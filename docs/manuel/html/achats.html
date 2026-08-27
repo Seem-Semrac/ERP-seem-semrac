@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manuel — Achats · ERP Seem Semrac</title>
+<link rel="stylesheet" href="manuel.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <div class="brandrow">
+      <div class="logo">SS</div>
+      <div>
+        <div class="co">SEEM · SEMRAC — ERP</div>
+        <div class="eyebrow">Manuel utilisateur</div>
+      </div>
+      <div class="kind">docs/manuel/html</div>
+    </div>
+    <h1>Service <span class="hi">Achats</span></h1>
+    <p class="lede">Le service Achats pilote tout ce que l'entreprise achète : consultations de prix auprès des fournisseurs (RFQ), demandes d'achat venues de l'atelier, bons de commande fournisseurs et sous-traitants, référentiel et évaluation des fournisseurs. Vous apprendrez ici à consulter des prix, transformer une demande d'achat en bon de commande et tenir votre panel fournisseurs à jour.</p>
+    <div class="metachips">
+      <span class="chip">👤 Pour qui : <b>Acheteur(se)</b> (écriture : Achats, Stocks — lecture : Commercial, BE, Production, Expéditions, Maintenance)</span>
+      <span class="chip">🧭 Dans l'ERP : <b>Sidebar → Achats</b></span>
+      <span class="chip">🗂 <b>5 onglets</b></span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-t">Sommaire</div>
+    <ol>
+      <li><a href="#tab-rfq">Demandes de prix (RFQ)</a></li>
+      <li><a href="#tab-da">Demandes d'achat</a></li>
+      <li><a href="#tab-fourn">Fournisseurs / ST</a></li>
+      <li><a href="#tab-scorecard">Scorecard</a></li>
+      <li><a href="#tab-dashboard">Dashboard achats</a></li>
+    </ol>
+  </nav>
+
+  <div class="note"><b>Règle d'or du service :</b> les <b>prix officiels</b> d'un fournisseur viennent exclusivement des réponses aux <b>demandes de prix (RFQ)</b> validées. Les bons de commande n'écrivent <b>jamais</b> le prix au catalogue : un prix saisi sur un BC n'engage que ce BC. À l'ouverture, la page s'affiche sur l'onglet <b>Demandes d'achat</b> ; les autres onglets sont accessibles par les boutons en haut de page.</div>
+
+  <section class="tab" id="tab-rfq">
+    <div class="tab-head"><span class="tab-num">1</span><h2>Demandes de prix (RFQ)</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est ici que vous consultez les fournisseurs et sous-traitants pour obtenir des prix. Une demande peut viser plusieurs références et, pour chaque référence, plusieurs fournisseurs : à la création, l'ERP la scinde automatiquement en <b>une RFQ par fournisseur</b>. Quand vous validez une réponse, le prix retenu devient le <b>prix officiel</b> du catalogue de ce fournisseur — c'est la seule porte d'entrée des prix dans l'ERP.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>En haut, le titre avec le nombre de demandes et le bouton <b>« Demande de prix »</b> (création). Une rangée de pastilles filtre la liste par statut : <b>Toutes</b>, <span class="b b-warn">À traiter</span>, <span class="b b-info">Envoyée</span>, <span class="b b-info">Réponse reçue</span>, <span class="b b-ok">Clôturée</span>. Le tableau liste chaque RFQ avec les colonnes <b>N°</b>, <b>Fournisseur</b>, <b>Origine</b> (Analyse DT, Nomenclature ou Libre — d'où vient le besoin), <b>Demandeur</b>, <b>Créée</b> (date) et <b>Statut</b>. Une pastille <span class="b b-warn">à relancer</span> apparaît sur les demandes restées trop longtemps sans réponse. À droite de chaque ligne : un bouton <b>PDF</b> (télécharge le document à envoyer au fournisseur), un bouton <b>« Relancer »</b> (si la demande est à relancer, il régénère le PDF) et le bouton vert <b>« Traiter »</b> qui ouvre la fiche de la demande.</p>
+    <figure class="shot">
+      <img src="../../assets/achats-rfq.png" alt="Capture de l'onglet Demandes de prix (RFQ)" loading="lazy">
+      <figcaption><b>Demandes de prix (RFQ)</b> — les pastilles de statut au-dessus du tableau et, sur chaque ligne, les boutons PDF et « Traiter ».</figcaption>
+    </figure>
+
+    <h3>Pas à pas — créer une demande de prix</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Demande de prix »</b> (ou, depuis l'onglet <b>Fournisseurs / ST</b>, sur le petit bouton devis d'une ligne fournisseur : la demande s'ouvre pré-remplie avec ce fournisseur).</li>
+      <li>Sur la première ligne, saisissez la <b>référence</b> (facultative), la <b>désignation</b> (obligatoire), la <b>quantité</b> et l'<b>unité</b> (« pce » par défaut).</li>
+      <li>Dans la colonne <b>« Fournisseurs à consulter »</b>, tapez le nom d'un fournisseur ou sous-traitant puis appuyez sur <b>Entrée</b> : il s'ajoute sous forme d'étiquette. Répétez pour consulter plusieurs fournisseurs sur la même référence — chaque référence doit en avoir <b>au moins un</b>.</li>
+      <li>Cliquez <b>« Ajouter une référence »</b> pour d'autres lignes, complétez éventuellement les <b>Notes</b> (précisions, délai souhaité…).</li>
+      <li>Cliquez <b>« Créer la demande de prix »</b> : l'ERP crée <b>une RFQ par fournisseur</b> consulté et confirme le nombre de demandes créées.</li>
+    </ol>
+
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+        <tbody>
+          <tr><td>Référence</td><td>Texte</td><td>Non</td><td>Référence interne de l'article à chiffrer.</td></tr>
+          <tr><td>Désignation</td><td>Texte</td><td><b>Oui</b></td><td>Description de l'article ou de la prestation ; une ligne sans référence ni désignation est ignorée.</td></tr>
+          <tr><td>Qté</td><td>Nombre</td><td>Non</td><td>Quantité estimée, transmise au fournisseur à titre indicatif.</td></tr>
+          <tr><td>Unité</td><td>Texte</td><td>Non</td><td>« pce » par défaut (pièce) ; adaptez si besoin (kg, m, barre…).</td></tr>
+          <tr><td>Fournisseurs à consulter</td><td>Nom + Entrée (liste proposée)</td><td><b>Oui</b> (≥ 1 par référence)</td><td>Fournisseurs et sous-traitants existants proposés en saisie ; un nom libre est aussi accepté.</td></tr>
+          <tr><td>Notes</td><td>Texte libre</td><td>Non</td><td>Précisions communes à la demande (délai souhaité, conditions…).</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="shot">
+      <img src="../../assets/form-achats-rfq.png" alt="Fenêtre Nouvelle demande de prix : références à chiffrer et fournisseurs à consulter" loading="lazy">
+      <figcaption><b>Nouvelle demande de prix</b> — le bloc « Références à chiffrer » : une ligne par référence (Référence, Désignation obligatoire, Qté, Unité « pce ») et la colonne <b>Fournisseurs à consulter</b> où chaque nom validé par Entrée devient une étiquette. « Ajouter une référence » empile les lignes ; « Créer la demande de prix » scinde le tout en une RFQ par fournisseur.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — envoyer, saisir les réponses et valider les prix</h3>
+    <ol class="steps">
+      <li>Ouvrez la demande avec <b>« Traiter »</b>. Si elle est <span class="b b-warn">À traiter</span>, cliquez <b>« Accepter et envoyer »</b> : elle passe au statut <span class="b b-info">Envoyée</span>.</li>
+      <li>Cliquez <b>« Télécharger le PDF »</b> et transmettez le document au fournisseur (par email, hors ERP).</li>
+      <li>À réception des offres, rouvrez la demande : pour chaque référence, saisissez le <b>prix unitaire</b> et le <b>délai (jours)</b> proposés. Le bouton <b>« Ajouter un fournisseur »</b> permet d'enregistrer l'offre d'un fournisseur supplémentaire sur une référence.</li>
+      <li>Cochez la colonne <b>« Retenu »</b> pour désigner l'offre gagnante de chaque référence (une seule par référence).</li>
+      <li><b>« Enregistrer les réponses »</b> sauvegarde votre saisie sans rien clôturer ; <b>« Valider &amp; mettre à jour les prix »</b> enregistre puis met à jour les <b>prix officiels</b> au catalogue des fournisseurs retenus et <b>clôture</b> la RFQ (statut <span class="b b-ok">Clôturée</span>).</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-achats-rfq-reponses.png" alt="Fenêtre de traitement d'une RFQ : saisie des prix, délais et choix du fournisseur retenu" loading="lazy">
+      <figcaption><b>Traiter une demande de prix</b> — l'en-tête rappelle le n° de RFQ, son origine et son statut, avec « Télécharger le PDF » et « Accepter et envoyer ». Sous chaque référence, une ligne par fournisseur consulté : <b>Prix unit.</b>, <b>Délai (j)</b> et le bouton radio <b>Retenu</b>. « Enregistrer les réponses » sauvegarde seulement ; « Valider &amp; mettre à jour les prix » écrit le prix retenu au catalogue et clôture la RFQ.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La validation exige <b>au moins une offre cochée « Retenu » avec un prix saisi</b> ; sinon l'ERP refuse et vous le signale.</li>
+      <li>Les prix validés alimentent le catalogue fournisseur et servent ensuite partout dans l'ERP (nomenclatures, coûts). Les bons de commande ne modifient jamais ces prix.</li>
+      <li>L'<b>origine</b> d'une RFQ indique qui a déclenché le besoin : une analyse de demande de travaux (« Analyse DT »), une nomenclature, ou une création libre depuis cet onglet.</li>
+      <li>Le bouton <b>« Supprimer »</b> dans la fiche efface définitivement la demande (une confirmation est demandée).</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> l'ERP ne transmet pas la demande au fournisseur tout seul — « Accepter et envoyer » change le statut, mais c'est à vous d'envoyer le <b>PDF</b> téléchargé. Une demande envoyée sans réponse finit marquée <span class="b b-warn">à relancer</span> : utilisez le bouton « Relancer » pour régénérer le PDF.</div>
+    <div class="astuce"><b>Astuce :</b> partez de l'onglet <b>Fournisseurs / ST</b> pour consulter un fournisseur précis : le bouton devis de sa ligne ouvre la demande de prix déjà pré-remplie à son nom.</div>
+  </section>
+
+  <section class="tab" id="tab-da">
+    <div class="tab-head"><span class="tab-num">2</span><h2>Demandes d'achat</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Les demandes d'achat (DA) sont les besoins exprimés par l'atelier et les autres services : matière, outillage, consommables, produits chimiques. Votre travail d'acheteur consiste à les transformer en <b>bons de commande</b> (BC) fournisseur ou sous-traitant. Une fois le BC créé, son suivi (arrivée, réception) se fait dans le service <b>Expéditions</b>.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Deux listes superposées. En haut, <b>« Demandes d'achat à traiter »</b> avec son compteur vert : colonnes <b>N° DA</b>, <b>Article</b>, <b>Fournisseur</b>, <b>Qté</b>, <b>Type</b> (Matière, Outillage, Consommable, Chimique), <b>Priorité</b> (<span class="b b-crit">critique</span> / <span class="b b-warn">urgent</span> / <span class="b b-ok">normal</span>), <b>Date DA</b>, <b>Livraison souhaitée</b>, <b>Statut</b> et le bouton d'action <b>« Traiter → BC »</b>. Une pastille <span class="b b-info">AUTO</span> à côté du numéro signale une DA générée automatiquement par l'ERP (et non saisie à la main) ; le numéro d'affaire lié s'affiche sous l'article. En bas, <b>« Demandes d'achat traitées »</b> (compteur bleu) : un BC a été généré, avec les colonnes <b>Type BC</b> (Fournisseur ou Sous-traitant), <b>Statut</b> (<span class="b b-ok">Commandé ✓</span>, <span class="b b-info">En cours</span>, <span class="b b-ok">Reçu ✓</span>, <span class="b b-crit">Annulé</span>…) et un lien <b>« Voir BC »</b> qui mène aux bons de commande du service Expéditions. Au-dessus des listes : une <b>barre de recherche</b> (par article, fournisseur, demandeur, type ou priorité), le bouton <b>« Regrouper par fournisseur »</b> et le bouton <b>« Créer un BC »</b>.</p>
+    <figure class="shot">
+      <img src="../../assets/achats-da.png" alt="Capture de l'onglet Demandes d'achat" loading="lazy">
+      <figcaption><b>Demandes d'achat</b> — la liste « à traiter » en haut avec priorités et bouton « Traiter → BC », les DA déjà transformées en BC en dessous.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — transformer une DA en bon de commande</h3>
+    <ol class="steps">
+      <li>Sur la ligne de la DA, cliquez <b>« Traiter → BC »</b>. La fenêtre « Traiter la DA — Bon de Commande » s'ouvre, pré-remplie avec l'article, le fournisseur pressenti et la livraison souhaitée.</li>
+      <li>Choisissez le <b>type de commande</b> (BC Fournisseur ou BC Sous-Traitant), vérifiez le <b>fournisseur / ST</b>, les <b>articles</b>, saisissez le <b>montant HT</b> et la <b>livraison prévue</b> ; le <b>n° d'affaire</b> et les <b>notes</b> sont optionnels.</li>
+      <li>Deux issues possibles : <b>« Enregistrer (brouillon) »</b> garde la DA dans la liste « à traiter » avec la pastille <span class="b b-mut">Brouillon</span> — le bouton devient « Reprendre » pour continuer plus tard. <b>« Soumettre → créer BC »</b> crée le bon de commande (le fournisseur est alors obligatoire).</li>
+      <li>Après soumission, l'ERP confirme le numéro du BC créé : la DA bascule dans « traitées » et le BC apparaît côté <b>Expéditions</b>, en attente de réception.</li>
+    </ol>
+
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+        <tbody>
+          <tr><td>Type de commande</td><td>Liste : BC Fournisseur / BC Sous-Traitant</td><td>Oui (prérempli)</td><td>Détermine si le BC part chez un fournisseur ou un sous-traitant.</td></tr>
+          <tr><td>Fournisseur / ST</td><td>Texte (raison sociale)</td><td><b>Oui</b> pour soumettre</td><td>Destinataire du bon de commande.</td></tr>
+          <tr><td>Articles / Prestation</td><td>Texte</td><td>Oui (prérempli avec la DA)</td><td>Désignation de ce qui est commandé.</td></tr>
+          <tr><td>Montant HT (€)</td><td>Nombre</td><td>Non</td><td>Montant hors taxes du BC. N'affecte pas le prix officiel du catalogue.</td></tr>
+          <tr><td>Livraison prévue</td><td>Date</td><td>Non</td><td>Date attendue — elle sert au suivi des arrivées et au calcul de ponctualité (OTD) côté Expéditions.</td></tr>
+          <tr><td>N° d'affaire</td><td>Texte (AFF-2026-XXX)</td><td>Non</td><td>Rattache la dépense à une affaire cliente.</td></tr>
+          <tr><td>Notes</td><td>Texte libre</td><td>Non</td><td>Conditions, remarques pour le fournisseur.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Pas à pas — créer un bon de commande direct (sans DA)</h3>
+    <ol class="steps">
+      <li>Cliquez <b>« Créer un BC »</b> en haut de l'onglet : la fenêtre « Nouveau bon de commande » s'ouvre.</li>
+      <li>Choisissez le <b>destinataire</b> (Fournisseur ou Sous-traitant), saisissez son <b>nom</b> (obligatoire) et les <b>articles / désignation</b> (obligatoire), puis quantité, montant HT, livraison prévue, n° d'affaire et notes.</li>
+      <li>Détaillez la commande dans <b>« Lignes commandées »</b> : pour chaque ligne, référence, désignation, catégorie (Matière, Accessoires, Outils, Chimique, Consommable, Autres), quantité et prix unitaire. Le <b>montant HT se calcule tout seul</b> à partir des lignes.</li>
+      <li>Pour un achat stratégique ou d'un montant élevé, cochez <b>« Soumettre ce BC à la validation de la Direction »</b> : le BC sera présenté dans l'onglet « À valider » du service Direction.</li>
+      <li>Cliquez <b>« Créer le BC »</b> : il apparaît aussitôt dans la liste des BC du service <b>Expéditions</b>, en attente de réception.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-achats-bc.png" alt="Formulaire de création d'un bon de commande" loading="lazy">
+      <figcaption><b>Créer un BC</b> — destinataire, articles, montant HT, livraison prévue et lignes détaillées ; le montant se recalcule à partir des lignes.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — regrouper les DA d'un même fournisseur</h3>
+    <ol class="steps">
+      <li>Cliquez <b>« Regrouper par fournisseur »</b> puis confirmez.</li>
+      <li>L'ERP fusionne les DA « à traiter » qui visent le même fournisseur en <b>une seule demande par fournisseur</b> et vous indique le nombre de fusions effectuées ; les DA absorbées disparaissent des listes. Vous ne passez plus qu'un seul BC au lieu de plusieurs.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Une DA est considérée <b>traitée</b> dès qu'un BC a été créé pour elle ; son avancement (commandé, en cours, reçu) se suit ensuite dans Expéditions via le lien « Voir BC ».</li>
+      <li>Les DA <span class="b b-crit">critique</span> sont à traiter en priorité — elles remontent aussi en alerte sur le Dashboard achats.</li>
+      <li>Le prix saisi sur un BC (montant, prix unitaires des lignes) ne met <b>pas</b> à jour le prix officiel du fournisseur : pour cela, passez par une <b>demande de prix</b> (onglet 1).</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> utilisez « Enregistrer (brouillon) » quand il vous manque une information (prix, délai) : la DA reste visible dans « à traiter » avec la pastille Brouillon, et le bouton « Reprendre » restaure toute votre saisie.</div>
+  </section>
+
+  <section class="tab" id="tab-fourn">
+    <div class="tab-head"><span class="tab-num">3</span><h2>Fournisseurs / ST</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le référentiel de votre panel : d'un côté les <b>fournisseurs</b> (matière, visserie, consommables…), de l'autre les <b>sous-traitants</b> (traitements de surface, découpe, rectification…). Chaque fiche porte les contacts, le catalogue de références avec prix, les familles de fourniture ou prestations, et sert de base aux demandes de prix et aux bons de commande.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Un sélecteur bascule entre les deux listes : <b>Fournisseurs</b> et <b>Sous-traitants</b>, chacun avec son compteur. À droite : le lien <b>« Exporter (Excel) »</b> (exporte tous les fournisseurs et sous-traitants avec leur catalogue et prestations, feuille Données + feuille TCD) et le bouton violet <b>« Nouveau fournisseur »</b> / <b>« Nouveau sous-traitant »</b> (le libellé suit la liste affichée). Une barre de filtres permet de restreindre par <b>catégorie</b>, par <b>activité</b> (Seem, Semrac, Seem &amp; Semrac) ou par recherche libre (nom, contact, email). Le tableau des fournisseurs affiche : nom et code, catégorie, activité, contact, email / téléphone, <b>Catalogue</b> (nombre de références connues), <b>Délai</b> moyen en jours, et les actions. Celui des sous-traitants remplace le délai par les <b>Prestations</b> (étiquettes, les 4 premières puis « +N ») et signale par une pastille <span class="b b-warn">à qualifier</span> un sous-traitant pas encore approuvé. Sur chaque ligne : un bouton devis (<b>demander un prix</b> — ouvre une RFQ pré-remplie), le bouton <b>« Fiche »</b> (ouvre la fiche complète pour consulter ou modifier) et une corbeille (suppression). Si des références de catalogue n'ont <b>pas de prix</b>, un bandeau jaune l'annonce en haut avec le bouton <b>« Nettoyer »</b>.</p>
+    <figure class="shot">
+      <img src="../../assets/achats-fournisseurs.png" alt="Capture de l'onglet Fournisseurs / ST" loading="lazy">
+      <figcaption><b>Fournisseurs / ST</b> — la bascule Fournisseurs / Sous-traitants, les filtres catégorie / activité et, sur chaque ligne, les boutons devis, Fiche et suppression.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — créer un fournisseur ou un sous-traitant</h3>
+    <ol class="steps">
+      <li>Affichez la bonne liste (Fournisseurs ou Sous-traitants) puis cliquez le bouton violet <b>« Nouveau fournisseur »</b> / <b>« Nouveau sous-traitant »</b>.</li>
+      <li>Renseignez au minimum la <b>raison sociale</b> (obligatoire) ; complétez code, SIRET, contact, email, téléphone, délai moyen, adresse.</li>
+      <li>Pour un fournisseur, ajoutez ses <b>familles de fourniture</b> (Aluminium, Acier, Inox, Visserie…) ; pour un sous-traitant, ses <b>prestations</b> (Oxydation anodique sulfurique, Zingage, Rectification…) : choisissez dans la liste proposée ou tapez librement, puis Entrée ou « + » — plusieurs étiquettes possibles.</li>
+      <li>Cliquez <b>« Créer »</b> : la fiche apparaît dans la liste et devient disponible dans les demandes de prix et les bons de commande.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-achats-fournisseur.png" alt="Fenêtre Nouveau fournisseur : raison sociale, coordonnées, familles de fourniture" loading="lazy">
+      <figcaption><b>Nouveau fournisseur</b> — seule la <b>Raison sociale</b> porte l'astérisque (obligatoire) ; le <b>Code</b> suit le format FOUR-XXX. Le bloc <b>Familles de fourniture</b> se remplit en choisissant dans la liste ou en saisissant librement, puis « + » : chaque famille s'ajoute au-dessus. « Créer » verse la fiche dans la liste Fournisseurs.</figcaption>
+    </figure>
+
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+        <tbody>
+          <tr><td>Raison sociale</td><td>Texte</td><td><b>Oui</b></td><td>Nom officiel du fournisseur ou du sous-traitant.</td></tr>
+          <tr><td>Code</td><td>Texte (FOUR-XXX / ST-XXX)</td><td>Non</td><td>Code court interne, affiché sous le nom dans la liste.</td></tr>
+          <tr><td>SIRET</td><td>Texte</td><td>Non</td><td>Identifiant légal de l'entreprise.</td></tr>
+          <tr><td>Contact / Email / Téléphone</td><td>Texte</td><td>Non</td><td>Interlocuteur habituel et ses coordonnées.</td></tr>
+          <tr><td>Familles de fourniture <i>(fournisseur)</i></td><td>Étiquettes (liste + saisie libre)</td><td>Non</td><td>Ce que le fournisseur sait livrer ; plusieurs familles possibles.</td></tr>
+          <tr><td>Prestations <i>(sous-traitant)</i></td><td>Étiquettes (liste + saisie libre)</td><td>Non</td><td>Opérations sous-traitées proposées ; plusieurs possibles.</td></tr>
+          <tr><td>Certifications <i>(sous-traitant)</i></td><td>Texte, séparées par des virgules</td><td>Non</td><td>Ex. : ISO 9001, EN 9100 — utile pour les exigences aéronautiques.</td></tr>
+          <tr><td>Délai moyen (j)</td><td>Nombre</td><td>Non</td><td>Délai de livraison habituel, affiché dans la liste des fournisseurs.</td></tr>
+          <tr><td>Conditions de paiement <i>(fournisseur)</i></td><td>Texte</td><td>Non</td><td>Ex. : virement 30 jours.</td></tr>
+          <tr><td>Adresse</td><td>Texte</td><td>Non</td><td>Adresse postale.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="shot">
+      <img src="../../assets/form-achats-st.png" alt="Fenêtre Nouveau sous-traitant : prestations de sous-traitance et certifications" loading="lazy">
+      <figcaption><b>Nouveau sous-traitant</b> — même trame que le fournisseur, mais le <b>Code</b> suit le format ST-XXX et deux champs remplacent les familles et les conditions de paiement : <b>Prestations de sous-traitance</b> (liste ou saisie libre, plusieurs possibles) et <b>Certifications</b> séparées par des virgules (ISO 9001, EN 9100…). Sans prestation ni approbation, la fiche créée reste marquée « à qualifier » dans la liste.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — nettoyer les références sans prix</h3>
+    <ol class="steps">
+      <li>Quand le bandeau jaune « N référence(s) sans prix dans le catalogue fournisseur » s'affiche, cliquez <b>« Nettoyer »</b>.</li>
+      <li>La fenêtre liste les références concernées (référence, désignation, fournisseur) et marque <b>« éligible »</b> celles sans prix depuis plus de <b>90 jours</b>.</li>
+      <li>Supprimez une référence isolée avec le <b>×</b> de sa ligne, ou cliquez <b>« Purger les éligibles (&gt; 90 j) »</b> pour tout nettoyer d'un coup (confirmation demandée).</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le badge <b>Activité</b> (Seem, Semrac ou Seem &amp; Semrac) indique pour quel site le fournisseur travaille ; le filtre du même nom s'appuie dessus.</li>
+      <li>Le compteur <b>Catalogue</b> (« N réf. ») correspond aux références connues de ce fournisseur — alimentées principalement par les demandes de prix validées.</li>
+      <li>Les cases à cocher de la barre de sélection permettent une <b>suppression groupée</b> de plusieurs fiches à la fois.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> la suppression d'un fournisseur ou d'un sous-traitant est <b>définitive</b> (confirmation demandée). Si la fiche est référencée ailleurs dans l'ERP (BC, catalogue…), l'ERP peut refuser la suppression et vous l'indique.</div>
+    <div class="astuce"><b>Astuce :</b> le bouton devis d'une ligne est le chemin le plus rapide pour consulter un fournisseur précis : il ouvre directement une nouvelle demande de prix avec ce fournisseur déjà positionné.</div>
+  </section>
+
+  <section class="tab" id="tab-scorecard">
+    <div class="tab-head"><span class="tab-num">4</span><h2>Scorecard</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> La scorecard évalue objectivement vos fournisseurs et sous-traitants à partir de leur historique réel dans l'ERP : ponctualité de livraison, qualité à réception et régularité de paiement. Elle vous aide à choisir qui consulter, qui surveiller et qui écarter — une exigence classique des audits EN 9100.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Un tableau classant les fournisseurs et sous-traitants ayant une <b>activité d'achat</b> (au moins un BC) ; l'en-tête rappelle la formule du score : <b>OTD 50 % + qualité réception 35 % + ponctualité paiement 15 %</b>, ainsi que le nombre de fiches en base et celles avec activité. Colonnes : <b>Fournisseur</b> (cliquable, ouvre la fiche), <b>Type</b> (Fournisseur / Sous-traitant), <b>Score</b> (pastille de couleur : <span class="b b-ok">≥ 85 vert</span>, <span class="b b-warn">65–84 orange</span>, <span class="b b-crit">&lt; 65 rouge</span>), <b>OTD</b> (livraisons à l'heure : vert ≥ 90 %, orange ≥ 75 %, rouge en dessous — avec le nombre de livraisons évaluées), <b>Qualité récept.</b> (réceptions sans non-conformité : vert ≥ 98 %, orange ≥ 90 %, rouge en dessous — le nombre de NC s'affiche le cas échéant), <b>Délai paiement</b> (jours), <b>Nb BC</b> et <b>Montant</b> total acheté en euros. Un tiret « — » signifie : pas encore assez de données pour noter.</p>
+    <figure class="shot">
+      <img src="../../assets/achats-scorecard.png" alt="Capture de l'onglet Scorecard" loading="lazy">
+      <figcaption><b>Scorecard</b> — le score global en pastille colorée, décomposé en OTD, qualité de réception et délai de paiement.</figcaption>
+    </figure>
+
+    <h3>Pas à pas</h3>
+    <ol class="steps">
+      <li>Parcourez le tableau : les pastilles rouges (score &lt; 65, OTD &lt; 75 %, qualité &lt; 90 %) désignent les fournisseurs à surveiller ou à challenger.</li>
+      <li>Cliquez sur le <b>nom</b> d'un fournisseur pour ouvrir sa fiche complète et creuser (catalogue, historique).</li>
+      <li>Avant de lancer une demande de prix importante, vérifiez ici l'OTD et la qualité des candidats pressentis.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Les notes se construisent automatiquement à partir des <b>BC</b>, des <b>livraisons</b> (dates prévues vs réelles), des <b>non-conformités</b> déclarées en Qualité et des <b>factures fournisseur</b> réglées en Comptabilité : plus l'historique est riche, plus le score est fiable.</li>
+      <li>Un fournisseur sans aucun BC n'apparaît pas dans le tableau — d'où le message « Aucune donnée fournisseur » tant qu'il n'y a ni BC, ni livraison, ni facture.</li>
+      <li>L'OTD est mesuré sur la <b>première</b> date de livraison promise : repousser une date ne « blanchit » pas un retard.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> combinez la scorecard et l'onglet Demandes de prix : consultez systématiquement au moins deux fournisseurs bien notés pour garder de la concurrence sur vos références clés.</div>
+  </section>
+
+  <section class="tab" id="tab-dashboard">
+    <div class="tab-head"><span class="tab-num">5</span><h2>Dashboard achats</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est la vue d'ensemble du service : votre charge du moment (DA en attente), les urgences à ne pas rater et la répartition des achats par type. C'est l'écran à consulter en début de journée pour organiser votre travail.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Quatre tuiles de compteurs : <b>DAs à traiter</b>, <b>Commandes en cours</b>, <b>Réceptions à valider</b> et <b>Total DAs (tous statuts)</b>. En dessous, deux blocs côte à côte : les <b>Alertes</b> — un encart rouge « N DA(s) CRITIQUE(S) en attente — traitement prioritaire immédiat » si des DA critiques attendent, un encart jaune « N demande(s) en attente de traitement », ou « Aucune alerte active » quand tout est traité — et la <b>Répartition par type</b> (Matière, Outillage, Consommable, Chimique) en barres de pourcentage. Enfin, trois <b>accès rapides</b> : <b>« Créer un BC »</b> (ouvre la création directe de bon de commande), <b>« Réception &amp; Stock »</b> (page de validation des réceptions) et <b>« Fournisseurs SS-T »</b> (liste complète des fournisseurs et sous-traitants).</p>
+    <figure class="shot">
+      <img src="../../assets/achats-dashboard.png" alt="Capture de l'onglet Dashboard achats" loading="lazy">
+      <figcaption><b>Dashboard achats</b> — les quatre compteurs, le bloc Alertes et la répartition des DA par type d'achat.</figcaption>
+    </figure>
+
+    <h3>Pas à pas</h3>
+    <ol class="steps">
+      <li>Commencez par le bloc <b>Alertes</b> : s'il affiche des DA critiques, filez à l'onglet <b>Demandes d'achat</b> les traiter en premier.</li>
+      <li>Surveillez la tuile <b>Réceptions à valider</b> : des marchandises sont arrivées et attendent votre validation via l'accès rapide « Réception &amp; Stock ».</li>
+      <li>Utilisez la <b>répartition par type</b> pour repérer une dérive (ex. : explosion des achats de consommables) et en parler en réunion.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Les compteurs se recalculent à chaque affichage de la page à partir des demandes d'achat réelles — aucun chiffre saisi à la main.</li>
+      <li>« Commandes en cours » compte les DA déjà transformées en BC dont la réception n'est pas terminée ; leur détail se suit côté Expéditions.</li>
+    </ul>
+    <div class="note"><b>Bon à savoir :</b> des analyses achats plus poussées (tendances, montants, filtres par période) existent dans <b>Tableaux de bord → Dashboard Achats</b>, commun à toute l'entreprise.</div>
+  </section>
+
+  <div class="docnav">
+    <a href="index.html">← Sommaire des manuels</a>
+    <a href="production.html">Manuel suivant : Production →</a>
+  </div>
+
+  <footer class="doc">
+    ERP Seem Semrac — manuel utilisateur généré depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs). En cas d'écart entre ce manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
+  </footer>
+
+</div>
+</body>
+</html>

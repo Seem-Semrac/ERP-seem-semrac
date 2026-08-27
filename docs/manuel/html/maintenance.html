@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manuel — Maintenance · ERP Seem Semrac</title>
+<link rel="stylesheet" href="manuel.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <div class="brandrow">
+      <div class="logo">SS</div>
+      <div>
+        <div class="co">SEEM · SEMRAC — ERP</div>
+        <div class="eyebrow">Manuel utilisateur</div>
+      </div>
+      <div class="kind">docs/manuel/html</div>
+    </div>
+    <h1>Service <span class="hi">Maintenance</span></h1>
+    <p class="lede">Le service Maintenance est la GMAO de l'atelier : il recueille les pannes déclarées en Production, les transforme en <b>ordres de maintenance (OM)</b>, surveille l'usure des pièces à partir des heures réellement tournées par chaque machine, mesure la fiabilité (MTTR, MTBF, disponibilité, TRS) et chiffre ce que coûte chaque machine et chaque poste de travail. Ce manuel décrit les 7 onglets, écran par écran.</p>
+    <div class="metachips">
+      <span class="chip">👤 Pour qui : <b>Technicien(ne) maintenance</b> (écriture — avec la Direction · lecture : BE, Achats, Production, OAS, Qualité)</span>
+      <span class="chip">🧭 Dans l'ERP : <b>Sidebar → Maintenance</b></span>
+      <span class="chip">🗂 <b>7 onglets</b></span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-t">Sommaire</div>
+    <ol>
+      <li><a href="#tab-interventions">Interventions / OM</a></li>
+      <li><a href="#tab-preventif">Plan Préventif</a></li>
+      <li><a href="#tab-mtbf">MTBF &amp; Historique</a></li>
+      <li><a href="#tab-fiche">Fiche 360</a></li>
+      <li><a href="#tab-postes">Coûts postes</a></li>
+      <li><a href="#tab-pieces">Pièces &amp; PDR</a></li>
+      <li><a href="#tab-dashboard">Dashboard</a></li>
+    </ol>
+  </nav>
+
+  <!-- ══════════════ 1. INTERVENTIONS / OM ══════════════ -->
+  <section class="tab" id="tab-interventions">
+    <div class="tab-head"><span class="tab-num">1</span><h2>Interventions / OM</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est l'écran de travail quotidien du technicien. Il réunit sur une seule page les <b>machines déclarées en panne</b> par l'atelier, les <b>ordres de maintenance en cours</b> et l'<b>historique des interventions clôturées</b>. Un OM est la trace complète d'une intervention : qui, quoi, combien de temps, combien ça a coûté, quelle cause racine. C'est aussi lui qui alimente tous les indicateurs de fiabilité du service (MTTR, MTBF, disponibilité) et le coût maintenance des machines et des postes.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Le bandeau jaune du service rappelle le titre <b>« Service Maintenance »</b> et sa signature <i>GMAO · OM · Préventif · MTBF · PDR · Historique · EN&nbsp;9100:2018</i>. À droite du bandeau, le bouton <b>« Demande d'achat »</b> permet de commander une pièce sans quitter la GMAO. Juste en dessous, la barre des sept onglets ; certains portent un compteur (nombre d'OM ouverts sur « Interventions / OM », nombre de pièces sur « Pièces &amp; PDR », nombre de postes actifs sur « Coûts postes »).</p>
+    <figure class="shot">
+      <img src="../../assets/maintenance.png" alt="Bandeau du service Maintenance et barre des onglets" loading="lazy">
+      <figcaption><b>Service Maintenance</b> — le bandeau jaune, la barre des sept onglets avec leurs compteurs, et le bouton « Demande d'achat » en haut à droite.</figcaption>
+    </figure>
+
+    <p>L'onglet lui-même empile <b>trois blocs</b>, du plus urgent au plus froid :</p>
+    <ul class="points">
+      <li><b>Machines en panne — à traiter</b> (cadre rouge, avec le nombre de machines concernées). La mention « déclarées en panne dans Production › Process atelier » rappelle d'où vient l'information. Colonnes : <b>Machine</b> (nom + code), <b>Atelier</b> (Seem ou Semrac), <b>Motif</b>, <b>Depuis</b> (« aujourd'hui » ou nombre de jours), <b>Action</b>. La colonne Action affiche soit le bouton jaune <b>« Créer un OM »</b>, soit — si un OM est déjà ouvert sur cette machine — la mention <b>« OM-…-… en cours »</b>. Quand rien n'est en panne, le bloc affiche « Aucune machine en panne — tout tourne. »</li>
+      <li><b>Ordres de maintenance en cours</b>. Colonnes : <b>N°&nbsp;OM</b>, <b>Machine</b>, <b>Titre</b>, <b>Priorité</b>, <b>Statut</b>, <b>Signalé</b> (date), <b>Actions</b> (boutons <b>« Ouvrir »</b> et <b>« Clôturer »</b>).</li>
+      <li><b>Interventions clôturées (MTTR)</b> — les 30 dernières. Colonnes : <b>N°&nbsp;OM</b>, <b>Machine</b>, <b>Titre</b>, <b>MTTR</b> (durée réelle de l'intervention, en heures), <b>Clôturé</b> (date).</li>
+    </ul>
+    <ul class="points">
+      <li>Priorité : <span class="b b-ok">normal</span> · <span class="b b-warn">urgent</span> · <span class="b b-crit">critique</span>.</li>
+      <li>Statut d'un OM : <span class="b b-crit">Ouvert</span> (signalé, pas encore pris en main) · <span class="b b-info">En cours</span> (intervention démarrée) · <span class="b b-warn">En attente</span> (bloqué, typiquement faute de pièce) · <span class="b b-ok">Terminé</span> · <span class="b b-mut">Annulé</span>.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/form-maintenance-om.png" alt="Les trois blocs de l'onglet Interventions / OM" loading="lazy">
+      <figcaption><b>Interventions / OM</b> — les trois blocs empilés : machines en panne (en rouge), OM en cours, interventions clôturées. Ici une journée sans panne : « tout tourne ».</figcaption>
+    </figure>
+
+    <h3>Pas à pas — ouvrir un OM sur une machine en panne</h3>
+    <ol class="steps">
+      <li>La panne se déclare d'abord <b>en Production</b> (onglet « Process Ateliers ») : la machine passe en arrêt avec un motif. Elle apparaît alors seule dans le bloc rouge, en haut de cet onglet.</li>
+      <li>Cliquez sur <b>« Créer un OM »</b> sur la ligne de la machine.</li>
+      <li>L'ERP crée l'ordre : numéro automatique <b>OM-AAAA-NNN</b>, type <i>correctif</i>, priorité <b>urgente</b>, statut <b>Ouvert</b>, titre « Panne — <i>nom de la machine</i> » et description reprise du motif de panne. Une notification confirme le numéro créé.</li>
+      <li>L'OM apparaît immédiatement dans le bloc « Ordres de maintenance en cours », et la ligne de la machine en panne affiche désormais « OM-… en cours » à la place du bouton.</li>
+    </ol>
+    <div class="note"><b>Bon à savoir :</b> l'horodatage exact de la panne est conservé comme début de l'intervention. Le <b>MTTR</b> se calcule donc sur le temps réellement subi par l'atelier (panne → remise en service), pas sur le temps passé la clé à la main.</div>
+
+    <h3>Pas à pas — créer un OM vous-même (sans passer par une panne)</h3>
+    <p>Toute intervention ne naît pas d'un arrêt machine : un bruit suspect, une fuite, un réglage à reprendre, un graissage à planifier. Le bouton <b>« Nouvel OM »</b>, en haut à droite du bloc « Ordres de maintenance en cours », ouvre un formulaire de saisie complet.</p>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Nouvel OM »</b>.</li>
+      <li>Choisissez la <b>machine</b> concernée (obligatoire) : la liste indique le code et le site, et signale « — EN PANNE » les machines actuellement à l'arrêt.</li>
+      <li>Choisissez le <b>type d'intervention</b> : <b>Correctif</b> (panne, dépannage — l'intervention est réputée commencée tout de suite) ou <b>Préventif</b> (planifié : le chronomètre ne démarre qu'au moment de l'intervention réelle).</li>
+      <li>Saisissez un <b>titre</b> court et parlant (obligatoire), par exemple « Remplacement courroie broche », puis la <b>description</b> : ce que vous avez constaté, dans quel contexte.</li>
+      <li>Réglez la <b>priorité</b> (Normale / Urgente / Critique — cette dernière signalant un arrêt de production) et indiquez le <b>responsable</b> qui pilote l'intervention (la liste des salariés est proposée à la saisie).</li>
+      <li>Pour une intervention planifiée, renseignez la <b>date d'intervention prévue</b> et la <b>durée estimée</b> en heures. Ces deux champs sont facultatifs.</li>
+      <li>Validez par <b>« Créer l'OM »</b> : le numéro <b>OM-AAAA-NNN</b> est attribué automatiquement, l'ordre part au statut <b>Ouvert</b> et apparaît aussitôt dans la liste des interventions en cours.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-maintenance-nouvel-om.png" alt="Formulaire de création d'un ordre de maintenance" loading="lazy">
+      <figcaption><b>Nouvel ordre de maintenance</b> — machine et titre sont les deux seuls champs obligatoires ; le type choisi (correctif ou préventif) détermine le point de départ du calcul du temps d'arrêt.</figcaption>
+    </figure>
+    <div class="astuce"><b>Astuce :</b> réservez la priorité <b>Critique</b> aux cas qui bloquent réellement la production — c'est elle qui fait remonter l'intervention en tête des urgences et dans les indicateurs de la Direction.</div>
+
+    <h3>Pas à pas — renseigner et suivre une intervention</h3>
+    <ol class="steps">
+      <li>Sur la ligne de l'OM, cliquez sur <b>« Ouvrir »</b> : la fenêtre de l'ordre de maintenance s'ouvre, son titre rappelant le numéro d'OM et la machine.</li>
+      <li>Complétez le diagnostic, la priorité, le <b>responsable</b> et l'<b>intervenant</b> (les deux champs proposent la liste des salariés), les pièces utilisées, le coût réel, la cause racine et vos observations (voir le tableau ci-dessous).</li>
+      <li>Passez le statut à <b>En cours</b> dès que vous intervenez, ou à <b>En attente</b> si vous êtes bloqué par une pièce à commander.</li>
+      <li>Cliquez sur <b>« Enregistrer »</b> : l'ERP confirme « OM enregistré (sans clôture) » — la machine reste en arrêt et l'OM reste ouvert.</li>
+    </ol>
+
+    <h3>Pas à pas — clôturer une intervention</h3>
+    <ol class="steps">
+      <li>Renseignez d'abord le <b>coût réel</b>, les <b>pièces utilisées</b>, l'<b>intervenant</b>, la <b>cause racine</b> et les <b>observations</b> : à la clôture, ces informations sont enregistrées avec l'OM.</li>
+      <li>Cliquez sur <b>« Clôturer l'intervention »</b> (dans la fenêtre de l'OM) ou sur <b>« Clôturer »</b> (directement sur la ligne). Une confirmation apparaît : « Clôturer cette intervention ? La machine sera remise en service et le MTTR calculé. »</li>
+      <li>Validez. L'OM passe en <span class="b b-ok">Terminé</span>, sa durée est calculée et affichée dans la notification (« Intervention clôturée — MTTR X,X h »).</li>
+      <li>La <b>machine repasse automatiquement en état opérationnel</b> : le motif et la date de panne sont effacés. Elle redevient disponible au planning de Production et repasse au vert sur la maquette du bâtiment.</li>
+      <li>L'intervention descend dans le bloc « Interventions clôturées (MTTR) » et son coût vient alimenter la Fiche 360 de la machine et les Coûts postes.</li>
+    </ol>
+
+    <h3>La fiche d'intervention (bouton « Ouvrir »), champ par champ</h3>
+    <p>Il s'agit ici de la fiche d'une intervention <b>déjà créée</b> — celle que vous complétez au fil du dépannage. À ne pas confondre avec le formulaire de <b>création</b> décrit plus haut.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+      <tbody>
+        <tr><td>Titre</td><td>Texte</td><td>Recommandé</td><td>Intitulé court de l'intervention (prérempli « Panne — <i>machine</i> » sur un OM créé depuis une panne).</td></tr>
+        <tr><td>Description / diagnostic</td><td>Texte libre</td><td>Non</td><td>Ce qui a été constaté ; prérempli avec le motif de panne saisi en Production.</td></tr>
+        <tr><td>Priorité</td><td>Normale / Urgente / Critique</td><td>Oui (Urgente par défaut sur une panne)</td><td>Une priorité <i>critique</i> alimente la tuile « OM critiques » du Dashboard.</td></tr>
+        <tr><td>Statut</td><td>Ouvert / En cours / En attente</td><td>Oui</td><td>« En attente » sert aux interventions suspendues faute de pièce de rechange. La clôture ne se fait pas ici mais par le bouton dédié.</td></tr>
+        <tr><td>Responsable</td><td>Texte (liste des salariés)</td><td>Non</td><td>Qui pilote l'intervention.</td></tr>
+        <tr><td>Intervenant</td><td>Texte (liste des salariés)</td><td>Non</td><td>Qui a réellement effectué le travail.</td></tr>
+        <tr><td>Coût réel (€)</td><td>Nombre</td><td>Non (mais fortement conseillé)</td><td>Coût de l'intervention : c'est la seule source du coût maintenance dans la Fiche 360, les Coûts postes et le Dashboard.</td></tr>
+        <tr><td>Pièces utilisées</td><td>Texte</td><td>Non</td><td>Pièces consommées ; à répercuter ensuite sur le stock PDR de la machine.</td></tr>
+        <tr><td>Cause racine</td><td>Texte</td><td>Non</td><td>Pourquoi la panne est arrivée — la matière première des actions de fond et des 8D côté Qualité.</td></tr>
+        <tr><td>Observations</td><td>Texte libre</td><td>Non</td><td>Commentaire de fin d'intervention, consignes, points à surveiller.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Une machine ne se déclare pas en panne depuis la Maintenance : la déclaration se fait <b>en Production, onglet « Process Ateliers »</b>. La Maintenance prend le relais dès que la machine apparaît dans le bloc rouge.</li>
+      <li>Une seule ligne « Créer un OM » par machine : dès qu'un OM non clos existe sur la machine, le bouton disparaît au profit de son numéro. Cela évite les doublons d'ordres sur la même panne.</li>
+      <li>Le <b>coût réel</b> est la donnée la plus stratégique de l'écran : sans lui, le TCO de la machine et le coût du poste restent faux, et le prix de revient calculé en Production est sous-estimé.</li>
+      <li>Le <b>numéro d'OM</b> est attribué par l'ERP (OM-AAAA-NNN) : ne le saisissez jamais à la main.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> la clôture d'un OM <b>remet la machine en service</b> sans autre contrôle. Ne clôturez qu'une fois la machine réellement apte à produire : le planning de Production la considérera immédiatement comme disponible.</div>
+    <div class="astuce"><b>Astuce :</b> s'il manque une pièce, passez l'OM en <b>« En attente »</b> et utilisez le bouton <b>« Demande d'achat »</b> du bandeau : la demande part directement au service Achats, qui la transformera en bon de commande fournisseur.</div>
+  </section>
+
+  <!-- ══════════════ 2. PLAN PRÉVENTIF ══════════════ -->
+  <section class="tab" id="tab-preventif">
+    <div class="tab-head"><span class="tab-num">2</span><h2>Plan Préventif</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Anticiper la casse plutôt que la subir. Cet onglet suit, machine par machine, les <b>heures de fonctionnement réellement tournées</b> — déduites des bons de travail (BDT) de la Production — et les compare à la <b>durée de vie conseillée</b> de chaque pièce remplaçable. Vous voyez d'un coup d'œil quelle pièce a consommé son capital d'heures, et laquelle est à changer maintenant.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Le titre <b>« Plan préventif — usure &amp; remplacement des pièces »</b> et son rappel : les heures viennent des BDT, la durée de vie et la date du dernier remplacement se définissent dans l'onglet <b>« Pièces &amp; PDR »</b>. L'écran est en deux volets.</p>
+    <ul class="points">
+      <li><b>À gauche</b>, la liste des machines avec leur compteur et un champ <b>« Rechercher… »</b>. Chaque vignette porte le nom de la machine, son code et son atelier ; un liseré coloré rappelle le site (bleu pour Seem, rose pour Semrac).</li>
+      <li><b>À droite</b>, tant qu'aucune machine n'est choisie : « Choisissez une machine pour voir ses heures de fonctionnement et l'usure de ses pièces. »</li>
+      <li>Une fois la machine sélectionnée, trois tuiles : <b>Heures tournées (année)</b>, <b>Heures totales (BDT)</b> et <b>Pièces à remplacer</b> (le nombre de pièces dont la durée de vie est dépassée).</li>
+      <li>En dessous, le tableau <b>« Pièces remplaçables — usure &amp; échéance »</b> : <b>Pièce</b>, <b>Référence</b>, <b>Durée de vie</b>, <b>Dernier rempl.</b>, <b>Utilisé depuis</b> (heures machine cumulées depuis le dernier remplacement), <b>Restant avant rempl.</b>, <b>Usure</b> (barre de progression en %) et un bouton d'action.</li>
+      <li>Codes couleur de la barre d'usure : <span class="b b-ok">vert</span> jusqu'à 80&nbsp;% · <span class="b b-warn">orange</span> à partir de 80&nbsp;% · <span class="b b-crit">rouge</span> à 100&nbsp;%, la colonne « Restant » affichant alors <b>À REMPLACER</b>. Une pièce sans durée de vie renseignée affiche « durée de vie ? » et un bouton <b>« définir »</b>.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/maintenance-preventif.png" alt="Capture de l'onglet Plan Préventif" loading="lazy">
+      <figcaption><b>Plan Préventif</b> — la liste des machines à gauche (liseré bleu = Seem, rose = Semrac) ; le détail d'usure s'affiche à droite dès qu'une machine est choisie.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — vérifier l'usure d'une machine</h3>
+    <ol class="steps">
+      <li>Cliquez sur la machine dans la liste de gauche (ou tapez son nom dans « Rechercher… » pour filtrer la liste).</li>
+      <li>Lisez les trois tuiles : les heures de l'année en cours, les heures totales depuis toujours, et le nombre de pièces déjà à remplacer.</li>
+      <li>Parcourez le tableau : les barres orange annoncent les remplacements du mois à venir, les rouges sont à traiter tout de suite.</li>
+      <li>Si une pièce affiche « durée de vie ? », cliquez sur <b>« définir »</b> et saisissez le nombre d'heures de fonctionnement avant remplacement conseillé (donnée du constructeur ou retour d'expérience). Le suivi d'usure démarre aussitôt.</li>
+    </ol>
+
+    <h3>Pas à pas — enregistrer un remplacement de pièce</h3>
+    <ol class="steps">
+      <li>Après avoir changé la pièce, cliquez sur le bouton vert en fin de ligne (« Marquer la pièce remplacée »).</li>
+      <li>Confirmez : « Marquer cette pièce remplacée aujourd'hui ? Le compteur d'usure repart à zéro. »</li>
+      <li>La date du jour devient le nouveau <b>dernier remplacement</b> ; la colonne « Utilisé depuis » revient à zéro et la barre d'usure redevient verte.</li>
+      <li>Pensez à décrémenter le stock de la pièce dans l'onglet <b>« Pièces &amp; PDR »</b>, et à rattacher l'intervention à un OM si elle a immobilisé la machine.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Les heures affichées sont le <b>temps machine alloué des BDT</b> (issu de la gamme définie à l'analyse DT), pas un compteur physique lu sur la machine. Une gamme mal renseignée en Bureau d'Études fausse donc le préventif.</li>
+      <li>Seules les pièces déclarées <b>remplaçables</b> apparaissent ici ; les consommables non suivis restent dans « Pièces &amp; PDR ».</li>
+      <li>Si aucune date de dernier remplacement n'est renseignée, l'usure est comptée depuis <b>l'origine</b> des heures machine — d'où l'intérêt de saisir cette date dès la création de la pièce.</li>
+    </ul>
+    <div class="note"><b>Automatisme :</b> à chaque ouverture du service Maintenance, l'ERP passe en revue le préventif et <b>crée tout seul les OM échus</b>, sans doublon : d'une part les plans <b>calendaires</b> dont la date prévue est atteinte (le plan est ensuite avancé à la prochaine échéance), d'autre part les pièces <b>en fin de vie</b> (heures machine cumulées ≥ durée de vie), avec un OM « Remplacement pièce — … ». Vous les retrouvez dans l'onglet « Interventions / OM », en type préventif.</div>
+    <div class="astuce"><b>Astuce :</b> renseignez la durée de vie <b>et</b> la date du dernier remplacement de chaque pièce critique dès sa création : c'est le seul travail de saisie du préventif — ensuite, l'ERP ouvre les OM tout seul au bon moment.</div>
+  </section>
+
+  <!-- ══════════════ 3. MTBF & HISTORIQUE ══════════════ -->
+  <section class="tab" id="tab-mtbf">
+    <div class="tab-head"><span class="tab-num">3</span><h2>MTBF &amp; Historique</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Mesurer la fiabilité du parc machines. Deux indicateurs, calculés automatiquement à partir des OM : le <b>MTTR</b> (temps moyen de réparation — combien de temps une machine reste immobilisée) et le <b>MTBF</b> (temps moyen entre deux pannes — à quelle fréquence elle tombe). C'est l'écran qui permet de désigner les machines à fiabiliser en priorité, et de justifier un investissement ou un contrat de maintenance.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>En haut, le titre <b>« Fiabilité — MTTR &amp; MTBF »</b>, trois pastilles de filtre <b>Tout l'atelier</b> · <b>SEEM</b> · <b>SEMRAC</b>, et le rappel « MTTR = temps moyen de réparation · MTBF = temps moyen entre pannes ». Quatre tuiles suivent : <b>MTTR moyen</b> (en heures), <b>MTBF moyen</b> (en jours), <b>Disponibilité</b> (en %) et <b>Total pannes</b>. En dessous, le tableau <b>« Indicateurs par machine »</b> : <b>Machine</b> (nom souligné, cliquable), <b>Atelier</b>, <b>Pannes</b>, <b>MTTR (h)</b>, <b>MTBF (h)</b>, <b>État</b>.</p>
+    <ul class="points">
+      <li>État de la machine : <span class="b b-ok">OK</span> (opérationnelle) · <span class="b b-warn">Maintenance</span> · <span class="b b-crit">En panne</span>.</li>
+      <li>Le MTBF s'affiche en <b>heures</b> tant qu'il reste court, et bascule en <b>jours</b> au-delà de 48&nbsp;h — plus lisible pour un parc fiable.</li>
+      <li>Un tiret « — » signifie que l'indicateur n'est pas calculable : le MTTR demande au moins une intervention <b>clôturée</b>, le MTBF au moins <b>deux</b> pannes signalées.</li>
+      <li>La <b>disponibilité</b> est le rapport MTBF / (MTBF + MTTR) : la part du temps où la machine est apte à produire.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/maintenance-mtbf.png" alt="Capture de l'onglet MTBF &amp; Historique" loading="lazy">
+      <figcaption><b>MTBF &amp; Historique</b> — les quatre tuiles résument le parc filtré ; dans le tableau, chaque nom de machine souligné ouvre sa Fiche 360.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — analyser la fiabilité d'un atelier</h3>
+    <ol class="steps">
+      <li>Choisissez le périmètre avec les pastilles : <b>Tout l'atelier</b>, <b>SEEM</b> ou <b>SEMRAC</b>. Les quatre tuiles et le tableau se recalculent instantanément.</li>
+      <li>Triez votre lecture par la colonne <b>Pannes</b> : les machines qui tombent le plus souvent sont vos candidates au préventif renforcé.</li>
+      <li>Comparez ensuite <b>MTTR</b> et <b>MTBF</b> : un MTTR élevé signale un problème de pièces de rechange ou de compétence disponible ; un MTBF faible signale une machine réellement fragile ou mal entretenue.</li>
+      <li>Cliquez sur le <b>nom d'une machine</b> : l'ERP bascule sur sa <b>Fiche 360</b>, déjà chargée, pour comprendre l'historique complet.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Ces indicateurs ne valent que ce que valent les OM : une panne réparée sans OM n'existe pas pour la GMAO, et une intervention non clôturée n'entre pas dans le MTTR.</li>
+      <li>Le MTBF se calcule sur l'<b>écart entre les dates de signalement</b> des pannes successives : il ne devient significatif qu'après plusieurs incidents sur la même machine.</li>
+      <li>Une machine qui n'a jamais eu d'OM est considérée comme disponible à 100&nbsp;% — c'est normal, mais ce n'est pas une preuve de fiabilité tant qu'elle n'a pas d'historique.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> avant une revue de direction, filtrez sur chaque site et notez les trois machines au plus faible MTBF : c'est le format d'argumentaire le plus court pour obtenir un budget de fiabilisation.</div>
+  </section>
+
+  <!-- ══════════════ 4. FICHE 360 ══════════════ -->
+  <section class="tab" id="tab-fiche">
+    <div class="tab-head"><span class="tab-num">4</span><h2>Fiche 360</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Tout savoir d'une machine sur un seul écran : ce qu'elle coûte (coût total de possession), ce qu'elle vaut en fiabilité, ce qui est passé dessus en production et tout ce qu'on lui a fait comme maintenance. C'est la fiche que l'on ouvre avant un arbitrage — réparer ou remplacer, sous-traiter ou investir — et celle que l'on montre en audit pour prouver la traçabilité du moyen de production.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Un menu déroulant <b>« Machine : »</b> en haut ; tant qu'aucune machine n'est choisie, l'écran invite à en sélectionner une. Une fois la machine choisie, la fiche se déploie :</p>
+    <ul class="points">
+      <li>Un <b>bandeau d'identité</b> : nom et code de la machine, atelier, année en cours, et une pastille d'état — <span class="b b-ok">Opérationnel</span> · <span class="b b-warn">En maintenance</span> · <span class="b b-crit">En panne</span>.</li>
+      <li>Une première rangée de tuiles <b>coûts</b> : <b>TCO</b> de l'année (OPEX + maintenance), <b>OPEX annuel</b> (avec le taux horaire de la machine), <b>Maintenance</b> de l'année (avec le nombre d'OM, dont les ouverts), <b>Coût absorbé prod.</b> (heures BDT × taux horaire) et <b>Valeur PDR stock</b> (nombre de pièces, et combien sont sous le stock mini).</li>
+      <li>Une seconde rangée de tuiles <b>fiabilité</b> : <b>Disponibilité</b>, <b>TRS*</b>, <b>MTTR</b>, <b>MTBF</b>, <b>Pannes</b>, <b>Heures machine</b> et <b>SPC cotes</b> (part de relevés de cotes conformes, issus des contrôles Qualité).</li>
+      <li>Deux tableaux côte à côte : <b>Historique de production</b> — ce qui est passé sur la machine (Date, Opération, Pièce, Client, Temps, Résultat) — et <b>Maintenance</b>, avec le cumul dépensé en titre (OM, Intervention, Date, Coût).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/maintenance-fiche.png" alt="Capture de l'onglet Fiche 360" loading="lazy">
+      <figcaption><b>Fiche 360</b> — tout part du menu « Machine : » ; la fiche complète (coûts, fiabilité, historiques) s'affiche dès la sélection.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — instruire un arbitrage « réparer ou remplacer »</h3>
+    <ol class="steps">
+      <li>Sélectionnez la machine dans le menu <b>« Machine : »</b>.</li>
+      <li>Comparez la tuile <b>Maintenance de l'année</b> à la tuile <b>OPEX annuel</b> : quand la maintenance approche le coût d'exploitation, la machine est en fin de vie économique.</li>
+      <li>Regardez la <b>Disponibilité</b> et le nombre de <b>Pannes</b> : une machine peu chère mais souvent arrêtée coûte surtout des retards de livraison.</li>
+      <li>Vérifiez le <b>Coût absorbé prod.</b> et les <b>Heures machine</b> : une machine peu chargée ne justifie pas un investissement de remplacement — elle justifie plutôt un redéploiement.</li>
+      <li>Parcourez le tableau <b>Maintenance</b> pour repérer les interventions répétitives (même titre, même cause) : c'est souvent là que se cache le vrai défaut à traiter.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Les <b>heures machine</b> comptabilisent uniquement le temps machine issu de la gamme (analyse DT), pas le temps homme : elles ne se comparent pas aux heures de présence des opérateurs.</li>
+      <li>Le <b>coût absorbé production</b> (heures × taux) est un indicateur de charge, il n'entre <b>pas</b> dans le TCO — sinon la machine serait comptée deux fois.</li>
+      <li>Le <b>TRS</b> affiché est <b>partiel</b> : c'est Disponibilité × Qualité. La composante Performance (cadence réelle rapportée à la cadence théorique) n'est pas encore mesurée — d'où l'astérisque.</li>
+      <li>L'historique de production affiche les derniers passages, et le bloc maintenance les derniers OM : pour l'exhaustivité comptable, appuyez-vous sur les tuiles, qui portent les cumuls.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> depuis la maquette du bâtiment (service <b>Plan / Bâtiment</b>), cliquer un repère de machine ouvre directement sa Fiche 360 — pratique en réunion devant le plan de l'atelier. Le nom des machines du tableau « MTBF &amp; Historique » y mène aussi en un clic.</div>
+  </section>
+
+  <!-- ══════════════ 5. COÛTS POSTES ══════════════ -->
+  <section class="tab" id="tab-postes">
+    <div class="tab-head"><span class="tab-num">5</span><h2>Coûts postes</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Voir le coût de l'atelier non plus machine par machine, mais <b>poste de travail par poste de travail</b> — un poste regroupant plusieurs machines. L'onglet additionne, pour chaque poste, l'<b>OPEX annuel</b> de ses machines et le <b>coût des OM</b> de ces mêmes machines, pour donner le <b>TCO annuel</b> du poste. C'est le chaînon entre la maintenance et le prix de revient : le taux horaire du poste sert directement au calcul du coût de revient unitaire des pièces.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Une seule carte, <b>« Coûts par poste — OPEX + maintenance (TCO annuel) »</b>, avec un tableau dont chaque ligne est un poste actif :</p>
+    <ul class="points">
+      <li><b>Poste</b> — le nom, précédé de la pastille de couleur du poste (la même qu'au planning de Production).</li>
+      <li><b>Machines</b> — combien de machines composent le poste.</li>
+      <li><b>OPEX annuel</b> — le coût d'exploitation annuel cumulé des machines du poste (valeur réelle si elle a été saisie, sinon estimation à partir du taux horaire et de la capacité).</li>
+      <li><b>Maintenance <i>année en cours</i></b> — le cumul des coûts réels des OM des machines du poste sur l'exercice.</li>
+      <li><b>TCO annuel</b> — la somme des deux colonnes précédentes.</li>
+      <li><b>Taux/h effectif</b> — le taux horaire qui alimente le coût de revient, en €/h. La mention <span class="b b-warn">manuel</span> signale un taux forcé à la main ; la mention « dont +X achats » signale la part provenant des achats machine reçus dans l'année.</li>
+      <li>Une ligne <b>TOTAL POSTES</b> en bas récapitule l'OPEX, la maintenance et le TCO de tout l'atelier.</li>
+      <li>Si aucun poste n'est défini, l'écran renvoie vers <b>Production → onglet Machines → « Postes de travail »</b>, où les postes se créent.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/maintenance-postes.png" alt="Capture de l'onglet Coûts postes" loading="lazy">
+      <figcaption><b>Coûts postes</b> — l'onglet se situe entre « Fiche 360 » et « Pièces &amp; PDR » ; son compteur indique le nombre de postes actifs pris en compte.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — contrôler le coût d'un poste</h3>
+    <ol class="steps">
+      <li>Repérez la ligne du poste concerné et lisez son nombre de <b>machines</b> : un poste sans machine rattachée n'a ni OPEX ni taux (colonnes à « — »).</li>
+      <li>Comparez <b>Maintenance</b> et <b>OPEX annuel</b> : une maintenance qui pèse lourd face à l'OPEX signale un poste à fiabiliser.</li>
+      <li>Vérifiez le <b>Taux/h effectif</b> : c'est lui qui est facturé au prix de revient. S'il porte la mention « manuel », le taux a été forcé en Production — assurez-vous qu'il est toujours d'actualité.</li>
+      <li>En cas d'écart, corrigez à la source : le rattachement des machines aux postes et le taux se règlent en <b>Production</b>, les coûts d'intervention se corrigent dans l'OM concerné (onglet « Interventions / OM »).</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>L'agrégation est <b>exactement la même qu'en Production</b> : les deux services doivent afficher les mêmes chiffres. Un écart signale une donnée saisie deux fois ou un rattachement de machine incohérent.</li>
+      <li>Seuls les postes <b>actifs</b> sont listés ; un poste passé inactif disparaît du tableau et du total.</li>
+      <li>Une machine <b>sans poste</b> n'est comptée nulle part ici : elle n'apparaît que dans sa Fiche 360. Rattachez chaque machine à un poste pour que le TCO de l'atelier soit complet.</li>
+      <li>La colonne Maintenance ne retient que les OM de l'<b>année civile en cours</b> : elle repart à zéro au 1<sup>er</sup> janvier, contrairement au cumul affiché dans la Fiche 360.</li>
+    </ul>
+    <div class="note"><b>Rappel :</b> cet onglet est en <b>consultation</b>. Rien ne s'y saisit — tout vient des machines (Production), des OPEX et des OM.</div>
+  </section>
+
+  <!-- ══════════════ 6. PIÈCES & PDR ══════════════ -->
+  <section class="tab" id="tab-pieces">
+    <div class="tab-head"><span class="tab-num">6</span><h2>Pièces &amp; PDR</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Tenir le magasin des pièces de rechange (PDR), machine par machine : ce qu'on a, où c'est rangé, chez qui on le rachète, à quel prix, et à partir de quel seuil il faut recommander. C'est aussi ici que se règlent les deux paramètres qui font vivre le <b>Plan Préventif</b> : la durée de vie conseillée d'une pièce et la date de son dernier remplacement.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Le titre <b>« Pièces de rechange (PDR) par machine »</b>, puis un menu déroulant <b>« Machine : »</b>. Tant qu'aucune machine n'est choisie, l'écran affiche « Choisissez une machine pour voir et gérer ses pièces de rechange. » Une fois la machine sélectionnée, deux blocs apparaissent :</p>
+    <ul class="points">
+      <li>Le formulaire <b>« Ajouter une pièce de rechange »</b> (voir le tableau champ par champ plus bas) et son bouton jaune <b>« Ajouter la pièce »</b>.</li>
+      <li>Le tableau <b>« Pièces de rechange »</b> avec son compteur : <b>Désignation</b>, <b>Référence</b>, <b>Fournisseur</b>, <b>Prix</b>, <b>Stock</b> (stock actuel / stock mini), <b>Emplac.</b> et un bouton corbeille pour supprimer la ligne.</li>
+      <li>Une pièce dont le stock est <b>tombé au niveau du mini</b> s'affiche en rouge, suivie d'un ⚠ : c'est le signal de réapprovisionnement.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/maintenance-pieces.png" alt="Capture de l'onglet Pièces &amp; PDR" loading="lazy">
+      <figcaption><b>Pièces &amp; PDR</b> — le magasin est organisé <i>par machine</i> : le menu « Machine : » conditionne tout l'écran.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — enregistrer une pièce de rechange</h3>
+    <ol class="steps">
+      <li>Choisissez la machine dans le menu <b>« Machine : »</b>.</li>
+      <li>Saisissez au minimum la <b>Désignation</b> (par exemple « Courroie trapézoïdale A38 ») — c'est le seul champ obligatoire.</li>
+      <li>Complétez la <b>Référence</b>, le <b>Fournisseur</b> (le champ propose les fournisseurs déjà utilisés sur d'autres pièces), le <b>Prix unitaire</b>, le <b>Stock actuel</b>, le <b>Stock mini</b> et l'<b>Emplacement</b> (magasin / casier).</li>
+      <li>Renseignez les deux champs sur fond jaune — <b>Durée de vie conseillée (h)</b> et <b>Dernier remplacement</b> — si la pièce doit être suivie en préventif.</li>
+      <li>Cliquez sur <b>« Ajouter la pièce »</b> : elle rejoint la liste de la machine et, si sa durée de vie est renseignée, apparaît immédiatement dans le tableau d'usure du <b>Plan Préventif</b>.</li>
+    </ol>
+
+    <h3>Le formulaire d'ajout, champ par champ</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+      <tbody>
+        <tr><td>Machine</td><td>Menu déroulant</td><td>Oui</td><td>Sélectionné en haut de l'écran ; la pièce est toujours rattachée à une machine.</td></tr>
+        <tr><td>Désignation</td><td>Texte</td><td>Oui</td><td>Nom courant de la pièce, tel qu'on la demande au magasin.</td></tr>
+        <tr><td>Référence</td><td>Texte</td><td>Non</td><td>Référence constructeur ou fournisseur — utile pour recommander sans erreur.</td></tr>
+        <tr><td>Fournisseur</td><td>Texte (propositions)</td><td>Non</td><td>Chez qui la pièce se rachète ; les fournisseurs déjà saisis sont proposés automatiquement.</td></tr>
+        <tr><td>Prix unitaire (€)</td><td>Nombre</td><td>Non</td><td>Sert à valoriser le stock PDR affiché dans la Fiche 360 de la machine.</td></tr>
+        <tr><td>Stock actuel</td><td>Nombre</td><td>Non (0 par défaut)</td><td>Quantité réellement en magasin.</td></tr>
+        <tr><td>Stock mini</td><td>Nombre</td><td>Non (0 par défaut)</td><td>Seuil d'alerte : au-dessous ou à égalité, la ligne passe en rouge avec un ⚠.</td></tr>
+        <tr><td>Emplacement</td><td>Texte</td><td>Non</td><td>Magasin / casier — évite de chercher la pièce pendant que la machine est arrêtée.</td></tr>
+        <tr><td>Durée de vie conseillée (h)</td><td>Nombre</td><td>Non (obligatoire pour le préventif)</td><td>Heures de fonctionnement machine avant remplacement conseillé. Déclenche le suivi d'usure et, une fois atteinte, la création automatique d'un OM préventif.</td></tr>
+        <tr><td>Dernier remplacement</td><td>Date</td><td>Non (fortement conseillé)</td><td>Point de départ du compteur d'usure. Sans cette date, l'usure est comptée depuis l'origine des heures machine.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Une pièce ne se déplace pas d'une machine à l'autre : si la même référence sert sur deux machines, créez-la des deux côtés (chaque machine a son propre compteur d'usure).</li>
+      <li>Le stock PDR de cet onglet est <b>indépendant du service Stocks</b> : il ne se décrémente pas tout seul quand vous utilisez une pièce. Mettez le <b>stock actuel</b> à jour après chaque intervention.</li>
+      <li>Le prix unitaire × le stock donne la <b>valeur PDR</b> affichée dans la Fiche 360 : un prix laissé vide sous-évalue le stock immobilisé.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> la suppression d'une pièce (bouton corbeille) est <b>définitive</b>, après une simple confirmation — son historique d'usure et sa date de dernier remplacement disparaissent avec elle.</div>
+    <div class="astuce"><b>Astuce :</b> pour recommander une pièce sous le mini, utilisez le bouton <b>« Demande d'achat »</b> du bandeau : la demande arrive dans le service Achats, qui la transforme en demande de prix puis en bon de commande fournisseur.</div>
+  </section>
+
+  <!-- ══════════════ 7. DASHBOARD ══════════════ -->
+  <section class="tab" id="tab-dashboard">
+    <div class="tab-head"><span class="tab-num">7</span><h2>Dashboard</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> La photo du service en une page : combien d'interventions sont en cours, combien de machines sont à l'arrêt, quelle est la disponibilité du parc, combien la maintenance a coûté depuis le début de l'année, et quels entretiens préventifs tombent dans les sept jours. C'est l'écran d'ouverture de journée et l'écran de point hebdomadaire avec la Production.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li>Six tuiles en haut : <b>OM ouverts / en cours</b> (interventions actives), <b>OM critiques</b> (action immédiate requise), <b>Disponibilité moy.</b> (calculée MTBF/MTTR), <b>TRS moyen*</b> (Dispo × Qualité), <b>Coût maintenance</b> (cumul depuis le début de l'année) et <b>Machines arrêtées</b>.</li>
+      <li>Le tableau <b>Disponibilité &amp; TRS par machine (calculé)</b> : <b>Machine</b>, <b>Disponibilité</b> (barre + %), <b>TRS*</b>, <b>MTBF</b>, <b>MTTR</b>, <b>Pannes</b>, <b>Qualité</b>. La disponibilité passe au vert au-dessus de 90&nbsp;%, à l'orange entre 75 et 90&nbsp;%, au rouge en dessous ; le TRS au vert au-dessus de 85&nbsp;%, à l'orange entre 65 et 85&nbsp;%, au rouge en dessous.</li>
+      <li>La carte <b>Statut machines</b> — une ligne par machine suivie, avec sa barre de disponibilité, son MTBF et son état : <span class="b b-ok">Opérationnel</span> · <span class="b b-warn">En maintenance</span> · <span class="b b-crit">Arrêt</span>.</li>
+      <li>La carte <b>Prochains PM urgents (≤ 7 jours)</b> — les entretiens préventifs à venir, avec une pastille d'échéance (<b>J-<i>n</i></b> à venir, <b>Auj.</b> aujourd'hui, <b>J+<i>n</i></b> en retard), l'intitulé, la machine, le responsable et le type. Le bouton <b>« Voir le plan préventif complet »</b> bascule vers l'onglet Plan Préventif. Quand rien n'est dû : « Aucun PM urgent cette semaine ».</li>
+      <li>Le tableau <b>Ordres de maintenance actifs</b> (les 8 premiers) : <b>N°&nbsp;OM</b>, <b>Type</b>, <b>Machine</b>, <b>Titre</b>, <b>Priorité</b>, <b>Statut</b>, <b>Prévu le</b>. La date prévue est colorée selon l'urgence : rouge si l'échéance est dépassée, orange à 3 jours ou moins, ambre à 7 jours ou moins, vert au-delà.</li>
+      <li>Types d'OM identifiables par leur pastille : <b>correctif</b>, <b>preventif</b>, <b>amelioratif</b>, <b>vgp</b> (vérification générale périodique) et <b>inspection</b>.</li>
+      <li>Statuts affichés ici : <span class="b b-info">Ouvert</span> · <span class="b b-warn">En cours</span> · <span class="b b-mut">En attente PDR</span> · <span class="b b-ok">Terminé</span> · <span class="b b-mut">Annulé</span>.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/maintenance-dashboard.png" alt="Capture de l'onglet Dashboard Maintenance" loading="lazy">
+      <figcaption><b>Dashboard</b> — les six tuiles, puis le tableau Disponibilité &amp; TRS par machine ; en bas de page, le statut des machines, les préventifs de la semaine et les OM actifs.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — le point du lundi matin</h3>
+    <ol class="steps">
+      <li>Lisez d'abord les tuiles <b>Machines arrêtées</b> et <b>OM critiques</b> : si elles ne sont pas à zéro, commencez la journée par l'onglet « Interventions / OM ».</li>
+      <li>Balayez la carte <b>Prochains PM urgents</b> : toute pastille <b>J+</b> est un préventif en retard — planifiez-le avec la Production avant qu'il ne devienne une panne.</li>
+      <li>Dans le tableau <b>Disponibilité &amp; TRS</b>, repérez les lignes orange ou rouges : ce sont les machines qui pèsent sur la capacité de l'atelier.</li>
+      <li>Terminez par le tableau <b>Ordres de maintenance actifs</b> et traitez d'abord les dates « Prévu le » affichées en rouge.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le <b>coût maintenance</b> affiché est un cumul depuis le début de l'année : il ne vaut que si le champ « coût réel » des OM est renseigné à chaque clôture.</li>
+      <li>Le <b>TRS</b> est partiel (Disponibilité × Qualité) : la composante Performance n'est pas encore mesurée. Ne le comparez pas tel quel à un TRS constructeur.</li>
+      <li>La colonne <b>Qualité</b> vient des passages de production enregistrés sur la machine : elle reste vide tant qu'aucun bon de travail n'a été soldé dessus.</li>
+      <li>Une machine sans aucun OM est portée à 100&nbsp;% de disponibilité : la moyenne du parc est donc optimiste tant que l'historique de la GMAO est jeune.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> le vrai levier de ce tableau de bord n'est pas ici mais dans la saisie : un OM clôturé avec sa durée, son coût et sa cause racine fait progresser d'un coup la disponibilité mesurée, le TCO des machines et le coût des postes.</div>
+  </section>
+
+  <div class="docnav">
+    <a href="index.html">← Sommaire des manuels</a>
+    <a href="rh.html">Manuel suivant : RH →</a>
+  </div>
+
+  <footer class="doc">
+    ERP Seem Semrac — manuel utilisateur généré depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs). En cas d'écart entre ce manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
+  </footer>
+
+</div>
+</body>
+</html>

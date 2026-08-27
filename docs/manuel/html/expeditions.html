@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manuel — Expéditions · ERP Seem Semrac</title>
+<link rel="stylesheet" href="manuel.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <div class="brandrow">
+      <div class="logo">SS</div>
+      <div>
+        <div class="co">SEEM · SEMRAC — ERP</div>
+        <div class="eyebrow">Manuel utilisateur</div>
+      </div>
+      <div class="kind">docs/manuel/html</div>
+    </div>
+    <h1>Service <span class="hi">Expéditions</span></h1>
+    <p class="lede">Les Expéditions sont la porte d'entrée et de sortie des marchandises. Le service est organisé selon le <b>sens du flux</b> : ce qui <b>part</b> (onglet Envois, ouvert par défaut), ce qui <b>arrive</b> (onglet Réceptions), puis une vue <b>Calendrier</b> qui réunit les deux et détaille la journée. S'y ajoutent le référentiel <b>Fournisseurs</b> — avec l'historique des commandes envoyées et des livraisons reçues — et un <b>Dashboard</b>. Vous y apprendrez aussi comment l'ERP mesure la ponctualité (OTD), la vôtre envers les clients et celle de vos fournisseurs.</p>
+    <div class="metachips">
+      <span class="chip">👤 Pour qui : <b>Agent d'expédition</b> (écriture : Expéditions, Stock · lecture : Commercial, Achats, Production)</span>
+      <span class="chip">🧭 Dans l'ERP : <b>Sidebar → Expéditions</b></span>
+      <span class="chip">🗂 <b>5 onglets</b></span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-t">Sommaire</div>
+    <ol>
+      <li><a href="#tab-envois">Envois (ce qui part)</a></li>
+      <li><a href="#tab-receptions">Réceptions (ce qui arrive)</a></li>
+      <li><a href="#tab-calendrier">Calendrier &amp; journée</a></li>
+      <li><a href="#tab-fournisseurs">Fournisseurs (référentiel, BC &amp; BL)</a></li>
+      <li><a href="#tab-dashboard">Dashboard</a></li>
+    </ol>
+  </nav>
+
+  <div class="note"><b>Le principe du service.</b> Les cinq onglets ne sont pas cinq bases de données différentes : ce sont <b>cinq projections des mêmes tables</b> (bons de commande, bons de sous-traitance, bons de livraison, commandes, non-conformités). Une réception enregistrée apparaît immédiatement dans le calendrier et dans l'historique du fournisseur — vous n'avez jamais à saisir deux fois.</div>
+
+  <!-- ═══════════════ ONGLET 1 : ENVOIS ═══════════════ -->
+  <section class="tab" id="tab-envois">
+    <div class="tab-head"><span class="tab-num">1</span><h2>Envois — ce qui part</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est l'onglet d'accueil du service : tout ce qui <b>quitte</b> l'atelier — les commandes clients prêtes à expédier, les bons de livraison à envoyer, et les pièces à confier à un sous-traitant. Le badge compte ce qui reste à faire partir.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>Commandes prêtes à expédier</b> — les commandes dont la production est terminée et le lot <b>libéré</b> par la Qualité. C'est de là que part la création d'un BL.</li>
+      <li><b>BL à envoyer</b> — les bons de livraison créés mais pas encore partis.</li>
+      <li><b>À envoyer en sous-traitance</b> — les bons de sous-traitance (BST) en attente d'expédition chez le prestataire.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/expeditions-envois.png" alt="Capture de l'onglet Envois" loading="lazy">
+      <figcaption><b>Envois</b> — commandes prêtes, BL à expédier et pièces à envoyer en sous-traitance, avec la porte qualité appliquée en amont.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — créer un bon de livraison client</h3>
+    <ol class="steps">
+      <li>Dans <b>« Commandes prêtes à expédier »</b>, cliquez la commande concernée.</li>
+      <li>Sélectionnez les <b>lots</b> à expédier et la <b>quantité</b> : une livraison partielle est possible, le reliquat reste sur la commande.</li>
+      <li>Renseignez le <b>transporteur</b> et, si vous l'avez, le <b>prix de transport</b>.</li>
+      <li>Validez : le BL est créé, le stock est décrémenté et une <b>facture client</b> ainsi que l'<b>écriture de vente</b> sont préparées.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-expeditions-bl.png" alt="Fenêtre de création d'un bon de livraison" loading="lazy">
+      <figcaption><b>Nouveau bon de livraison</b> — choix des lots libérés, quantités (partiel possible), transporteur et prix de transport.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — envoyer en sous-traitance</h3>
+    <ol class="steps">
+      <li>Dans <b>« À envoyer en sous-traitance »</b>, repérez le BST et cliquez son bouton d'envoi.</li>
+      <li>L'horodatage de départ est enregistré ; la pièce est désormais attendue en retour, et apparaît à ce titre dans l'onglet <b>Réceptions</b>.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-expeditions-bst.png" alt="Fenêtre d'envoi en sous-traitance" loading="lazy">
+      <figcaption><b>Envoi en sous-traitance</b> — le départ horodaté bascule automatiquement la pièce en « retour attendu » côté Réceptions.</figcaption>
+    </figure>
+
+    <div class="warn"><b>La porte qualité.</b> Un bon de livraison est <b>refusé</b> si le lot porte une non-conformité ouverte ou s'il est en quarantaine. Ce n'est pas un bug : c'est la garantie qu'aucune pièce douteuse ne part chez un client. Faites lever le blocage par la Qualité (libération du lot, dérogation, ou traitement de la NC).</div>
+  </section>
+
+  <!-- ═══════════════ ONGLET 2 : RÉCEPTIONS ═══════════════ -->
+  <section class="tab" id="tab-receptions">
+    <div class="tab-head"><span class="tab-num">2</span><h2>Réceptions — ce qui arrive</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est votre écran du matin : tout ce que l'entreprise <b>attend</b>, quelle qu'en soit l'origine — commandes fournisseurs, retours de sous-traitance, retours clients — et tout ce qui a <b>déjà été réceptionné</b>. Le badge de l'onglet compte ce qui reste à recevoir.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Des blocs empilés, du plus urgent au plus froid :</p>
+    <ul class="points">
+      <li><b>À réceptionner — fournisseurs &amp; sous-traitants</b> : un bon de commande par ligne, avec son numéro, le fournisseur, les articles, le montant et la <b>date d'arrivée prévue</b>. Une date dépassée passe en <span class="b b-crit">en retard</span>.</li>
+      <li><b>Retours de sous-traitance attendus</b> : les pièces parties chez un prestataire et qui doivent revenir.</li>
+      <li><b>Retours clients attendus</b> : annoncés en amont depuis une <b>non-conformité client</b> (service Qualité), avec le n° de commande, la quantité et la date prévue.</li>
+      <li><b>En attente de validation fournisseur</b> : les BC envoyés dont le fournisseur n'a pas encore accusé réception.</li>
+      <li><b>Arrivées enregistrées</b> : l'historique de ce qui est entré, avec le bon de livraison correspondant.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/expeditions-receptions.png" alt="Capture de l'onglet Réceptions" loading="lazy">
+      <figcaption><b>Réceptions</b> — tout ce qui arrive, regroupé par nature : commandes fournisseurs et sous-traitants, retours de sous-traitance, retours clients, puis les arrivées déjà enregistrées.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — enregistrer une réception fournisseur</h3>
+    <ol class="steps">
+      <li>Repérez la ligne du bon de commande dans <b>« À réceptionner »</b> et cliquez son bouton d'action.</li>
+      <li>Vérifiez la <b>quantité reçue</b> : elle peut être inférieure à la quantité commandée (réception partielle), le BC reste alors ouvert pour le solde.</li>
+      <li>Renseignez le <b>transporteur</b> et la référence de transport si le colis en porte une — c'est ce qui alimentera la colonne Transporteur de l'historique fournisseur.</li>
+      <li>Enregistrez : un <b>bon de livraison de réception</b> est créé et rattaché au BC, la date d'arrivée réelle est posée, et la ligne bascule dans « Arrivées enregistrées ».</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-expeditions-reception.png" alt="Fenêtre d'enregistrement d'une réception" loading="lazy">
+      <figcaption><b>Enregistrer une réception</b> — quantité reçue, transporteur et référence de transport ; la réception partielle laisse le bon de commande ouvert pour le solde.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — réceptionner un retour client</h3>
+    <ol class="steps">
+      <li>Le retour doit d'abord avoir été <b>annoncé en Qualité</b> : à la déclaration de la non-conformité client, cochez « Retour de marchandise prévu » et renseignez le n° de commande, la quantité et la date prévue.</li>
+      <li>Il apparaît alors ici, dans <b>« Retours clients attendus »</b>. Cliquez <b>« Enregistrer l'arrivée »</b>.</li>
+      <li>Le n° de commande est <b>prérempli depuis la non-conformité</b> ; complétez la quantité réellement revenue et validez.</li>
+      <li>Un bon de livraison d'entrée est créé et rattaché à la commande, et la non-conformité passe en « retour reçu ».</li>
+    </ol>
+    <div class="warn"><b>Attention :</b> un retour client ne se crée pas ici de toutes pièces. Il naît toujours d'une <b>non-conformité</b> côté Qualité — c'est ce qui garantit qu'un retour est tracé, analysé et, le cas échéant, transformé en avoir.</div>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La <b>date d'arrivée prévue</b> peut être modifiée, mais l'ERP <b>gèle la première date promise</b> : c'est elle, et non la date repoussée, qui sert à calculer l'OTD du fournisseur. Un fournisseur ne peut donc pas « racheter » sa ponctualité en décalant ses dates.</li>
+      <li>Un bon de commande <b>annulé</b> n'apparaît nulle part dans le service — ni en réception, ni au calendrier, ni dans l'historique fournisseur.</li>
+    </ul>
+  </section>
+
+  <!-- ═══════════════ ONGLET 3 : CALENDRIER ═══════════════ -->
+  <section class="tab" id="tab-calendrier">
+    <div class="tab-head"><span class="tab-num">3</span><h2>Calendrier &amp; journée</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Voir <b>arrivées et départs sur une même frise</b>, pour anticiper les journées chargées et repérer les retards d'un coup d'œil. En dessous, le bloc <b>« Aujourd'hui »</b> liste précisément ce qui doit entrer et sortir dans la journée, retards compris.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li>Une <b>frise unique</b>, une ligne par sens de flux, chaque mouvement positionné à sa date. Une légende de couleurs distingue les natures : commande fournisseur, envoi ou retour de sous-traitance, livraison client, retour client.</li>
+      <li>Un repère sur le <b>jour courant</b>, et les mouvements dépassés signalés <span class="b b-crit">en retard</span>.</li>
+      <li>Sous la frise, deux blocs : <b>à réceptionner aujourd'hui</b> et <b>à envoyer aujourd'hui</b>, chaque ligne portant directement son bouton d'action.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/expeditions-calendrier.png" alt="Capture de l'onglet Calendrier" loading="lazy">
+      <figcaption><b>Calendrier</b> — arrivées et départs sur une frise commune, puis le détail de la journée avec les actions à portée de clic.</figcaption>
+    </figure>
+
+    <div class="astuce"><b>Astuce :</b> commencez la journée par cet onglet plutôt que par les deux premiers. Le bloc « Aujourd'hui » vous donne la liste de travail complète — entrées et sorties — sans avoir à basculer d'un onglet à l'autre.</div>
+  </section>
+
+  <!-- ═══════════════ ONGLET 4 : FOURNISSEURS ═══════════════ -->
+  <section class="tab" id="tab-fournisseurs">
+    <div class="tab-head"><span class="tab-num">4</span><h2>Fournisseurs — référentiel, commandes &amp; livraisons</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Consulter la liste des fournisseurs, en <b>ajouter</b> et en <b>supprimer</b>, et surtout retrouver pour chacun <b>tout l'historique des échanges</b> : les bons de commande qui lui ont été envoyés et les bons de livraison reçus de ses transporteurs. Chaque ligne ouvre l'affaire correspondante.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>L'écran est en deux colonnes.</p>
+    <ul class="points">
+      <li><b>À gauche, la liste</b> : un champ <b>« Rechercher un fournisseur… »</b> qui filtre à la frappe, puis une ligne par fournisseur avec son nom, son code, sa catégorie et deux compteurs — <span class="b b-info">N BC</span> (bons de commande envoyés) et <span class="b b-ok">N BL</span> (bons de livraison reçus).</li>
+      <li><b>À droite, le détail</b> du fournisseur sélectionné : son identité (code, catégorie, contact, téléphone, e-mail), puis deux tableaux.</li>
+      <li><b>Bons de commande envoyés</b> — N° BC · Date · Montant · Réception (<span class="b b-ok">reçu</span> ou <span class="b b-warn">en attente</span>) · Affaire.</li>
+      <li><b>Bons de livraison reçus</b> — N° BL · Date · <b>Transporteur</b> · BC lié · Affaire.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/expeditions-fournisseurs.png" alt="Capture de l'onglet Fournisseurs" loading="lazy">
+      <figcaption><b>Fournisseurs</b> — la liste filtrable à gauche avec les compteurs BC / BL, le détail du fournisseur à droite : commandes envoyées et livraisons reçues, chaque ligne ouvrant son affaire.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — consulter l'historique d'un fournisseur</h3>
+    <ol class="steps">
+      <li>Tapez les premières lettres du nom dans le champ de recherche, ou faites défiler la liste.</li>
+      <li>Cliquez le fournisseur : le détail s'affiche à droite, sans recharger la page.</li>
+      <li>Lisez ses <b>bons de commande envoyés</b> — vous voyez immédiatement lesquels sont encore en attente de réception.</li>
+      <li>Lisez ses <b>bons de livraison reçus</b> : la colonne <b>Transporteur</b> indique par qui la marchandise est arrivée, et la colonne <b>BC lié</b> rattache la livraison à sa commande.</li>
+      <li><b>Cliquez n'importe quelle ligne</b> des deux tableaux : l'ERP ouvre la <b>fiche de l'affaire</b> correspondante, où vous retrouvez la commande complète, de la demande de travaux à la facturation.</li>
+    </ol>
+
+    <h3>Pas à pas — ajouter un fournisseur</h3>
+    <ol class="steps">
+      <li>Cliquez <b>« Nouveau fournisseur »</b> en haut à droite.</li>
+      <li>Renseignez au minimum le <b>nom</b> (seul champ obligatoire) ; complétez si vous les avez le code, la catégorie, le contact, le téléphone, l'e-mail et l'adresse.</li>
+      <li><b>Enregistrez</b> : le fournisseur rejoint le référentiel et devient sélectionnable partout ailleurs dans l'ERP — demandes de prix, bons de commande, catalogue.</li>
+    </ol>
+
+    <h3>Pas à pas — supprimer un fournisseur</h3>
+    <ol class="steps">
+      <li>Sélectionnez le fournisseur, puis cliquez <b>« Supprimer »</b> dans le bandeau de droite.</li>
+      <li>Confirmez. <b>Les bons de commande déjà émis ne sont pas supprimés</b> : l'historique comptable et documentaire reste intact.</li>
+    </ol>
+
+    <div class="note"><b>Bon à savoir :</b> le bouton <b>« Fiche complète »</b> ouvre la fiche fournisseur 360 du service Achats — scorecard OTD, catalogue de produits, prix négociés, qualification. Cet onglet-ci est volontairement centré sur le <b>flux logistique</b> ; la relation commerciale se pilote côté Achats.</div>
+    <div class="astuce"><b>Astuce :</b> un fournisseur qui affiche beaucoup de BC et peu de BL a des commandes en souffrance. Les compteurs de la liste sont un bon détecteur de relances à passer.</div>
+  </section>
+
+  <!-- ═══════════════ ONGLET 5 : DASHBOARD ═══════════════ -->
+  <section class="tab" id="tab-dashboard">
+    <div class="tab-head"><span class="tab-num">5</span><h2>Dashboard</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Les indicateurs du service : volumes expédiés, ponctualité (OTD) client et fournisseur, en-cours et retards. C'est la vue que l'on présente en revue de service.</p>
+    <figure class="shot">
+      <img src="../../assets/expeditions-dashboard.png" alt="Capture du Dashboard Expéditions" loading="lazy">
+      <figcaption><b>Dashboard Expéditions</b> — volumes, OTD et en-cours ; la barre de filtres commune permet de changer la période, le site ou le client, et de comparer à l'année précédente.</figcaption>
+    </figure>
+    <ul class="points">
+      <li>L'<b>OTD fournisseur</b> se calcule sur la <b>première date promise</b>, jamais sur une date repoussée.</li>
+      <li>Le <b>PV de contrôle</b> à réception alimente la qualité fournisseur : un colis reçu non conforme dégrade la scorecard du fournisseur, consultable côté Achats.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/form-expeditions-pv.png" alt="Fenêtre de PV de contrôle à réception" loading="lazy">
+      <figcaption><b>PV de contrôle à réception</b> — conformité du lot reçu ; un écart déclenche une non-conformité et, si nécessaire, une mise en quarantaine.</figcaption>
+    </figure>
+  </section>
+
+  <div class="docnav">
+    <a href="index.html">← Sommaire des manuels</a>
+    <a href="stock.html">Manuel suivant : Stocks →</a>
+  </div>
+
+  <footer class="doc">
+    ERP Seem Semrac — manuel utilisateur généré depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs). En cas d'écart entre ce manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
+  </footer>
+
+</div>
+</body>
+</html>

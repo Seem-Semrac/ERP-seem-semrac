@@ -1,0 +1,469 @@
+<title>Dossier de reprise CSE</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;600&display=swap">
+
+<style>
+  :root{
+    --ground:#F2F4F7; --panel:#FFFFFF; --panel-2:#E9EDF3;
+    --ink:#14181F; --ink-2:#4A5464; --ink-3:#7A8698;
+    --rule:#D5DBE4; --rule-2:#C2CAD6;
+    --accent:#1B3A6B; --accent-soft:#E3EAF4;
+    --signal:#C2410C; --signal-soft:#FBE9DF;
+    --ok:#15803D; --ok-soft:#E2F2E7;
+    --wait:#A16207; --wait-soft:#FAF0DC;
+    --bad:#B42318; --bad-soft:#FBE4E2;
+    --mute:#5B5470; --mute-soft:#EBE8F1;
+    --f-disp:"Archivo","Segoe UI",system-ui,sans-serif;
+    --f-body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+    --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#101319; --panel:#171B23; --panel-2:#1E242E;
+      --ink:#E8ECF2; --ink-2:#A8B2C0; --ink-3:#78838F;
+      --rule:#2A313C; --rule-2:#3A4350;
+      --accent:#7FA6DC; --accent-soft:#1B2635;
+      --signal:#E8834F; --signal-soft:#2E1D14;
+      --ok:#5BB57C; --ok-soft:#152418;
+      --wait:#D6A64A; --wait-soft:#282013;
+      --bad:#E4796F; --bad-soft:#2E1817;
+      --mute:#A99CC4; --mute-soft:#211E2B;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#101319; --panel:#171B23; --panel-2:#1E242E;
+    --ink:#E8ECF2; --ink-2:#A8B2C0; --ink-3:#78838F;
+    --rule:#2A313C; --rule-2:#3A4350;
+    --accent:#7FA6DC; --accent-soft:#1B2635;
+    --signal:#E8834F; --signal-soft:#2E1D14;
+    --ok:#5BB57C; --ok-soft:#152418;
+    --wait:#D6A64A; --wait-soft:#282013;
+    --bad:#E4796F; --bad-soft:#2E1817;
+    --mute:#A99CC4; --mute-soft:#211E2B;
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--f-body);
+    font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:clamp(22px,4vw,52px) clamp(16px,4vw,40px);
+    display:flex;flex-direction:column;gap:46px}
+  h1,h2,h3{font-family:var(--f-disp);margin:0;text-wrap:balance;line-height:1.14;letter-spacing:-.015em}
+  h1{font-size:clamp(1.8rem,4.2vw,2.6rem);font-weight:700}
+  h2{font-size:clamp(1.15rem,2.6vw,1.45rem);font-weight:600}
+  h3{font-size:1rem;font-weight:600}
+  p{margin:0}
+  a{color:var(--accent)}
+  .mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+  .eyebrow{font-family:var(--f-mono);font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-3);font-weight:600}
+
+  header{border-bottom:2px solid var(--rule-2);padding-bottom:26px;display:flex;flex-direction:column;gap:14px}
+  .hrow{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  .hrow .who{margin-left:auto;font-family:var(--f-mono);font-size:.72rem;color:var(--ink-3)}
+  .lede{color:var(--ink-2);max-width:66ch;font-size:1.03rem}
+
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .stat{background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:14px 15px;
+    display:flex;flex-direction:column;gap:5px}
+  .stat .n{font-family:var(--f-mono);font-size:1.5rem;font-weight:600;line-height:1;letter-spacing:-.02em}
+  .stat .l{font-size:.75rem;color:var(--ink-2);line-height:1.35}
+  .stat.a .n{color:var(--accent)} .stat.s .n{color:var(--signal)} .stat.o .n{color:var(--ok)}
+  .stat.m .n{color:var(--ink-3)}
+
+  section{display:flex;flex-direction:column;gap:16px}
+  .sechead{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--rule);padding-bottom:9px}
+
+  .panel{background:var(--panel);border:1px solid var(--rule);border-radius:11px;padding:18px 20px;
+    display:flex;flex-direction:column;gap:11px}
+  .note{border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 9px 9px 0;
+    padding:13px 17px;font-size:.92rem}
+  .warn{border-left:3px solid var(--signal);background:var(--signal-soft);border-radius:0 9px 9px 0;
+    padding:13px 17px;font-size:.92rem}
+  .grave{border-left:3px solid var(--bad);background:var(--bad-soft);border-radius:0 9px 9px 0;
+    padding:13px 17px;font-size:.92rem}
+
+  /* barre de couverture */
+  .bar{display:flex;height:34px;border-radius:8px;overflow:hidden;border:1px solid var(--rule)}
+  .bar div{display:flex;align-items:center;justify-content:center;font-family:var(--f-mono);
+    font-size:.72rem;font-weight:600;color:#fff;white-space:nowrap}
+  .b-eq{background:#15803D} .b-mi{background:#A16207} .b-fo{background:#C2410C}
+  .b-ab{background:#B42318} .b-so{background:#8A94A6}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.78rem;color:var(--ink-2)}
+  .legend span{display:flex;align-items:center;gap:6px}
+  .dot{width:11px;height:11px;border-radius:3px;flex:none}
+
+  .chip{display:inline-block;font-family:var(--f-mono);font-size:.64rem;font-weight:600;
+    padding:2px 8px;border-radius:4px;letter-spacing:.03em;white-space:nowrap}
+  .c-beta{background:var(--ok-soft);color:var(--ok)}
+  .c-v1{background:var(--wait-soft);color:var(--wait)}
+  .c-v11{background:var(--signal-soft);color:var(--signal)}
+  .c-alpha{background:var(--panel-2);color:var(--ink-2)}
+  .c-gap{background:var(--bad-soft);color:var(--bad)}
+
+  table{width:100%;border-collapse:collapse;font-size:.85rem}
+  th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-family:var(--f-mono);font-size:.64rem;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--ink-3);font-weight:600;white-space:nowrap}
+  td.n{font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:none}
+  .tw{overflow-x:auto;background:var(--panel);border:1px solid var(--rule);border-radius:11px}
+
+  /* epine d'execution */
+  .spine{display:flex;flex-direction:column;gap:0}
+  .lot{display:grid;grid-template-columns:64px 1fr;gap:0;position:relative}
+  .lot .rail{display:flex;flex-direction:column;align-items:center;gap:0;padding-top:2px}
+  .lot .code{font-family:var(--f-mono);font-size:.74rem;font-weight:600;color:#FFFFFF;
+    background:var(--accent);border-radius:6px;padding:4px 0;width:44px;text-align:center;flex:none}
+  .lot.crit .code{background:var(--signal)}
+  .lot .line{width:2px;flex:1;background:var(--rule-2);margin:6px 0 0}
+  .lot:last-child .line{display:none}
+  .lot .body{padding:0 0 24px 16px;display:flex;flex-direction:column;gap:8px}
+  .lot .t{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+  .lot .t h3{font-size:1.02rem}
+  .lot .meta{font-family:var(--f-mono);font-size:.7rem;color:var(--ink-3);margin-left:auto}
+  .lot .d{font-size:.9rem;color:var(--ink-2);max-width:70ch}
+  .lot .spec{font-size:.8rem;color:var(--ink-3);font-family:var(--f-mono)}
+  .lot .gate{font-size:.79rem;color:var(--signal);font-weight:600}
+  .lot .gap{font-size:.82rem;color:var(--bad)}
+
+  ul.pts{margin:0;padding-left:19px;display:flex;flex-direction:column;gap:7px;font-size:.9rem;color:var(--ink-2)}
+  ul.pts strong{color:var(--ink);font-weight:600}
+  ol.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;font-size:.9rem;color:var(--ink-2)}
+  ol.steps strong{color:var(--ink)}
+
+  code{font-family:var(--f-mono);font-size:.86em;background:var(--panel-2);padding:1px 5px;border-radius:4px}
+
+  footer{border-top:1px solid var(--rule);padding-top:20px;color:var(--ink-3);font-size:.78rem;line-height:1.6}
+  @media (max-width:640px){ .lot{grid-template-columns:48px 1fr} .lot .code{width:40px;font-size:.68rem} }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="hrow">
+      <span class="eyebrow">SEEM · SEMRAC</span>
+      <span class="who">Reprise de l'ERP sous Laravel · dossier pour CSE · 26 août 2026</span>
+    </div>
+    <h1>Dossier de reprise</h1>
+    <p class="lede">Ce document dit trois choses : <strong>ce que l'ERP actuel couvre déjà</strong> des 185 fonctions de la GPAO — vérifié fonction par fonction, preuve dans le code à l'appui —, <strong>ce qui manque réellement</strong>, et <strong>dans quel ordre reconstruire</strong>, du premier devis jusqu'à la livraison client.</p>
+
+    <div class="stats">
+      <div class="stat o"><span class="n">76 %</span><span class="l">du besoin réel de la GPAO déjà couvert par l'ERP</span></div>
+      <div class="stat s"><span class="n">41</span><span class="l">fonctions réellement absentes, à concevoir</span></div>
+      <div class="stat m"><span class="n">16</span><span class="l">sans objet — à ne surtout pas redévelopper</span></div>
+      <div class="stat a"><span class="n">96</span><span class="l">écrans existants servant de référence d'UI</span></div>
+    </div>
+  </header>
+
+  <!-- ─────────── LA RÉPONSE ─────────── -->
+  <section>
+    <div class="sechead"><span class="eyebrow">La réponse</span><h2>Ce que l'ERP couvre déjà de la GPAO</h2></div>
+    <p>Les 185 fonctions listées dans le fichier de départ ont été confrontées une par une à ce que fait réellement l'application : écrans, routes, code, base. Voici le résultat.</p>
+
+    <div class="bar" role="img" aria-label="Répartition des 185 fonctions GPAO : 6 équivalentes, 61 à écart mineur, 61 à écart fonctionnel, 41 absentes, 16 sans objet">
+      <div class="b-eq" style="flex:6">6</div>
+      <div class="b-mi" style="flex:61">61</div>
+      <div class="b-fo" style="flex:61">61</div>
+      <div class="b-ab" style="flex:41">41</div>
+      <div class="b-so" style="flex:16">16</div>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:#15803D"></i> Équivalent — l'ERP fait le travail</span>
+      <span><i class="dot" style="background:#A16207"></i> Écart mineur — il manque un accessoire</span>
+      <span><i class="dot" style="background:#C2410C"></i> Écart fonctionnel — une part du besoin manque</span>
+      <span><i class="dot" style="background:#B42318"></i> Absent</span>
+      <span><i class="dot" style="background:#8A94A6"></i> Sans objet</span>
+    </div>
+
+    <div class="tw"><table>
+      <thead><tr><th>Lecture</th><th class="n">Fonctions</th><th>Ce que cela veut dire pour la refonte</th></tr></thead>
+      <tbody>
+        <tr><td><strong style="color:var(--ok)">Couvert par l'ERP</strong></td><td class="n">128</td><td>Un écran de référence existe. Le prestataire reproduit un comportement observable au lieu d'arbitrer du métier. C'est ce qui rend l'exigence « au plus proche de l'UI » réaliste.</td></tr>
+        <tr><td><strong style="color:var(--bad)">Réellement absent</strong></td><td class="n">41</td><td>Rien dans l'ERP n'y répond, ou le modèle de données nécessaire n'existe pas. Chacune demande une décision métier avant développement. Détail plus bas.</td></tr>
+        <tr><td><strong style="color:var(--ink-3)">Sans objet</strong></td><td class="n">16</td><td><span class="mono">11</span> artefacts du moteur Pick (reconstruction d'index, fichiers de transfert inter-sites, files d'impression) et <span class="mono">5</span> métiers que Seem Semrac ne pratique pas (négoce, boutique, DEB douanière, commissions export). <strong>Ne pas les faire chiffrer.</strong></td></tr>
+        <tr><td colspan="3" style="padding-top:12px"><strong>Couverture du besoin réel : 128 sur 169, soit 76 %.</strong> Les 16 fonctions sans objet sont retirées du dénominateur — les compter fausserait le chiffre dans les deux sens.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ─────────── MÉTHODE ─────────── -->
+  <section>
+    <div class="sechead"><span class="eyebrow">Méthode</span><h2>Comment ce chiffre a été établi, et ce qu'il vaut</h2></div>
+    <p>Un chiffre de couverture qui sert à chiffrer un projet doit pouvoir être contesté. Voici comment celui-ci a été produit, y compris ce qui a mal tourné en chemin.</p>
+    <ol class="steps">
+      <li><strong>Première estimation, écartée.</strong> Un premier classement avait été fait au libellé, par entité GPAO — sans ouvrir le code. Il donnait <span class="mono">104</span> fonctions couvertes. Il était trop optimiste et n'a pas été retenu.</li>
+      <li><strong>Passe 1 — établissement avec preuve.</strong> Chaque fonction confrontée au code, à la base et au manuel utilisateur, avec obligation de citer l'écran, la route et le <code>fichier:ligne</code>. Sans preuve produite, pas de verdict favorable.</li>
+      <li><strong>Passe 2 — contre-examen, et son biais.</strong> Un second examen avait pour consigne de <em>réfuter</em> et de rétrograder au moindre doute. Il a rétrogradé <span class="mono">49</span> verdicts favorables sur <span class="mono">54</span> et n'en a jamais confirmé un seul. <strong>C'est le signe d'une consigne mal posée, pas d'une mesure.</strong> Ses trouvailles ont été conservées ; son barème a été écarté.</li>
+      <li><strong>Passe 3 — arbitrage sur échelle explicite.</strong> Un troisième examen, neutre, a tranché sur quatre niveaux définis, en devant déclarer quand il contredisait l'un des deux précédents — ce qu'il a fait <span class="mono">74</span> fois.</li>
+      <li><strong>Contrôle de calibrage.</strong> Un contrôle final a comparé chaque examinateur à un point d'ancrage factuel et détecté deux dérives d'indulgence, corrigées une par une après revérification dans le dépôt.</li>
+    </ol>
+    <div class="note"><strong>Ce que le chiffre vaut.</strong> Le décompte des absences est solide : trois méthodes indépendantes convergent entre <span class="mono">41</span> et <span class="mono">54</span> selon qu'on compte ou non les fonctions sans objet, et chaque absence est adossée à une vérification dans le code. En revanche, <strong>la frontière entre « écart mineur » et « écart fonctionnel » est la partie faible</strong> : selon l'examinateur, le classement en mineur variait de 0 % à 100 % sur des cas comparables. Utilisez le partage 61/61 comme un ordre de grandeur, pas comme une base de chiffrage ligne à ligne.</div>
+  </section>
+
+  <!-- ─────────── CE QUI MANQUE ─────────── -->
+  <section>
+    <div class="sechead"><span class="eyebrow">Les manques</span><h2>Les 41 fonctions réellement absentes</h2></div>
+    <p>Classées par lot d'exécution. Celles marquées <span class="chip c-beta">beta</span> sont dans le circuit de la première version. Chacune demande votre arbitrage métier <em>avant</em> que CSE puisse la chiffrer.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Lot</th><th class="n">Nb</th><th>Fonctions absentes</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">L1</td><td class="n">9</td><td>Budget commercial · Calcul des délais et préréservations · Factures pro forma · Suivi de la relation client · Édition des tarifs clients · Marges par produit sur facturation · Modification collective des tarifs par coefficient · Rattachement des acomptes · Étiquettes d'adressage des tiers
+        <div style="margin-top:6px;color:var(--ink-3);font-size:.82rem">Le fond commun : l'ERP n'a <strong>aucun tarif de vente stocké</strong>. Un prix ne vit que dans l'offre de son affaire. Quatre de ces neuf fonctions en découlent.</div></td></tr>
+
+        <tr><td class="mono">L2</td><td class="n">8</td><td>Analyse des relations de gamme · Consultation du délai d'un produit · Profils et longueurs de matière · Arborescence de nomenclature pour le Web et Excel · Archivage et remise en circuit des anciens produits · Changement de code article · Mise à jour collective des prix de revient · Modification en masse des nomenclatures
+        <div style="margin-top:6px;color:var(--ink-3);font-size:.82rem">Le fond commun : les nomenclatures se modifient <strong>une par une</strong>. Aucune action de masse, aucun renommage de référence.</div></td></tr>
+
+        <tr><td class="mono">L4</td><td class="n">9</td><td>Correction et traçabilité de l'inventaire · Cycle d'inventaire · Dépréciation d'inventaire · Entrée magasin sans attendu · Prévisions de consommation · <strong>Saisie directe du stock d'inventaire</strong> <span class="chip c-beta">beta</span> · Création des réservations depuis une nomenclature · Modification manuelle des réservations · Recréation des réservations
+        <div style="margin-top:6px;color:var(--ink-3);font-size:.82rem">Les trois <strong>réservations de stock</strong> sont la décision la plus structurante du lot — voir les points à trancher.</div></td></tr>
+
+        <tr><td class="mono">L5</td><td class="n">4</td><td><strong>Correction d'un horaire enregistré</strong> <span class="chip c-beta">beta</span> · <strong>Pointage différé</strong> <span class="chip c-beta">beta</span> · Pointage autorisé après livraison · Heures supplémentaires
+        <div style="margin-top:6px;color:var(--ink-3);font-size:.82rem">Vérifié : il n'existe <strong>aucune route de modification ni de suppression</strong> d'un pointage. Un horaire saisi par erreur ne peut pas être corrigé.</div></td></tr>
+
+        <tr><td class="mono">L6</td><td class="n">2</td><td>Jalonnement sur calendrier industriel · Sections de production</td></tr>
+
+        <tr><td class="mono">L8</td><td class="n">5</td><td>Annulation d'une expédition · Annulation d'une livraison fournisseur · <strong>Bordereaux d'expédition</strong> <span class="chip c-beta">beta</span> · Gestion des réceptions en attente de facture · Étiquettes d'expédition
+        <div style="margin-top:6px;color:var(--ink-3);font-size:.82rem">Vérifié : aucune route n'écrit le statut « annulé » sur un bon de livraison ni sur un bon de commande — le statut n'est que lu. Et <strong>aucun PDF de bon de livraison n'existe</strong>.</div></td></tr>
+
+        <tr><td class="mono">L9</td><td class="n">3</td><td>Factures spéciales · Comptabilisation des factures spéciales · Regroupement de factures spéciales</td></tr>
+
+        <tr><td class="mono">L0</td><td class="n">1</td><td>Table des marges sur les délais</td></tr>
+      </tbody>
+    </table></div>
+    <div class="warn"><strong>Un constat qui dépasse la refonte.</strong> Plusieurs de ces absences ne sont pas des manques du futur ERP : ce sont des manques du vôtre, aujourd'hui. On ne peut ni annuler une expédition, ni annuler une réception fournisseur, ni imprimer un bon de livraison, ni corriger un pointage erroné. Ce sont des gestes d'exploitation quotidiens.</div>
+  </section>
+
+  <!-- ─────────── LE CAHIER DES CHARGES ─────────── -->
+  <section>
+    <div class="sechead"><span class="eyebrow">Spécification</span><h2>Le cahier des charges existe déjà — il est écrit</h2></div>
+    <p>L'ERP actuel fait office de spécification exhaustive. Ce n'est pas une intention : la documentation a été rédigée à partir de l'application en fonctionnement, écran par écran. <strong>C'est ce corpus qu'il faut remettre à CSE</strong>, et non une liste de fonctions.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Corpus</th><th>Ce qu'on y trouve</th><th class="n">Volume</th></tr></thead>
+      <tbody>
+        <tr><td><code>docs/manuel/html/</code></td><td>Un document par service. <strong>Chaque onglet</strong> détaillé selon le même plan : <em>ce que vous voyez · pas à pas · règles et points d'attention</em>, et pour les formulaires, <em>champ par champ</em>.</td><td class="n">114 chapitres<br>434 sections<br>79 700 mots<br>176 captures</td></tr>
+        <tr><td><code>docs/print/ManuelUtilisateur.html</code></td><td>Le même contenu en un seul fichier imprimable, captures embarquées. Le plus simple à transmettre.</td><td class="n">20,5 Mo</td></tr>
+        <tr><td><code>docs/technique/06-modules/</code></td><td>Une fiche par service : route, fichier source, droits RBAC, onglets, familles d'API, tables, points d'attention.</td><td class="n">15 fiches</td></tr>
+        <tr><td><code>docs/technique/07-api-reference.md</code></td><td>Les routes de l'application, leur méthode et leur objet.</td><td class="n">353 routes<br>dont 218 d'API</td></tr>
+        <tr><td>Le dépôt lui-même</td><td>Les gabarits d'écran sont lisibles : libellés, états, enchaînements, règles. C'est la référence d'UI la plus fidèle qui existe.</td><td class="n">50 502 lignes<br>42 fichiers</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note"><strong>Comment CSE doit le lire.</strong> Pour chaque lot ci-dessous, le manuel du service correspondant est la spécification. Le prestataire n'a pas à deviner un comportement : il l'ouvre, il le lit, il le reproduit. Les questions qui restent sont celles listées en fin de document — pas les autres.</div>
+  </section>
+
+  <!-- ─────────── ORDRE D'EXÉCUTION ─────────── -->
+  <section>
+    <div class="sechead"><span class="eyebrow">Séquence</span><h2>L'ordre d'exécution, du devis à la livraison</h2></div>
+    <p>Les lots suivent la chaîne de valeur réelle. Chaque lot ouvre une porte pour le suivant — c'est ce qui interdit de les mener dans le désordre. <strong>Les lots <span class="mono">L0</span> à <span class="mono">L8</span> composent la beta</strong> demandée : circuit client, fournisseur et sous-traitance, stock, RH, planification, contrôle qualité bloquant, livraison.</p>
+
+    <div class="spine">
+
+      <div class="lot"><div class="rail"><span class="code">L0</span><span class="line"></span></div>
+        <div class="body">
+          <div class="t"><h3>Socle</h3><span class="chip c-alpha">alpha</span><span class="meta">0 écran</span></div>
+          <p class="d">Authentification par matricule et code PIN, les rôles et leur matrice de droits, le gabarit de marque, la gestion documentaire, et les migrations qui portent le schéma. Aucun métier.</p>
+          <p class="spec">Spécification : <code>docs/technique/04-auth-rbac.md</code></p>
+          <p class="gate">Porte : sans les rôles, aucun écran métier ne peut être recetté par la bonne personne.</p>
+        </div></div>
+
+      <div class="lot"><div class="rail"><span class="code">L1</span><span class="line"></span></div>
+        <div class="body">
+          <div class="t"><h3>Circuit client — amont</h3><span class="chip c-beta">beta</span><span class="meta">8 écrans</span></div>
+          <p class="d">Le point d'entrée de tout le reste. Demandes du site internet, demandes de travaux, offres versionnées avec coefficient de marge, commandes validées, avoirs et commandes prioritaires, liste clients, fiche affaire 360. Sans commande, rien à produire.</p>
+          <p class="spec">Spécification : <code>manuel/html/commercial.html</code> — 8 chapitres, de « Demandes site internet » à « Affaires (circuit) »</p>
+          <p class="gap">9 fonctions absentes, dont le tarif de vente qui n'existe pas.</p>
+          <p class="gate">Porte : la commande validée déclenche la préparation technique et la création des lots.</p>
+        </div></div>
+
+      <div class="lot"><div class="rail"><span class="code">L2</span><span class="line"></span></div>
+        <div class="body">
+          <div class="t"><h3>Technique — nomenclature &amp; gamme</h3><span class="chip c-beta">beta</span><span class="meta">5 écrans</span></div>
+          <p class="d">Nomenclatures et gammes, analyse de demande de travaux, préparations techniques, références clients. La gamme porte les temps et les coûts : c'est elle qui rend un bon de travaux planifiable et un prix calculable.</p>
+          <p class="spec">Spécification : <code>manuel/html/be.html</code> — dont « Analyse DT », la page la plus dense de l'application</p>
+          <p class="gap">8 fonctions absentes, toutes des actions de masse sur les nomenclatures.</p>
+          <p class="gate">Porte : pas de bon de travaux sans gamme, pas de prix de revient sans nomenclature.</p>
+        </div></div>
+
+      <div class="lot"><div class="rail"><span class="code">L3</span><span class="line"></span></div>
+        <div class="body">
+          <div class="t"><h3>Fournisseurs / ST &amp; commande d'achat</h3><span class="chip c-beta">beta</span><span class="meta">5 écrans</span></div>
+          <p class="d">Référentiel fournisseurs et sous-traitants, demandes de prix — seule porte d'entrée des prix au catalogue —, demandes d'achat, bons de commande, scorecard et ponctualité. Inclut la sous-traitance, qui alimentera les bons de sous-traitance du lot 6.</p>
+          <p class="spec">Spécification : <code>manuel/html/achats.html</code> + le chapitre « Fournisseurs » de <code>expeditions.html</code></p>
+          <p class="gate">Porte : la commande d'achat conditionne la réception, donc le stock.</p>
+        </div></div>
+
+      <div class="lot"><div class="rail"><span class="code">L4</span><span class="line"></span></div>
+        <div class="body">
+          <div class="t"><h3>Réception &amp; stock</h3><span class="chip c-beta">beta</span><span class="meta">5 écrans</span></div>
+          <p class="d">Réception des commandes fournisseurs avec gel de la première date promise, mouvements de stock, alertes et réapprovisionnement, ajustement d'inventaire. La ponctualité fournisseur ne doit jamais pouvoir être rachetée par un report de date : c'est une règle, pas un affichage.</p>
+          <p class="spec">Spécification : <code>manuel/html/stock.html</code> + « Réceptions » de <code>expeditions.html</code></p>
+          <p class="gap">9 fonctions absentes — inventaire tournant et réservations de stock.</p>
+          <p class="gate">Porte : sans matière disponible, un bon de travaux ne peut pas être lancé.</p>
+        </div></div>
+
+      <div class="lot"><div class="rail"><span class="code">L5</span><span class="line"></span></div>
+        <div class="body">
+          <div class="t"><h3>RH &amp; présence</h3><span class="chip c-beta">beta</span><span class="meta">7 écrans</span></div>
+          <p class="d">Salariés, habilitations et certifications, matrice de compétences, organigramme, gestion des temps, borne de pointage atelier. Placé avant la planification à dessein : <strong>la présence détermine qui est affectable</strong> sur le planning.</p>
+          <p class="spec">Spécification : <code>manuel/html/rh.html</code> — 7 chapitres dont « Système de pointage »</p>
+          <p class="gap">4 fonctions absentes, toutes autour de la correction d'un temps saisi.</p>
+          <p class="gate">Porte : un opérateur non programmé n'est pas affectable à un poste.</p>
+        </div></div>
+
+      <div class="lot crit"><div class="rail"><span class="code">L6</span><span class="line"></span></div>
+        <div class="body">
+          <div class="t"><h3>Planification, BDT / BST</h3><span class="chip c-beta">beta</span><span class="meta">7 écrans</span></div>
+          <p class="d"><strong>Le lot le plus structurant et le plus difficile.</strong> Postes de travail, machines et process, commandes et lots, planning des bons de travaux, planning de sous-traitance, présence opérateurs, avancement. Détaillé dans la section suivante.</p>
+          <p class="spec">Spécification : <code>manuel/html/production.html</code> — « Planning Gantt BDT », « Planning Gantt BST », « Process Ateliers »</p>
+          <p class="gate">Porte : le bon de travaux soldé fait avancer le lot, qui devient libérable.</p>
+        </div></div>
+
+      <div class="lot"><div class="rail"><span class="code">L7</span><span class="line"></span></div>
+        <div class="body">
+          <div class="t"><h3>Porte qualité</h3><span class="chip c-beta">beta</span><span class="meta">4 chapitres sur 13</span></div>
+          <p class="d">Périmètre volontairement réduit à ce qui <strong>autorise ou bloque une expédition</strong> : procès-verbaux de contrôle, non-conformités, mise en quarantaine, libération de lot. Les 9 autres chapitres — 8D, ECME, capabilité, plans de contrôle, dérogations, périssables, audits — passent en <span class="chip c-v1">v1</span>.</p>
+          <p class="spec">Spécification : <code>manuel/html/qualite.html</code>, chapitres « PV de Contrôle », « Non-Conformités », « Quarantaine », « Libération Lots »</p>
+          <p class="gate">Porte : un lot non libéré ne peut pas partir.</p>
+        </div></div>
+
+      <div class="lot"><div class="rail"><span class="code">L8</span><span class="line"></span></div>
+        <div class="body">
+          <div class="t"><h3>Livraison client</h3><span class="chip c-beta">beta</span><span class="meta">5 écrans</span></div>
+          <p class="d">Envois, réceptions, calendrier des flux, référentiel fournisseur avec ses commandes et ses livraisons. Création du bon de livraison avec livraison partielle, refus si le lot porte une non-conformité bloquante ou une quarantaine, décrément du stock. <strong>Fin du circuit beta.</strong></p>
+          <p class="spec">Spécification : <code>manuel/html/expeditions.html</code> — « Envois » puis « Réceptions »</p>
+          <p class="gap">5 fonctions absentes — dont l'impression du bon de livraison et l'annulation.</p>
+          <p class="gate">Porte : le bon de livraison déclenche la facture et l'écriture de vente.</p>
+        </div></div>
+
+      <div class="lot"><div class="rail"><span class="code">L9</span><span class="line"></span></div>
+        <div class="body">
+          <div class="t"><h3>Facturation &amp; comptabilité</h3><span class="chip c-v1">v1</span><span class="meta">5 écrans</span></div>
+          <p class="d">Facturation client et fournisseur, grand livre, TVA et déclarations, balance et trésorerie, exports comptables. Hors beta : la beta s'arrête à la livraison.</p>
+          <p class="spec">Spécification : <code>manuel/html/compta.html</code></p>
+        </div></div>
+
+      <div class="lot"><div class="rail"><span class="code">L10</span><span class="line"></span></div>
+        <div class="body">
+          <div class="t"><h3>Maintenance · OAS · Plan bâtiment</h3><span class="chip c-v1">v1</span><span class="meta">12 écrans</span></div>
+          <p class="d">Interventions et plan préventif, MTBF, pièces de rechange ; chaîne d'oxydation, bains et relevés d'eau ; maquette interactive du bâtiment. Trois domaines indépendants du circuit client, d'où leur position.</p>
+          <p class="spec">Spécification : <code>maintenance.html</code> · <code>oas.html</code> · <code>plans.html</code></p>
+        </div></div>
+
+      <div class="lot"><div class="rail"><span class="code">L11</span><span class="line"></span></div>
+        <div class="body">
+          <div class="t"><h3>Pilotage</h3><span class="chip c-v1">v1</span><span class="meta">7 + 16 écrans</span></div>
+          <p class="d">Cockpit direction, circuit de validation, jalons critiques, vue par affaire, budget, santé des données, et les 16 tableaux de bord filtrables. Se construit en dernier parce qu'il <strong>lit</strong> ce que tous les lots précédents écrivent.</p>
+          <p class="spec">Spécification : <code>direction.html</code> · <code>dashboard.html</code></p>
+        </div></div>
+
+      <div class="lot"><div class="rail"><span class="code">L12</span><span class="line"></span></div>
+        <div class="body">
+          <div class="t"><h3>Sécurité · Environnement</h3><span class="chip c-v11">v1.1</span><span class="meta">19 écrans</span></div>
+          <p class="d">Document unique et risques, événements, EPI, chimie et fiches de données de sécurité, contrôles et prévention, veille réglementaire, audits ; déchets, rejets, ATEX, aspects et impacts, ICPE, bilan gaz à effet de serre, autodiagnostics. Reporté comme convenu.</p>
+          <p class="spec">Spécification : <code>securite.html</code> · <code>environnement.html</code></p>
+        </div></div>
+
+    </div>
+  </section>
+
+  <!-- ─────────── L6 ─────────── -->
+  <section>
+    <div class="sechead"><span class="eyebrow">Lot critique</span><h2>L6 — le planning BDT / BST, spécifié par ses gestes</h2></div>
+    <p>La consigne est « fidèle sur le résultat, libre sur la technique ». La spécification est donc écrite en <strong>gestes observables</strong> : CSE choisit sa bibliothèque, mais chaque ligne ci-dessous se vérifie à la recette. C'est l'écran que l'atelier ouvre tous les jours ; un équivalent approximatif serait rejeté à l'usage.</p>
+    <div class="panel">
+      <h3>Ce que la recette vérifiera</h3>
+      <ul class="pts">
+        <li><strong>Un seul planning.</strong> Pas de page d'affectation séparée : les files d'attente « BDT à classer » et « BST à planifier » sont <em>au-dessus</em> du Gantt, sur le même écran.</li>
+        <li><strong>Poser un bon par glissé.</strong> Une carte de la file se dépose sur un poste, ou sur une sous-case Matin / Après-midi / Soir pour affecter du même geste l'opérateur du créneau.</li>
+        <li><strong>Déprogrammer par retour.</strong> Une carte ramenée dans la file quitte le planning — pas de menu, pas de formulaire.</li>
+        <li><strong>Focus étape.</strong> Un clic sur un bon n'isole pas le lot entier mais <em>l'étape cliquée, la précédente et la suivante</em>, gammes internes et sous-traitées fusionnées, pour que l'étape voisine chez le sous-traitant soit nommée.</li>
+        <li><strong>Fractionner un bon de travaux.</strong> Menu contextuel « Séparer en morceaux » : de 2 à 12 morceaux, contrôle de la somme en direct, morceaux suffixés <code>-M2</code>, <code>-M3</code>… renvoyés dans la file. Un écart de somme se répartit au prorata.</li>
+        <li><strong>Goulotte matière et préparation.</strong> Un bon n'apparaît dans la file que si sa matière est réceptionnée et sa préparation technique faite. Règle métier, pas filtre d'affichage — détail dans la section suivante.</li>
+        <li><strong>Solder avec traçabilité.</strong> Clic droit « Solder » → temps réel et code PIN de l'opérateur. Un écart significatif ouvre une non-conformité.</li>
+        <li><strong>Priorité visible.</strong> Les bons prioritaires se distinguent sans avoir à ouvrir la carte.</li>
+      </ul>
+    </div>
+    <div class="warn"><strong>Piège de vocabulaire à signaler à CSE.</strong> L'écran dit <strong>BST</strong>, la base et le code disent <strong>BDS</strong> (table <code>bons_sous_traitance</code>, identifiants préfixés <code>BDS-</code>). Même objet, deux noms. Sans cet avertissement, deux entités seront créées.</div>
+  </section>
+
+  <!-- ─────────── RÈGLES TRANSVERSES ─────────── -->
+  <section>
+    <div class="sechead"><span class="eyebrow">Règles</span><h2>Ce qu'aucune liste de fonctions ne transmet</h2></div>
+    <p>Ces règles sont dans le code, pas dans les libellés. Un prestataire qui ne les a pas les réinvente — et les réinvente faux. Toutes vérifiées à la source.</p>
+
+    <div class="panel">
+      <h3>Multi-société SEEM / SEMRAC, avec croisement</h3>
+      <p style="font-size:.9rem;color:var(--ink-2)">Le champ porte <strong>deux noms selon les tables</strong> : <code>activite</code> sur 18 tables métier, <code>entite</code> sur 26 tables QHSE et RH. Les valeurs sont <code>Seem</code>, <code>Semrac</code> et <strong><code>both</code></strong> — le croisement —, plus <code>ST</code>, plus <code>OAS</code> sur les machines et <code>Support</code> côté salariés. En base : 87 clients, 119 fournisseurs et 5 process sont en <code>both</code>. La règle de visibilité est : <em>sans valeur ou en <code>both</code>, l'objet est visible des deux côtés</em>.</p>
+      <p style="font-size:.88rem;color:var(--signal)"><strong>Incohérence à trancher :</strong> l'écran Achats applique la règle inverse — choisir « both » n'y affiche <em>que</em> les lignes <code>both</code>. Deux sémantiques coexistent aujourd'hui. Si CSE n'en retient qu'une, il casse l'autre.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Les deux portes du circuit de production</h3>
+      <ul class="pts">
+        <li><strong>Porte matière.</strong> La cascade d'acceptation d'offre crée les bons de travaux en « matière non disponible ». Le drapeau ne bascule que lorsque <em>tous</em> les bons de commande matière de l'affaire sont réceptionnés. Le planning n'affiche que les bons dont la matière n'est pas explicitement absente <em>et</em> dont l'affaire n'a plus de préparation technique ouverte. La nuance « pas explicitement absente » est délibérée : les bons hérités sans valeur restent visibles.</li>
+        <li><strong>Porte qualité.</strong> L'expédition n'est bloquée que si la non-conformité est de gravité <strong>critique ou bloquante</strong>, <strong>rattachée à l'affaire</strong> et <strong>non close</strong>. Avec une échappatoire explicite : expédier sous dérogation. C'est plus fin que « une NC bloque ».</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h3>Numérotation, temps, droits</h3>
+      <ul class="pts">
+        <li><strong>Numérotation déterministe.</strong> <code>LOT-{année}-{affaire}-{ZZ}</code> et <code>BDT|BDS-{année}-{affaire}-{ZZ}-{AA}</code>, avec idempotence sur la clé <em>affaire + pièce + séquence</em> : relancer la cascade ne duplique rien.</li>
+        <li><strong>Temps de gamme en millièmes d'heure.</strong> 1000 millièmes = 1 heure. Le réglage est une part <strong>fixe par lot</strong>, jamais multipliée par la quantité — c'est une erreur de coût classique.</li>
+        <li><strong>Marge en taux de marque.</strong> Le coefficient est la source de vérité ; le taux s'en déduit. Un coefficient ×2 donne 50 %, ×2,5 donne 60 %. Ce n'est pas un taux de marge sur coût.</li>
+        <li><strong>Prix d'achat.</strong> Un bon de commande n'écrit jamais un prix. Les prix viennent des demandes de prix validées, qui alimentent le catalogue fournisseur. Inverser ce sens casse la traçabilité des prix.</li>
+        <li><strong>Droits.</strong> Matrice rôle × service à trois états — écriture, lecture, refusé — avec union du meilleur niveau en multi-rôles, sept routes atelier en self-service signées par le PIN individuel, et refus par défaut sur toute famille d'API non déclarée.</li>
+      </ul>
+      <p style="font-size:.85rem;color:var(--ink-3)">Correction à porter : la documentation actuelle annonce 13 rôles. La matrice en contient <strong>12</strong>.</p>
+    </div>
+  </section>
+
+  <!-- ─────────── DÉFAUTS ─────────── -->
+  <section>
+    <div class="sechead"><span class="eyebrow">Avant de porter</span><h2>Deux défauts de l'ERP actuel à corriger d'abord</h2></div>
+    <p>Trouvés pendant la vérification. Ils ne concernent pas la refonte : ils concernent l'application <strong>en production aujourd'hui</strong>. Et si on ne les corrige pas avant, CSE les portera fidèlement.</p>
+
+    <div class="grave">
+      <p><strong>Cinq boutons du service Expéditions confirment un succès sans rien enregistrer.</strong> Ils affichent une notification puis ne font aucune requête :</p>
+      <ul class="pts" style="margin-top:9px">
+        <li>« BL expédié. Notification client + transporteur envoyée. » — rien n'est envoyé, rien n'est enregistré.</li>
+        <li>« Impression BL en cours. » — aucun PDF de bon de livraison n'existe dans l'application.</li>
+        <li>« BST parti chez le sous-traitant. BC ST mis à jour. » — rien.</li>
+        <li>« BST créé. Apparaîtra le jour J dans la liste. » — rien.</li>
+        <li>« Retour BST confirmé. Lot remis en production. » — rien.</li>
+      </ul>
+      <p style="margin-top:9px">Les deux derniers annoncent des changements d'état qui pilotent le planning et la disponibilité matière. Un utilisateur qui s'y fie croit le circuit avancé alors que rien n'a bougé en base.</p>
+    </div>
+
+    <div class="grave">
+      <p><strong>Un avoir client sur deux ne réduit jamais rien.</strong> Un avoir est créé avec le mode de restitution « déduire d'une facture » <em>par défaut</em>. Or les deux seuls endroits qui consomment un avoir ne traitent que le mode « déduire de la commande suivante » — ils excluent le mode par défaut. Et la table des avoirs n'est lue par aucun écran comptable. Résultat : un avoir saisi sans changer le mode reste actif indéfiniment, solde intact, et ne réduit aucune facture ni le grand livre.</p>
+    </div>
+  </section>
+
+  <!-- ─────────── DONNÉES ─────────── -->
+  <section>
+    <div class="sechead"><span class="eyebrow">Reprise</span><h2>Deux origines de données, pas une</h2></div>
+    <p>Le schéma sera porté par les migrations Laravel sur PostgreSQL. La reprise a donc deux sources, à mener en parallèle du lot 0 et non après.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Origine</th><th>Volume mesuré</th><th>Difficulté</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Base actuelle</strong><br>PostgreSQL</td><td>100 tables · 455 clients · 484 interlocuteurs · 155 fournisseurs · 402 lignes de stock · 265 équipements de mesure · 236 périssables · 86 produits chimiques · 36 salariés</td><td><strong>Modérée mais pas triviale.</strong> Même moteur. Mais <span class="mono">1 213</span> colonnes sur <span class="mono">1 710</span> — <strong>71 %</strong> — sont typées <code>text</code>, dont <span class="mono">120</span> colonnes de date, et <strong>une seule clé étrangère</strong> est déclarée sur les 100 tables. Le typage et l'intégrité référentielle se rétablissent <em>pendant</em> la reprise, pas après.</td></tr>
+        <tr><td><strong>Base Pick</strong><br>GPAO</td><td>À qualifier</td><td>Modèle multivalué : un champ peut contenir plusieurs valeurs et des sous-valeurs, ce qui ne se projette pas ligne à ligne en relationnel. Chaque fichier demande une règle d'éclatement explicite. <strong>CSE annonce savoir le faire rapidement</strong> — demandez-lui un échantillon extrait et rechargé sur un fichier multivalué avant de valider son chiffrage.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ─────────── À TRANCHER ─────────── -->
+  <section>
+    <div class="sechead"><span class="eyebrow">Ouvert</span><h2>Ce qui reste à décider</h2></div>
+    <ol class="steps">
+      <li><strong>Réservations de stock.</strong> Trois fonctions absentes, et la décision la plus structurante du lot 4. Réserver <em>à la commande client</em> ou <em>au lancement du lot</em> ? Réservation ferme ou prévisionnelle ? Elle touche aussi la goulotte matière du planning.</li>
+      <li><strong>« Sections de production ».</strong> Est-ce autre chose que les postes de travail actuels ? Si c'est la même notion, une inconnue du lot 6 disparaît.</li>
+      <li><strong>Frontière Nova / Laravel sur mesure.</strong> Nova couvrira bien les référentiels — clients, fournisseurs, articles, salariés, machines. Le planning BDT/BST, la fiche affaire 360 et l'analyse de demande de travaux sont des écrans sur mesure. Cette frontière vaut mieux posée dans le devis que découverte au lot 6.</li>
+      <li><strong>Gel de l'ERP actuel.</strong> Pendant la construction, l'ERP continue-t-il d'évoluer ? Si oui, il faut une règle simple : dès qu'un lot entre en développement, son périmètre est figé du côté actuel. Sinon la cible bouge et n'est jamais atteinte.</li>
+      <li><strong>Sémantique multi-société.</strong> Laquelle des deux règles aujourd'hui en vigueur fait foi (voir plus haut) ?</li>
+    </ol>
+  </section>
+
+  <footer>
+    SEEM · SEMRAC — dossier de reprise de l'ERP sous Laravel, à destination de CSE. Le détail ligne à ligne des <span class="mono">299</span> entrées — 185 fonctions GPAO avec leur couverture, leur preuve dans le code et ce qu'il reste à créer, 18 compléments, 96 écrans existants — figure dans le classeur <em>Couverture GPAO et plan de reprise Laravel</em>, filtrable par lot, service, phase, couverture et effort, avec une feuille « Ce qui manque » et un récapitulatif par lot. Les volumes de code, de données et de documentation sont mesurés sur l'application et la base au 26 août 2026, non estimés.
+  </footer>
+
+</div>

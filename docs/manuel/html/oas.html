@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manuel — OAS · ERP Seem Semrac</title>
+<link rel="stylesheet" href="manuel.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <div class="brandrow">
+      <div class="logo">SS</div>
+      <div>
+        <div class="co">SEEM · SEMRAC — ERP</div>
+        <div class="eyebrow">Manuel utilisateur</div>
+      </div>
+      <div class="kind">docs/manuel/html</div>
+    </div>
+    <h1>Service <span class="hi">OAS</span></h1>
+    <p class="lede">L'OAS (Oxydation Anodique Sulfurique) est le traitement de surface de l'atelier. Ce service suit les lots arrivés à l'étape OAS, les <b>balancelles</b> (sessions de traitement multi-références), les relevés de consommation d'eau et les relevés périodiques des bains. Vous y apprendrez à composer une balancelle, à la clore avec un autocontrôle, et à saisir les relevés réglementaires eau et bains.</p>
+    <div class="metachips">
+      <span class="chip">👤 Pour qui : <b>Opérateur OAS</b> (lecture : BE, Production, Qualité, Sécurité, Stock, Maintenance)</span>
+      <span class="chip">🧭 Dans l'ERP : <b>Sidebar → OAS</b></span>
+      <span class="chip">🗂 <b>4 onglets</b></span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-t">Sommaire</div>
+    <ol>
+      <li><a href="#tab-lots-balancelles">Lots &amp; Balancelles</a></li>
+      <li><a href="#tab-eau">Relevé consommation eau</a></li>
+      <li><a href="#tab-bains">Relevés périodiques bains</a></li>
+      <li><a href="#tab-dashboard">Dashboard OAS</a></li>
+    </ol>
+  </nav>
+
+  <!-- ═══════════════ ONGLET 1 : LOTS & BALANCELLES ═══════════════ -->
+  <section class="tab" id="tab-lots-balancelles">
+    <div class="tab-head"><span class="tab-num">1</span><h2>Lots &amp; Balancelles</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> L'OAS est une « porte de lot » : l'étape n'a pas de bon de travail propre. Dès que le bon de travail (BDT) <b>précédant</b> l'étape OAS est soldé en Production, le lot apparaît <b>automatiquement</b> dans cet onglet — vous n'avez rien à créer. Vous y composez ensuite les <b>balancelles</b> (une balancelle = une session de traitement pouvant mélanger plusieurs références de plusieurs lots), puis vous les clôturez avec un autocontrôle. Quand 100 % des pièces d'un lot sont traitées, le lot bascule automatiquement vers son étape suivante.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>L'écran empile trois tableaux, avec en haut à droite le bouton <b>« Nouvelle balancelle »</b> :</p>
+    <ul class="points">
+      <li><b>Lots arrivés à l'OAS</b> — colonnes : Lot · Client · Pièce · Pièces traitées (traitées / total) · Progression OAS (barre de progression en %) · Statut · Étape suivante (le BDT qui suivra) · Action. Chaque ligne porte un bouton <b>« Balancelle »</b> qui ouvre le formulaire avec le lot déjà présélectionné. Statuts : <span class="b b-info">En OAS</span> tant que le traitement est en cours, <span class="b b-ok">Terminé</span> à 100 %.</li>
+      <li><b>Balancelles (sessions OAS)</b> — colonnes : Session · Lot(s) / Réf · Qté · Charge surface (jauge en % de la limite de 550 000 mm²) · Bain · Entrée · Sortie · Durée · Statut · Résultat · Action. Statuts : <span class="b b-info">En cours</span>, <span class="b b-ok">Terminé</span>, <span class="b b-mut">Annulé</span> ; résultat : <span class="b b-ok">Conforme</span> ou <span class="b b-crit">Non conforme</span>. Une balancelle en cours porte le bouton <b>« Clore + autocontrôle »</b>. Un champ de recherche filtre la liste par <b>n° d'affaire, n° de lot ou n° de session</b>.</li>
+      <li><b>Lots OAS terminés</b> — colonnes : Lot · Client · Pièce · Pièces traitées · Statut OAS (badge <span class="b b-ok">✓ 100% OAS</span>) · Bascule vers (le BDT suivant du lot, activé automatiquement).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/oas.png" alt="Capture de l'onglet Lots &amp; Balancelles du service OAS" loading="lazy">
+      <figcaption><b>Lots &amp; Balancelles</b> — en haut les lots arrivés à l'OAS avec leur barre de progression, au milieu les balancelles avec la jauge de charge surface, en bas les lots terminés qui basculent vers l'étape suivante.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — créer une balancelle</h3>
+    <ol class="steps">
+      <li>Dans le tableau <b>Lots arrivés à l'OAS</b>, cliquez sur <b>« Balancelle »</b> sur la ligne du lot à traiter (le lot est présélectionné), ou cliquez sur <b>« Nouvelle balancelle »</b> en haut de page pour partir d'un formulaire vierge.</li>
+      <li>Le <b>N° de session</b> (format OAS-AAAA-NNNN) est généré automatiquement. Choisissez le <b>type de traitement</b> (la liste reprend les process des postes OAS déclarés dans Production → Process Ateliers) et le <b>bain</b> utilisé. L'<b>heure d'entrée</b> est préremplie à l'instant présent.</li>
+      <li>Composez le chargement : pour chaque référence, choisissez le <b>lot</b> (la liste affiche « n° de lot · pièce · reste N pcs »), la <b>référence pièce</b> et la <b>surface unitaire</b> se préremplissent, puis saisissez le <b>nombre de pièces</b> posées sur la balancelle. Cliquez sur <b>« Ajouter une référence »</b> pour mélanger plusieurs lots sur la même balancelle.</li>
+      <li>Surveillez la <b>jauge de charge</b> : elle cumule surface unitaire × quantité de toutes les lignes, sur une limite de <b>550 000 mm²</b>. Verte = charge OK (le message affiche la marge libre restante) ; orange à partir de 85 % = « charge proche du maximum » ; rouge au-delà de 100 % = « charge dépassée : retirez des pièces ou réduisez la quantité ».</li>
+      <li>Cliquez sur <b>« Enregistrer la balancelle »</b>. La session apparaît dans le tableau des balancelles avec le statut <span class="b b-info">En cours</span>, et la progression des lots concernés augmente d'autant.</li>
+    </ol>
+
+    <h3>Le formulaire « Nouvelle balancelle » en détail</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+        <tbody>
+          <tr><td>N° Session</td><td>Automatique</td><td>—</td><td>Généré au format OAS-AAAA-NNNN, non modifiable.</td></tr>
+          <tr><td>Type de traitement (bain)</td><td>Liste déroulante</td><td>Oui</td><td>Reprend les noms des process des postes d'activité OAS (Production → Postes). À défaut : OAS incolore, OAS noire, Désoxydation.</td></tr>
+          <tr><td>Bain</td><td>Liste déroulante</td><td>Oui</td><td>Principal OAS · Bain de lavage · Rinçage 1 · Rinçage 2 · Neutralisation · Bain 2 (essais).</td></tr>
+          <tr><td>Heure entrée</td><td>Date + heure</td><td>Oui</td><td>Préremplie à l'instant présent ; c'est le début de la session (la durée est calculée entrée → sortie).</td></tr>
+          <tr><td>Références (une ligne par référence)</td><td>Lot + référence + surface unitaire (mm²) + nb pièces</td><td>Oui (au moins une ligne)</td><td>Chaque ligne doit avoir un lot, une surface &gt; 0 et une quantité &gt; 0. La référence et la surface se préremplissent au choix du lot ; la surface vient de la nomenclature de la pièce quand elle y est renseignée.</td></tr>
+          <tr><td>Observations</td><td>Texte libre</td><td>Non</td><td>Remarques sur la session (montage, particularités…).</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="shot">
+      <img src="../../assets/form-oas-balancelle.png" alt="Formulaire Nouvelle balancelle OAS multi-références" loading="lazy">
+      <figcaption><b>Nouvelle balancelle</b> — les lignes de références en haut, la jauge de charge (0 → 550 000 mm²) qui se recalcule à chaque saisie.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — clore une balancelle (autocontrôle)</h3>
+    <ol class="steps">
+      <li>Dans le tableau des balancelles, cliquez sur <b>« Clore + autocontrôle »</b> sur la ligne de la session en cours. Le bandeau de la fenêtre rappelle la session, le lot et la pièce concernés.</li>
+      <li>Saisissez les <b>mesures finales</b> : pH final du bain, température finale (°C), épaisseur anodique (µm), Cp et Cpk si vous les avez ; l'<b>heure de sortie</b> est obligatoire (préremplie à l'instant présent).</li>
+      <li>Choisissez l'<b>aspect visuel</b> (Uniforme — couleur homogène · Léger voile · Tache locale · Coulure · Brûlure) puis le <b>résultat de l'autocontrôle</b> : <span class="b b-ok">✓ Conforme — libéré</span> ou <span class="b b-crit">✗ Non conforme — bloqué (NC ouverte)</span>. Notez les anomalies éventuelles dans Observations.</li>
+      <li><b>Identifiez-vous</b> : saisissez votre <b>matricule</b> et votre <b>code PIN</b> (les mêmes que pour la connexion à l'ERP). Sans identification valide, la clôture est refusée.</li>
+      <li>Cliquez sur <b>« Valider la clôture + créer le PV »</b>. La balancelle passe à <span class="b b-ok">Terminé</span> avec son résultat, et un <b>PV de contrôle</b> (type autocontrôle) est créé automatiquement dans le service <b>Qualité</b> — la notification affiche son numéro.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-oas-cloture-balancelle.png" alt="Fenêtre Clore + autocontrôle d'une balancelle OAS" loading="lazy">
+      <figcaption><b>Clore + autocontrôle</b> — le bandeau rappelle la session, le lot et la pièce ; en dessous les mesures finales (pH, température, épaisseur anodique, Cp/Cpk), l'heure de sortie obligatoire, l'aspect visuel, le résultat conforme / non conforme, puis le matricule et le code PIN qui signent l'autocontrôle. La validation clôt la session et crée le PV de contrôle en Qualité.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La limite de charge d'une balancelle est de <b>550 000 mm²</b> de surface totale : l'enregistrement est refusé au-delà, quelle que soit la jauge affichée.</li>
+      <li>La <b>progression OAS d'un lot</b> est calculée sur les quantités posées en balancelles : elle passe à « Terminé » à 100 %, et le lot bascule alors automatiquement vers son étape suivante (colonne « Bascule vers »).</li>
+      <li>La surface unitaire proposée vient de la <b>nomenclature</b> de la pièce (Bureau Études). Vérifiez-la avant d'enregistrer : une surface fausse fausse la jauge de charge.</li>
+      <li>La clôture exige le <b>matricule + PIN</b> de l'opérateur : c'est la signature de l'autocontrôle sur le PV envoyé à la Qualité.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> un résultat d'autocontrôle « Non conforme » <b>bloque</b> les pièces et ouvre une non-conformité côté Qualité. Ne clôturez en non conforme qu'après avoir vérifié vos mesures — la suite (dérogation, retouche, rebut) se traite dans le service Qualité.</div>
+    <div class="astuce"><b>Astuce :</b> le bouton <b>« Demande d'achat »</b> en haut à droite de la bannière du service permet de demander un réapprovisionnement (chimiques, consommables…) sans quitter l'OAS : la demande est transmise directement au service Achats.</div>
+  </section>
+
+  <!-- ═══════════════ ONGLET 2 : RELEVÉ CONSOMMATION EAU ═══════════════ -->
+  <section class="tab" id="tab-eau">
+    <div class="tab-head"><span class="tab-num">2</span><h2>Relevé consommation eau</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Le traitement de surface consomme de l'eau (bains, rinçages) : cet onglet trace les relevés périodiques de consommation et de qualité de l'eau. C'est un suivi réglementaire — les relevés alimentent aussi les mesures environnementales (HSE) de l'entreprise.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Le sous-titre récapitule le nombre de relevés et le <b>volume total</b> consommé (en m³). Le tableau liste chaque relevé : Date · Opérateur · Volume · pH · Température · Turbidité · Chlore · Conformité (<span class="b b-ok">✓ Conforme</span> ou <span class="b b-crit">✗ NC</span>) · Observations. Le bouton <b>« Nouveau relevé »</b> ouvre le formulaire de saisie.</p>
+    <figure class="shot">
+      <img src="../../assets/oas-eau.png" alt="Capture de l'onglet Relevé consommation eau" loading="lazy">
+      <figcaption><b>Relevé consommation eau</b> — l'historique des relevés avec le volume total en tête et le badge de conformité par ligne.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — saisir un relevé d'eau</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Nouveau relevé »</b> : la fenêtre « Relevé consommation d'eau » s'ouvre, la date du jour est préremplie.</li>
+      <li>Saisissez le <b>volume</b> relevé (en m³, 3 décimales possibles, ex. 1.250) puis les mesures disponibles : pH, température (°C), turbidité (NTU), chlore (mg/L). Tous ces champs sont facultatifs — ne saisissez que ce que vous avez mesuré.</li>
+      <li>Laissez la case <b>« Conforme aux seuils réglementaires »</b> cochée si tout est dans les seuils ; décochez-la sinon (le relevé apparaîtra <span class="b b-crit">✗ NC</span> dans la liste).</li>
+      <li>Cliquez sur <b>« Enregistrer »</b>. Le relevé s'ajoute à l'historique ; si des mesures environnementales sont générées, la notification l'indique (« N mesure(s) HSE créée(s) »).</li>
+    </ol>
+
+    <h3>Le formulaire « Relevé consommation d'eau » en détail</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+        <tbody>
+          <tr><td>Date</td><td>Date</td><td>Oui</td><td>Préremplie à la date du jour.</td></tr>
+          <tr><td>Volume (m³)</td><td>Nombre (3 décimales)</td><td>Non</td><td>Volume d'eau consommé sur la période relevée ; s'additionne dans le volume total de l'onglet.</td></tr>
+          <tr><td>pH</td><td>Nombre</td><td>Non</td><td>pH de l'eau mesurée.</td></tr>
+          <tr><td>Température (°C)</td><td>Nombre</td><td>Non</td><td>Température de l'eau.</td></tr>
+          <tr><td>Turbidité (NTU)</td><td>Nombre</td><td>Non</td><td>Trouble de l'eau, en unités NTU.</td></tr>
+          <tr><td>Chlore (mg/L)</td><td>Nombre</td><td>Non</td><td>Teneur en chlore.</td></tr>
+          <tr><td>Observations</td><td>Texte libre</td><td>Non</td><td>Remarques (origine d'un écart, intervention…).</td></tr>
+          <tr><td>Conforme aux seuils réglementaires</td><td>Case à cocher</td><td>—</td><td>Cochée par défaut ; décochez si une mesure sort des seuils.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="shot">
+      <img src="../../assets/form-oas-eau.png" alt="Formulaire de relevé de consommation d'eau" loading="lazy">
+      <figcaption><b>Relevé d'eau</b> — la date est préremplie ; seuls les champs mesurés doivent être renseignés.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La colonne Opérateur affiche l'auteur du relevé quand il est connu ; les champs non mesurés restent affichés « — » dans la liste.</li>
+      <li>Le volume total affiché en tête d'onglet est la somme de tous les relevés listés : il alimente aussi la tuile « Eau consommée » du Dashboard OAS.</li>
+    </ul>
+    <div class="note"><b>Bon à savoir :</b> les relevés d'eau peuvent générer automatiquement des <b>mesures HSE</b> exploitées par les services Sécurité et Environnement — d'où l'importance de saisir des valeurs exactes et datées.</div>
+  </section>
+
+  <!-- ═══════════════ ONGLET 3 : RELEVÉS PÉRIODIQUES BAINS ═══════════════ -->
+  <section class="tab" id="tab-bains">
+    <div class="tab-head"><span class="tab-num">3</span><h2>Relevés périodiques bains</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> La qualité du traitement OAS dépend directement de la chimie des bains. Cet onglet trace les contrôles périodiques des cinq bains de la ligne (Principal OAS, Bain de lavage, Rinçage 1, Rinçage 2, Neutralisation) : pH, température, concentration, titrages… C'est le point de vigilance n° 1 du service : <b>un bain déclaré non conforme ouvre automatiquement une non-conformité dans le service Qualité</b>.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Le sous-titre affiche le nombre de relevés et l'état global : <span class="b b-ok">Tous conformes</span> en vert, ou le nombre de relevés <span class="b b-crit">hors seuil</span> en rouge. Le tableau (avec défilement horizontal) liste chaque relevé : Date · Bain (badge coloré par bain) · pH · Température · Concentration (g/L) · Densité · Titrage H₂SO₄ · Titrage Al · Conductivité · Conformité · Observations. Le bouton <b>« Nouveau relevé »</b> ouvre le formulaire.</p>
+    <figure class="shot">
+      <img src="../../assets/oas-bains.png" alt="Capture de l'onglet Relevés périodiques bains" loading="lazy">
+      <figcaption><b>Relevés périodiques bains</b> — un badge de couleur par bain, les mesures chimiques colonne par colonne et le badge de conformité en bout de ligne.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — saisir un relevé de bain</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Nouveau relevé »</b> : la fenêtre « Relevé périodique bain » s'ouvre, la date du jour est préremplie.</li>
+      <li>Choisissez le <b>bain</b> contrôlé (Principal OAS, Bain de lavage, Rinçage 1, Rinçage 2 ou Neutralisation).</li>
+      <li>Saisissez les mesures réalisées : pH, température (°C), concentration (g/L), densité, titrage H₂SO₄ (g/L), titrage Al (g/L), conductivité (mS/cm). Tous ces champs sont facultatifs — renseignez ce que votre contrôle a couvert.</li>
+      <li>Statuez sur la conformité : laissez la case <b>« Conforme »</b> cochée si le bain est dans les tolérances ; <b>décochez-la</b> si une mesure sort des seuils, et expliquez l'écart dans Observations.</li>
+      <li>Cliquez sur <b>« Enregistrer »</b>. Si le bain est conforme, le relevé s'ajoute simplement à l'historique. S'il est <b>non conforme</b>, une notification orange vous prévient : « Bain … non conforme : NC ouverte côté Qualité » — la non-conformité est créée automatiquement et sera traitée par le service Qualité.</li>
+    </ol>
+
+    <h3>Le formulaire « Relevé périodique bain » en détail</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+        <tbody>
+          <tr><td>Date</td><td>Date</td><td>Oui</td><td>Préremplie à la date du jour.</td></tr>
+          <tr><td>Bain</td><td>Liste déroulante</td><td>Oui</td><td>Principal OAS · Bain de lavage · Rinçage 1 · Rinçage 2 · Neutralisation.</td></tr>
+          <tr><td>pH</td><td>Nombre</td><td>Non</td><td>Pour le bain principal, la tolérance de référence est pH 0.7 – 1.1 (visible sur le Dashboard OAS).</td></tr>
+          <tr><td>Température (°C)</td><td>Nombre</td><td>Non</td><td>Température du bain.</td></tr>
+          <tr><td>Concentration (g/L)</td><td>Nombre</td><td>Non</td><td>Concentration du bain (référence bain principal : 180 g/L de H₂SO₄).</td></tr>
+          <tr><td>Densité</td><td>Nombre (3 décimales)</td><td>Non</td><td>Densité mesurée du bain.</td></tr>
+          <tr><td>Titrage H₂SO₄ (g/L)</td><td>Nombre</td><td>Non</td><td>Résultat du titrage acide.</td></tr>
+          <tr><td>Titrage Al (g/L)</td><td>Nombre</td><td>Non</td><td>Teneur en aluminium dissous.</td></tr>
+          <tr><td>Conductivité (mS/cm)</td><td>Nombre</td><td>Non</td><td>Conductivité du bain.</td></tr>
+          <tr><td>Conforme</td><td>Case à cocher</td><td>—</td><td>Cochée par défaut. <b>Décochée = NC créée automatiquement en Qualité.</b></td></tr>
+          <tr><td>Observations</td><td>Texte libre</td><td>Non</td><td>Écart constaté, action réalisée (ajout, dilution…).</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="shot">
+      <img src="../../assets/form-oas-bain.png" alt="Formulaire de relevé périodique de bain" loading="lazy">
+      <figcaption><b>Relevé de bain</b> — les mesures chimiques et la case « Conforme » : c'est elle qui déclenche (ou non) la NC automatique.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Un relevé par bain et par échéance : c'est le <b>dernier relevé de chaque bain</b> qui fait l'état de référence affiché sur le Dashboard OAS.</li>
+      <li>La conformité est déclarée par l'opérateur (case à cocher) : comparez vos mesures aux tolérances de la gamme avant de statuer.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> décocher « Conforme » ouvre <b>immédiatement et automatiquement</b> une non-conformité dans le service Qualité. C'est le comportement voulu (traçabilité EN 9100) — ne « corrigez » jamais un relevé en le déclarant conforme à tort pour éviter la NC.</div>
+    <div class="astuce"><b>Astuce :</b> consultez l'évolution du pH du bain principal sur le <a href="#tab-dashboard">Dashboard OAS</a> avant de lancer une session : une dérive lente se voit mieux sur la courbe des derniers relevés que sur une mesure isolée.</div>
+  </section>
+
+  <!-- ═══════════════ ONGLET 4 : DASHBOARD OAS ═══════════════ -->
+  <section class="tab" id="tab-dashboard">
+    <div class="tab-head"><span class="tab-num">4</span><h2>Dashboard OAS</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Vue d'ensemble en temps réel de l'activité du traitement de surface : sessions, conformité, lots en cours, consommation d'eau et état des bains. C'est l'écran à consulter en début de poste pour savoir où en est la ligne avant de charger une balancelle.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Cinq tuiles d'indicateurs en haut de page :</p>
+    <ul class="points">
+      <li><b>Sessions totales</b> — nombre de balancelles enregistrées, avec le nombre en cours.</li>
+      <li><b>Taux conformité</b> — pourcentage de sessions terminées conformes (le sous-texte détaille « X NC sur Y » sessions terminées).</li>
+      <li><b>Lots actifs à l'OAS</b> — lots en cours de traitement, avec le nombre de lots terminés.</li>
+      <li><b>Eau consommée (période)</b> — volume total en m³ et nombre de relevés.</li>
+      <li><b>État des bains</b> — « OK » en vert si tous les relevés sont conformes, sinon le nombre de relevés NC en rouge ; le sous-texte rappelle le dernier pH du bain principal.</li>
+    </ul>
+    <p>En dessous, deux blocs côte à côte : le graphique <b>« Évolution pH — Bain Principal OAS »</b> (les 5 derniers relevés en barres, vertes dans la tolérance pH 0.7 – 1.1, rouges en dehors — référence H₂SO₄ 180 g/L) et le tableau <b>« Dernier état des bains »</b> (Bain · Dernier relevé · pH · Température · État) qui récapitule le dernier relevé de chacun des cinq bains.</p>
+    <figure class="shot">
+      <img src="../../assets/oas-dashboard.png" alt="Capture du Dashboard OAS" loading="lazy">
+      <figcaption><b>Dashboard OAS</b> — les 5 tuiles d'indicateurs, l'évolution du pH du bain principal et le dernier état de chaque bain.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — le réflexe de début de poste</h3>
+    <ol class="steps">
+      <li>Ouvrez le <b>Dashboard OAS</b> et vérifiez la tuile <b>État des bains</b> : si elle affiche des NC, traitez d'abord la chimie (voir onglet <a href="#tab-bains">Relevés périodiques bains</a>) avant de charger des pièces.</li>
+      <li>Contrôlez la courbe de <b>pH du bain principal</b> : une barre rouge ou une dérive vers les bornes 0.7 / 1.1 appelle un nouveau relevé, voire un ajustement du bain.</li>
+      <li>Regardez <b>Lots actifs à l'OAS</b> puis passez à l'onglet <a href="#tab-lots-balancelles">Lots &amp; Balancelles</a> pour composer vos balancelles de la journée.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Tous les indicateurs sont calculés en direct à partir des trois onglets précédents : un relevé ou une clôture saisis apparaissent immédiatement ici.</li>
+      <li>Le taux de conformité ne compte que les <b>sessions terminées</b> : les balancelles en cours n'y entrent pas encore.</li>
+    </ul>
+    <div class="note"><b>Bon à savoir :</b> un tableau de bord OAS plus complet (avec filtres et export) existe aussi dans le service <b>Tableaux de bord → Dashboard OAS</b>, accessible aux autres services en lecture.</div>
+  </section>
+
+  <div class="docnav">
+    <a href="index.html">← Sommaire des manuels</a>
+    <a href="qualite.html">Manuel suivant : Qualité →</a>
+  </div>
+
+  <footer class="doc">
+    ERP Seem Semrac — manuel utilisateur généré depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs). En cas d'écart entre ce manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
+  </footer>
+
+</div>
+</body>
+</html>

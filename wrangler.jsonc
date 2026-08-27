@@ -1,0 +1,43 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "seem-semrac-erp",
+  "compatibility_date": "2026-03-09",
+  "pages_build_output_dir": "./dist",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "vars": {
+    "SUPABASE_URL": "https://vyqgrasezpyqjwvijwvv.supabase.co",
+    "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5cWdyYXNlenB5cWp3dmlqd3Z2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwNTE4MTcsImV4cCI6MjA5MzYyNzgxN30.Optt1QD-Ai3Xm8mk4f8fsvKry9-L2SlTBNB9KgVG3ls",
+    // ─── AUTH ───
+    // Mur d'authentification : "off" (déploiement progressif, identifie sans bloquer) → "on" (login obligatoire partout)
+    "AUTH_ENFORCE": "on"
+    // JWT_SECRET / BOOTSTRAP_MATRICULE / BOOTSTRAP_PIN = SECRETS Pages (JAMAIS committés) :
+    //   npx wrangler pages secret put JWT_SECRET        --project-name seem-semrac-erp
+    //   npx wrangler pages secret put BOOTSTRAP_MATRICULE --project-name seem-semrac-erp
+    //   npx wrangler pages secret put BOOTSTRAP_PIN     --project-name seem-semrac-erp
+    // En LOCAL (wrangler pages dev), mettre ces valeurs dans un fichier .dev.vars (déjà gitignored) — voir .dev.vars.example.
+  },
+  // "kv_namespaces": [
+  //   {
+  //     "binding": "MY_KV_NAMESPACE",
+  //     "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  //   }
+  // ],
+  // "r2_buckets": [
+  //   {
+  //     "binding": "MY_BUCKET",
+  //     "bucket_name": "my-bucket"
+  //   }
+  // ],
+  // "d1_databases": [
+  //   {
+  //     "binding": "MY_DB",
+  //     "database_name": "my-database",
+  //     "database_id": ""
+  //   }
+  // ],
+  // "ai": {
+  //   "binding": "AI"
+  // }
+}

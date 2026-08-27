@@ -1,0 +1,53 @@
+# 04 — Authentification & autorisations (RBAC)
+
+Tout est dans `src/auth.ts` (logique) + middleware dans `src/index.tsx` (~L114).
+
+## Authentification — login matricule + PIN
+- Page autonome `src/login.tsx` : champ **matricule** (majuscules auto) + **PIN 4 chiffres**.
+- `POST /api/login` → vérifie le PIN (haché **PBKDF2-SHA256**, avec re-hachage paresseux à la volée) → pose un **cookie de session JWT** (algorithme **HS256** — l'algo doit être explicite, cf. gotcha `hono/jwt`).
+- Session valable ~12 h. `GET /api/me` renvoie l'utilisateur courant.
+- `AUTH_ENFORCE` (env, défaut **ON**) active le gating. **Compte de secours** `ADMIN` / PIN `246810` (bootstrap intégré).
+- Routes publiques (`PUBLIC_PREFIXES`) : `/login`, `/api/login`, `/logout`, `/static`, `/api/contact`, `/favicon.ico`.
+
+## Autorisations — modèle
+Le middleware appelle `canAccess(user, path, method)` sur **chaque** requête (hors routes publiques). La décision suit :
+
+1. `perms` contient `all` (rôle **direction**) → **autorisé** (tout).
+2. Route **self-service** atelier (PIN dans le corps) → autorisé (`isSelfService`).
+3. `interlocuteurs` (contacts clients ET fournisseurs) → autorisé si écriture `rw` sur **commercial/achats/be** (cas multi-services).
+4. `serviceFor(path)` déduit le **service** de la route :
+   - `/api/<famille>/…` → `API_FAM_SERVICE[famille]`
+   - `/<segment>/…` (page) → `PAGE_SEG_SERVICE[segment]`
+   - routes explicitement neutres (`/api/me`, `/api/ged/file`, soumission `/api/validations`) → `__neutral__` (autorisé au connecté).
+5. **Défaut FAIL-CLOSED** (depuis l'audit 2026-07-04) : une route `/api/*` **non mappée** est **refusée** ; une page non mappée reste ouverte au connecté.
+6. Sinon : niveau du service dans `ROLE_MATRIX` — **écriture** (POST/PATCH/DELETE) exige `rw`, **lecture** (GET) accepte `r` ou `rw`. Multi-rôles → meilleur niveau.
+
+> ⚠ **Règle d'or pour toute nouvelle route API** : ajouter sa **famille** à `API_FAM_SERVICE` (sinon elle est refusée par défaut). Voir skill `erp-new-module`.
+
+## Les 13 rôles (`ROLE_MATRIX`)
+`rw` = lecture+écriture · `r` = lecture seule · (vide) = aucun accès.
+
+| Rôle | Écriture (rw) | Lecture (r) |
+|---|---|---|
+| **direction** | **tous** (perm `all`) | tous |
+| **commercial** | commercial | be, production, qualite, expeditions, stock |
+| **bei** (bureau d'études) | be, achats | commercial, production, oas, qualite, securite, stock, maintenance |
+| **achats** | achats, stock | commercial, be, production, expeditions, maintenance |
+| **production** | production | be, achats, oas, qualite, securite, expeditions, stock, maintenance |
+| **oas** | oas | be, production, qualite, securite, stock, maintenance |
+| **qualite** | qualite, securite | be, production, oas, expeditions, stock, maintenance |
+| **logistique** | expeditions, stock | commercial, achats, production |
+| **maintenance** | maintenance | achats, production, oas, securite, stock |
+| **comptable** | compta | commercial, achats, expeditions, stock, rh |
+| **rh** | rh | production, securite, compta |
+| **operateur** | — (aucune) | production, oas, qualite, expeditions |
+
+## Cas particuliers
+- **`plans` (Plan/Bâtiment)** : lecture ouverte à tout connecté ; écriture BE/Production/Maintenance/Qualité/Direction.
+- **`habilitations`** : géré par RH **et** Qualité (jeton `habilitations`), sans donner accès au reste de la RH.
+- **`pointage`** : borne self-service (matricule+PIN dans le corps) → ouvert à tout connecté.
+- **GED** : ouverture d'un fichier (`/api/ged/file`) ouverte au connecté ; upload/suppression réservés au BE.
+- **Validations** : la **soumission** (`POST /api/validations`) est ouverte au connecté (n'importe quel service peut soumettre un jalon) ; la **décision** (`/decision`) est réservée à la Direction (garde inline + non neutre).
+
+## Filtrage du menu
+`navServices(user)` retourne les services **lisibles** → la sidebar n'affiche que ce à quoi l'utilisateur a droit (`plans` visible par tous).

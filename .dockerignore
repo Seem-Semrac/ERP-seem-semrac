@@ -1,0 +1,18 @@
+# Contexte de build de l'image app (docker/app.Dockerfile, contexte = racine).
+# On n'envoie PAS ces éléments au démon Docker (image plus légère, build plus rapide).
+node_modules
+dist
+.wrangler
+.git
+.github
+backups
+docs/print
+docker/supabase/volumes/db/data
+docker/supabase/volumes/storage
+docker/db/seed/*.sql
+**/*.log
+.env
+.env.production
+.dev.vars
+.DS_Store
+cerveau application

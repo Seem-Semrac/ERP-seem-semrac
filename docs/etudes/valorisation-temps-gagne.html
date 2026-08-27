@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recuperer 3 ETP sur 4 — SEEM · SEMRAC</title>
+<style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style>
+</head>
+<body>
+<style>
+  /* Document volontairement en thème CLAIR unique (quel que soit le réglage du lecteur). */
+  :root,:root[data-theme="light"],:root[data-theme="dark"]{
+    color-scheme:light;
+    --bg:#F4F6FB; --surface:#FFFFFF; --surface-2:#EDF0F7; --surface-3:#E4E9F3;
+    --ink:#161A28; --muted:#586074; --faint:#8891a4; --line:#E1E6F0;
+    --accent:#22409B; --accent-2:#5C5391; --bar:#2B4CC0; --bar-soft:#6D82D8;
+    --good:#1E8A54; --good-soft:#2FA669; --warn:#B4791F; --crit:#B23B3B;
+    --residual:#AEB6C6; --residual-track:#EAEEF6;
+    --shadow:0 1px 2px rgba(20,30,60,.06),0 8px 24px rgba(20,30,60,.06);
+    --font-display:"Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    --font-body:"Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    --font-mono:"SFMono-Regular",ui-monospace,"JetBrains Mono","Roboto Mono",Consolas,"Liberation Mono",monospace;
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:var(--font-body);line-height:1.6;
+    -webkit-font-smoothing:antialiased;margin:0;font-size:16px}
+  .wrap{max-width:940px;margin:0 auto;padding:clamp(20px,5vw,56px) clamp(16px,4vw,40px)}
+  h1,h2,h3{font-family:var(--font-display);text-wrap:balance;line-height:1.15;margin:0}
+  p{margin:0}
+  .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+  .eyebrow{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  a{color:var(--accent)}
+
+  /* Header */
+  header{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:40px}
+  .brandrow{display:flex;align-items:center;gap:12px;margin-bottom:22px;flex-wrap:wrap}
+  .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    display:grid;place-items:center;color:#fff;font-family:var(--font-mono);font-weight:700;font-size:.82rem;flex:none}
+  .brandrow .co{font-weight:700;letter-spacing:.02em}
+  .brandrow .doc{margin-left:auto;color:var(--faint);font-size:.78rem;font-family:var(--font-mono)}
+  h1{font-size:clamp(1.7rem,4.4vw,2.7rem);font-weight:800;letter-spacing:-.02em}
+  h1 .hi{color:var(--accent)}
+  .lede{margin-top:16px;color:var(--muted);font-size:clamp(1rem,2.4vw,1.12rem);max-width:64ch}
+
+  /* Headline stats */
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:30px}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 16px 14px;box-shadow:var(--shadow)}
+  .kpi .n{font-family:var(--font-mono);font-size:clamp(1.5rem,4vw,2rem);font-weight:700;letter-spacing:-.02em;line-height:1}
+  .kpi .n small{font-size:.9rem;font-weight:600;color:var(--muted)}
+  .kpi .l{margin-top:7px;font-size:.76rem;color:var(--muted);line-height:1.35}
+  .kpi.good .n{color:var(--good)} .kpi.crit .n{color:var(--crit)} .kpi.accent .n{color:var(--accent)}
+
+  .ctxband{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:18px;padding:14px 18px;background:var(--surface-2);
+    border:1px solid var(--line);border-radius:12px;font-size:.82rem;color:var(--muted)}
+  .ctxband b{color:var(--ink)}
+  .ctxband .sep{color:var(--faint)}
+
+  section{margin-top:52px}
+  .sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:6px}
+  .sec-num{font-family:var(--font-mono);font-size:.82rem;font-weight:700;color:var(--accent);flex:none}
+  h2{font-size:clamp(1.25rem,3vw,1.6rem);font-weight:800;letter-spacing:-.01em}
+  .sec-intro{color:var(--muted);margin:12px 0 22px;max-width:68ch}
+  .sec-intro strong{color:var(--ink);font-weight:650}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px clamp(16px,3vw,26px);box-shadow:var(--shadow)}
+
+  /* Bar chart */
+  .chart-scale{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:.66rem;color:var(--faint);
+    border-bottom:1px dashed var(--line);padding-bottom:5px;margin:4px 0 16px}
+  .barrow{margin:0 0 16px}
+  .barrow:last-child{margin-bottom:4px}
+  .barrow .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px}
+  .barrow .fn{font-weight:650;font-size:.92rem}
+  .barrow .fn .pc{font-weight:400;color:var(--faint);font-size:.82em}
+  .barrow .hh{font-family:var(--font-mono);font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+  .barrow .hh b{color:var(--ink)}
+  .track{position:relative;height:26px;background:var(--residual-track);border-radius:7px;display:flex;gap:2px;overflow:hidden}
+  .seg{height:100%;display:flex;align-items:center;padding-left:8px;color:#fff;font-family:var(--font-mono);font-size:.7rem;font-weight:600;white-space:nowrap;min-width:0}
+  .seg.rec{background:var(--bar);border-radius:6px 3px 3px 6px}
+  .seg.res{background:var(--residual);border-radius:3px 6px 6px 3px;color:var(--surface)}
+  .barrow .cause{margin-top:6px;font-size:.76rem;color:var(--faint);line-height:1.4}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:18px;padding-top:14px;border-top:1px solid var(--line);font-size:.78rem;color:var(--muted)}
+  .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:7px;vertical-align:-1px}
+  .chart-total{margin-top:16px;font-size:.82rem;color:var(--muted)}
+  .chart-total b{color:var(--ink);font-family:var(--font-mono)}
+
+  /* Cascade */
+  .cascade{margin-top:6px}
+  .cascade .track{height:52px;border-radius:10px}
+  .cascade .seg{font-size:.82rem;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;padding:0 14px}
+  .cascade .seg .big{font-size:1rem;font-weight:700}
+  .cascade .seg.rec{background:linear-gradient(135deg,var(--good),var(--good-soft))}
+  .cascade .seg.res{background:var(--residual)}
+
+  /* Causes / gains cards */
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+  .mini{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 18px 16px;box-shadow:var(--shadow)}
+  .mini .tag{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  .mini h3{font-size:1rem;font-weight:750;margin:8px 0 6px}
+  .mini p{font-size:.84rem;color:var(--muted);line-height:1.5}
+  .mini .chip{display:inline-block;margin-top:10px;font-family:var(--font-mono);font-size:.72rem;font-weight:700;
+    background:var(--surface-2);color:var(--accent);border-radius:999px;padding:3px 10px}
+  .mini.q .chip{color:var(--good);}
+
+  /* tables */
+  table{width:100%;border-collapse:collapse;font-size:.86rem}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:700}
+  td.num{font-family:var(--font-mono);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  td .lev{color:var(--accent);font-weight:600}
+  tbody tr:last-child td{border-bottom:none}
+  .tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--surface);box-shadow:var(--shadow)}
+
+  /* callout + hypotheses */
+  .callout{border-left:3px solid var(--accent);background:var(--surface-2);border-radius:0 12px 12px 0;padding:16px 20px;margin-top:22px}
+  .callout p{color:var(--ink);font-size:.92rem}
+  .callout .q{font-style:italic;color:var(--muted)}
+  .hypo{margin-top:16px;background:var(--surface);border:1px dashed var(--line);border-radius:14px;padding:20px 22px}
+  .hypo h3{font-size:.92rem;font-weight:750;margin-bottom:10px}
+  .hypo ul{margin:0;padding-left:18px;color:var(--muted);font-size:.83rem;line-height:1.7}
+  .hypo code{font-family:var(--font-mono);color:var(--ink);background:var(--surface-2);padding:1px 6px;border-radius:5px;font-size:.82em}
+  footer{margin-top:48px;padding-top:22px;border-top:1px solid var(--line);color:var(--faint);font-size:.76rem;line-height:1.6}
+
+  @media (max-width:720px){
+    .kpis{grid-template-columns:repeat(2,1fr)}
+    .grid3,.grid2{grid-template-columns:1fr}
+  }
+  @media print{
+    body{background:#fff} .card,.mini,.kpi,.tbl-wrap{box-shadow:none}
+    section{break-inside:avoid}
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="brandrow">
+      <div class="logo">SS</div>
+      <div>
+        <div class="co">SEEM · SEMRAC</div>
+        <div class="eyebrow">Usinage aluminium · Tôlerie-chaudronnerie · Sous-traitance aéronautique</div>
+      </div>
+      <div class="doc">Note interne — Direction &amp; associés</div>
+    </div>
+
+    <h1>Récupérer <span class="hi">3 ETP sur 4</span> de temps improductif, sans embaucher.</h1>
+    <p class="lede">Nos 20 collaborateurs — <b>15 au bureau, 5 en atelier</b> — consacrent une part lourde de leur semaine à des tâches administratives sans valeur ajoutée : la même donnée saisie plusieurs fois, des reportings tapés à la main référence par référence, et autant de « vérités » que de services. Avec <b>≈ 130 demandes de travaux entrantes par mois</b> qui traversent tout le bureau, la moindre ressaisie répétée se paie très cher. L'ERP unifie la donnée et automatise ce qui l'était à la main. Voici où le temps part — et où il revient.</p>
+
+    <div class="kpis">
+      <div class="kpi crit"><div class="n mono">≈4,1<small> ETP</small></div><div class="l">de temps improductif aujourd'hui (~143 h/sem)</div></div>
+      <div class="kpi good"><div class="n mono">≈3,0<small> ETP</small></div><div class="l">récupérables, soit <b>≈3 ETP</b> à redéployer</div></div>
+      <div class="kpi accent"><div class="n mono">~156<small> k€/an</small></div><div class="l">valeur du temps repris (32 €/h chargé)</div></div>
+      <div class="kpi accent"><div class="n mono">~234<small> k€/an</small></div><div class="l">potentiel total identifié (temps + gains directs)</div></div>
+    </div>
+
+    <div class="ctxband">
+      <span><b>20</b> personnes</span><span class="sep">·</span>
+      <span><b>≈15</b> bureau (14,5 ETP) + <b>5</b> atelier</span><span class="sep">·</span>
+      <span><b>≈130</b> DT / mois (1 560/an)</span><span class="sep">·</span>
+      <span><b>≈3 h</b> d'administratif évitable <b>par DT</b></span><span class="sep">·</span>
+      <span><b>&gt;¼</b> du temps bureau en admin sans valeur</span>
+    </div>
+  </header>
+
+  <!-- 1. CONSTAT -->
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>Le constat — où part le temps aujourd'hui</h2></div>
+    <p class="sec-intro">Chaque fonction du bureau perd des heures chaque semaine non pas à <em>travailler</em>, mais à <strong>ressaisir, chercher, réconcilier et reporter à la main</strong>. Le graphique répartit ce temps improductif par fonction — <strong>à l'effectif réel de chaque équipe</strong> — en distinguant la part <strong>récupérable</strong> par l'ERP de la part <strong>résiduelle</strong> (jugement, échanges, saisie initiale incompressible).</p>
+
+    <div class="card">
+      <div class="chart-scale"><span>0 h/sem</span><span>13 h/sem</span><span>26 h/sem</span></div>
+
+      <!-- Commercial 13 (11/2) — 1 pers -->
+      <div class="barrow">
+        <div class="top"><span class="fn">Commercial / ADV <span class="pc">— 1 pers.</span></span><span class="hh"><b>26</b> h/sem</span></div>
+        <div class="track">
+          <div class="seg rec" style="width:92.3%">24 récupérables</div>
+          <div class="seg res" style="width:7.7%">2</div>
+        </div>
+        <div class="cause"><strong>Le poste le plus lourdement touché.</strong> Faute de visibilité sur le statut réel des commandes, le commercial passe l'essentiel de sa semaine à faire le SAV des retards : rappeler les clients en attente, rechercher où en est chaque affaire, relancer la production, ressaisir devis et commandes. Un statut fiable en temps réel supprime presque tout ce travail.</div>
+      </div>
+
+      <!-- BE 21 (16/5) — 3 pers -->
+      <div class="barrow">
+        <div class="top"><span class="fn">Bureau d'études / Méthodes <span class="pc">— 3 pers.</span></span><span class="hh"><b>21</b> h/sem</span></div>
+        <div class="track">
+          <div class="seg rec" style="width:61.5%">16 récupérables</div>
+          <div class="seg res" style="width:19.2%">5</div>
+        </div>
+        <div class="cause">3 personnes traitent les ≈130 DT/mois : ressaisie des gammes et données techniques, recherche de plans et références dispersés. <strong>Le dessin industriel lui-même reste productif et inchangé</strong> — seule l'administration autour des DT est récupérable (pas de multiplication brute).</div>
+      </div>
+
+      <!-- Qualité 18 (13/5) — 2 pers -->
+      <div class="barrow">
+        <div class="top"><span class="fn">Qualité / QHSE <span class="pc">— 2 pers.</span></span><span class="hh"><b>18</b> h/sem</span></div>
+        <div class="track">
+          <div class="seg rec" style="width:50%">13 récupérables</div>
+          <div class="seg res" style="width:19.2%">5</div>
+        </div>
+        <div class="cause">PV de contrôle, ECME, DUER et audits remplis à la main ; visibilité de la conformité reconstituée document par document.</div>
+      </div>
+
+      <!-- Compta/Paie 16.5 (13.5/3) — 1,5 pers -->
+      <div class="barrow">
+        <div class="top"><span class="fn">Comptabilité / Paie <span class="pc">— 1,5 pers.</span></span><span class="hh"><b>16,5</b> h/sem</span></div>
+        <div class="track">
+          <div class="seg rec" style="width:51.9%">13,5 récupérables</div>
+          <div class="seg res" style="width:11.5%">3</div>
+        </div>
+        <div class="cause">Factures et heures ressaisies référence par référence, paie reconstituée à la main, sans export vers Sage ou Silae.</div>
+      </div>
+
+      <!-- Logistique 14 (11/3) — 2 pers -->
+      <div class="barrow">
+        <div class="top"><span class="fn">Logistique / Expédition <span class="pc">— 2 pers.</span></span><span class="hh"><b>14</b> h/sem</span></div>
+        <div class="track">
+          <div class="seg rec" style="width:42.3%">11 récup.</div>
+          <div class="seg res" style="width:11.5%">3</div>
+        </div>
+        <div class="cause">Ressaisie des bons de livraison et expéditions, recherche du statut réel des commandes, suivi de traçabilité à la main.</div>
+      </div>
+
+      <!-- Programmation 13 (10/3) — 1 pers -->
+      <div class="barrow">
+        <div class="top"><span class="fn">Programmation / Ordonnancement <span class="pc">— 1 pers.</span></span><span class="hh"><b>13</b> h/sem</span></div>
+        <div class="track">
+          <div class="seg rec" style="width:38.5%">10 récupérables</div>
+          <div class="seg res" style="width:11.5%">3</div>
+        </div>
+        <div class="cause">Aucun suivi du statut de charge : la planification et le pointage d'avancement se tiennent à la main, hors de tout tableau partagé.</div>
+      </div>
+
+      <!-- Achats 10 (8/2) — 1 pers -->
+      <div class="barrow">
+        <div class="top"><span class="fn">Achats / Approvisionnement <span class="pc">— 1 pers.</span></span><span class="hh"><b>10</b> h/sem</span></div>
+        <div class="track">
+          <div class="seg rec" style="width:30.8%">8 récup.</div>
+          <div class="seg res" style="width:7.7%">2</div>
+        </div>
+        <div class="cause">Ressaisie des commandes et des prix, suivi de stock manuel, relances fournisseurs sans échéancier partagé.</div>
+      </div>
+
+      <!-- Atelier 10 (1/9) — 5 postes -->
+      <div class="barrow">
+        <div class="top"><span class="fn">Atelier — 5 postes (saisie terrain)</span><span class="hh"><b>10</b> h/sem</span></div>
+        <div class="track">
+          <div class="seg rec" style="width:3.8%"></div>
+          <div class="seg res" style="width:34.6%">9 — fiabilisé, non accéléré</div>
+        </div>
+        <div class="cause">Saisie terrain (BDT, PV, relevés) : l'ERP la <strong>fiabilise</strong> sous un management rigoureux, mais ne la raccourcit pas — le gain est la qualité de la donnée, pas le temps opérateur.</div>
+      </div>
+
+      <!-- Resp production 9 (7/2) — 1 pers -->
+      <div class="barrow">
+        <div class="top"><span class="fn">Responsable production <span class="pc">— 1 pers.</span></span><span class="hh"><b>9</b> h/sem</span></div>
+        <div class="track">
+          <div class="seg rec" style="width:26.9%">7 récup.</div>
+          <div class="seg res" style="width:7.7%">2</div>
+        </div>
+        <div class="cause">Consolidation de l'avancement, chasse à l'information atelier, arbitrages de charge sans tableau de bord en direct.</div>
+      </div>
+
+      <!-- Direction 14 (11/3) — 2 pers -->
+      <div class="barrow">
+        <div class="top"><span class="fn">Direction <span class="pc">— 2 pers.</span></span><span class="hh"><b>6</b> h/sem</span></div>
+        <div class="track">
+          <div class="seg rec" style="width:11.5%">3 récup.</div>
+          <div class="seg res" style="width:11.5%">3</div>
+        </div>
+        <div class="cause">Consolidation manuelle avant les revues de direction. <strong>La moitié seulement est automatisable</strong> : le reste est de l'arbitrage et de la décision, qu'aucun tableau de bord ne remplace.</div>
+      </div>
+
+      <div class="legend">
+        <span><i style="background:var(--bar)"></i>Temps <b>récupérable</b> par l'ERP</span>
+        <span><i style="background:var(--residual)"></i>Temps <b>résiduel</b> (incompressible)</span>
+      </div>
+      <p class="chart-total">Cumul du temps improductif : <b>≈ 143,5 h/semaine</b> → sur 45,9 semaines travaillées ≈ <b>6 587 h/an</b>, soit <b>≈ 4,1 ETP</b> (base légale <span class="mono">1 607 h/an</span>). Rapporté aux <b>~14,5 ETP</b> du bureau, cela représente <b>~1,3 jour par personne et par semaine</b> — soit <strong>plus d'un quart</strong> du temps bureau passé en administratif sans valeur ajoutée.</p>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h3 style="font-size:1.06rem;font-weight:750;margin-bottom:4px">La même perte, vue par type de tâche</h3>
+      <p style="color:var(--muted);font-size:.88rem;margin-bottom:18px">Réparties par nature, les 143,5 h/semaine désignent le premier gisement : non pas la saisie, mais la <strong>recherche &amp; réconciliation</strong> d'informations éparpillées — la signature des « plusieurs sources de vérité ».</p>
+
+      <div class="barrow"><div class="top"><span class="fn">Recherche &amp; réconciliation <span style="font-weight:400;color:var(--faint)">— sources multiples</span></span><span class="hh"><b>39,5</b> h/sem · 27 %</span></div><div class="track"><div class="seg rec" style="width:100%">V</div></div></div>
+      <div class="barrow"><div class="top"><span class="fn">Ressaisie multiple <span style="font-weight:400;color:var(--faint)">— même donnée re-tapée</span></span><span class="hh"><b>31</b> h/sem · 22 %</span></div><div class="track"><div class="seg rec" style="width:78.5%">S</div></div></div>
+      <div class="barrow"><div class="top"><span class="fn">Reporting manuel <span style="font-weight:400;color:var(--faint)">— réf par réf, sans export</span></span><span class="hh"><b>24</b> h/sem · 17 %</span></div><div class="track"><div class="seg rec" style="width:60.8%">R</div></div></div>
+      <div class="barrow"><div class="top"><span class="fn">Relances &amp; suivi manuel</span><span class="hh"><b>23</b> h/sem · 16 %</span></div><div class="track"><div class="seg rec" style="width:58.2%">T</div></div></div>
+      <div class="barrow"><div class="top"><span class="fn">Documents à la main <span style="font-weight:400;color:var(--faint)">— PV, BDT, ECME, DUER</span></span><span class="hh"><b>18</b> h/sem · 12 %</span></div><div class="track"><div class="seg rec" style="width:45.6%">D</div></div></div>
+      <div class="barrow"><div class="top"><span class="fn">Erreurs &amp; reprises</span><span class="hh"><b>8</b> h/sem · 6 %</span></div><div class="track"><div class="seg rec" style="width:20.3%">E</div></div></div>
+
+      <div class="tbl-wrap" style="margin-top:20px">
+        <table>
+          <thead><tr><th>Service <span style="font-weight:400;text-transform:none">(pers.)</span></th><th style="text-align:right">S</th><th style="text-align:right">R</th><th style="text-align:right">V</th><th style="text-align:right">D</th><th style="text-align:right">T</th><th style="text-align:right">E</th><th style="text-align:right">Total</th></tr></thead>
+          <tbody>
+            <tr><td>Bureau d'études / Méthodes (3)</td><td class="num">7</td><td class="num">1</td><td class="num">8</td><td class="num">3</td><td class="num">–</td><td class="num">2</td><td class="num" style="font-weight:700">21</td></tr>
+            <tr><td>Qualité / QHSE (2)</td><td class="num">1</td><td class="num">3</td><td class="num">3</td><td class="num">8</td><td class="num">2</td><td class="num">1</td><td class="num" style="font-weight:700">18</td></tr>
+            <tr><td>Comptabilité / Paie (1,5)</td><td class="num">7</td><td class="num">6</td><td class="num">1,5</td><td class="num">–</td><td class="num">–</td><td class="num">2</td><td class="num" style="font-weight:700">16,5</td></tr>
+            <tr><td>Direction (2)</td><td class="num">1</td><td class="num">2</td><td class="num">2</td><td class="num">–</td><td class="num">1</td><td class="num">–</td><td class="num" style="font-weight:700">6</td></tr>
+            <tr><td>Logistique / Expédition (2)</td><td class="num">4</td><td class="num">3</td><td class="num">3</td><td class="num">–</td><td class="num">3</td><td class="num">1</td><td class="num" style="font-weight:700">14</td></tr>
+            <tr><td>Commercial / ADV (1)</td><td class="num">5</td><td class="num">3</td><td class="num">8</td><td class="num">–</td><td class="num">8</td><td class="num">2</td><td class="num" style="font-weight:700">26</td></tr>
+            <tr><td>Programmation / Ordo (1)</td><td class="num">2</td><td class="num">2</td><td class="num">5</td><td class="num">–</td><td class="num">4</td><td class="num">–</td><td class="num" style="font-weight:700">13</td></tr>
+            <tr><td>Achats / Appro (1)</td><td class="num">4</td><td class="num">1</td><td class="num">2</td><td class="num">–</td><td class="num">3</td><td class="num">–</td><td class="num" style="font-weight:700">10</td></tr>
+            <tr><td>Atelier — 5 postes</td><td class="num">–</td><td class="num">–</td><td class="num">3</td><td class="num">7</td><td class="num">–</td><td class="num">–</td><td class="num" style="font-weight:700">10</td></tr>
+            <tr><td>Responsable production (1)</td><td class="num">–</td><td class="num">3</td><td class="num">4</td><td class="num">–</td><td class="num">2</td><td class="num">–</td><td class="num" style="font-weight:700">9</td></tr>
+            <tr><td style="font-weight:700">Total h/sem</td><td class="num" style="font-weight:700;color:var(--accent)">31</td><td class="num" style="font-weight:700;color:var(--accent)">24</td><td class="num" style="font-weight:700;color:var(--accent)">39,5</td><td class="num" style="font-weight:700;color:var(--accent)">18</td><td class="num" style="font-weight:700;color:var(--accent)">23</td><td class="num" style="font-weight:700;color:var(--accent)">8</td><td class="num" style="font-weight:800">143,5</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:10px;font-size:.72rem;color:var(--faint)">S ressaisie · R reporting manuel · V recherche &amp; réconciliation · D documents à la main · T relances &amp; suivi · E erreurs &amp; reprises. Heures hebdomadaires estimées par fonction, à l'effectif réel (hypothèses de travail, ajustables avec chaque responsable).</p>
+    </div>
+  </section>
+
+  <!-- 2. CAUSES -->
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>Les trois causes racines</h2></div>
+    <p class="sec-intro">Le temps ne se perd pas par manque de sérieux — au contraire, il se perd <strong>à force de rigueur manuelle</strong>. Trois mécanismes reviennent dans tous les services.</p>
+    <div class="grid3">
+      <div class="mini">
+        <div class="tag">Cause 1</div>
+        <h3>La même donnée, saisie plusieurs fois</h3>
+        <p>Une DT vit dans un mail, un tableur, un carnet, puis un logiciel comptable. Chaque service la re-tape. Sur ≈130 DT/mois, chaque ressaisie coûte du temps et introduit une erreur possible.</p>
+      </div>
+      <div class="mini">
+        <div class="tag">Cause 2</div>
+        <h3>Le reporting tapé à la main, sans export</h3>
+        <p>Les états (revue de direction, suivi client, paie) se reconstituent <em>a posteriori</em>, référence par référence, sans possibilité d'export. Un travail refait à chaque échéance.</p>
+      </div>
+      <div class="mini">
+        <div class="tag">Cause 3</div>
+        <h3>Plusieurs sources de vérité</h3>
+        <p>Le stock, le prix, le statut d'une commande diffèrent selon le service qu'on interroge. On passe un temps fou à <strong>réconcilier</strong> avant même de décider.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. REPRISE -->
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>Où le temps est repris — et par quel levier</h2></div>
+    <p class="sec-intro">À chaque cause correspond une brique déjà en place dans l'ERP. Le tableau relie chaque fonction au <strong>levier</strong> qui supprime la tâche manuelle, et au temps hebdomadaire repris à effectif constant.</p>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Fonction</th><th>Levier ERP qui supprime la tâche manuelle</th><th style="text-align:right">h/sem repris</th></tr></thead>
+        <tbody>
+          <tr><td>Commercial / ADV</td><td><span class="lev">Statut de commande &amp; délais en temps réel</span> — la date annoncée au client est fiable ; le commercial cesse de faire le SAV des retards et de courir après l'information.</td><td class="num">24</td></tr>
+          <tr><td>Bureau d'études / Méthodes</td><td><span class="lev">Référentiels, nomenclatures &amp; plans centralisés</span> — une seule source ; la DT ne se ressaisit plus, le plan ne se cherche plus (le dessin, lui, reste le métier).</td><td class="num">16</td></tr>
+          <tr><td>Comptabilité / Paie</td><td><span class="lev">Exports CSV → Sage (FEC) &amp; Silae (heures→paie)</span> — la saisie devient un import.</td><td class="num">13,5</td></tr>
+          <tr><td>Qualité / QHSE</td><td><span class="lev">PV, ECME, DUER &amp; audits numériques</span> — conformité visible en direct, contrôles périodiques auto-actualisés.</td><td class="num">13</td></tr>
+          <tr><td>Logistique / Expédition</td><td><span class="lev">BL &amp; expéditions structurés, traçabilité automatique</span> — le statut réel remonte seul, plus de recherche.</td><td class="num">11</td></tr>
+          <tr><td>Programmation / Ordonnancement</td><td><span class="lev">Planning &amp; charge par poste</span> — le statut de charge est visible, l'ordonnancement se pilote au lieu de se reconstituer.</td><td class="num">10</td></tr>
+          <tr><td>Achats / Appro</td><td><span class="lev">Prix (RFQ), stock &amp; relances automatisés</span> — l'échéancier fournisseurs et le besoin remontent seuls.</td><td class="num">8</td></tr>
+          <tr><td>Responsable production</td><td><span class="lev">Avancement &amp; charge en direct</span> — fini la chasse à l'information atelier.</td><td class="num">7</td></tr>
+          <tr><td>Direction</td><td><span class="lev">Tableaux de bord temps réel</span> — la revue de direction se lit au lieu de se préparer. Gain volontairement modeste : l'essentiel du temps de direction est de l'arbitrage, non de la consolidation.</td><td class="num">3</td></tr>
+          <tr><td>Atelier (5 postes)</td><td>Saisie terrain structurée — <em>fiabilité</em> de la donnée, gain de temps marginal assumé.</td><td class="num">1</td></tr>
+          <tr><td style="font-weight:700">Total</td><td style="color:var(--muted)">Temps hebdomadaire repris à effectif constant</td><td class="num" style="font-weight:700;color:var(--good)">≈ 106,5</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <p>Nous retenons volontairement une résorption de <strong>74 %</strong> — pas 100 %. Le ~1 ETP résiduel (jugement métier, échanges humains, saisie <em>initiale</em> de la donnée, et le dessin industriel qui reste le cœur du BE) demeure manuel. <span class="q">C'est précisément ce qui rend le « 3 sur 4 » crédible et défendable.</span></p>
+    </div>
+  </section>
+
+  <!-- 4. VALORISATION -->
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2>Ce que ça vaut</h2></div>
+    <p class="sec-intro">106,5 h/semaine reprises représentent <strong>≈ 4 888 h/an</strong>, soit <strong>≈ 3,0 ETP</strong>. Valorisées au coût chargé de <span class="mono">32 €/h</span>, elles pèsent près de <strong>156 k€ par an</strong> de temps aujourd'hui consommé sans produire de valeur. Rapportées aux <strong>1 560 DT/an</strong>, cela fait <strong>≈ 3 h d'administratif évitable par demande de travaux</strong>.</p>
+
+    <div class="card cascade">
+      <div class="chart-scale"><span>0 ETP</span><span>2 ETP</span><span>4 ETP</span></div>
+      <div class="track">
+        <div class="seg rec" style="width:74.2%"><span class="big mono">≈ 3,0 ETP repris</span><span>~156 k€/an — à redéployer</span></div>
+        <div class="seg res" style="width:25.8%"><span class="big mono">≈ 1,1 ETP</span><span>résiduel</span></div>
+      </div>
+      <p class="chart-total" style="margin-top:14px">Point de départ : <b>≈ 4,1 ETP</b> de temps improductif ≈ <b>211 k€/an</b>. Adressable : <b style="color:var(--good)">≈ 3,0 ETP ≈ 156 k€/an</b>.</p>
+    </div>
+
+    <div class="grid3" style="margin-top:16px">
+      <div class="kpi"><div class="n mono">6 587<small> h/an</small></div><div class="l">temps improductif actuel (≈ 4,1 ETP)</div></div>
+      <div class="kpi good"><div class="n mono">4 888<small> h/an</small></div><div class="l">reprises par l'ERP (≈ 3,0 ETP)</div></div>
+      <div class="kpi accent"><div class="n mono">~3 h<small> / DT</small></div><div class="l">administratif évitable par demande de travaux</div></div>
+    </div>
+  </section>
+
+  <!-- 5. GAINS ANNEXES -->
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><h2>Les gains annexes — dont une part déjà chiffrable</h2></div>
+    <p class="sec-intro">Au-delà du temps, l'ERP attaque des pertes bien réelles au compte de résultat. Chiffrage <strong>prudent</strong> (fourchettes basses), présenté <strong>à part des 3 ETP</strong> pour ne rien compter deux fois.</p>
+
+    <div class="grid3">
+      <div class="mini q">
+        <div class="tag" style="color:var(--good)">Manque à gagner</div>
+        <h3>Mauvais OTD, qualité &amp; délais</h3>
+        <p>≈ <strong>130 k€</strong> de chiffre perdu cette année (repousses de dates → annulations et clients perdus). L'ERP fiabilise délais et avancement ; en régime établi, ~50 % est adressable.</p>
+        <span class="chip">~65 k€/an</span>
+      </div>
+      <div class="mini q">
+        <div class="tag" style="color:var(--good)">Non-qualité</div>
+        <h3>Rebuts &amp; retouches</h3>
+        <p>≈ <strong>35 k€/an</strong> en interne. Source unique de vérité + contrôle tracé (PV, ECME) → réduction prudente de 30 %.</p>
+        <span class="chip">~10 k€/an</span>
+      </div>
+      <div class="mini q">
+        <div class="tag" style="color:var(--good)">Papier</div>
+        <h3>Impression &amp; archivage</h3>
+        <p>≈ <strong>5 k€/an</strong>. Flux OAS → Production → Environnement dématérialisé, impression au juste nécessaire → −70 %.</p>
+        <span class="chip">~3,5 k€/an</span>
+      </div>
+    </div>
+
+    <div class="callout" style="border-left-color:var(--good)">
+      <p><strong>Gains directs chiffrés ≈ 78 k€/an.</strong> Ajoutés au temps redéployé (~156 k€), le <strong>potentiel total identifié atteint ≈ 234 k€/an</strong> — deux natures distinctes, qu'on ne confond pas : d'un côté de la <em>capacité à redéployer</em> (les 3 ETP), de l'autre de la <em>marge et du cash</em> (les gains directs).</p>
+    </div>
+
+    <h3 style="font-size:1.02rem;font-weight:750;margin:26px 0 4px">Et ce qui reste qualitatif — chiffrable plus tard</h3>
+    <p class="sec-intro" style="margin-bottom:18px">Ces gains sont réels mais volontairement non chiffrés ici ; ils se mesureront quand les indicateurs tourneront.</p>
+    <div class="grid2">
+      <div class="mini q">
+        <div class="tag">Commercial</div>
+        <h3>Capacité commerciale libérée</h3>
+        <p>Avec <strong>24 h/semaine</strong> rendues — le plus gros gain du périmètre — le commercial retrouve presque une semaine de travail par quinzaine pour le développement et le traitement des devis, à effectif constant.</p>
+        <span class="chip">plus d'affaires</span>
+      </div>
+      <div class="mini q">
+        <div class="tag">Qualité</div>
+        <h3>Conformité EN 9100 en continu</h3>
+        <p>Contrôles périodiques auto-actualisés, PV et audits numériques : la conformité se lit à l'écran. Audits plus courts, moins d'écarts.</p>
+        <span class="chip">audits mieux préparés</span>
+      </div>
+      <div class="mini q">
+        <div class="tag">Pilotage</div>
+        <h3>Le socle de l'amélioration continue</h3>
+        <p>Donnée propre et indicateurs fiables (Power BI à terme) : on pilote enfin par les chiffres, on fixe des objectifs mesurables — au lieu de subir.</p>
+        <span class="chip">décider sur des faits</span>
+      </div>
+      <div class="mini q">
+        <div class="tag">Organisation</div>
+        <h3>Métiers duplicables &amp; robustes</h3>
+        <p>Saisies ordonnées et rapides, process transverses tracés : l'entreprise dépend moins des personnes, forme plus vite, absorbe la croissance sans casse.</p>
+        <span class="chip">moins de dépendance</span>
+      </div>
+      <div class="mini q">
+        <div class="tag">Stock &amp; trésorerie</div>
+        <h3>Un stock enfin maîtrisé</h3>
+        <p>Le stock est un point de friction récurrent : ruptures, sur-stock, achats en urgence. Indices matière (LME), point de commande et suggestions de réappro donnent une vision fiable pour immobiliser moins de trésorerie et éviter les urgences coûteuses.</p>
+        <span class="chip">moins d'immobilisé</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. REDEPLOIEMENT -->
+  <section>
+    <div class="sec-head"><span class="sec-num">06</span><h2>Ce qu'on fait des 3 ETP</h2></div>
+    <p class="sec-intro">L'objectif n'est pas de réduire l'effectif : c'est de <strong>rendre à chacun son cœur de métier</strong> et de dégager la capacité de croître à effectif constant.</p>
+    <div class="card">
+      <div class="grid2" style="gap:22px">
+        <div>
+          <h3 style="font-size:1.02rem;font-weight:750;margin-bottom:8px">Le commercial redevient commercial</h3>
+          <p style="color:var(--muted);font-size:.9rem">C'est <strong>le premier gisement de l'entreprise : 24 h par semaine</strong>, presque une seconde personne. Corinne cesse de « faire le SAV » des retards — rappeler les clients en attente, chercher où en est chaque affaire — et ce temps retourne au développement commercial et à la relation client, le cœur de valeur.</p>
+        </div>
+        <div>
+          <h3 style="font-size:1.02rem;font-weight:750;margin-bottom:8px">Le BE dessine, il ne ressaisit plus</h3>
+          <p style="color:var(--muted);font-size:.9rem">Les 3 personnes du bureau d'études rendent le temps d'administration des DT (gammes, plans, références) et le réinvestissent dans le <strong>dessin et les méthodes</strong> — absorber plus de 130 DT/mois sans renfort.</p>
+        </div>
+        <div>
+          <h3 style="font-size:1.02rem;font-weight:750;margin-bottom:8px">On manage la production, on ne la court plus</h3>
+          <p style="color:var(--muted);font-size:.9rem">Le temps repris se concentre sur le <strong>management de ce qu'il y a à produire</strong> et sur les process transverses — là où une PME industrielle gagne vraiment.</p>
+        </div>
+        <div>
+          <h3 style="font-size:1.02rem;font-weight:750;margin-bottom:8px">Absorber la croissance sans embaucher</h3>
+          <p style="color:var(--muted);font-size:.9rem">≈ 3 ETP redéployés, c'est la capacité de traiter plus d'affaires et de devis à effectif constant — un levier de marge, pas une coupe.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="hypo">
+      <h3>Hypothèses de calcul — transparentes et ajustables</h3>
+      <ul>
+        <li>Effectif : <code>20 personnes</code> = <code>≈15 au bureau (14,5 ETP)</code> + <code>5 postes atelier</code>. Répartition bureau : Commercial/ADV 1 · Programmation 1 · Compta/Paie 1,5 · Qualité/QHSE 2 · <b>Bureau d'études/Méthodes 3</b> · Achats 1 · Direction 2 · Responsable production 1 · Logistique 2.</li>
+        <li>Volume d'activité : <code>≈130 DT/mois</code> (1 560/an), colonne vertébrale — chaque DT traverse Commercial → BE → Programmation → Atelier → Qualité → Compta.</li>
+        <li>Base ETP : <code>1 607 h/an</code> (base légale française) · valorisation au coût chargé de <code>32 €/h</code> (≈ 51,4 k€/ETP·an).</li>
+        <li>Temps perdu estimé : <code>≈ 143,5 h/sem</code> réparties par fonction à l'effectif réel (tableau §01) ≈ <code>4,1 ETP</code> ≈ <b>plus d'un quart</b> du temps bureau.</li>
+        <li><b>Bureau d'études (3 pers.)</b> : seule la part <em>administrative</em> des DT est récupérable (ressaisie gammes, recherche plans/références) = <code>21 h/sem</code> d'admin, dont <code>16 récup.</code> ; le <strong>dessin industriel reste productif et inchangé</strong> — pas de multiplication brute ×3.</li>
+        <li>Taux de résorption retenu : <code>74 %</code> (prudent) → <code>≈ 106,5 h/sem ≈ 3,0 ETP ≈ 156 k€/an</code>, soit <code>≈ 3 h évitables par DT</code>.</li>
+        <li>Gains annexes chiffrés (§05, à part des 3 ETP) : manque à gagner OTD/qualité/délais <code>enjeu 130 k€</code> × 50 % ≈ 65 k€ ; non-qualité <code>35 k€</code> × −30 % ≈ 10 k€ ; papier/archivage <code>5 k€</code> × −70 % ≈ 3,5 k€ → <code>≈ 78 k€/an</code>. Base d'activité CA ≈ <code>2–2,5 M€</code>.</li>
+        <li>Potentiel total identifié : <code>156 k€ (temps) + 78 k€ (P&amp;L) ≈ 234 k€/an</code> — capacité redéployable + marge/cash, deux natures non fongibles.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    SEEM · SEMRAC — Note interne de justification (direction &amp; associés). Chiffres estimatifs à valider : effectifs par fonction, heures perdues et taux de résorption sont des hypothèses de travail, à affiner avec chaque responsable. Effectif 20 pers. (≈15 bureau + 5 atelier) · ≈130 DT/mois · base légale 1 607 h/an · coût chargé 32 €/h. Document de travail — ne pas diffuser hors direction.
+  </footer>
+
+</div>
+
+
+</body>
+</html>

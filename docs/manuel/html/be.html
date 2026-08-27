@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manuel — Bureau d'Études · ERP Seem Semrac</title>
+<link rel="stylesheet" href="manuel.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <div class="brandrow">
+      <div class="logo">SS</div>
+      <div>
+        <div class="co">SEEM · SEMRAC — ERP</div>
+        <div class="eyebrow">Manuel utilisateur</div>
+      </div>
+      <div class="kind">docs/manuel/html</div>
+    </div>
+    <h1>Service <span class="hi">Bureau d'Études</span></h1>
+    <p class="lede">Le Bureau d'Études définit techniquement les pièces : il crée les nomenclatures (matière, accessoires, gamme d'opérations), analyse les Demandes de Travaux (DT) transmises par le commercial pour calculer le coût de revient, prépare les programmes CN et tient le catalogue des références achetées. Ce manuel décrit chaque onglet et les procédures pas à pas.</p>
+    <div class="metachips">
+      <span class="chip">👤 Pour qui : <b>Technicien(ne) BE</b> (écriture : BE, Achats)</span>
+      <span class="chip">🧭 Dans l'ERP : <b>Sidebar → Bureau Études</b></span>
+      <span class="chip">🗂 <b>5 onglets</b></span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-t">Sommaire</div>
+    <ol>
+      <li><a href="#tab-noms">Nomenclatures</a></li>
+      <li><a href="#tab-analyse">Analyse DT (page /be/analyse)</a></li>
+      <li><a href="#tab-prep">Préparations tech.</a></li>
+      <li><a href="#tab-refs">Références</a></li>
+      <li><a href="#tab-dashboard">Dashboard BE</a></li>
+    </ol>
+  </nav>
+
+  <!-- ══════════════════════ 1. NOMENCLATURES ══════════════════════ -->
+  <section class="tab" id="tab-noms">
+    <div class="tab-head"><span class="tab-num">1</span><h2>Nomenclatures</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> La nomenclature est la carte d'identité de fabrication d'une pièce : sa matière, ses accessoires, sa gamme d'opérations et son prix de revient calculé automatiquement. C'est ici que le BE crée les nomenclatures demandées par les DT « Nouveau produit », complète les brouillons, et fait vivre les révisions (indices A, B, C…). Sans nomenclature validée, l'analyse BE d'une DT ne peut pas chiffrer la pièce.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>L'onglet s'ouvre sur quatre sous-onglets, avec en haut à droite un bouton <b>« Créer une demande de prix »</b> (envoi d'articles à chiffrer au service Achats) :</p>
+    <ul class="points">
+      <li><b>Nomenclatures à créer</b> — bandeau jaune « Nomenclatures à faire (depuis DT validées) » : chaque DT en attente de nomenclature y apparaît avec son client, son type, sa priorité, et un bouton par pièce à nomencler (réf ×&nbsp;quantité). Le compteur du sous-onglet totalise les pièces restant à créer.</li>
+      <li><b>Brouillons à traiter</b> — les nomenclatures non validées (colonnes : N° NOM, Indice, Entité, N° Affaire, Code Réf, Description, Type, Créé le), avec les boutons <b>Terminer</b> et <b>Supprimer</b>. Un brouillon n'apparaît pas dans Standards/Mères tant qu'il n'est pas validé.</li>
+      <li><b>Standards (1 pièce)</b> — les nomenclatures validées décrivant <b>une seule pièce</b>. Colonnes : #, N° NOM, Indice (liste déroulante des révisions), Entité, N° Affaire, Code Réf Produit, Description, Statut, Prix de revient, Créé le, Action (<b>Ouvrir</b> / <b>Supprimer</b>). Filtres <b>Toutes / Seem / Semrac</b>, champ de recherche, sélection multiple pour suppression groupée, bouton <b>« + Nouvelle nomenclature standard »</b>.</li>
+      <li><b>Mères (assemblages)</b> — les nomenclatures qui assemblent des standards (colonne <b>Composants</b> = nombre de standards). Bouton <b>« + Nouvelle mère »</b>. Le prix de revient d'une mère est la somme de ses composants.</li>
+    </ul>
+    <p>Statuts d'une nomenclature : <span class="b b-mut">Brouillon</span> <span class="b b-info">En cours</span> <span class="b b-ok">Validée ✓</span>. L'entité est signalée par un badge <span class="b b-ok">Seem</span> ou <span class="b b-crit">Semrac</span>.</p>
+    <figure class="shot">
+      <img src="../../assets/be-noms.png" alt="Capture de l'onglet Nomenclatures" loading="lazy">
+      <figcaption><b>Onglet Nomenclatures</b> — les quatre sous-onglets (À créer / Brouillons / Standards / Mères), le bandeau des pièces à nomencler issues des DT validées et la liste des standards avec leur indice.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — créer une nomenclature depuis une DT</h3>
+    <ol class="steps">
+      <li>Sous-onglet <b>Nomenclatures à créer</b> : repérez la DT concernée, puis cliquez le bouton de la pièce à nomencler (ex. <b>+ REF-PIECE ×10</b>). Le formulaire s'ouvre pré-rempli (N° affaire, réf. pièce, n° de plan) — une notification le confirme.</li>
+      <li>Complétez l'<b>Identification</b> (voir tableau des champs ci-dessous) : entité Seem/Semrac, description, masse, dimensions, surface…</li>
+      <li>Ajoutez la <b>Matière (tôle)</b> : saisissez la <b>réf. matière</b> (ou la désignation) — la liste propose le catalogue existant. Le fournisseur qui porte cette réf se sélectionne tout seul s'il est unique. Le <b>prix tôle</b> s'affiche automatiquement s'il date de moins de 6 mois ; sinon un bouton <b>« demande de prix »</b> l'envoie aux Achats (un bouton <b>« vérifier »</b> apparaît ensuite pour récupérer la réponse). Renseignez <b>Pc/tôle</b> : le prix matière par pièce = prix tôle ÷ pièces par tôle.</li>
+      <li>Ajoutez les <b>Accessoires</b> (visserie, composants…) : réf catalogue, fournisseur, prix paquet (mêmes règles de fraîcheur de prix), quantité par paquet et nombre par pièce. Prix accessoire / pièce = (prix paquet ÷ qté par paquet) × nb par pièce.</li>
+      <li>Construisez la <b>gamme</b> (« Étapes de production ») : pour chaque étape, choisissez le <b>Type</b> (Interne ou Sous-traité), puis le <b>Poste</b> d'atelier et le <b>Process</b> du poste (la machine liée et son taux horaire se renseignent seuls ; un process manuel n'a pas de temps machine). Saisissez les temps <b>en millièmes d'heure</b> (1000&nbsp;‰ = 1&nbsp;h) : réglage, MO, machine. Réordonnez les étapes par glisser-déposer — cet ordre devient la séquence de fabrication des BDT.</li>
+      <li>Pour une étape <b>sous-traitée</b> : choisissez le sous-traitant puis l'opération — le prix unitaire pièce et le forfait de son tarif s'appliquent automatiquement.</li>
+      <li>Vérifiez le panneau <b>« Prix de revient unitaire — Calcul automatique »</b> : matière, accessoire, MO fixe (réglage / lot), MO variable, sous-traitance, et le total. Le bloc <b>« Estimation commande »</b> simule le coût pour une quantité : le réglage n'est compté qu'une fois par lot et la sous-traitance applique le forfait plancher (max entre forfait et qté × prix unitaire).</li>
+      <li>Enregistrez : <b>Brouillon</b> (retrouvable dans « Brouillons à traiter »), <b>Enregistrer &amp; continuer</b> (statut En cours), ou <b>Valider la nomenclature</b>. Le N° de nomenclature est obligatoire pour enregistrer.</li>
+      <li>À la <b>validation</b> d'une nomenclature créée depuis une DT, la DT bascule automatiquement « en attente BE » : l'analyse (onglet Analyse DT) est débloquée.</li>
+    </ol>
+
+    <h3>Pas à pas — créer une nomenclature mère (assemblage)</h3>
+    <ol class="steps">
+      <li>Sous-onglet <b>Mères</b>, cliquez <b>« + Nouvelle mère »</b> (ou basculez le type sur « Mère (assemblage) » dans le formulaire).</li>
+      <li>Dans le bloc <b>Composants</b>, cliquez <b>« Ajouter un standard »</b> puis choisissez chaque nomenclature standard et sa quantité. Le total des composants s'affiche en direct.</li>
+      <li>Les compartiments matière/accessoires disparaissent (une mère n'a pas de fournitures propres) : son prix de revient est la somme de ses standards.</li>
+      <li>Enregistrez puis validez, comme pour une standard.</li>
+    </ol>
+
+    <h3>Pas à pas — créer une révision (indice)</h3>
+    <ol class="steps">
+      <li>Depuis la liste : la colonne <b>Indice</b> est une liste déroulante qui montre toutes les révisions du produit. Choisissez <b>« ➕ Créer indice B… »</b> (ou C, D…) : la nouvelle révision clone la dernière, <b>l'ancienne est conservée</b> et reste ouvrable via la même liste.</li>
+      <li>Depuis le formulaire d'une nomenclature enregistrée : le bandeau violet <b>« Indice actuel »</b> propose <b>« Incrémenter l'indice → B »</b>. Confirmez : la révision précédente est conservée telle quelle.</li>
+    </ol>
+
+    <h3>Le formulaire nomenclature, champ par champ (Identification)</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+        <tbody>
+          <tr><td>N° Nomenclature = réf. pièce</td><td>Texte (ex. SEEM-DISSIP-A24)</td><td>Oui</td><td>Identifiant de la nomenclature ; c'est la référence interne de la pièce.</td></tr>
+          <tr><td>N° Affaire</td><td>Texte (ex. 2026-081)</td><td>Non</td><td>Rattache la nomenclature à une affaire ; vide = nomenclature « libre ».</td></tr>
+          <tr><td>Entité</td><td>Seem / Semrac</td><td>Oui</td><td>Filtre les fournisseurs, postes et process proposés dans le reste du formulaire.</td></tr>
+          <tr><td>Type de nomenclature</td><td>Standard (1 pièce) / Mère (assemblage)</td><td>Oui (Standard par défaut)</td><td>Une mère assemble des standards ; ses fournitures propres sont masquées.</td></tr>
+          <tr><td>Code produit</td><td>Texte</td><td>Non</td><td>Par défaut égal au N° de nomenclature.</td></tr>
+          <tr><td>Description produit</td><td>Texte</td><td>Non</td><td>Désignation complète du produit.</td></tr>
+          <tr><td>N° de plan</td><td>Texte (ex. PL-138001 ind. A)</td><td>Non</td><td>Référence du plan de la pièce.</td></tr>
+          <tr><td>Nom du fichier CAO</td><td>Texte (ex. PL-138001_A.pdf)</td><td>Non</td><td>Se remplit seul si vous joignez le plan CAO en GED.</td></tr>
+          <tr><td>Masse pour 1 pc (g)</td><td>Nombre</td><td>Non</td><td>Saisie en <b>grammes</b> (stockée en kg côté base).</td></tr>
+          <tr><td>Dimensions pour 1 pc</td><td>Texte (ex. 150 × 80 × 20 mm)</td><td>Non</td><td>Encombrement de la pièce.</td></tr>
+          <tr><td>Surface totale pour 1 pc (mm²)</td><td>Nombre</td><td>Non</td><td>Surface développée : sert au calcul de charge des balancelles OAS.</td></tr>
+          <tr><td>Créé par</td><td>Liste des analystes BE</td><td>Non</td><td>Auteur de la nomenclature.</td></tr>
+          <tr><td>Notes</td><td>Texte</td><td>Non</td><td>Remarques libres.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Sous l'identification, deux blocs complètent la fiche : <b>« Clients &amp; réfs de cette pièce »</b> (le répertoire réf interne ↔ réf client ↔ plan, alimenté automatiquement par les DT validées, avec ajout manuel possible) et <b>« Documents (GED) »</b> pour joindre le plan client, le plan CAO et les programmes FAO par étape machine.</p>
+    <figure class="shot">
+      <img src="../../assets/form-be-nomenclature.png" alt="Capture du formulaire de nomenclature" loading="lazy">
+      <figcaption><b>Formulaire nomenclature</b> — à gauche identification + fournitures (matière / accessoires), à droite la gamme en millièmes d'heure et le prix de revient calculé automatiquement.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li><b>Temps en millièmes d'heure</b> : 1000&nbsp;‰ = 1&nbsp;h. Les totaux s'affichent en heures/minutes.</li>
+      <li><b>Le réglage est un coût fixe par lot</b> : il n'est jamais multiplié par la quantité produite (la machine se règle une fois, qu'on fasse 1 ou 10&nbsp;000 pièces).</li>
+      <li><b>Prix fournisseurs pilotés par le catalogue</b> : un prix n'est appliqué que s'il date de moins de 6 mois ; au-delà (ou s'il est absent), passez par la <b>demande de prix</b> — pas de saisie manuelle du prix matière/accessoire.</li>
+      <li><b>Postes et process se gèrent dans Production → « Postes &amp; Process »</b> : la gamme ne fait que les choisir.</li>
+      <li>Une nomenclature ouverte par un collègue est <b>verrouillée</b> : une notification vous indique qui la modifie ; patientez, la liste se met à jour en direct (rafraîchissement automatique toutes les ~7&nbsp;secondes hors édition).</li>
+      <li>Les champs « N° programme machine / fichier programme » n'apparaissent dans la gamme que pour les étapes sur <b>machine CNC</b>.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> la suppression d'une nomenclature est <b>irréversible</b> (une confirmation est demandée). Pour faire évoluer une pièce, préférez toujours <b>créer un nouvel indice</b> : l'ancienne révision reste consultable.</div>
+    <div class="astuce"><b>Astuce :</b> le bouton <b>« Créer une demande de prix »</b> en haut de l'onglet accepte plusieurs articles d'un coup — l'ERP crée <b>une demande par référence</b> et les envoie dans Achats → « Demandes de prix ». Le prix officiel du catalogue est mis à jour à la validation de la réponse.</div>
+  </section>
+
+  <!-- ══════════════════════ 2. ANALYSE DT ══════════════════════ -->
+  <section class="tab" id="tab-analyse">
+    <div class="tab-head"><span class="tab-num">2</span><h2>Analyse DT (page /be/analyse)</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Quand le commercial valide une DT, elle arrive ici pour l'analyse technique : faisabilité, gamme, couverture matière et calcul du coût de revient unitaire (CRU). Le résultat alimente directement l'offre de prix côté commercial. L'onglet liste les DT à analyser et celles déjà analysées ; le bouton <b>Analyser</b> ouvre la page d'analyse complète.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Deux tableaux et un bouton <b>« Demande de prix »</b> :</p>
+    <ul class="points">
+      <li><b>DTs en attente d'analyse BE</b> — colonnes : N° DT / Affaire, Client, Pièce(s) · Qté, Type DT (<span class="b b-info">Nouveau produit</span> / <span class="b b-info">Maj produit</span> / <span class="b b-warn">Maj prix</span>), Priorité (<span class="b b-crit">critique</span> <span class="b b-warn">urgent</span> <span class="b b-ok">normal</span>), Date DT, Analyste, et deux actions : <b>Analyser</b> (ouvre la page /be/analyse pré-remplie) et <b>Visualiser</b> (œil).</li>
+      <li><b>DT analysées — offres &amp; commandes</b> — colonnes : N° DT / Affaire, Client, Pièce(s) · Qté, Montant offre, Statut offre (<span class="b b-info">Offre en cours</span> <span class="b b-ok">Offre acceptée</span> <span class="b b-info">Commande créée</span> <span class="b b-mut">Pas d'offre</span>). Tant que l'offre n'est pas acceptée : bouton <b>« Ré-éditer l'analyse »</b>. Offre acceptée ou commande créée : l'analyse est <b>figée</b> (cadenas), seul <b>Visualiser</b> reste disponible.</li>
+    </ul>
+    <p>Le bouton <b>œil « Visualiser »</b> ouvre un panneau en <b>LECTURE SEULE</b> (le badge l'indique) : la décomposition auto-calculée depuis les nomenclatures validées — par pièce : réf. interne, nomenclature, quantité, matière, MO (réglage inclus), machine, sous-traitance (forfait minimum inclus), total série et €&nbsp;/&nbsp;pièce. Aucune modification possible depuis cette vue : pour éditer, passez par « Analyser ».</p>
+    <figure class="shot">
+      <img src="../../assets/be-analyse.png" alt="Capture de l'onglet Analyse DT" loading="lazy">
+      <figcaption><b>Onglet Analyse DT</b> — en haut les DT en attente avec les boutons « Analyser » et « Visualiser » (œil, lecture seule) ; en dessous les DT déjà analysées avec leur statut d'offre.</figcaption>
+    </figure>
+
+    <h3>La page d'analyse /be/analyse en détail</h3>
+    <p>Ouverte via <b>Analyser</b>, la page charge automatiquement la DT : entête, pièces, quantités, exigences et plan sont déversés (une notification le confirme). Elle se compose, de haut en bas :</p>
+    <ul class="points">
+      <li><b>Référence DT à analyser</b> — N° DT et Client sont pré-remplis et verrouillés ; vous renseignez : <b>Analyste BE</b> (obligatoire, liste des salariés habilités BE), Date analyse, Priorité (Standard / Urgent / Critique), Type demande (Commande ferme / Prototype / Essai / Réclamation).</li>
+      <li><b>Produits analysés</b> — un bloc par pièce de la DT, avec le <b>triplet lié</b> : Réf. interne pièce ↔ N° plan client ↔ Réf. pièce client. Saisir l'une des trois remplit les cases vides depuis le répertoire des références clients ; un lien <b>« Ouvrir le plan client »</b> apparaît si le plan est en GED. La <b>quantité</b> vient de la DT (verrouillée).</li>
+      <li><b>Exigences normatives</b> — cases à cocher identiques à la DT : ISO 9001, EN 9100, REACH, RoHS, EN 13485.</li>
+      <li><b>Couverture matière &amp; accessoires</b> — pour chaque fourniture de la nomenclature : besoin exprimé en <b>unités d'achat entières</b> (tôles / paquets, arrondi supérieur), prix unité (ou « à chiffrer » si aucun prix récent), coût série, stock restant, seuil, et un état : <span class="b b-ok">Couvert</span> <span class="b b-warn">Repasse sous seuil</span> <span class="b b-warn">Insuffisant</span> <span class="b b-crit">Rupture</span> <span class="b b-mut">Hors stock</span>. Le pied de tableau totalise le coût matière + accessoires de la série.</li>
+      <li><b>Gamme opératoire</b> — mêmes colonnes que la nomenclature (N°, Type, Poste, Process, Régl.&nbsp;‰h, MO&nbsp;‰h, Mach&nbsp;‰h, Coût/pc). Les étapes issues de la nomenclature sont <b>verrouillées</b> (cadenas, non modifiables ni déplaçables). Le bouton <b>« Ajouter une étape »</b> insère une étape supplémentaire (fond violet) que vous positionnez <b>par glisser-déposer</b> entre les étapes verrouillées ; son coût s'ajoute au CRU.</li>
+      <li><b>Temps &amp; coûts par poste</b> — regroupement par poste d'atelier avec les <b>temps réels</b> (réglage par lot + variable × quantité) et le coût série ; les flèches ‹&nbsp;› font défiler les différentes quantités chiffrées.</li>
+      <li><b>Chiffrage — Coût de revient (CRU)</b> — tout est calculé automatiquement (matière, accessoire, MO+machine, sous-traitance) ; le seul champ saisissable est <b>Frais généraux / lot</b> (coût fixe par lot, amorti sur la quantité). Le tableau affiche une ligne par quantité : Matière ×q, Access. ×q, MO+mach ×q, S-trait ×q, Frais g. (lot), <b>CRU total</b> et <b>CRU /pc</b> ; la ligne de la quantité de la DT est surlignée.</li>
+      <li><b>Analyse de faisabilité technique</b> — Faisabilité (obligatoire : Faisable sans réserve / Faisable avec adaptation / Non faisable – alternative proposée), Commentaires, et pièces jointes complémentaires pour l'offre (rangées en GED, dossier « analyse DT »).</li>
+      <li><b>Conclusion &amp; transmission</b> — Décision BE (obligatoire : ✅ Faisable – Offre à établir / ⚠ Faisable avec réserves – Points à clarifier / ❌ Non faisable – Alternative proposée) puis le bouton <b>« Valider l'analyse BE complète »</b>.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/form-be-analyse.png" alt="Capture de la page d'analyse /be/analyse" loading="lazy">
+      <figcaption><b>Page /be/analyse</b> — bloc produit avec triplet réf interne ↔ plan ↔ réf client, couverture matière/stock, gamme verrouillée (cadenas) + étapes ajoutées glissables, et chiffrage CRU par quantité.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — analyser une DT</h3>
+    <ol class="steps">
+      <li>Onglet <b>Analyse DT</b>, ligne de la DT, cliquez <b>Analyser</b>. Vérifiez l'entête et choisissez l'<b>Analyste BE</b>.</li>
+      <li>Contrôlez chaque bloc produit : triplet de références, exigences cochées, <b>couverture matière</b> (un état « Rupture » ou « à chiffrer » se règle par une demande de prix ou un réapprovisionnement avant le lancement).</li>
+      <li>Ajustez la gamme si besoin en <b>ajoutant des étapes</b> (les étapes nomenclature restent intouchées) et saisissez les éventuels <b>frais généraux par lot</b>.</li>
+      <li>Renseignez <b>Faisabilité</b>, commentaires, et joignez les documents utiles à l'offre.</li>
+      <li>Choisissez la <b>Décision BE</b> puis cliquez <b>« Valider l'analyse BE complète »</b> : l'analyse est enregistrée, le montant calculé, et la DT <b>bascule dans les offres</b> côté commercial (notification, puis retour automatique à l'onglet).</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>L'analyse reste <b>ré-éditable</b> tant que l'offre n'est pas acceptée ; les <b>marges par produit</b> fixées dans l'offre sont conservées lors d'une ré-édition.</li>
+      <li>La <b>marge et le prix de vente ne se fixent pas ici</b> : le BE produit le coût de revient ; la marge se règle dans l'offre de prix (service Commercial).</li>
+      <li>Les BDT/BDS sont générés à la <b>validation de la commande</b>, puis visibles en Production.</li>
+    </ul>
+    <div class="note"><b>DT mixte Seem + Semrac :</b> si la DT mélange des pièces des deux sites, l'analyse passe automatiquement en <b>2 volets</b> (une barre d'onglets Volet SEEM / Volet SEMRAC apparaît). Chaque volet se termine séparément — le bouton devient « Terminer le volet … » — et l'offre n'est générée que lorsque <b>les deux volets</b> sont terminés.</div>
+    <div class="astuce"><b>Astuce :</b> le bouton <b>œil</b> est le moyen rapide de consulter le CRU d'une DT déjà analysée sans risquer de rien modifier — la vue est strictement en lecture seule, y compris pour les analyses figées.</div>
+  </section>
+
+  <!-- ══════════════════════ 3. PRÉPARATIONS TECH. ══════════════════════ -->
+  <section class="tab" id="tab-prep">
+    <div class="tab-head"><span class="tab-num">3</span><h2>Préparations tech.</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Avant de lancer une commande en fabrication, les pièces usinées sur machine CNC ont besoin de leurs codes programme. Cet onglet liste les commandes en attente de préparation technique et donne accès à la page de saisie des programmes CN — qui seront imprimés sur l'Ordre de Fabrication (OF) du lot.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Le tableau <b>« Préparations techniques en attente »</b> (le compteur reprend le badge de l'onglet) : N° CMD / Affaire, Client, Pièce(s), Activité, Livraison, Statut (<span class="b b-info">Attente prépa</span> ou <span class="b b-warn">À programmer</span>) et le bouton <b>Préparer</b> qui ouvre la page <b>/be/preparation</b>.</p>
+    <p>Sur la page de préparation : une liste déroulante <b>« Pièce à programmer »</b> propose les nomenclatures dont au moins une étape tourne sur une <b>machine CNC</b> (le nombre de machines CNC et de pièces concernées est rappelé). Après sélection s'affichent : le bloc <b>Plan de la pièce</b> (N° de plan + indice, fichier plan / CAO) et, pour chaque étape CNC de la gamme, deux champs : <b>N° programme CN</b> (ex. O1234) et <b>Fichier programme</b> (ex. piece.nc, prog.mpf).</p>
+    <figure class="shot">
+      <img src="../../assets/be-prep.png" alt="Capture de l'onglet Préparations techniques" loading="lazy">
+      <figcaption><b>Onglet Préparations tech.</b> — les commandes en attente de prépa avec leur statut ; « Préparer » ouvre la saisie des codes programme CN.</figcaption>
+    </figure>
+
+    <h3>Pas à pas</h3>
+    <ol class="steps">
+      <li>Cliquez <b>Préparer</b> sur la commande concernée (ou ouvrez directement la page de préparation).</li>
+      <li>Choisissez la <b>pièce</b> dans la liste (nomenclatures avec étape CNC uniquement).</li>
+      <li>Renseignez le <b>N° de plan (+ indice)</b> et le <b>fichier plan / CAO</b> — le fichier lui-même se joint en GED depuis la nomenclature.</li>
+      <li>Pour chaque étape CNC, saisissez le <b>N° programme CN</b> et le <b>fichier programme</b>.</li>
+      <li>Cliquez <b>« Enregistrer la prépa (plan + codes) »</b> : les codes se déversent dans la nomenclature et seront <b>imprimés sur l'OF</b> du lot (colonne « N° Programme »).</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Seules les pièces dont la gamme comporte une étape sur machine <b>marquée CNC</b> apparaissent dans la liste. Si la liste est vide, marquez vos machines comme CNC (Production → Machines) et rattachez-les aux étapes de la nomenclature.</li>
+      <li>La préparation technique fait partie des <b>portes de lancement</b> : une commande « Attente prépa » ne part pas en production tant que la prépa n'est pas faite.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> les codes programme peuvent aussi être saisis directement dans la gamme de la nomenclature (champs « N° programme machine » des étapes CNC) — la page de préparation les regroupe simplement au même endroit, commande par commande.</div>
+  </section>
+
+  <!-- ══════════════════════ 4. RÉFÉRENCES ══════════════════════ -->
+  <section class="tab" id="tab-refs">
+    <div class="tab-head"><span class="tab-num">4</span><h2>Références</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le catalogue des références achetées (matières, fournitures, outils…) avec leur dernier prix unitaire et son historique. Il alimente la sélection matière/accessoires des nomenclatures et se remplit automatiquement à la validation des bons de commande, des demandes de prix, et depuis les nomenclatures du BE.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>En tête, le nombre de références et deux boutons de création : <b>« + Fournisseur / Sous-traitant »</b> et <b>« + Entrée catalogue »</b>. Puis deux rangées de filtres — <b>Catégorie</b> (Toutes, Matière, Accessoires, Outils, Produits chimiques, Consommable, Autres) et <b>Activité</b> (Tous, Seem, Semrac) — avec un champ de recherche (réf, désignation, fournisseur).</p>
+    <p>Le tableau : <b>Réf.</b>, <b>Désignation</b>, <b>Catégorie</b>, <b>Activité</b>, <b>Fournisseur</b>, <b>Dernier PU</b>, et la colonne d'actions : <b>Éditer</b> (modifier la référence), <b>Évolution</b> (courbe du prix unitaire au fil des bons de commande, avec dernier prix, % d'évolution et tableau Date / PU / Qté / Fournisseur / BC), et — uniquement si le prix est absent ou daté de plus de 6 mois — <b>Demande de prix</b> (pré-remplit la demande avec cette référence).</p>
+    <figure class="shot">
+      <img src="../../assets/be-refs.png" alt="Capture de l'onglet Références" loading="lazy">
+      <figcaption><b>Onglet Références</b> — filtres par catégorie et activité, dernier prix unitaire, et boutons Éditer / Évolution / Demande de prix par référence.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — ajouter une entrée catalogue</h3>
+    <ol class="steps">
+      <li>Cliquez <b>« + Entrée catalogue »</b>.</li>
+      <li>Renseignez : Fournisseur, <b>Référence</b> (obligatoire), Catégorie (Matière / Accessoire / Outillage / Consommable / Chimique), <b>Désignation</b> (obligatoire), Prix HT (optionnel), Activité (Les deux / Seem / Semrac).</li>
+      <li><b>Enregistrer</b>. Sans prix, l'entrée reste « en attente de prix » — complétez-la via une demande de prix.</li>
+    </ol>
+
+    <h3>Pas à pas — créer un fournisseur ou un sous-traitant</h3>
+    <ol class="steps">
+      <li>Cliquez <b>« + Fournisseur / Sous-traitant »</b> et choisissez le <b>Type</b>.</li>
+      <li>Renseignez le <b>Nom</b> (obligatoire), le code, l'email, le téléphone — et pour un sous-traitant, ses <b>prestations</b> (séparées par des virgules, ex. Oxydation, Sérigraphie, Zingage).</li>
+      <li><b>Créer</b> : le fournisseur devient sélectionnable dans les nomenclatures et le catalogue. La fiche complète (tarifs ST…) se gère dans le service Achats.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le <b>bon de commande n'écrit jamais le prix</b> : le prix officiel vient des demandes de prix validées — d'où le bouton « Demande de prix » sur les références au prix manquant ou périmé (&gt; 6 mois).</li>
+      <li>Lors de l'<b>édition</b> d'une référence, le champ prix laissé vide ne change pas le prix existant (il reste piloté par les demandes de prix).</li>
+      <li>L'historique « Évolution » se remplit à chaque <b>bon de commande validé</b> : une référence jamais commandée n'a pas encore de courbe.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> utilisez « Évolution » avant de chiffrer une nomenclature — une matière dont le prix grimpe fortement mérite une nouvelle demande de prix plutôt qu'un chiffrage sur l'ancien tarif.</div>
+  </section>
+
+  <!-- ══════════════════════ 5. DASHBOARD BE ══════════════════════ -->
+  <section class="tab" id="tab-dashboard">
+    <div class="tab-head"><span class="tab-num">5</span><h2>Dashboard BE</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Vue synthétique de la charge du Bureau d'Études : ce qui attend une analyse, une nomenclature ou une préparation, et les urgences à traiter en priorité. C'est l'écran à consulter en début de journée.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>4 tuiles KPI</b> : DTs en attente BE, Nomenclatures en cours, Préparations, Nomenclatures validées.</li>
+      <li><b>Pipeline DTs</b> : répartition En attente BE / Dans les offres / Commandes créées / Refus.</li>
+      <li><b>Alertes</b> : DT <span class="b b-crit">critiques</span> (traitement prioritaire immédiat), DT <span class="b b-warn">urgentes</span>, nomenclatures en attente, préparations qui bloquent la production — ou « Aucune alerte active ».</li>
+      <li><b>Accès rapides</b> : trois raccourcis vers Nomenclatures, Analyse DT et Prépa technique.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/be-dashboard.png" alt="Capture du Dashboard BE" loading="lazy">
+      <figcaption><b>Dashboard BE</b> — tuiles de charge, pipeline des DT et alertes priorisées ; les accès rapides renvoient vers les onglets de travail.</figcaption>
+    </figure>
+
+    <h3>Pas à pas</h3>
+    <ol class="steps">
+      <li>Consultez d'abord le bloc <b>Alertes</b> : traitez les DT critiques puis urgentes via l'accès rapide « Analyse DT ».</li>
+      <li>Vérifiez les <b>préparations</b> en attente : chacune bloque le lancement d'une commande en production.</li>
+      <li>Utilisez le <b>Pipeline DTs</b> pour suivre le devenir de vos analyses (offres, commandes, refus).</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Les compteurs sont calculés en direct à l'ouverture de la page : rechargez la page pour actualiser après un traitement.</li>
+      <li>Pour des indicateurs filtrables par période et par site, utilisez aussi <b>Tableaux de bord → Dashboard Bureau Études</b> dans la sidebar.</li>
+    </ul>
+    <div class="note"><b>Info :</b> les badges des onglets (Nomenclatures, Analyse DT, Préparations tech., Références) reprennent ces mêmes compteurs — le dashboard en donne la lecture d'ensemble.</div>
+  </section>
+
+  <div class="docnav">
+    <a href="index.html">← Sommaire des manuels</a>
+    <a href="achats.html">Achats →</a>
+  </div>
+
+  <footer class="doc">
+    ERP Seem Semrac — manuel utilisateur généré depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs). En cas d'écart entre ce manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
+  </footer>
+
+</div>
+</body>
+</html>

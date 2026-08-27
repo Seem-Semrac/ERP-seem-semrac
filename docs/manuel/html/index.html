@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manuels utilisateur · ERP Seem Semrac</title>
+<link rel="stylesheet" href="manuel.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <div class="brandrow">
+      <div class="logo">SS</div>
+      <div>
+        <div class="co">SEEM · SEMRAC — ERP</div>
+        <div class="eyebrow">Manuels utilisateur</div>
+      </div>
+      <div class="kind">docs/manuel/html</div>
+    </div>
+    <h1>Le <span class="hi">mode d'emploi</span> de l'ERP, service par service</h1>
+    <p class="lede">Un manuel par service, chaque onglet expliqué pas à pas avec des captures d'écran réelles de l'application. Commencez par la prise en main ci-dessous, puis ouvrez le manuel de votre service.</p>
+    <p class="lede" style="font-size:.9rem;"><b>Valable dans toute l application :</b> le bouton à <b>trois petites barres horizontales</b>, en haut de la barre latérale, replie le menu pour libérer toute la largeur de l écran ; un bouton identique apparaît en haut à gauche pour le réafficher. Le choix est mémorisé d une page à l autre.</p>
+    <div class="metachips">
+      <span class="chip">📚 <b>16 manuels</b> de service</span>
+      <span class="chip">🖼 Captures réelles de l'application</span>
+      <span class="chip">🖨 Imprimable (Ctrl+P) par manuel</span>
+    </div>
+  </header>
+
+  <section class="tab" id="prise-en-main">
+    <div class="tab-head"><span class="tab-num">🔑</span><h2>Prise en main — se connecter et naviguer</h2></div>
+    <p class="tab-but"><b>Avant tout :</b> l'ERP est une application web. Elle s'ouvre dans un navigateur (Chrome, Edge, Firefox), au bureau comme à l'atelier — aucun logiciel à installer.</p>
+
+    <h3>Se connecter</h3>
+    <ol class="steps">
+      <li>Ouvrez l'adresse de l'ERP dans le navigateur (celle fournie par la direction).</li>
+      <li>Saisissez votre <b>matricule</b> et votre <b>code PIN</b> personnel, puis validez.</li>
+      <li>En cas de PIN oublié : voir avec l'administrateur (Direction), qui peut le réinitialiser.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/login.png" alt="Écran de connexion (matricule + PIN)" loading="lazy">
+      <figcaption><b>Connexion</b> — matricule + code PIN personnel.</figcaption>
+    </figure>
+
+    <h3>L'accueil et la navigation</h3>
+    <p>Après connexion, l'<b>accueil</b> présente la grille des services. La <b>barre latérale</b> (sidebar), présente sur toutes les pages, permet de changer de service à tout moment. Chaque service s'organise en <b>onglets</b> (barre horizontale sous l'en-tête du service).</p>
+    <figure class="shot">
+      <img src="../../assets/accueil.png" alt="Page d'accueil : grille des services" loading="lazy">
+      <figcaption><b>Accueil</b> — un service = une carte ; la sidebar à gauche est toujours disponible.</figcaption>
+    </figure>
+
+    <h3>Ouvrir les manuels depuis l'ERP</h3>
+    <p>Ces manuels sont consultables <b>directement dans l'application</b> : le bouton <b>« Manuels d'utilisation »</b> se trouve en bas de la barre latérale, entre votre compte et le système de pointage. Vous n'y voyez que les manuels des services auxquels vous avez accès — la Direction les consulte tous.</p>
+    <figure class="shot">
+      <img src="../../assets/manuels-hub.png" alt="Page des manuels d'utilisation dans l'ERP" loading="lazy">
+      <figcaption><b>Manuels d'utilisation</b> — une carte par manuel accessible ; le bandeau rappelle l'étendue de vos accès. Chaque manuel s'ouvre dans l'ERP et s'imprime d'un clic.</figcaption>
+    </figure>
+
+    <h3>Ce que vous voyez dépend de votre rôle</h3>
+    <ul class="points">
+      <li>Chaque compte a un <b>rôle</b> (opérateur, qualité, achats, direction…) qui détermine les services visibles et les actions autorisées (lecture ou écriture).</li>
+      <li>Si un service ou un bouton n'apparaît pas, c'est en général une question de droits — pas une panne. Voir la Direction pour ajuster les autorisations.</li>
+      <li>Les données sont <b>partagées en temps réel</b> : ce que vous enregistrez est immédiatement visible par les autres services. En cas d'édition simultanée d'une même fiche, un <b>verrou</b> prévient le second utilisateur.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> chaque manuel est imprimable tel quel (Ctrl+P) — la mise en page s'adapte automatiquement à l'impression.</div>
+  </section>
+
+  <section class="tab" id="manuels">
+    <div class="tab-head"><span class="tab-num">📚</span><h2>Les manuels, service par service</h2></div>
+    <p class="tab-but">Dans l'ordre du flux de l'entreprise : de la demande client jusqu'à la facturation, puis les fonctions support et le pilotage.</p>
+
+    <h3>Flux principal — de la demande client à la livraison</h3>
+    <div class="grid-idx">
+      <a class="card-idx" href="commercial.html"><span class="t"><span class="dot" style="background:#3b82f6"></span>Commercial</span><span class="d">Demandes site, DT, offres, avoirs, clients, commandes, affaires</span><span class="n">8 onglets</span></a>
+      <a class="card-idx" href="be.html"><span class="t"><span class="dot" style="background:#8b5cf6"></span>Bureau d'Études</span><span class="d">Nomenclatures, analyse DT, préparations techniques, références</span><span class="n">5 onglets</span></a>
+      <a class="card-idx" href="achats.html"><span class="t"><span class="dot" style="background:#0ea5e9"></span>Achats</span><span class="d">Demandes de prix (RFQ), demandes d'achat, fournisseurs, scorecard</span><span class="n">5 onglets</span></a>
+      <a class="card-idx" href="production.html"><span class="t"><span class="dot" style="background:#22c55e"></span>Production</span><span class="d">Plannings Gantt BDT/BST, présence, commandes &amp; lots, process ateliers</span><span class="n">7 onglets</span></a>
+      <a class="card-idx" href="oas.html"><span class="t"><span class="dot" style="background:#14b8a6"></span>OAS</span><span class="d">Lots &amp; balancelles, relevés eau et bains, traitement de surface</span><span class="n">4 onglets</span></a>
+      <a class="card-idx" href="qualite.html"><span class="t"><span class="dot" style="background:#ef4444"></span>Qualité</span><span class="d">PV, NC, 8D, dérogations, libération, quarantaine, ECME, capabilité, audits</span><span class="n">13 onglets</span></a>
+      <a class="card-idx" href="expeditions.html"><span class="t"><span class="dot" style="background:#f59e0b"></span>Expéditions</span><span class="d">Réceptions, envois, calendrier, fournisseurs (BC &amp; BL), OTD</span><span class="n">5 onglets</span></a>
+      <a class="card-idx" href="stock.html"><span class="t"><span class="dot" style="background:#84cc16"></span>Stocks</span><span class="d">Stock temps réel, gestion, mouvements, alertes &amp; réappro</span><span class="n">5 onglets</span></a>
+      <a class="card-idx" href="compta.html"><span class="t"><span class="dot" style="background:#6366f1"></span>Comptabilité</span><span class="d">Facturation, règlements, grand livre, TVA, balance &amp; trésorerie</span><span class="n">5 onglets</span></a>
+    </div>
+
+    <h3>Support &amp; conformité</h3>
+    <div class="grid-idx">
+      <a class="card-idx" href="securite.html"><span class="t"><span class="dot" style="background:#dc2626"></span>Sécurité</span><span class="d">DUER, événements, EPI, chimie/FDS, contrôles, audit ISO 45001</span><span class="n">9 onglets</span></a>
+      <a class="card-idx" href="environnement.html"><span class="t"><span class="dot" style="background:#16a34a"></span>Environnement</span><span class="d">Déchets, rejets, ATEX, aspects &amp; impacts, ICPE, GES, ISO 14001/26000</span><span class="n">10 onglets</span></a>
+      <a class="card-idx" href="maintenance.html"><span class="t"><span class="dot" style="background:#f97316"></span>Maintenance</span><span class="d">Interventions/OM, préventif, MTBF, fiche 360, coûts postes, PDR</span><span class="n">7 onglets</span></a>
+      <a class="card-idx" href="rh.html"><span class="t"><span class="dot" style="background:#ec4899"></span>RH</span><span class="d">Employés, habilitations, compétences, organigramme, temps, pointage</span><span class="n">7 pages</span></a>
+      <a class="card-idx" href="plans.html"><span class="t"><span class="dot" style="background:#64748b"></span>Plan / Bâtiment</span><span class="d">Maquette du bâtiment, repères et zones</span><span class="n">1 onglet</span></a>
+    </div>
+
+    <h3>Pilotage</h3>
+    <div class="grid-idx">
+      <a class="card-idx" href="direction.html"><span class="t"><span class="dot" style="background:#5C5391"></span>Direction</span><span class="d">Validations, jalons critiques, pilotage par affaire, budget, santé des données</span><span class="n">7 onglets</span></a>
+      <a class="card-idx" href="dashboard.html"><span class="t"><span class="dot" style="background:#22409B"></span>Tableaux de bord</span><span class="d">Hub des 15 dashboards filtrables (période, site, comparaison N-1, export)</span><span class="n">15 dashboards</span></a>
+    </div>
+  </section>
+
+  <footer class="doc">
+    ERP Seem Semrac — manuels utilisateur générés depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs). En cas d'écart entre un manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
+  </footer>
+
+</div>
+</body>
+</html>

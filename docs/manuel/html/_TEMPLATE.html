@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="fr">
+<!-- ══════════════════════════════════════════════════════════════
+     GABARIT des manuels HTML (docs/manuel/html/<service>.html)
+     Contrat de structure — tout manuel DOIT suivre ce squelette :
+     · <head> identique (titre adapté) + lien manuel.css
+     · header.doc : logo, service, lede, metachips (Pour qui / Route / Onglets)
+     · nav.toc : sommaire ancré (1 entrée par onglet)
+     · 1 <section class="tab" id="tab-<id>"> PAR ONGLET, contenant :
+         .tab-head (numéro + h2)
+         .tab-but  (à quoi sert l'onglet, 2-4 phrases)
+         h3 "Ce que vous voyez" + description + figure.shot (capture ../../assets/<f>.png)
+         h3 "Pas à pas" + ol.steps (tutoriel concret)
+         h3 "Règles & points d'attention" + ul.points / .note / .warn / .astuce
+         (si formulaire important : .tbl tableau champ-par-champ)
+     · .docnav (← Sommaire des manuels · Manuel suivant →)
+     · footer.doc
+     Images : UNIQUEMENT des fichiers existants de docs/assets (chemin ../../assets/x.png).
+     ══════════════════════════════════════════════════════════════ -->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manuel — NomService · ERP Seem Semrac</title>
+<link rel="stylesheet" href="manuel.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <div class="brandrow">
+      <div class="logo">SS</div>
+      <div>
+        <div class="co">SEEM · SEMRAC — ERP</div>
+        <div class="eyebrow">Manuel utilisateur</div>
+      </div>
+      <div class="kind">docs/manuel/html</div>
+    </div>
+    <h1>Service <span class="hi">NomService</span></h1>
+    <p class="lede">Une phrase qui dit à quoi sert le service dans le flux global de l'entreprise, et ce que l'utilisateur va apprendre ici.</p>
+    <div class="metachips">
+      <span class="chip">👤 Pour qui : <b>Rôle(s)</b></span>
+      <span class="chip">🧭 Dans l'ERP : <b>Sidebar → NomService</b></span>
+      <span class="chip">🗂 <b>N onglets</b></span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-t">Sommaire</div>
+    <ol>
+      <li><a href="#tab-exemple">Nom de l'onglet</a></li>
+    </ol>
+  </nav>
+
+  <section class="tab" id="tab-exemple">
+    <div class="tab-head"><span class="tab-num">1</span><h2>Nom de l'onglet</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Deux à quatre phrases qui expliquent le rôle de l'onglet dans le processus métier.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Description de l'écran (tuiles KPI, tableau, boutons principaux…).</p>
+    <figure class="shot">
+      <img src="../../assets/exemple.png" alt="Capture de l'onglet Exemple" loading="lazy">
+      <figcaption><b>Onglet Exemple</b> — légende qui pointe ce qu'il faut regarder.</figcaption>
+    </figure>
+
+    <h3>Pas à pas</h3>
+    <ol class="steps">
+      <li>Première action concrète (où cliquer, quoi saisir).</li>
+      <li>Deuxième action…</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Règle métier importante.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> piège connu ou action irréversible.</div>
+    <div class="astuce"><b>Astuce :</b> raccourci ou bonne pratique.</div>
+  </section>
+
+  <div class="docnav">
+    <a href="index.html">← Sommaire des manuels</a>
+    <a href="suivant.html">Manuel suivant →</a>
+  </div>
+
+  <footer class="doc">
+    ERP Seem Semrac — manuel utilisateur généré depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs). En cas d'écart entre ce manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
+  </footer>
+
+</div>
+</body>
+</html>

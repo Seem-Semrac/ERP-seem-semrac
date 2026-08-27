@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manuel — Direction · ERP Seem Semrac</title>
+<link rel="stylesheet" href="manuel.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <div class="brandrow">
+      <div class="logo">SS</div>
+      <div>
+        <div class="co">SEEM · SEMRAC — ERP</div>
+        <div class="eyebrow">Manuel utilisateur</div>
+      </div>
+      <div class="kind">docs/manuel/html</div>
+    </div>
+    <h1>Service <span class="hi">Direction</span></h1>
+    <p class="lede">Le service Direction est le <b>cockpit de pilotage</b> de l'entreprise : il rassemble en un seul endroit tout ce qui attend un arbitrage (validations envoyées par les autres services), tout ce qui dérape (retards, impayés, non-conformités critiques, ruptures de stock, échéances de sécurité), la vue affaire par affaire, les indicateurs financiers et opérationnels, le budget de l'année et la qualité des données saisies dans l'ERP. Ce manuel décrit les 7 onglets, écran par écran.</p>
+    <div class="metachips">
+      <span class="chip">👤 Pour qui : <b>Direction</b> (seul rôle à accéder à ce service ; les décisions sont refusées à tout autre compte)</span>
+      <span class="chip">🧭 Dans l'ERP : <b>Sidebar → Direction</b></span>
+      <span class="chip">🗂 <b>7 onglets</b></span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-t">Sommaire</div>
+    <ol>
+      <li><a href="#tab-avalider">À valider</a></li>
+      <li><a href="#tab-traites">Traités</a></li>
+      <li><a href="#tab-jalons">Jalons critiques</a></li>
+      <li><a href="#tab-affaire">Par affaire</a></li>
+      <li><a href="#tab-pilotage">Pilotage</a></li>
+      <li><a href="#tab-budget">Budget</a></li>
+      <li><a href="#tab-sante">Santé des données</a></li>
+    </ol>
+  </nav>
+
+  <!-- ══════════════ 1. À VALIDER ══════════════ -->
+  <section class="tab" id="tab-avalider">
+    <div class="tab-head"><span class="tab-num">1</span><h2>À valider</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est la <b>boîte de réception de la Direction</b> : tout ce que les autres services ont soumis à arbitrage arrive ici, dans une file unique. Un bon de commande d'achat stratégique, un avoir client, une facture fournisseur, une fiche salarié, une non-conformité grave, une sortie de quarantaine, un formulaire Sécurité : partout dans l'ERP, une case <b>« Soumettre à la validation de la Direction »</b> pousse la demande dans cette file. S'y ajoutent les alertes détectées automatiquement par l'ERP, ainsi que deux circuits historiques : les <b>paiements de factures</b> et les <b>congés des fonctions support</b>. C'est l'onglet qui s'ouvre par défaut quand vous entrez dans le service.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Un bandeau doré <b>« Direction Générale · Cockpit de pilotage »</b> coiffe la page, suivi de la barre des 7 onglets — chacun portant son <b>compteur</b> (nombre de demandes en attente, de jalons ouverts, de contrôles de données à corriger…). Sous le titre <b>« File à valider »</b> et son compteur, vous disposez du bouton <b>« Scanner les alertes »</b> et d'un menu <b>Trier</b> (Plus récent · Montant ↓). Une rangée de pastilles filtre par domaine : <b>Tous</b>, puis les domaines réellement présents dans la file (Compta, RH, Qualité, Sécurité, Achats, Commercial).</p>
+    <ul class="points">
+      <li>Colonnes du tableau : <b>Domaine</b>, <b>Type</b>, <b>Objet</b>, <b>Émetteur</b>, <b>Montant</b>, <b>Priorité</b>, <b>Date</b>, puis les boutons d'action.</li>
+      <li>Priorité : <span class="b b-crit">URGENT</span> / <span class="b b-crit">CRITIQUE</span> en rouge, sinon <span class="b b-ok">normal</span> en vert. Une non-conformité de gravité Critique ou Bloquante arrive automatiquement en « urgent ».</li>
+      <li>Trois boutons par ligne : l'<b>œil</b> bleu (consulter l'objet soumis), la <b>coche verte</b> (valider) et la <b>croix rouge</b> (refuser). L'œil n'apparaît que si la demande est reliée à un objet consultable.</li>
+      <li>Si aucune demande n'attend : « Aucune demande en attente de validation. »</li>
+      <li>Sous le tableau, deux blocs de cartes apparaissent seulement s'ils sont alimentés : <b>Paiements de factures</b> (n° de facture, client, n° d'affaire, montant TTC et échéance) et <b>Congés fonctions support</b> (salarié, type de congé, période).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/direction.png" alt="Capture de l'onglet À valider du service Direction" loading="lazy">
+      <figcaption><b>À valider</b> — la file centrale, les pastilles de domaine au-dessus et, à droite de chaque ligne, les trois boutons œil / valider / refuser.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — instruire puis valider une demande</h3>
+    <ol class="steps">
+      <li>Filtrez la file si besoin : cliquez sur une pastille de domaine (par exemple <b>Achats</b>) pour ne garder que ces demandes, ou passez le tri sur <b>« Montant ↓ »</b> pour traiter d'abord les engagements les plus lourds.</li>
+      <li>Cliquez sur l'<b>œil</b> de la ligne : une fenêtre de consultation affiche la fiche réelle de l'objet soumis (commande, facture, non-conformité, salarié, bon de commande, demande d'achat, offre, lot, bon de travail…) champ par champ, sans quitter le cockpit.</li>
+      <li>Si vous voulez le contexte complet, cliquez sur <b>« Ouvrir dans le service »</b> en bas de cette fenêtre : l'ERP vous emmène sur le service concerné (une commande ouvre directement sa <b>fiche affaire</b> dans Commercial). Revenez ensuite au cockpit.</li>
+      <li>Cliquez sur la <b>coche verte</b> : la décision est enregistrée avec votre nom et la date, une notification « Validé. » s'affiche et la page se rafraîchit. La ligne quitte la file et bascule dans l'onglet <b>Traités</b>.</li>
+      <li>Côté service émetteur, l'objet porte désormais le badge <b>Direction ✓</b> — le demandeur voit votre décision sans avoir à vous appeler.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-direction-source.png" alt="Fenêtre de consultation de la pièce source ouverte depuis l'œil de la file à valider" loading="lazy">
+      <figcaption><b>Consulter la pièce source</b> — l'œil ouvre la fiche réelle de l'objet soumis (ici une non-conformité critique), avec sous le titre la table d'origine et le numéro de pièce, puis chaque champ tel qu'il est en base : date, type, gravité, statut, détecteur, horodatages de création et de mise à jour. Le bouton violet <b>« Ouvrir dans le service »</b> en bas à droite bascule vers le service concerné ; la croix en haut à droite referme la fenêtre et vous laisse dans la file.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — refuser : annulation totale ou renvoi en révision</h3>
+    <ol class="steps">
+      <li>Cliquez sur la <b>croix rouge</b> : la fenêtre <b>« Refuser cette validation »</b> s'ouvre.</li>
+      <li>Saisissez le <b>motif du refus</b> — il est <b>obligatoire</b> : sans texte, l'ERP affiche « Indiquez un motif de refus. » et ne va pas plus loin.</li>
+      <li>Choisissez l'effet du refus avec la case <b>« Annulation totale de l'élément »</b> : cochée, l'élément est définitivement écarté ; <b>décochée</b> (comportement par défaut), c'est un <b>renvoi en révision</b> — l'émetteur corrige et resoumet.</li>
+      <li>Cliquez sur <b>« Confirmer le refus »</b>. La notification précise l'effet retenu (« Refusé — annulation totale. » ou « Refusé — renvoi en révision. ») et la demande rejoint l'onglet Traités avec le badge correspondant.</li>
+      <li>Cas particulier des <b>sorties de quarantaine</b> (soumises par la Qualité) : votre décision agit directement sur le lot. Validation → le lot est <b>libéré</b> ; refus en <b>annulation</b> → le lot est <b>rejeté</b> ; refus en <b>révision</b> → le lot revient « en cours » et la Qualité peut statuer à nouveau.</li>
+    </ol>
+
+    <div class="tbl"><table>
+      <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+      <tbody>
+        <tr><td>Motif du refus</td><td>Texte libre</td><td><b>Oui</b></td><td>Raison du refus. Repris tel quel dans la colonne Commentaire de l'onglet Traités et dans l'infobulle du badge côté service émetteur.</td></tr>
+        <tr><td>Annulation totale de l'élément</td><td>Case à cocher</td><td>Non (décochée par défaut)</td><td>Cochée = l'élément est annulé. Décochée = renvoi en révision, l'émetteur corrige et resoumet.</td></tr>
+      </tbody>
+    </table></div>
+    <figure class="shot">
+      <img src="../../assets/form-direction-refus.png" alt="Fenêtre de refus d'une validation Direction : motif obligatoire et case d'annulation totale" loading="lazy">
+      <figcaption><b>Refuser cette validation</b> — le champ <b>Motif du refus</b> porte l'astérisque des champs obligatoires : tant qu'il est vide, « Confirmer le refus » ne part pas. L'encart rose en dessous porte la case <b>« Annulation totale de l'élément »</b>, décochée par défaut, avec son rappel « Décoché = renvoi en révision » — c'est elle, et elle seule, qui décide si l'élément est écarté définitivement ou renvoyé à l'émetteur pour correction.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — alimenter la file avec le scan d'alertes</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Scanner les alertes »</b> : l'ERP relit les données vives et détecte les <b>commandes en retard</b>, les <b>marges faibles</b> (moins de 15 % sur une commande soldée), les <b>factures clients impayées</b> après échéance, les <b>non-conformités critiques ou bloquantes ouvertes</b> et les <b>ruptures de stock</b> (article géré tombé à zéro).</li>
+      <li>Une notification résume le résultat : nombre d'alertes ajoutées, nombre déjà présentes, nombre détectées. Les nouvelles lignes apparaissent dans la file avec l'émetteur <b>« Moteur alertes »</b>.</li>
+      <li>Traitez-les comme n'importe quelle demande : consultez l'objet avec l'œil, puis validez (vous prenez acte) ou refusez avec un motif.</li>
+    </ol>
+
+    <h3>Pas à pas — paiements de factures et congés support</h3>
+    <ol class="steps">
+      <li>Dans le bloc <b>« Paiements de factures »</b>, vérifiez le client, le montant TTC et la date d'échéance affichés sur la carte, puis cliquez sur <b>« Valider »</b> (le paiement est autorisé) ou sur la croix (refus).</li>
+      <li>Dans le bloc <b>« Congés fonctions support »</b>, contrôlez le salarié, le type de congé et la période, puis <b>« Valider »</b> : l'ERP crée les jours d'absence correspondants dans le RH et la notification indique combien de jours ont été posés. La croix refuse la demande.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La <b>décision est réservée à la Direction</b> : un compte d'un autre service ne peut ni valider ni refuser (l'ERP répond « Décision réservée à la Direction. »).</li>
+      <li>Le scan d'alertes ne crée <b>jamais de doublon</b> : une alerte déjà présente — même déjà traitée, validée ou refusée — n'est pas recréée au scan suivant.</li>
+      <li>Le scan est volontairement plus sélectif que l'onglet Jalons critiques sur les stocks : il ne remonte que les <b>ruptures franches</b> (article tombé à zéro), le réapprovisionnement de routine restant l'affaire des Achats.</li>
+      <li>Chaque demande garde son <b>émetteur</b> : le nom de la personne qui a coché la case dans son service, ou « Moteur alertes » pour les détections automatiques.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> un refus en <b>annulation totale</b> n'est pas un simple avis — sur une sortie de quarantaine, il fait passer le lot en « rejeté ». Quand vous voulez seulement faire corriger un dossier, laissez la case décochée : le renvoi en révision permet à l'émetteur de resoumettre.</div>
+    <div class="astuce"><b>Astuce :</b> lancez « Scanner les alertes » en début de semaine, puis triez par <b>Montant ↓</b> : vous voyez immédiatement les engagements financiers et les retards les plus coûteux, avant de descendre dans le détail.</div>
+  </section>
+
+  <!-- ══════════════ 2. TRAITÉS ══════════════ -->
+  <section class="tab" id="tab-traites">
+    <div class="tab-head"><span class="tab-num">2</span><h2>Traités</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est la <b>mémoire des décisions</b> : toutes les demandes déjà validées ou refusées, avec leur motif, leur auteur et leur date. On y revient pour répondre à un « qu'avait-on décidé sur ce dossier ? », pour préparer une revue de direction, ou pour justifier une décision lors d'un audit. Cet onglet ne se vide jamais : il est indépendant de la file à traiter.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Le titre <b>« Historique des validations traitées »</b> avec le nombre total de décisions. Deux rangées de filtres cumulables : d'abord par <b>catégorie</b> (Toutes catégories, puis les domaines présents), ensuite par <b>décision</b> (Toutes décisions · Validées · Refusées). Le tableau détaille : Catégorie, Type, Objet, Émetteur, Montant, Décision, Décidé le, Par, Commentaire, et l'œil de consultation.</p>
+    <ul class="points">
+      <li>Décisions affichées : <span class="b b-ok">VALIDÉ</span> · <span class="b b-crit">REFUSÉ · ANNULATION</span> · <span class="b b-warn">REFUSÉ · RÉVISION</span> — le refus n'a donc pas un seul visage, on distingue toujours l'annulation du renvoi pour correction.</li>
+      <li>La colonne <b>Commentaire</b> reprend le motif saisi lors du refus ; elle affiche « — » quand aucun commentaire n'a été laissé.</li>
+      <li>Si aucune décision n'a encore été prise : « Aucune décision enregistrée pour l'instant. »</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/direction-traites.png" alt="Capture de l'onglet Traités du service Direction" loading="lazy">
+      <figcaption><b>Traités</b> — les deux rangées de filtres (catégorie puis décision) se combinent ; les colonnes Décidé le / Par / Commentaire constituent la trace d'audit.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — retrouver une décision</h3>
+    <ol class="steps">
+      <li>Cliquez sur la pastille de la <b>catégorie</b> concernée (Achats, Qualité, Compta…), puis, si besoin, sur <b>« Refusées »</b> ou <b>« Validées »</b> : les deux filtres s'appliquent ensemble.</li>
+      <li>Repérez la ligne à sa colonne <b>Objet</b> (elle porte le libellé rédigé par l'émetteur : fournisseur, client, numéro de pièce…).</li>
+      <li>Cliquez sur l'<b>œil</b> pour rouvrir la fiche de l'objet tel qu'il est aujourd'hui, et éventuellement l'ouvrir dans son service d'origine.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Cet onglet ne contient que les demandes <b>validées ou refusées</b>. Les jalons critiques marqués « Traité » ont leur propre historique, en bas de l'onglet <b>Jalons critiques</b>.</li>
+      <li>Une décision ne se rejoue pas depuis cet écran : il est en <b>consultation</b>. Si un dossier doit repasser en décision, il doit être resoumis par son service.</li>
+      <li>L'œil peut répondre « Objet introuvable » : c'est normal quand l'élément d'origine a été supprimé depuis la décision — la trace de la décision, elle, reste.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> le filtre <b>« Refusées »</b> est le meilleur point de départ d'une revue de direction : il montre en un écran ce que l'entreprise a arbitré à la baisse, avec le motif écrit.</div>
+  </section>
+
+  <!-- ══════════════ 3. JALONS CRITIQUES ══════════════ -->
+  <section class="tab" id="tab-jalons">
+    <div class="tab-head"><span class="tab-num">3</span><h2>Jalons critiques</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Cet onglet ne contient <b>aucune saisie</b> : il lit directement les données vives de l'ERP et affiche ce qui déraille aujourd'hui, réparti en cinq familles — retards de livraison, stocks sous seuil, factures clients impayées, non-conformités critiques et échéances de sécurité dépassées. C'est la revue quotidienne du dirigeant : ce qui est rouge ici coûte de l'argent, du client ou de la conformité. Chaque ligne peut être marquée <b>« Traité »</b> pour tracer sa prise en charge.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Cinq sections repliées en cartes, chacune avec son <b>compteur</b> à droite du titre. Une section vide affiche « Rien à signaler ✓ ».</p>
+    <ul class="points">
+      <li><b>Commandes en retard (vs date promise client)</b> — Affaire, Client, Livraison promise (en rouge avec le nombre de jours de retard), Montant. Une commande livrée, close, terminée, soldée ou annulée n'y figure plus.</li>
+      <li><b>Stocks critiques (à réapprovisionner)</b> — Référence, Désignation, Stock / seuil, Emplacement. Un article apparaît dès que son stock est retombé <b>au niveau ou en dessous</b> de son point de commande (ou de son stock mini).</li>
+      <li><b>Factures clients impayées en retard</b> — Facture, Client, Échéance (avec les jours de dépassement), Montant TTC. Les brouillons et les factures payées sont exclus.</li>
+      <li><b>Non-conformités critiques / bloquantes ouvertes</b> — NC, Date, Gravité (<span class="b b-crit">Critique</span> ou <span class="b b-crit">Bloquante</span>), Lot ou type. Une NC clôturée, fermée, résolue ou traitée disparaît de la liste.</li>
+      <li><b>Échéances Sécurité dépassées</b> — Type, Objet, Échéance. Le type précise l'origine : <span class="b b-info">VGP</span> (vérification périodique dépassée), <span class="b b-info">EPI</span> (péremption atteinte ou à moins de 30 jours), <span class="b b-info">Conformité</span> (obligation non conforme ou échue), <span class="b b-info">Habilitation</span> (certification expirée ou à renouveler), <span class="b b-info">ATEX</span> (revue de zone dépassée) et <span class="b b-info">Rejet hors VLE</span> (mesure environnementale non conforme).</li>
+      <li>En bas de page, <b>« Historique des jalons critiques traités »</b> : Catégorie, Objet, Traité le, Par, Note — avec l'œil pour rouvrir l'objet concerné.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/direction-jalons.png" alt="Capture de l'onglet Jalons critiques" loading="lazy">
+      <figcaption><b>Jalons critiques</b> — les cinq familles avec leur compteur ; à droite de chaque ligne, le bouton noir « Traiter » ou la pastille verte « Traité ».</figcaption>
+    </figure>
+
+    <h3>Pas à pas — tracer la prise en charge d'un jalon</h3>
+    <ol class="steps">
+      <li>Repérez la ligne concernée (par exemple une commande à +12 jours de retard) et cliquez sur le bouton noir <b>« Traiter »</b>.</li>
+      <li>La fenêtre <b>« Tracer le traitement du jalon »</b> rappelle l'objet visé. Saisissez une <b>note</b> décrivant l'action menée — relance client, réappro lancé, dérogation demandée… Le champ est facultatif, mais c'est lui qui donne sa valeur à l'historique.</li>
+      <li>Cliquez sur <b>« Marquer traité »</b> : la ligne troque son bouton contre une pastille verte <span class="b b-ok">Traité</span> dont l'infobulle indique la date, l'auteur et la note.</li>
+      <li>La ligne s'ajoute aussitôt à l'<b>historique des jalons traités</b>, en bas de l'onglet — même après que le problème a disparu des données.</li>
+      <li>Si une <b>alerte du scan</b> existait déjà pour ce même objet dans l'onglet « À valider », elle est <b>absorbée</b> : elle sort de la file d'attente et devient cette trace « traité ». Vous ne traitez donc jamais deux fois le même sujet.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-direction-jalon-traite.png" alt="Fenêtre Tracer le traitement du jalon, ouverte depuis le bouton Traiter" loading="lazy">
+      <figcaption><b>Tracer le traitement du jalon</b> — sous le titre, la fenêtre rappelle l'objet exactement visé (ici « Commande 0001 en retard — PROMISTEL ») : vérifiez-le avant de valider, c'est la ligne dont vous cliquez le bouton « Traiter ». Le champ <b>Note / action menée</b> est marqué <b>optionnel</b>, mais c'est lui qui donne son intérêt à l'historique. <b>« Marquer traité »</b> remplace aussitôt le bouton noir de la ligne par la pastille verte <b>Traité</b> ; « Annuler » ferme sans rien tracer.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>« Traiter » <b>ne corrige rien</b> : c'est une trace de pilotage. Le retard, l'impayé ou la NC restent visibles tant que la donnée source n'a pas changé dans son service (livraison enregistrée, encaissement saisi, NC clôturée).</li>
+      <li>L'action est <b>idempotente</b> : re-traiter le même jalon met à jour la note et l'horodatage au lieu de créer un doublon.</li>
+      <li>Les listes sont volontairement <b>plafonnées à l'écran</b> (les 20 premières lignes par famille, 25 pour la Sécurité) : elles servent à décider, pas à faire l'inventaire. Le détail exhaustif se consulte dans le service concerné.</li>
+      <li>Le marquage « Traité » est, comme la décision de validation, <b>réservé à la Direction</b>.</li>
+    </ul>
+    <div class="note"><b>Bon à savoir :</b> les échéances de Sécurité proviennent de six sources différentes du service Sécurité / Environnement (VGP, EPI, conformité réglementaire, habilitations, zones ATEX, mesures de rejet). Une ligne rouge ici veut souvent dire qu'une saisie manque dans ces modules, pas qu'un contrôle n'a pas été fait.</div>
+    <div class="astuce"><b>Astuce :</b> traitez la revue dans l'ordre des cartes — argent (retards, impayés), matière (stocks), conformité (NC, Sécurité) — puis relisez l'historique en fin de mois : il raconte, note après note, ce que la Direction a réellement piloté.</div>
+  </section>
+
+  <!-- ══════════════ 4. PAR AFFAIRE ══════════════ -->
+  <section class="tab" id="tab-affaire">
+    <div class="tab-head"><span class="tab-num">4</span><h2>Par affaire</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> La vue transversale <b>affaire par affaire et client par client</b> : pour chaque commande, l'avancement réel de la production, le montant engagé, la marge et la date de livraison promise. C'est l'écran de la revue de portefeuille : quelles affaires avancent, lesquelles sont en retard, lesquelles gagnent ou perdent de l'argent.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Quatre tuiles en tête : <b>Affaires actives</b> (commandes non soldées), <b>Carnet de commandes</b> (montant restant à produire et livrer), <b>Marge moyenne</b> et <b>En retard</b> (nombre d'affaires dépassant la date promise — la tuile passe au vert quand il n'y en a aucune). Sous le titre <b>« Pilotage par affaire &amp; client »</b>, le tableau liste : Affaire, Client, Avancement, Montant, Marge, Livraison et un lien <b>détail</b>.</p>
+    <ul class="points">
+      <li><b>Avancement</b> : une barre de progression accompagnée du décompte « bons de travail soldés / total ». Grise tant que rien n'est soldé, orange en cours de route, verte à 100 %.</li>
+      <li><b>Marge</b> en pourcentage du montant, avec un code couleur immédiat : vert à partir de 15 %, orange entre 0 et 15 %, rouge en dessous de zéro. « — » signifie que la marge réelle n'est pas encore connue.</li>
+      <li><b>Livraison</b> : la date promise, affichée en rouge et suivie d'un « ⚠ » si elle est dépassée alors que l'affaire n'est pas soldée.</li>
+      <li>Les affaires <b>en retard remontent automatiquement en tête</b> de tableau.</li>
+      <li>S'il n'y a aucune commande : « Aucune commande en base. »</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/direction-affaires.png" alt="Capture de l'onglet Par affaire" loading="lazy">
+      <figcaption><b>Par affaire</b> — la barre d'avancement traduit le nombre de bons de travail soldés ; les colonnes Marge et Livraison colorent immédiatement les affaires à surveiller.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — passer une affaire en revue</h3>
+    <ol class="steps">
+      <li>Lisez d'abord les quatre tuiles : elles donnent la photo du portefeuille (nombre d'affaires vivantes, carnet restant, marge moyenne, retards).</li>
+      <li>Parcourez les premières lignes du tableau — ce sont les affaires en retard, remontées d'office.</li>
+      <li>Pour une affaire précise, comparez <b>Avancement</b> et <b>Livraison</b> : une barre à 30 % avec une date déjà passée est un sujet de réunion, pas de mail.</li>
+      <li>Cliquez sur <b>détail</b> en bout de ligne : l'ERP ouvre la <b>fiche de la commande côté Production</b>, où se trouvent les lots, les bons de travail et l'avancement pièce par pièce.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>L'avancement est un décompte de <b>bons de travail soldés</b> : il reflète le travail déclaré à l'atelier, pas une estimation.</li>
+      <li>La marge affichée est la <b>marge réelle</b> calculée par l'ERP au fil de la production ; elle reste vide tant que les coûts n'ont pas été consommés.</li>
+      <li>Le tableau affiche au maximum les <b>100 premières affaires</b> : pour une recherche fine, passez par le service Commercial.</li>
+      <li>Une affaire close, livrée ou annulée n'entre plus dans les tuiles « Affaires actives » et « Carnet de commandes », mais reste dans le tableau.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> une ligne à 100 % d'avancement mais toujours ouverte signale généralement une affaire produite qui attend sa libération qualité ou son bon de livraison — le sujet se règle en un appel aux Expéditions.</div>
+  </section>
+
+  <!-- ══════════════ 5. PILOTAGE ══════════════ -->
+  <section class="tab" id="tab-pilotage">
+    <div class="tab-head"><span class="tab-num">5</span><h2>Pilotage</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Le tableau des <b>indicateurs de direction</b>, calculés en direct sur les données de l'ERP : cinq chiffres financiers et sept chiffres opérationnels, sur le mois et l'année en cours. C'est l'écran que l'on regarde chaque lundi matin, et celui que l'on projette en revue de direction.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Deux blocs de tuiles, précédés du rappel « Mois &amp; année en cours, données live ».</p>
+    <ul class="points">
+      <li><b>Financier</b> : <b>CA facturé (mois)</b> · <b>CA facturé (année)</b> (cumul de l'année civile) · <b>Carnet de commandes</b> (le backlog encore ouvert) · <b>Encours clients</b> (le montant facturé restant à encaisser) · <b>Impayés en retard</b> (montant et nombre de factures échues non réglées).</li>
+      <li><b>Opérationnel</b> : <b>OTD livraison client</b> — le taux de livraison à l'heure, avec l'objectif <b>≥ 95 %</b> rappelé sous la tuile : elle est verte au-dessus de 95 %, orange en dessous · <b>NC critiques ouvertes</b> · <b>Stocks critiques</b> · <b>Échéances Sécurité</b> · <b>Accidents YTD</b> (accidents du travail de l'année, objectif = 0, la tuile est verte à zéro et rouge dès le premier) · <b>Effectif actif</b> · <b>En attente de validation</b> (le volume de votre file de l'onglet 1).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/direction-pilotage.png" alt="Capture de l'onglet Pilotage" loading="lazy">
+      <figcaption><b>Pilotage</b> — bloc financier en haut, bloc opérationnel en dessous ; la couleur de chaque tuile porte déjà le verdict par rapport à l'objectif.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — lire les indicateurs</h3>
+    <ol class="steps">
+      <li>Comparez <b>CA facturé (mois)</b> et <b>Carnet de commandes</b> : le premier dit ce qui est encaissable, le second ce qui reste à produire — c'est le couple qui annonce les mois suivants.</li>
+      <li>Regardez ensuite <b>Encours clients</b> et <b>Impayés en retard</b> : l'écart entre les deux mesure la qualité du recouvrement. Le détail nominatif est dans l'onglet <b>Jalons critiques</b>.</li>
+      <li>Sur l'<b>OTD</b>, une valeur sous 95 % renvoie directement aux <b>commandes en retard</b> de l'onglet Jalons critiques : ce sont exactement les mêmes commandes.</li>
+      <li>Les tuiles <b>NC critiques</b>, <b>Stocks critiques</b> et <b>Échéances Sécurité</b> reprennent les compteurs des familles de jalons : si un chiffre bouge, ouvrez l'onglet 3 pour voir de quelles lignes il s'agit.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>L'<b>OTD</b> se calcule sur les commandes dont la date promise est passée : c'est la part de celles qui ne sont pas en retard. Tant qu'aucune échéance n'est arrivée, l'indicateur affiche « — ».</li>
+      <li>Les chiffres de CA et d'encours de cet onglet sont exprimés en <b>TTC</b>, alors que l'onglet <b>Budget</b> raisonne en <b>HT</b> : ne comparez pas directement les deux écrans.</li>
+      <li>Les factures en <b>brouillon</b> sont exclues de tous les cumuls : un CA qui semble faible peut simplement signifier que des factures n'ont pas été finalisées en Compta.</li>
+      <li>Tous les indicateurs sont <b>recalculés à chaque ouverture</b> de la page : aucun chiffre n'est figé ni saisi à la main.</li>
+    </ul>
+    <div class="note"><b>Bon à savoir :</b> ces tuiles donnent la photo du jour. Pour les courbes, les comparaisons N-1 et les filtres par période ou par site, passez par le service <b>Tableaux de bord</b>.</div>
+  </section>
+
+  <!-- ══════════════ 6. BUDGET ══════════════ -->
+  <section class="tab" id="tab-budget">
+    <div class="tab-head"><span class="tab-num">6</span><h2>Budget</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> La vue économique de l'année : ce que l'entreprise a <b>facturé</b>, ce qu'elle a <b>acheté</b> et ce qui reste entre les deux. Les chiffres proviennent des factures réellement enregistrées en Comptabilité — clients d'un côté, fournisseurs de l'autre — et non d'un budget prévisionnel saisi à la main. Une seconde carte montre comment le carnet de commandes se répartit entre les activités.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Le titre <b>« Budget &amp; Marge »</b> suivi de l'année en cours et de la mention « données compta réelles ». Trois tuiles, puis une carte de répartition.</p>
+    <ul class="points">
+      <li><b>CA facturé HT (année)</b> — cumul des factures clients de l'année civile, hors brouillons.</li>
+      <li><b>Achats fournisseurs HT</b> — cumul des factures fournisseurs de la même année.</li>
+      <li><b>Marge sur achats</b> — la différence entre les deux, assortie de son <b>pourcentage du CA</b>.</li>
+      <li><b>Carnet de commandes par activité</b> — une barre par activité (Seem, Semrac…), avec le montant et le poids en pourcentage, triée du plus gros au plus petit. Si aucune commande n'existe : « Aucune commande enregistrée. »</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/direction-budget.png" alt="Capture de l'onglet Budget" loading="lazy">
+      <figcaption><b>Budget</b> — les trois tuiles CA / achats / marge, puis la répartition du carnet de commandes activité par activité.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — lire la marge de l'année</h3>
+    <ol class="steps">
+      <li>Lisez d'abord <b>CA facturé HT</b> et <b>Achats fournisseurs HT</b> : ce sont deux cumuls bruts de l'année civile en cours.</li>
+      <li>Contrôlez le pourcentage affiché sous <b>Marge sur achats</b> : c'est la marge <b>sur achats</b>, pas la marge nette — elle ne déduit ni la main-d'œuvre, ni les charges de structure.</li>
+      <li>Descendez sur la carte <b>Carnet de commandes par activité</b> : elle indique quelle activité porte le travail à venir, donc où se joueront les prochains mois.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Ces montants ne valent que ce que vaut la saisie en <b>Comptabilité</b> : une facture fournisseur non enregistrée gonfle artificiellement la marge.</li>
+      <li>Le cumul est calé sur l'<b>année civile</b> en cours et se remet donc à zéro au 1<sup>er</sup> janvier.</li>
+      <li>La répartition par activité porte sur le <b>carnet de commandes</b> (les commandes enregistrées), pas sur le chiffre d'affaires facturé : les deux chiffres n'ont pas la même base.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> la « marge sur achats » n'est pas un résultat d'exploitation. Elle mesure l'écart entre facturation client et achats fournisseurs ; pour la rentabilité affaire par affaire, utilisez la colonne <b>Marge</b> de l'onglet « Par affaire ».</div>
+  </section>
+
+  <!-- ══════════════ 7. SANTÉ DES DONNÉES ══════════════ -->
+  <section class="tab" id="tab-sante">
+    <div class="tab-head"><span class="tab-num">7</span><h2>Santé des données</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Un ERP ne vaut que par la qualité de ce qu'on y saisit. Cet onglet <b>audite l'ERP lui-même</b> selon quatre piliers — <b>D</b>isponibilité, <b>I</b>ntégrité, <b>C</b>onfidentialité, <b>T</b>raçabilité — et attribue un score sur 100. Il ne juge pas le terrain : il repère les données qui ne <i>circulent</i> pas entre les modules (un EPI sans fournisseur, un accident sans salarié, une habilitation orpheline) et vous dit précisément où corriger la saisie. C'est l'outil de préparation d'un audit et le thermomètre du déploiement de l'ERP.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>En haut, le <b>Score DICT global</b> sur 100 dans un cartouche coloré, avec le nombre de contrôles à corriger, et un encadré rappelant que tout est <b>recalculé à chaque ouverture</b>. Dessous, quatre jauges — une par pilier — puis le détail, contrôle par contrôle.</p>
+    <ul class="points">
+      <li>Les quatre piliers : <b>Intégrité</b> (liens &amp; référentiels), <b>Disponibilité</b> (données présentes), <b>Confidentialité</b> (accès cadrés), <b>Traçabilité</b> (horodatage &amp; auteur). Chaque jauge indique son score et le nombre de points à corriger, ou « tout est lié ».</li>
+      <li>Code couleur des scores : <span class="b b-ok">vert</span> à partir de 90, <span class="b b-warn">orange</span> de 70 à 89, <span class="b b-crit">rouge</span> en dessous de 70.</li>
+      <li>Chaque contrôle affiche à gauche un compteur — une <b>coche</b> quand tout est bon, sinon « nombre en défaut / total » — puis son libellé, la <b>consigne de correction</b> (le service et l'écran où agir) et, à droite, le taux de complétude en pourcentage.</li>
+      <li>Un bouton <b>détails</b> apparaît quand l'ERP peut nommer les cas fautifs : il déplie la liste des références concernées (fournisseurs hors référentiel, personnes absentes de la base salariés, lots périmés…), avec la mention « + n autre(s)… » au-delà de huit.</li>
+      <li>Les lignes marquées d'un <b>ℹ</b> sont des <b>informations de posture</b> (sécurité de la plateforme, horodatage automatique) : elles ne comptent pas dans le score.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/direction-donnees.png" alt="Capture de l'onglet Santé des données" loading="lazy">
+      <figcaption><b>Santé des données</b> — le score DICT global, les quatre jauges par pilier, puis chaque contrôle avec sa consigne de correction et son taux de complétude.</figcaption>
+    </figure>
+
+    <h3>Ce que chaque pilier contrôle</h3>
+    <ul class="points">
+      <li><b>Intégrité</b> — les rattachements manquants : dotations EPI, catalogue EPI, produits périssables et produits chimiques sans fournisseur ; fournisseurs cités en texte libre mais absents du référentiel Achats ; accidents, dotations et certifications non reliés à une fiche salarié ; personnes citées qui n'existent pas dans la base salariés.</li>
+      <li><b>Disponibilité</b> — les données indispensables au pilotage : produits chimiques sans fiche de données de sécurité, lots périssables périmés encore en stock, dotations EPI sans prix (donc invisibles dans les dépenses HSE), obligations de conformité non conformes ou échues.</li>
+      <li><b>Confidentialité</b> — la gouvernance des accès : salariés actifs sans rôle ni autorisations, salariés actifs sans identifiant de connexion (matricule et code PIN, indispensables pour tracer qui fait quoi).</li>
+      <li><b>Traçabilité</b> — la preuve du « qui a fait quoi, quand » : accidents clôturés sans date de clôture, non-conformités sans horodatage de mise à jour, décisions de validation sans nom de décideur.</li>
+    </ul>
+
+    <h3>Pas à pas — faire remonter le score</h3>
+    <ol class="steps">
+      <li>Ouvrez la jauge la plus basse : c'est là que l'effort rapporte le plus.</li>
+      <li>Dans la section correspondante, repérez les contrôles au compteur rouge et lisez la <b>consigne</b> : elle nomme l'écran exact où corriger (« Sécurité › EPI catalogue », « Qualité › Produits périssables », « Achats »…).</li>
+      <li>Cliquez sur <b>détails</b> quand le bouton est proposé : vous obtenez la liste nominative des cas à traiter — de quoi confier une consigne précise au service concerné.</li>
+      <li>Faites corriger la saisie dans le service, puis <b>revenez sur l'onglet</b> : le score est recalculé à l'ouverture, sans aucune manipulation.</li>
+      <li>Recommencez jusqu'à ce que les quatre jauges soient au vert : l'ERP est alors réellement branché de bout en bout.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le score d'un pilier est la <b>moyenne des taux de complétude</b> de ses contrôles ; le score global est la moyenne des quatre piliers. Un seul contrôle très incomplet peut donc tirer une jauge vers le bas.</li>
+      <li>Un défaut ici n'est <b>pas un problème terrain</b> : c'est une donnée manquante ou mal reliée dans l'ERP. La correction se fait toujours <b>à la source</b>, dans le service émetteur, jamais depuis cet écran (l'onglet est en consultation).</li>
+      <li>Le contrôle « fournisseurs cités hors référentiel » et « personnes citées absentes de la base salariés » raisonnent sur les <b>noms distincts</b> réellement cités : deux orthographes d'un même fournisseur comptent pour deux écarts — corrigez le nom ou créez la fiche.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> avant un audit client ou de certification, imprimez cet écran : un score DICT élevé, contrôle par contrôle, démontre en quelques minutes que le système d'information est maîtrisé et tracé.</div>
+  </section>
+
+  <div class="docnav">
+    <a href="index.html">← Sommaire des manuels</a>
+    <a href="dashboard.html">Manuel suivant : Tableaux de bord →</a>
+  </div>
+
+  <footer class="doc">
+    ERP Seem Semrac — manuel utilisateur généré depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs). En cas d'écart entre ce manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
+  </footer>
+
+</div>
+</body>
+</html>

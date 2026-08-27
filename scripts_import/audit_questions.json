@@ -1,0 +1,300 @@
+{
+ "GRL-CF": [
+  {
+   "theme": "T1",
+   "num": "1.1",
+   "q": "le salarié dispose-t-il du dossier de fabrication complet (fiche suiveuse, plan, gamme)?"
+  },
+  {
+   "theme": "T1",
+   "num": "1.2",
+   "q": "l'indice de révision du plan utilisé au contrôle correspond-il exactement à la dernière version informatique?"
+  },
+  {
+   "theme": "T2",
+   "num": "2.1",
+   "q": "toutes les étapes de fabrication précédentes ont-elles bien été signées sur la fiche suiveuse avant le contrôle final?"
+  },
+  {
+   "theme": "T2",
+   "num": "2.2",
+   "q": "comment le salarié matérialise-t-il l'acceptation finale du lot (tampon, signature, GPAO)?"
+  },
+  {
+   "theme": "T2",
+   "num": "2.3",
+   "q": "si une pièce est non-conforme, comment est-elle gérée pour éviter tout mélange avec les pièces conformes?"
+  },
+  {
+   "theme": "T2",
+   "num": "2.4",
+   "q": "le salarié utilise-t-il le plan de contrôle pour guider ses vérifications? Le cas échéant, le nombre de pièces effectivement contrôlées est-il strictement conforme à la taille d'échantillon ou à la fréquence exigée par le plan de contrôle (ex: 100% des pièces, table ISO...)?"
+  },
+  {
+   "theme": "T2",
+   "num": "2.5",
+   "q": "le lot en cours est-il soumis à une obligation de Premier Article (FAI) ? (Vérifier si : 1ère production, nouvel indice BEI, ou exigence contractuelle spécifiée sur la commande). Si le rapport FAI a-t-il été dument complété, vérifié et validé (interne ou client) avant d'autoriser la libération du reste du lot ?"
+  },
+  {
+   "theme": "T3",
+   "num": "3.1",
+   "q": "comment le salarié connait-il les équipements de contrôle, de mesure et d'essai (ECME) à utiliser? Les outils utilisés pour le contrôle possèdent-ils tous une vignette d'étalonnage valide (non périmée)?"
+  },
+  {
+   "theme": "T3",
+   "num": "3.2",
+   "q": "les gabarits ou outils de contrôle spécifiques à cet AR ont-ils bien été contrôlés, rangés au bon endroit, référencé dans le fichier Excel et identifié avant le début du contrôle?"
+  },
+  {
+   "theme": "T4",
+   "num": "4.1",
+   "q": "la table de travail est-elle propre, rangée et exempts d'objets n'appartenant pas à la production en cours (risque FOD/pollution)?"
+  },
+  {
+   "theme": "T4",
+   "num": "4.2",
+   "q": "les pièces acceptées sont-elles correctement protégées (bacs, intercalaires) pour éviter des chocs ou des rayures après le contrôle?"
+  },
+  {
+   "theme": "T5",
+   "num": "5.1",
+   "q": "le contrôleur porte-t-il ses équipements de protection individuelle obligatoires dans cette zone?"
+  },
+  {
+   "theme": "T6",
+   "num": "6.1",
+   "q": "l'éclairage du poste est-il suffisant et conforme pour permettre une détection visuelle correcte des défauts d'aspect?"
+  }
+ ],
+ "GRL-SOU": [
+  {
+   "theme": "T1",
+   "num": "1.1",
+   "q": "le soudeur dispose-t-il du dossier de fabrication complet (fiche suiveuse, plan, gamme) et de la DMOS (Descriptif du Mode Opératoire de Soudage) applicable à la pièce?"
+  },
+  {
+   "theme": "T1",
+   "num": "1.2",
+   "q": "les fiches de données de sécurité (FDS) des produits d'apport (fils, baguettes) ou des gaz sont-elles accessibles au poste?"
+  },
+  {
+   "theme": "T2",
+   "num": "2.1",
+   "q": "le soudeur possède-t-il sa QS (qualification de soudeur) formelle, nominative et en cours de validité pour le procédé et le matériau utilisés?"
+  },
+  {
+   "theme": "T2",
+   "num": "2.2",
+   "q": "le numéro de lot du métal d'apport et le type de gaz utilisé sont-ils correctement relevés pour garantir la traçabilité?"
+  },
+  {
+   "theme": "T2",
+   "num": "2.3",
+   "q": "le soudeur utilise-t-il le plan de contrôle pour guider ses vérifications?"
+  },
+  {
+   "theme": "T2",
+   "num": "2.4",
+   "q": "le nombre de pièces inspectées par le soudeur correspond-il strictement aux exigences définies dans ce plan de contrôle?"
+  },
+  {
+   "theme": "T2",
+   "num": "2.5",
+   "q": "le soudeur atteste-t-il formellement la réalisation de son travail en apposant son matricule sur la fiche suiveuse et dans la GPAO?"
+  },
+  {
+   "theme": "T3",
+   "num": "3.1",
+   "q": "les indicateurs de gaz intégrés au poste possèdent-ils une vignette de contrôle valide?"
+  },
+  {
+   "theme": "T3",
+   "num": "3.2",
+   "q": "les paramètres de soudage réels (intensité, tension, débit de gaz) correspondent-ils strictement aux plages définies par la DMOS?"
+  },
+  {
+   "theme": "T4",
+   "num": "4.1",
+   "q": "le poste de travail est-il propre et exempts d'objets n'appartenant pas à la production en cours (risque FOD/pollution)"
+  },
+  {
+   "theme": "T5",
+   "num": "5.1",
+   "q": "le système d'aspiration des fumées de soudage au poste est-il actif, fonctionnel et correctement positionné par l'opérateur?"
+  },
+  {
+   "theme": "T5",
+   "num": "5.2",
+   "q": "le soudeur porte-t-il ses équipements de protection individuelle obligatoires dans cette zone?"
+  },
+  {
+   "theme": "T6",
+   "num": "6.1",
+   "q": "l'état général de la torche, de la pince de masse et des câbles électriques ne présente-t-il aucune usure ou dégradation visible?"
+  }
+ ],
+ "GRL-EMB": [
+  {
+   "theme": "T1",
+   "num": "1.1",
+   "q": "l'opérateur dispose-t-il de la fiche d'emballage générale et le cas échéant de la fiche d'instruction d'emballage spécifique demandée par le client?"
+  },
+  {
+   "theme": "T2",
+   "num": "2.1",
+   "q": "quelles sont les conditions préalables à vérifier avant de pouvoir emballer les pièces (réponse attendue: contrôle final et pointages précédents)?"
+  },
+  {
+   "theme": "T2",
+   "num": "2.2",
+   "q": "l'opérateur réalise-t-il une ultime vérification visuelle des pièces (absence de chocs visibles, poussière, limaille, tâche d'huile…) avant mise en carton?"
+  },
+  {
+   "theme": "T2",
+   "num": "2.3",
+   "q": "l'opérateur atteste-t-il formellement la réalisation de son travail en apposant son matricule sur la fiche suiveuse et dans la GPAO?"
+  },
+  {
+   "theme": "T2",
+   "num": "2.4",
+   "q": "si une pièce est non-conforme, comment est-elle gérée pour éviter tout mélange avec les pièces conformes?"
+  },
+  {
+   "theme": "T2",
+   "num": "2.5",
+   "q": "le salarié utilise-t-il le plan de contrôle pour guider ses vérifications? Le cas échéant, le nombre de pièces effectivement contrôlées est-il strictement conforme à la taille d'échantillon ou à la fréquence exigée par le plan de contrôle (ex: 100% des pièces, table ISO...)?"
+  },
+  {
+   "theme": "T4",
+   "num": "4.1",
+   "q": "le poste de travail est-il propre et exempts d'objets n'appartenant pas à la production en cours (risque FOD/pollution)"
+  },
+  {
+   "theme": "T4",
+   "num": "4.2",
+   "q": "les consommables d'emballage (films plastiques, mousses de calage, cartons, papier bulle) sont-ils stockés à l'abri de la poussière et de l'humidité pour éviter de polluer les pièces ?"
+  },
+  {
+   "theme": "T4",
+   "num": "4.3",
+   "q": "les intercalaires ou protections spécifiques sont-ils correctement positionnés entre les pièces pour exclure tout risque de frottement ou de choc pendant le transport?"
+  },
+  {
+   "theme": "T5",
+   "num": "5.1",
+   "q": "l'opérateur utilise-t-il les aides à la manutention disponible pour le levage des colis lourds afin d'éviter les risques de chutes de matériel ou de blessure?"
+  },
+  {
+   "theme": "T5",
+   "num": "5.2",
+   "q": "les outils de coupe (cutters) utilisés sont-ils conformes et en bon état?"
+  },
+  {
+   "theme": "T6",
+   "num": "6.1",
+   "q": "les équipements de fermeture (cercleuse, filmeuse par exemple) sont-ils propres, fonctionnels et entretenus selon les règles?"
+  }
+ ],
+ "GRL-INFO": [
+  {
+   "theme": "B",
+   "num": "B.1",
+   "q": "quelle est la stratégie de l'entreprise concernant la gestion des risques cyber pouvant paralyser l'usine? Existe-t-il une cartographie des risques informatiques à jour?"
+  },
+  {
+   "theme": "B",
+   "num": "B.2",
+   "q": "existe-t-il un plan de continuité d'activité (PCA) ou un plan de secours informatique (PSI) formalisé pour assurer le redémarrage de l'usine en cas de sinistre majeur?"
+  },
+  {
+   "theme": "B",
+   "num": "B.3",
+   "q": "existe-t-il une procédure écrite décrivant la fréquence, la méthode et la responsabilité des sauvegardes des données?"
+  },
+  {
+   "theme": "B",
+   "num": "B.4",
+   "q": "le serveur \"en miroir\" est-il encadré par un protocole informatique sécurisé (VPN, chiffrement) garantissant la non-divulgation des données?"
+  },
+  {
+   "theme": "B",
+   "num": "B.5",
+   "q": "comment s'assure-t-on de la protection et de la confidentialité des données personnelles (RGPD) stockés sur le serveur?"
+  },
+  {
+   "theme": "B",
+   "num": "B.6",
+   "q": "dispose-t-on d'un document clarifiant les rôles de chacun dans la répartition des différents contrats informatiques et téléphonie?"
+  },
+  {
+   "theme": "C",
+   "num": "C.1",
+   "q": "quelle est la politique de sauvegarde des données critiques de l'usine (données du B.E.I, historique qualité…)? Les tests de restauration des sauvegardes sont-ils planifiés et réalisés pour prouver que les données sont réellement récupérables? (demander à voir le dernier PV de test de restauration)"
+  },
+  {
+   "theme": "C",
+   "num": "C.2",
+   "q": "où est situé physiquement le serveur de l'entreprise? Son accès est-il restreint, verrouillé et protégé contre l'instrusion ou l'incendie?"
+  },
+  {
+   "theme": "C",
+   "num": "C.3",
+   "q": "comment est protégé le serveur contre les coupures de courant ou les surtensions (présence d'un onduleur, d'une batterie de secours testée)?"
+  },
+  {
+   "theme": "C",
+   "num": "C.4",
+   "q": "comment s'assure-t-on que le personnel (bureaux et atelier) est sensibilisé aux risques informatiques (phishing, choix des mots de passe, fuite d'informations techniques)? Existe-t-il une charte informatique signée par les salariés?"
+  },
+  {
+   "theme": "C",
+   "num": "C.5",
+   "q": "qui détient les codes \"administrateur\" du réseau et des serveurs actuels? Existe-t-il un registre des mots de passe sécurisé en cas de départ d'un collaborateur?"
+  },
+  {
+   "theme": "C",
+   "num": "C.6",
+   "q": "les utilisateurs possèdent-ils des identifiants et des mots de passe individuels, robustes et renouvelé régulièrement?"
+  },
+  {
+   "theme": "C",
+   "num": "C.7",
+   "q": "l'intégralité du parc de PC (bureaux et atelier) est-elle couverte par un antivirus professionnel géré de manière centralisée?"
+  },
+  {
+   "theme": "C",
+   "num": "C.8",
+   "q": "existe-t-il une règle de nommage et d'arborescence pour éviter la prolifération des fichiers en doublons?"
+  },
+  {
+   "theme": "C",
+   "num": "C.9",
+   "q": "dispose-t-on d'un listing/inventaire à jour de tous les PC de l'entreprise incluant leur date de mise en service et l'état de leurs licences logicielles?"
+  },
+  {
+   "theme": "C",
+   "num": "C.10",
+   "q": "les logiciels installés et utilisés au quotidien sont-ils tous officiellement sous licence valide (absence de logiciels piratés ou crackés)?"
+  },
+  {
+   "theme": "C",
+   "num": "C.11",
+   "q": "lors de la remise d'un PC ou d'un téléphone à un collaborateur, un document formel d'attribution (charte de prêt) est-il signé pour garantir la restitution obligatoire du matériel et des données lors de son départ?"
+  },
+  {
+   "theme": "C",
+   "num": "C.12",
+   "q": "quelle est la règle de nettoyage des dossiers temporaires (dossier Scan par exemple), des répertoires communs…?"
+  },
+  {
+   "theme": "H",
+   "num": "H.1",
+   "q": "quels sont les indicateurs de performance utilisés pour piloter le processus informatique? Sont-ils à jour et analysés?"
+  },
+  {
+   "theme": "H",
+   "num": "H2",
+   "q": "en cas de panne matérielle ou logicielle impactant la production, comment l'incident est-il enregistré, traité et analysé pour éviter qu'il ne se reproduise?"
+  }
+ ]
+}

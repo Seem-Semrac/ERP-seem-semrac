@@ -1,0 +1,64 @@
+# ══════════════════════════════════════════════════════════════
+# INGESTION IA (overlay additif de la stack n8n).
+# Ajoute Ollama (LLM local) et raccorde n8n + Ollama au réseau de la
+# base ERP (erp-seem-semrac) pour que le workflow d'import puisse :
+#   fichier CSV/XLS  ->  Ollama (mapping vers le schéma de la table cible)
+#   ->  table de staging import_staging  ->  validation  ->  insert.
+#
+# Lancer (2 fichiers = merge compose) :
+#   cd docker/n8n
+#   docker compose -f docker-compose.observ.yml -f docker-compose.ai-ingest.yml up -d
+#
+# Puis tirer le modèle (une fois, ~5 Go) :
+#   docker exec -it erp-ollama ollama pull qwen2.5:7b-instruct
+#
+# Éditeur n8n : http://localhost:5678  (importer erp-ingestion-ia.workflow.json)
+# Prérequis GPU : nvidia-container-toolkit installé sur l'hôte. SANS GPU,
+#   retirer le bloc `deploy:` d'ollama ci-dessous → Ollama tourne en CPU.
+# ══════════════════════════════════════════════════════════════
+services:
+  # n8n existe déjà (docker-compose.observ.yml) : on ne fait que le RACCORDER
+  # au réseau de la base ERP, en plus de son réseau par défaut.
+  n8n:
+    networks:
+      - default
+      - erp
+    environment:
+      # URL interne d'Ollama (résolue par le DNS du réseau Docker).
+      OLLAMA_URL: http://erp-ollama:11434
+      # Connexion Postgres (réutilisée par le nœud Postgres du workflow).
+      PGHOST: erp-db
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-postgres}
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requis (cf docker/.env)}
+
+  ollama:
+    container_name: erp-ollama
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama-models:/root/.ollama       # modèles persistés (évite de re-télécharger)
+    networks:
+      - default
+      - erp
+    # CPU par défaut (fonctionne partout). Pour activer le GPU NVIDIA, ajouter en
+    # plus l'overlay docker-compose.ai-ingest.gpu.yml (cf README) — nécessite
+    # nvidia-container-toolkit + un adaptateur GPU réellement exposé à l'hôte.
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  ollama-models:
+
+networks:
+  # Réseau de la stack ERP principale (docker/docker-compose.yml) = là où vit erp-db.
+  erp:
+    name: erp-seem-semrac
+    external: true

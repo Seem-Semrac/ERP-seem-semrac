@@ -1,0 +1,37 @@
+# ══════════════════════════════════════════════════════════════
+# Stack d'OBSERVABILITÉ (opt-in, séparée de la stack ERP principale).
+# n8n surveille les logs + l'état des conteneurs Docker, détecte les
+# incidents, en fait un rapport (triage IA Claude), et — de façon BORNÉE —
+# répare l'infra (redémarrer un conteneur tombé, purger le disque).
+#
+# Lancer :   cd docker/n8n && docker compose -f docker-compose.observ.yml up -d --build
+# Éditeur :  http://localhost:5678   (importer erp-observabilite.workflow.json)
+# ══════════════════════════════════════════════════════════════
+services:
+  n8n:
+    container_name: erp-n8n
+    build:
+      context: ..                      # contexte = docker/ (pour trouver n8n.Dockerfile)
+      dockerfile: n8n.Dockerfile
+    restart: unless-stopped
+    # root : nécessaire pour accéder au socket Docker monté ci-dessous (cf. n8n.Dockerfile).
+    user: root
+    ports:
+      - "5678:5678"
+    environment:
+      GENERIC_TIMEZONE: Europe/Paris
+      N8N_SECURE_COOKIE: "false"        # accès en http://localhost sans TLS (dev local)
+      N8N_RUNNERS_ENABLED: "true"
+      # ── À renseigner (docker/n8n/.env ou export) ──
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}     # clé API Claude (triage IA). Sans elle, le triage est sauté.
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}     # URL webhook (Slack/Discord/Teams…) où poster le rapport.
+      AUTOHEAL_ENABLED: ${AUTOHEAL_ENABLED:-false}  # "true" = autorise la réparation infra bornée. Défaut : rapport seul.
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-opus-4-8}
+    volumes:
+      - n8n-data:/home/node/.n8n
+      # Socket Docker de l'hôte → l'atout central : permet à n8n d'observer et de
+      # (re)démarrer les conteneurs. ⚠ Équivaut à un accès root au Docker de l'hôte.
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  n8n-data:

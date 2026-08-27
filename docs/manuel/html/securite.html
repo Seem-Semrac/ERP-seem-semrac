@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manuel — Sécurité · ERP Seem Semrac</title>
+<link rel="stylesheet" href="manuel.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <div class="brandrow">
+      <div class="logo">SS</div>
+      <div>
+        <div class="co">SEEM · SEMRAC — ERP</div>
+        <div class="eyebrow">Manuel utilisateur</div>
+      </div>
+      <div class="kind">docs/manuel/html</div>
+    </div>
+    <h1>Service <span class="hi">Sécurité</span></h1>
+    <p class="lede">Le service Sécurité regroupe la Santé-Sécurité au Travail (HSE) des deux sites Seem et Semrac : le Document Unique (DUER), les accidents et presqu'accidents, les dotations d'EPI, le risque chimique (FDS + cotation SEIRICH), les vérifications réglementaires (VGP), les formations sécurité et la conformité ISO 45001. Vous y apprendrez à tenir le DUER à jour, à déclarer un événement, à doter un salarié en EPI et à piloter l'inventaire chimique. Le volet environnement (déchets, rejets, ATEX, ISO 14001, RSE) a son propre service : <b>Environnement</b>.</p>
+    <div class="metachips">
+      <span class="chip">👤 Pour qui : <b>Responsable HSE / QSE</b> (écriture via le rôle Qualité ; lecture : BE, Production, OAS, Maintenance, RH)</span>
+      <span class="chip">🧭 Dans l'ERP : <b>Sidebar → Sécurité</b></span>
+      <span class="chip">🗂 <b>9 onglets</b></span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-t">Sommaire</div>
+    <ol>
+      <li><a href="#tab-duer">DUER / Risques</a></li>
+      <li><a href="#tab-evenements">Événements (accidents, actions, flash)</a></li>
+      <li><a href="#tab-epi">EPI (dotations + matrice EPI × zone)</a></li>
+      <li><a href="#tab-chimie">Chimie / FDS (+ SEIRICH + expositions)</a></li>
+      <li><a href="#tab-controles">Contrôles &amp; prévention (VGP, formations, plans)</a></li>
+      <li><a href="#tab-veille">Veille réglementaire (obligations SST)</a></li>
+      <li><a href="#tab-audit">Audit Conformité (ISO 45001)</a></li>
+      <li><a href="#tab-referentiels">Référentiels</a></li>
+      <li><a href="#tab-dashboard">Tableau de bord</a></li>
+    </ol>
+  </nav>
+
+  <div class="note"><b>Bon à savoir (valable dans tout le service) :</b> chaque liste possède son champ <b>« Rechercher… »</b> (filtre instantané) et chaque ligne porte les boutons <b>Modifier</b> (crayon) et <b>Supprimer</b> (poubelle, avec confirmation). Chaque formulaire de saisie propose en bas la case <b>« Soumettre à la validation de la Direction »</b> : si vous la cochez, l'élément part dans la file « À valider » du service Direction, et une fois la décision rendue un badge apparaît sur la ligne concernée. Les onglets qui gèrent des listes affichent un <b>compteur</b> du nombre d'éléments accessibles.</div>
+
+  <!-- ═══════════════ ONGLET 1 : DUER / RISQUES ═══════════════ -->
+  <section class="tab" id="tab-duer">
+    <div class="tab-head"><span class="tab-num">1</span><h2>DUER / Risques</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le <b>Document Unique d'Évaluation des Risques Professionnels</b> (DUERP) de l'entreprise, obligation du Code du travail (art. R.4121-1) : le recensement des dangers <b>par unité de travail</b>, coté et classé par exercice annuel (mise à jour au moins une fois par an, R.4121-2). Les mesures prévues constituent le plan d'action annuel (<b>PAPRIPACT</b>). C'est le point d'entrée de toute la prévention : on y revient après chaque accident, chaque nouvelle machine, chaque nouveau produit chimique.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Un seul grand tableau des risques, précédé d'une barre d'outils : le sélecteur d'exercice <b>« DUERP AAAA »</b> (filtre le tableau sur l'année choisie), le bouton <b>« Imprimer / PDF »</b> (exporte la DUERP de l'exercice au format A4 paysage avec le logo de l'entreprise), le bouton <b>« Générer DUERP N+1 »</b> (reconduction annuelle) et le bouton orange <b>« Nouveau risque »</b>. Colonnes du tableau :</p>
+    <ul class="points">
+      <li><b>Prio</b> — priorité de traitement : <span class="b b-crit">P1</span> (urgent), <span class="b b-warn">P2</span>, <span class="b b-ok">P3</span>.</li>
+      <li><b>Famille</b> — l'une des <b>20 familles de risque INRS ED 840 (2023)</b>, conformité stricte : aucune famille hors nomenclature (chutes de plain-pied, chute de hauteur, circulation interne, produits chimiques, bruit, incendie/explosion, RPS… la liste complète est dans l'onglet Référentiels).</li>
+      <li><b>Unité de travail · Danger</b> — où et quoi (14 unités de travail canoniques : Usinage, Montage, Magasins, Bureaux…).</li>
+      <li><b>G · F · Criticité · Score</b> — gravité (1-4), fréquence (1-4), criticité = gravité × fréquence avec badge couleur (<span class="b b-ok">≤ 4</span>, <span class="b b-warn">5–8</span>, 9–11 orange, <span class="b b-crit">≥ 12</span>) et score brut (méthode Kinney P×F×G×coefficient).</li>
+      <li><b>Responsable · Échéance</b> — le pilote de l'action et sa date limite ; l'échéance passe <span class="b b-crit">en rouge</span> si elle est dépassée, <span class="b b-warn">en jaune</span> si elle tombe dans les 30 jours.</li>
+      <li><b>Statut</b> — <span class="b b-crit">à traiter</span>, <span class="b b-warn">en cours</span>, <span class="b b-ok">maîtrisé</span>.</li>
+      <li><b>Site</b> — Seem ou Semrac.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/securite-duer.png" alt="Capture de l'onglet DUER / Risques" loading="lazy">
+      <figcaption><b>DUER / Risques</b> — le sélecteur d'exercice et les boutons PDF / Générer N+1 en haut, puis le tableau coté avec les badges de priorité et de criticité.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — ajouter un risque au DUER</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Nouveau risque »</b> : la fenêtre « Risque (DUER) » s'ouvre.</li>
+      <li>Renseignez l'<b>année</b> (exercice), choisissez la <b>famille de risque</b> dans la liste ED 840, l'<b>unité de travail</b> (obligatoire, liste suggérée) et décrivez le <b>danger</b> (obligatoire) puis la situation dangereuse.</li>
+      <li>Cotez : <b>gravité</b>, <b>fréquence</b> et <b>maîtrise</b>, chacune de 1 à 4. La criticité et la priorité se déduisent de la cotation.</li>
+      <li>Décrivez les <b>mesures existantes</b> puis les <b>mesures prévues</b> (c'est le plan d'action / PAPRIPACT), nommez un <b>responsable</b> et fixez une <b>échéance</b>.</li>
+      <li>Laissez le statut « À traiter » et enregistrez. Le risque apparaît dans le tableau de l'exercice ; faites-le vivre en le passant « En cours » puis « Maîtrisé » au fil des actions.</li>
+    </ol>
+
+    <h3>Pas à pas — reconduire le DUER pour l'année suivante</h3>
+    <ol class="steps">
+      <li>Sélectionnez l'exercice source dans la liste <b>« DUERP AAAA »</b>.</li>
+      <li>Cliquez sur <b>« Générer DUERP N+1 »</b> et confirmez. Les dangers et leur cotation sont <b>reconduits</b> ; le plan d'action (PAPRIPACT), les statuts et les échéances repartent <b>à zéro</b> pour le nouvel exercice.</li>
+      <li>Un message confirme « DUERP N+1 créé : X risques reconduits ». Sélectionnez le nouvel exercice et mettez à jour cotations et plans d'action lors de la revue annuelle.</li>
+    </ol>
+
+    <h3>Le formulaire « Risque (DUER) » en détail</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+        <tbody>
+          <tr><td>Année (exercice)</td><td>Nombre</td><td>Non</td><td>Exercice DUERP de rattachement (ex. 2026) ; pilote le filtre du sélecteur d'année.</td></tr>
+          <tr><td>Famille de risque</td><td>Liste déroulante</td><td>Non</td><td>Les 20 familles INRS ED 840 (2023), numérotées 1 à 20.</td></tr>
+          <tr><td>Unité de travail</td><td>Texte + suggestions</td><td><b>Oui</b></td><td>14 unités canoniques proposées (Bureaux, Usinage, Montage, Magasins, Maintenance…).</td></tr>
+          <tr><td>Zone / secteur</td><td>Texte + suggestions</td><td>Non</td><td>Secteur physique de l'atelier (Oxydation, Tôlerie, Usinage, Magasin…).</td></tr>
+          <tr><td>Danger</td><td>Texte</td><td><b>Oui</b></td><td>Le danger identifié (ex. projection de copeaux).</td></tr>
+          <tr><td>Risque résiduel</td><td>Texte</td><td>Non</td><td>Ce qui reste après les mesures existantes.</td></tr>
+          <tr><td>Situation dangereuse</td><td>Texte long</td><td>Non</td><td>Description concrète de l'exposition.</td></tr>
+          <tr><td>Gravité / Fréquence / Maîtrise</td><td>Nombres 1-4</td><td>Non</td><td>La cotation ; criticité = gravité × fréquence.</td></tr>
+          <tr><td>Mesures existantes / Mesures prévues</td><td>Texte long</td><td>Non</td><td>Les mesures prévues alimentent le plan d'action (PAPRIPACT).</td></tr>
+          <tr><td>Responsable · Échéance</td><td>Texte · Date</td><td>Non</td><td>Pilote et date limite de l'action.</td></tr>
+          <tr><td>Statut</td><td>À traiter / En cours / Maîtrisé</td><td>Non</td><td>Avancement du traitement du risque.</td></tr>
+          <tr><td>Site</td><td>Seem / Semrac</td><td>Non</td><td>Site concerné.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="shot">
+      <img src="../../assets/form-securite-risque.png" alt="Formulaire de saisie d'un risque DUER" loading="lazy">
+      <figcaption><b>Nouveau risque (DUER)</b> — famille ED 840, unité de travail, cotation 1-4 et plan d'action ; en bas la case « Soumettre à la validation de la Direction ».</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le DUER est recalé <b>strictement</b> sur les 20 familles ED 840 : ne créez pas de famille « libre », rattachez chaque risque à sa famille de danger (brûlure chimique → famille 7, écran → famille 5, travail isolé → famille 17…).</li>
+      <li>La mise à jour est réglementaire : <b>au moins une fois par an</b> et après tout accident ou changement notable.</li>
+      <li>L'export <b>« Imprimer / PDF »</b> reprend l'exercice sélectionné, colonnes réglementaires incluses (mesures existantes, mesures prévues / PAPRIPACT, responsable, échéance) — c'est le document à présenter en cas de contrôle.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> « Générer DUERP N+1 » remet à zéro plan d'action, statuts et échéances du nouvel exercice — l'exercice source, lui, reste intact. Ne lancez la reconduction qu'une fois par an, en fin d'exercice.</div>
+    <div class="astuce"><b>Astuce :</b> l'évaluation du risque chimique (onglet Chimie / FDS, cotation SEIRICH) alimente le volet « Produits chimiques » du DUER : cotez d'abord vos produits, puis reportez les situations « Élevé » comme risques prioritaires du Document Unique.</div>
+  </section>
+
+  <!-- ═══════════════ ONGLET 2 : ÉVÉNEMENTS ═══════════════ -->
+  <section class="tab" id="tab-evenements">
+    <div class="tab-head"><span class="tab-num">2</span><h2>Événements</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le registre unique des événements sécurité, en <b>trois blocs empilés</b> : les <b>accidents &amp; presqu'accidents</b> (déclaration et enquête), les <b>actions correctives &amp; 5 Pourquoi</b> (traitement des causes) et les <b>flash sécurité</b> (alertes diffusées au personnel). Le compteur de l'onglet cumule les trois listes. Tout ce qui se passe sur le terrain se déclare ici — et alimente les indicateurs TF/TG et le schéma corporel du Tableau de bord.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p><b>Bloc 1 — Accidents &amp; presqu'accidents</b> (bouton <b>« Déclarer »</b>). Colonnes : Date · Type (accident du travail, accident de trajet, maladie professionnelle, presqu'accident, situation dangereuse, soin / premiers secours) · Salarié · Partie du corps · Gravité · Arrêt (badge <span class="b b-crit">N j</span> si arrêt, sinon « non ») · Statut · Site. Statuts du circuit d'enquête : <span class="b b-info">nouveau</span> → <span class="b b-warn">enquête</span> → <span class="b b-warn">actions</span> → <span class="b b-mut">clos</span>. Chaque ligne porte en plus un bouton violet (clé-outil) <b>« Créer une action corrective liée »</b>.</p>
+    <p><b>Bloc 2 — Actions correctives &amp; 5 Pourquoi</b> (bouton <b>« Nouvelle action »</b>). Colonnes : N° · Type (<span class="b b-info">AC</span> action corrective, <span class="b b-warn">PAC</span> presque accident, <span class="b b-crit">SD</span> situation dangereuse) · Date · Secteur · Constat · 5 Pourquoi (la chaîne de causes « pourquoi → pourquoi → … », les 3 premiers affichés) · Action(s) d'éradication · Pilote / délai · Statut (<span class="b b-warn">en cours</span>, <span class="b b-ok">soldé</span>, <span class="b b-mut">annulé</span>).</p>
+    <p><b>Bloc 3 — Flash Sécurité</b> (bouton <b>« Nouveau flash »</b>). Colonnes : N° · Date · Secteur · Description du flash · Mesures · Rédacteur · Statut (Diffusé, En cours, Soldé, À supprimer). Un flash est une alerte courte diffusée à l'ensemble du personnel : consigne, situation à risque, retour d'expérience — daté et tracé jusqu'à clôture.</p>
+    <figure class="shot">
+      <img src="../../assets/securite-evenements.png" alt="Capture de l'onglet Événements" loading="lazy">
+      <figcaption><b>Événements</b> — les trois blocs empilés : accidents &amp; presqu'accidents, actions correctives avec la colonne 5 Pourquoi, flash sécurité.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — déclarer un accident ou un presqu'accident</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Déclarer »</b> dans le bloc Accidents &amp; presqu'accidents (la date du jour est préremplie).</li>
+      <li>Choisissez le <b>type</b> d'événement, l'heure, le <b>salarié</b> concerné (liste du personnel), la zone et le poste.</li>
+      <li>Précisez la <b>partie du corps</b> touchée et la <b>nature de la lésion</b> — c'est ce champ « Partie du corps » qui nourrit le schéma corporel du Tableau de bord.</li>
+      <li>Cotez la <b>gravité</b> (Bénin, Léger, Grave, Mortel) ; cochez <b>« Avec arrêt »</b> et saisissez les <b>jours d'arrêt</b> le cas échéant (ils alimentent le taux de gravité TG).</li>
+      <li>Complétez la description, les premiers secours prodigués, les témoins et la <b>date de déclaration CPAM</b> — la déclaration doit partir en <b>moins de 48 h</b> pour un accident du travail.</li>
+      <li>Enregistrez avec le statut <span class="b b-info">Nouveau</span>. Menez ensuite l'enquête (statut <span class="b b-warn">Enquête</span>, champ Analyse des causes), lancez les actions (statut <span class="b b-warn">Actions</span>) puis clôturez (<span class="b b-mut">Clos</span>).</li>
+    </ol>
+
+    <h3>Pas à pas — traiter la cause (action corrective liée)</h3>
+    <ol class="steps">
+      <li>Sur la ligne de l'accident, cliquez sur le bouton violet <b>« Créer une action corrective liée »</b> : le formulaire « Action corrective (AC / PAC / SD) » s'ouvre <b>prérempli</b> (type AC, secteur = zone de l'accident, constat = description + salarié + date). Le lien avec l'accident source est conservé.</li>
+      <li>Menez l'analyse <b>5 Pourquoi</b> : dans le champ « Cause racine (5 Pourquoi) », enchaînez les pourquoi jusqu'à la cause racine.</li>
+      <li>Décrivez l'<b>action d'éradication</b>, nommez le <b>pilote</b>, fixez l'<b>échéance</b>, enregistrez.</li>
+      <li>Quand l'action est faite et son <b>efficacité vérifiée</b> (champ dédié), passez le statut à <span class="b b-ok">Soldé</span>.</li>
+    </ol>
+
+    <h3>Le formulaire « Accident / presqu'accident » en détail</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+        <tbody>
+          <tr><td>Type</td><td>Liste déroulante</td><td>Non</td><td>Accident du travail · Accident de trajet · Maladie professionnelle · Presqu'accident · Situation dangereuse · Soin / premiers secours.</td></tr>
+          <tr><td>Date · Heure</td><td>Date · Texte</td><td>Non</td><td>Date préremplie au jour même.</td></tr>
+          <tr><td>Salarié</td><td>Liste du personnel</td><td>Non</td><td>Liste alimentée par le module RH.</td></tr>
+          <tr><td>Zone / secteur · Poste</td><td>Texte + suggestions</td><td>Non</td><td>Lieu de l'événement (secteurs atelier suggérés).</td></tr>
+          <tr><td>Partie du corps · Nature de la lésion</td><td>Texte</td><td>Non</td><td>La partie du corps alimente le schéma corporel du Tableau de bord.</td></tr>
+          <tr><td>Gravité</td><td>Bénin / Léger / Grave / Mortel</td><td>Non</td><td>Cotation de l'événement.</td></tr>
+          <tr><td>Avec arrêt · Jours d'arrêt</td><td>Case + nombre</td><td>Non</td><td>Alimentent les taux TF (fréquence) et TG (gravité).</td></tr>
+          <tr><td>Témoins · Décl. CPAM le</td><td>Texte · Date</td><td>Non</td><td>Traçabilité de la déclaration (délai légal 48 h).</td></tr>
+          <tr><td>Description · Premiers secours · Analyse des causes · Actions correctives</td><td>Texte long</td><td>Non</td><td>Le récit, les soins, l'enquête et les suites.</td></tr>
+          <tr><td>Responsable · Statut · Site</td><td>Texte · Liste · Seem/Semrac</td><td>Non</td><td>Statuts : Nouveau · Enquête · Actions · Clos.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="shot">
+      <img src="../../assets/form-securite-incident.png" alt="Formulaire de déclaration d'accident" loading="lazy">
+      <figcaption><b>Déclarer un accident</b> — type, salarié, partie du corps, gravité, arrêt et déclaration CPAM.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Déclarez <b>aussi</b> les presqu'accidents et situations dangereuses : ce sont les remontées terrain qui évitent le prochain accident (indicateur dédié au Tableau de bord).</li>
+      <li>Un accident du travail se déclare à la CPAM sous <b>48 h</b> : renseignez la date « Décl. CPAM le » comme preuve.</li>
+      <li>Les <b>jours d'arrêt</b> ne comptent dans le TG que si la case « Avec arrêt » est cochée.</li>
+      <li>Un flash sécurité doit rester <b>court et concret</b> : le fait, la consigne, le rédacteur — puis soldez-le une fois la consigne intégrée.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> passez toujours par le bouton « Créer une action corrective liée » plutôt que par « Nouvelle action » quand l'action découle d'un accident : le préremplissage garde la référence de l'accident source, ce qui trace le lien accident → cause → action.</div>
+  </section>
+
+  <!-- ═══════════════ ONGLET 3 : EPI ═══════════════ -->
+  <section class="tab" id="tab-epi">
+    <div class="tab-head"><span class="tab-num">3</span><h2>EPI</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Deux blocs empilés. Le premier gère les <b>dotations nominatives</b> d'équipements de protection individuelle : qui a reçu quoi, en quelle taille, quand, à quel prix et jusqu'à quelle péremption — c'est la <b>preuve de remise</b> exigée en cas de contrôle ou d'accident. Le second est la <b>matrice EPI × zone</b> : quels équipements sont obligatoires dans quelle zone de l'atelier, complétée des bonnes pratiques sécurité affichées en atelier.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p><b>Bloc 1 — Dotations EPI</b> (boutons <b>« Nouvelle dotation »</b> et <b>« Réappro »</b>, qui ouvre une demande d'achat transmise au service Achats). Colonnes : Salarié · Fourniture / EPI · Taille · Qté · Fournisseur · Marque · Remis le · Péremption (<span class="b b-crit">rouge</span> si dépassée, <span class="b b-warn">jaune</span> si sous 30 jours) · Statut (<span class="b b-ok">en service</span>, <span class="b b-warn">à renouveler</span>, restitué). En dessous, le <b>Catalogue EPI</b> (bouton <b>« Nouvel EPI »</b>) définit les équipements de référence : EPI · Catégorie · Norme EN · Durée de vie (mois) · Réf. stock · Fournisseur.</p>
+    <p><b>Bloc 2 — EPI obligatoires par zone</b> : la matrice croise les 6 EPI de l'atelier (Casque, Lunettes de sécurité, Bouchons d'oreilles, Vêtements de travail, Gants anti-coupure, Chaussures de sécurité) avec les 8 zones physiques (Z1 Dissipation/Tronçonnage, Z2 Oxydation, Z3 Tôlerie, Z4 Bureaux, Z5 Magasin/Expédition, Z6 Collage/Labo, Z7 Montage Puissance, A Allée piétonne). Une coche rouge = EPI obligatoire dans la zone. Suivent les <b>7 bonnes pratiques sécurité</b> (tenue adaptée, chaussures hors zones piéton, protection auditive, lunettes, gants anti-coupure, posture de manutention, demander conseil).</p>
+    <figure class="shot">
+      <img src="../../assets/securite-epi.png" alt="Capture de l'onglet EPI" loading="lazy">
+      <figcaption><b>EPI</b> — les dotations nominatives avec leurs péremptions, le catalogue, puis la matrice EPI × zone et les bonnes pratiques.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — doter un salarié</h3>
+    <ol class="steps">
+      <li>Si l'équipement n'existe pas encore au catalogue, créez-le d'abord (<b>« Nouvel EPI »</b> : désignation, catégorie tête/yeux/audition/voies respiratoires/mains/pieds/corps/antichute, norme EN, durée de vie en mois).</li>
+      <li>Cliquez sur <b>« Nouvelle dotation »</b>, choisissez le <b>salarié</b>, puis l'<b>EPI du catalogue</b> (optionnel) ou saisissez une fourniture libre ; précisez le type (EPI ou Matériel).</li>
+      <li>Renseignez taille, quantité, fournisseur, marque, référence et <b>prix</b> (les prix alimentent l'indicateur « Dépenses EPI/matériel » du Tableau de bord).</li>
+      <li>Saisissez la date de <b>remise</b> (préremplie au jour même) et la <b>péremption</b> ; cochez <b>« Signature obtenue »</b> une fois la fiche de remise signée par le salarié.</li>
+      <li>Enregistrez avec le statut <span class="b b-ok">En service</span>. À l'approche de la péremption, la date passe en jaune puis en rouge et l'EPI compte dans la tuile « EPI à renouveler » du Tableau de bord.</li>
+    </ol>
+
+    <h3>Pas à pas — modifier la matrice EPI × zone</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Modifier la matrice »</b> : les cases deviennent cliquables.</li>
+      <li>Cliquez sur chaque case à changer : la coche « obligatoire » se pose ou se retire.</li>
+      <li>Cliquez sur <b>« Sauvegarder »</b> pour enregistrer d'un coup, ou <b>« Annuler »</b> pour tout abandonner. <b>Rien n'est enregistré tant que vous n'avez pas sauvegardé.</b></li>
+    </ol>
+
+    <h3>Le formulaire « Remise EPI / matériel » en détail</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+        <tbody>
+          <tr><td>Salarié</td><td>Liste du personnel</td><td>Non</td><td>Le bénéficiaire de la dotation.</td></tr>
+          <tr><td>EPI du catalogue (optionnel)</td><td>Liste</td><td>Non</td><td>Relie la dotation à un EPI défini au catalogue (norme, durée de vie).</td></tr>
+          <tr><td>Fourniture / EPI (libre)</td><td>Texte</td><td>Non</td><td>Désignation libre si l'article n'est pas au catalogue.</td></tr>
+          <tr><td>Type</td><td>EPI / Matériel</td><td>Non</td><td>Distingue protection individuelle et matériel remis.</td></tr>
+          <tr><td>Taille · Quantité</td><td>Texte · Nombre</td><td>Non</td><td>Ce qui est réellement remis.</td></tr>
+          <tr><td>Fournisseur · Marque · Référence</td><td>Liste · Texte · Texte</td><td>Non</td><td>Traçabilité de l'achat (le fournisseur vient du référentiel Achats).</td></tr>
+          <tr><td>Prix (€)</td><td>Nombre</td><td>Non</td><td>Valorise la dépense EPI de l'année (Tableau de bord).</td></tr>
+          <tr><td>Remis le · Péremption</td><td>Dates</td><td>Non</td><td>La péremption déclenche l'alerte de renouvellement (≤ 30 j).</td></tr>
+          <tr><td>Signature obtenue</td><td>Case à cocher</td><td>Non</td><td>Preuve de remise signée par le salarié.</td></tr>
+          <tr><td>Statut · Site</td><td>En service / À renouveler / Restitué · Seem/Semrac</td><td>Non</td><td>Cycle de vie de la dotation.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="shot">
+      <img src="../../assets/form-securite-epi.png" alt="Formulaire de dotation EPI" loading="lazy">
+      <figcaption><b>Nouvelle dotation</b> — salarié, EPI du catalogue, taille, prix, dates de remise et de péremption, case signature.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La dotation est <b>nominative</b> : une ligne par salarié et par équipement remis, avec signature — c'est elle qui prouve la remise en cas d'accident.</li>
+      <li>Renseignez systématiquement le <b>prix</b> et le <b>fournisseur</b> : les dotations sans prix et les articles non reliés à un fournisseur sont comptés à part sur le Tableau de bord (« dotation(s) sans prix », « Items sans fournisseur »).</li>
+      <li>Le bouton <b>« Réappro »</b> crée une demande d'achat pré-cadrée côté Achats : utilisez-le dès qu'un stock d'EPI baisse, sans quitter le service.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> en mode édition de la matrice EPI × zone, vos clics ne sont pas enregistrés au fur et à mesure — si vous quittez la page sans cliquer « Sauvegarder », toutes vos modifications sont perdues.</div>
+  </section>
+
+  <!-- ═══════════════ ONGLET 4 : CHIMIE / FDS ═══════════════ -->
+  <section class="tab" id="tab-chimie">
+    <div class="tab-head"><span class="tab-num">4</span><h2>Chimie / FDS</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Trois blocs empilés couvrent tout le risque chimique. D'abord l'<b>inventaire des produits chimiques</b> avec leurs Fiches de Données de Sécurité (FDS, règlement REACH/CLP), pictogrammes et agents CMR. Ensuite la <b>cotation SEIRICH</b> du danger de chaque produit (méthode INRS ND 2233). Enfin l'<b>exposition par situation de travail</b> : le même produit coté là où et comme il est réellement utilisé, sur 3 axes (Santé, Incendie-Explosion avec alerte ATEX, Environnement). C'est la matière première du volet chimique du DUER.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p><b>Bloc 1 — Produits chimiques &amp; FDS</b>, avec trois boutons : <b>« Nouveau produit »</b>, <b>« Pictogrammes »</b> (rappel des pictogrammes CLP/SGH et matrice de compatibilité de stockage : ✗ ne pas stocker ensemble, ● sous conditions, ＋ compatibles) et <b>« Réappro »</b> (demande d'achat). Colonnes : Produit · N° identif. · Réf. produit · Pictos CLP (vignettes) · CMR (badge <span class="b b-crit">rouge</span>) · Quantité · Stockage · FDS (<span class="b b-ok">FDS</span> présente ou <span class="b b-crit">manquante</span>) · Date FDS · Site. Chaque ligne porte quatre actions spécifiques : l'icône <b>fiche produit 360</b> (ouvre la page du produit réunissant danger, cotation SEIRICH, FDS, péremption des lots et stock, avec un PDF fiche produit), l'icône radiation <b>« + exposition SEIRICH »</b> (crée une situation d'exposition préremplie avec ce produit), l'icône PDF <b>« Exporter la fiche FDS »</b> (résumé FDS interne imprimable, avec logo), puis Modifier et Supprimer.</p>
+    <p><b>Bloc 2 — Risque chimique, cotation SEIRICH</b> (bandeau <b>« INDICATIVE — À VALIDER »</b>) : 4 tuiles (Niveau élevé, Niveau moyen, CMR / très toxique, Données incomplètes) puis le tableau : Produit · Dangers (codes H, pictogrammes, badge CMR) · Quantité · Santé · Incendie · Environ. · Priorité. Chaque axe reçoit un niveau <span class="b b-ok">Faible</span>, <span class="b b-warn">Moyen</span> ou <span class="b b-crit">Élevé</span> ; la priorité est le niveau le plus défavorable. Un ⚠ signale les produits sans codes H ni pictogrammes (à compléter dans l'inventaire).</p>
+    <p><b>Bloc 3 — Exposition par situation de travail (SEIRICH intermédiaire)</b> : 4 tuiles (Situations niveau élevé, Niveau moyen, Expositions significatives AES/CMR, Situations ATEX), les boutons <b>« Export SEIRICH »</b> (tableur .xlsx de l'inventaire coté, à recopier dans le logiciel SEIRICH de l'INRS), <b>« Rapport SEIRICH »</b> (rapport PDF d'évaluation en 3 parties : inventaire coté, expositions, plan d'actions) et <b>« Nouvelle exposition »</b>. Colonnes du tableau : Produit (+ badge CMR) · Unité de travail (+ tâche) · Procédé · Protection (+EPI) · Santé · Incendie (+ ⚡ATEX si atmosphère explosive probable) · Environ. · Retenu (le plus défavorable des 3 axes, en gras si exposition significative). Chaque ligne porte un bouton clé-outil <b>« Créer une action corrective (réduire l'exposition) »</b>. En dessous, la <b>matrice produits × unités de travail</b> donne, pour chaque croisement, le niveau retenu le plus élevé.</p>
+    <figure class="shot">
+      <img src="../../assets/securite-chimie.png" alt="Capture de l'onglet Chimie / FDS" loading="lazy">
+      <figcaption><b>Chimie / FDS</b> — l'inventaire avec pictogrammes CLP et statut FDS, puis la cotation SEIRICH des produits et les expositions par situation de travail.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — référencer un produit chimique</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Nouveau produit »</b> et saisissez le nom (obligatoire), le fournisseur, le n° d'identification et la référence produit.</li>
+      <li>Cliquez sur les <b>tuiles de pictogrammes CLP</b> pour sélectionner ceux de l'étiquette (SGH01 à SGH09) et listez les <b>mentions de danger H/P</b> (séparées par des virgules, ex. H226, H315) : ce sont ces données qui alimentent la cotation SEIRICH.</li>
+      <li>Renseignez la catégorie <b>CMR</b> le cas échéant, la VLEP, la référence et la <b>date de la FDS</b> (et son lien URL si elle est numérisée).</li>
+      <li>Précisez la zone de stockage, la rétention, les compatibilités, la quantité détenue et le statut (En stock / En commande / Périmé), puis enregistrez.</li>
+      <li>Le produit apparaît dans l'inventaire <b>et</b> dans le tableau de cotation SEIRICH juste en dessous, avec son niveau calculé automatiquement.</li>
+    </ol>
+
+    <h3>Pas à pas — coter une situation d'exposition (SEIRICH)</h3>
+    <ol class="steps">
+      <li>Depuis l'inventaire, cliquez sur l'icône radiation du produit concerné (formulaire prérempli) ou sur <b>« Nouvelle exposition »</b>.</li>
+      <li>Indiquez l'<b>unité de travail</b> (obligatoire), la zone et la <b>tâche exposante</b> (ex. dégraissage au pinceau).</li>
+      <li>Décrivez la mise en œuvre : <b>procédé</b> (clos en permanence, clos ouvert régulièrement, à l'air libre, dispersif), <b>quantité mise en œuvre</b> et unité, <b>fréquence</b> (occasionnelle à permanente), <b>état physique / volatilité</b>.</li>
+      <li>Renseignez la <b>protection collective</b> (vase clos, captage à la source, ventilation générale, aucune) et les cases : EPI adapté porté, protection non entretenue, fumée/poussière issue de transformation, non utilisé depuis ≥ 1 an, rejet possible vers l'environnement.</li>
+      <li>Enregistrez : la ligne apparaît cotée sur les 3 axes, avec le niveau <b>Retenu</b> et, le cas échéant, l'alerte ⚡ATEX. Les situations « Élevé » remontent en tête de liste.</li>
+      <li>Pour chaque situation Élevé ou CMR, cliquez sur le bouton clé-outil : l'action corrective préremplie rappelle la priorité <b>STOP</b> (Substituer · Technique : capter à la source · Organiser · Protéger par EPI).</li>
+    </ol>
+
+    <h3>Le formulaire « Produit chimique / FDS » en détail</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+        <tbody>
+          <tr><td>Produit</td><td>Texte</td><td><b>Oui</b></td><td>Nom commercial du produit.</td></tr>
+          <tr><td>Fournisseur</td><td>Liste</td><td>Non</td><td>Référentiel fournisseurs (Achats).</td></tr>
+          <tr><td>N° d'identification · Réf. produit</td><td>Texte</td><td>Non</td><td>Identifiants internes (étiquetage, codes).</td></tr>
+          <tr><td>État</td><td>Liquide / Solide / Gaz-aérosol</td><td>Non</td><td>État physique du produit.</td></tr>
+          <tr><td>Pictogrammes CLP</td><td>Tuiles cliquables SGH01-09</td><td>Non</td><td>Cliquer pour sélectionner ; ils s'affichent dans la liste et sur la fiche PDF.</td></tr>
+          <tr><td>Mentions de danger (H/P)</td><td>Liste (virgules)</td><td>Non</td><td>Codes H et P de l'étiquette — la cotation SEIRICH en dépend.</td></tr>
+          <tr><td>CMR (cat.) · VLEP</td><td>Texte</td><td>Non</td><td>Catégorie CMR et valeur limite d'exposition professionnelle.</td></tr>
+          <tr><td>Réf. FDS · Date FDS · Lien FDS (URL)</td><td>Texte · Date · URL</td><td>Non</td><td>Sans réf. ni lien, le produit est marqué « FDS manquante ».</td></tr>
+          <tr><td>Zone de stockage · Rétention · Compatibilités</td><td>Texte · Case · Texte long</td><td>Non</td><td>Conditions de stockage (voir la matrice « Pictogrammes »).</td></tr>
+          <tr><td>Quantité · Unité</td><td>Nombre · Texte</td><td>Non</td><td>Quantité détenue — entre dans la cotation Phase 1.</td></tr>
+          <tr><td>Statut · Site</td><td>En stock / En commande / Périmé · Seem/Semrac</td><td>Non</td><td>Cycle de vie du produit.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="shot">
+      <img src="../../assets/form-securite-chimie.png" alt="Formulaire produit chimique avec pictogrammes CLP" loading="lazy">
+      <figcaption><b>Nouveau produit chimique</b> — les tuiles de pictogrammes CLP cliquables, les mentions H/P et les informations FDS.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La cotation SEIRICH est <b>indicative</b> : cote par défaut (méthode simplifiée INRS ND 2233 / R 409) à faire <b>valider par le référent QHSE</b> et à recouper avec le logiciel SEIRICH de l'INRS — utilisez « Export SEIRICH » pour recopier l'inventaire dans l'outil officiel.</li>
+      <li>Un produit sans codes H ni pictogrammes est marqué <b>⚠ données incomplètes</b> et sa cotation n'est pas fiable : complétez d'abord l'inventaire.</li>
+      <li>Les produits <b>CMR</b> sont prioritaires pour la <b>substitution</b> — le plancher de cotation santé leur est appliqué d'office.</li>
+      <li>Le résumé FDS exporté en PDF est un document <b>interne</b> : la FDS officielle du fournisseur fait foi pour les mesures de prévention et d'urgence.</li>
+      <li>Le niveau retenu d'une exposition dépend de la <b>plus grande quantité utilisée dans l'unité de travail</b> : une même quantité peut donc être cotée différemment selon la zone.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> l'icône « fiche produit 360 » ouvre une page dédiée au produit (<i>/securite/chimique/…</i>) qui réunit danger, cotation SEIRICH, FDS, péremption des lots et stock : c'est la page à consulter avant un achat ou lors d'un audit.</div>
+  </section>
+
+  <!-- ═══════════════ ONGLET 5 : CONTRÔLES & PRÉVENTION ═══════════════ -->
+  <section class="tab" id="tab-controles">
+    <div class="tab-head"><span class="tab-num">5</span><h2>Contrôles &amp; prévention</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Trois blocs empilés pour tout ce qui se planifie et se vérifie : les <b>vérifications générales périodiques</b> (VGP) obligatoires des équipements, les <b>formations sécurité</b> requises par poste (croisées avec les habilitations réellement détenues, module RH) avec les <b>exercices d'évacuation</b>, et les <b>plans de prévention &amp; permis</b> pour les interventions d'entreprises extérieures.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p><b>Bloc 1 — Vérifications périodiques (VGP)</b> (bouton <b>« Nouvelle vérification »</b>) : l'échéancier des contrôles réglementaires — levage, électrique, incendie, ESP (équipements sous pression), portes/portails, racks, ventilation, ATEX. Colonnes : Type · Équipement · Organisme · Contrôle (date) · Prochaine (<span class="b b-crit">rouge</span> si dépassée, <span class="b b-warn">jaune</span> sous 30 jours) · Résultat (<span class="b b-ok">conforme</span>, avec observations, <span class="b b-crit">non conforme</span>) · Statut (<span class="b b-ok">à jour</span>, <span class="b b-warn">à prévoir</span>, <span class="b b-crit">en retard</span>) · Site.</p>
+    <p><b>Bloc 2 — Formations sécurité requises</b> (bouton <b>« Nouveau besoin »</b>) : la matrice des formations obligatoires par poste (accueil, SST, habilitation électrique, CACES, ATEX, gestes &amp; postures…). Colonnes : Poste / famille · Formation · Obligatoire · Périodicité (« N mois » ou « unique ») · Site. Un encart bleu récapitule les certifications et habilitations du module RH et le nombre à renouveler / expirées. Suit la <b>matrice de suivi des formations &amp; habilitations</b> : chaque salarié actif × chaque formation requise pour son poste, avec un symbole par case (✓ valide · ⚠ à renouveler · ⏱ expirée · ✗ manquante · — non requise) et un <b>% de couverture</b> par salarié et global. Puis les <b>Exercices d'évacuation / incendie</b> (bouton <b>« Nouvel exercice »</b>) : Date · Type (évacuation, incendie, POI) · Site · Participants · Durée · Conforme.</p>
+    <p><b>Bloc 3 — Plans de prévention &amp; permis</b> (bouton <b>« Nouveau document »</b>) : plans de prévention (entreprises extérieures, décret 92-158), protocoles de sécurité chargement/déchargement et permis de feu. Colonnes : Type · Entreprise ext. · Opération · Début · Fin · Statut (<span class="b b-warn">en cours</span>, <span class="b b-mut">clos</span>) · Site.</p>
+    <figure class="shot">
+      <img src="../../assets/securite-controles.png" alt="Capture de l'onglet Contrôles et prévention" loading="lazy">
+      <figcaption><b>Contrôles &amp; prévention</b> — l'échéancier VGP avec les échéances colorées, la matrice formations × salariés, les exercices et les plans de prévention.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — enregistrer une vérification périodique (VGP)</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Nouvelle vérification »</b>, choisissez le <b>type</b> (levage, électrique, incendie, ESP, portes/portails, racks, ventilation, ATEX) et nommez l'<b>équipement</b> (obligatoire) ; reliez-le à une <b>machine</b> du parc si elle existe dans l'ERP.</li>
+      <li>Indiquez l'<b>organisme</b> vérificateur, la <b>date du contrôle</b> et la <b>prochaine échéance</b> (ou la périodicité en mois).</li>
+      <li>Saisissez le <b>résultat</b> (Conforme / Avec observations / Non conforme), les <b>levées de réserves</b> éventuelles et le lien vers le rapport.</li>
+      <li>Enregistrez avec le statut adéquat (À jour / À prévoir / En retard). Les VGP dont l'échéance est dépassée comptent dans la tuile <b>« VGP en retard »</b> du Tableau de bord.</li>
+    </ol>
+
+    <h3>Pas à pas — suivre les formations sécurité</h3>
+    <ol class="steps">
+      <li>Déclarez chaque besoin avec <b>« Nouveau besoin »</b> : poste / famille (obligatoire), formation (obligatoire), obligatoire ou non, périodicité de recyclage en mois (vide = formation unique).</li>
+      <li>Consultez la <b>matrice de suivi</b> : elle croise automatiquement ces besoins avec les certifications / habilitations saisies dans <b>RH › Habilitations &amp; Certifications</b> — survolez l'en-tête d'une colonne pour le détail (poste, recyclage).</li>
+      <li>Traitez les ✗ (manquantes) et ⏱ (expirées) en planifiant les formations côté RH : la matrice se met à jour d'elle-même, la couverture remonte.</li>
+      <li>Après chaque exercice d'évacuation ou d'incendie, tracez-le avec <b>« Nouvel exercice »</b> (date, participants, durée, scénario, conformité).</li>
+    </ol>
+
+    <h3>Le formulaire « Vérification périodique (VGP) » en détail</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+        <tbody>
+          <tr><td>Type</td><td>Liste déroulante</td><td>Non</td><td>Levage · Électrique · Incendie · ESP (sous pression) · Portes/portails · Racks · Ventilation · ATEX.</td></tr>
+          <tr><td>Équipement</td><td>Texte</td><td><b>Oui</b></td><td>L'équipement vérifié (pont roulant, armoire électrique…).</td></tr>
+          <tr><td>Machine liée</td><td>Liste du parc machines</td><td>Non</td><td>Relie la VGP à une machine de l'ERP (Production/Maintenance).</td></tr>
+          <tr><td>Organisme</td><td>Texte</td><td>Non</td><td>Organisme de contrôle agréé.</td></tr>
+          <tr><td>Date contrôle · Prochaine échéance · Périodicité (mois)</td><td>Dates · Nombre</td><td>Non</td><td>L'échéancier ; l'échéance dépassée passe en rouge.</td></tr>
+          <tr><td>Résultat</td><td>Conforme / Avec observations / Non conforme</td><td>Non</td><td>Conclusion du rapport de vérification.</td></tr>
+          <tr><td>Levée des réserves</td><td>Texte long</td><td>Non</td><td>Suivi des observations jusqu'à leur levée.</td></tr>
+          <tr><td>Lien rapport (URL)</td><td>URL</td><td>Non</td><td>Rapport numérisé de l'organisme.</td></tr>
+          <tr><td>Statut · Site</td><td>À jour / À prévoir / En retard · Seem/Semrac</td><td>Non</td><td>État de l'échéancier.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="shot">
+      <img src="../../assets/form-securite-vgp.png" alt="Formulaire de vérification périodique VGP" loading="lazy">
+      <figcaption><b>Nouvelle vérification (VGP)</b> — type, équipement, organisme, dates de contrôle et prochaine échéance, résultat.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Les enregistrements réels de formation (dates, organismes, attestations) vivent dans <b>RH › Habilitations &amp; Certifications</b> ; cet onglet définit les <b>besoins</b> par poste et en mesure la couverture.</li>
+      <li>Une VGP « Non conforme » appelle une <b>levée de réserves</b> tracée — ne la passez « À jour » qu'une fois les réserves levées.</li>
+      <li>Un plan de prévention se rédige <b>avant</b> l'intervention de l'entreprise extérieure ; un permis de feu avant tout travail par point chaud.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> la matrice formations reconnaît les intitulés (SST, CACES, habilitation électrique, ATEX, hauteur, gestes &amp; postures, chimique, incendie/évacuation, pontier-élingueur, accueil) : nommez vos besoins avec ces mots-clés pour que le croisement avec les certifications RH se fasse tout seul.</div>
+  </section>
+
+  <!-- ═══════════════ ONGLET 6 : VEILLE RÉGLEMENTAIRE ═══════════════ -->
+  <section class="tab" id="tab-veille">
+    <div class="tab-head"><span class="tab-num">6</span><h2>Veille réglementaire</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le <b>registre des obligations</b> qui s'imposent à l'entreprise en santé-sécurité : Code du travail, REACH-CLP, risque chimique, ISO 45001, ISO 9001, EN 9100. Pour chacune, on dit si elle nous est applicable, où on en est, qui en répond et quand il faut la revérifier. C'est la checklist que l'on présente à l'<b>inspection du travail</b> et à la <b>CARSAT</b>.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Un tableau unique et son bouton <b>« Nouvelle obligation »</b>. Colonnes : <b>Domaine</b> · <b>Obligation</b> · <b>Référence</b> réglementaire · <b>Échéance</b> (surlignée en rouge si dépassée) · <b>Responsable</b> · <b>Statut</b> — <span class="b b-info">à vérifier</span>, <span class="b b-ok">conforme</span>, <span class="b b-warn">partiel</span>, <span class="b b-crit">non conforme</span>.</p>
+    <figure class="shot">
+      <img src="../../assets/securite-veille.png" alt="Capture de l'onglet Veille réglementaire" loading="lazy">
+      <figcaption><b>Veille réglementaire</b> — la matrice de conformité SST : une ligne par obligation, son statut, son responsable et son échéance de revérification.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — tenir la matrice de conformité</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Nouvelle obligation »</b>.</li>
+      <li>Choisissez le <b>domaine</b> (Code du travail, Risque chimique, ISO 45001, ISO 9001, EN 9100), décrivez l'<b>obligation</b> (obligatoire) et sa <b>référence réglementaire</b>.</li>
+      <li>Cochez <b>« Applicable »</b>, positionnez le <b>statut</b> (À vérifier / Conforme / Partiel / Non conforme / Non applicable), datez le <b>dernier contrôle</b> et fixez l'<b>échéance</b> de la prochaine vérification.</li>
+      <li>Nommez un <b>responsable</b> et joignez la <b>preuve</b> (URL du document).</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Les obligations <b>non conformes ou échues</b> alimentent la tuile <b>« Alertes conformité »</b> du Tableau de bord.</li>
+      <li>Chaque obligation gagne à porter une <b>preuve</b> (rapport, registre, attestation) : c'est exactement ce que demandent l'inspection du travail et la CARSAT.</li>
+      <li>La conformité <b>environnementale</b> (ICPE, ISO 14001, ATEX, RSE) ne se gère pas ici : elle est dans le service <b>Environnement</b>, onglet <b>Veille réglementaire</b>, avec la même mécanique.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> passez la matrice en revue à échéances fixes (revue de direction, préparation d'audit) en triant par la colonne Échéance grâce au champ Rechercher — les échues sont surlignées en rouge.</div>
+  </section>
+
+  <!-- ═══════════════ ONGLET 7 : AUDIT CONFORMITÉ ═══════════════ -->
+  <section class="tab" id="tab-audit">
+    <div class="tab-head"><span class="tab-num">7</span><h2>Audit Conformité</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le cycle d'<b>audit interne</b> appliqué à la santé-sécurité : on ordonnance les audits ISO 45001 de l'année, on les réalise, on consigne les écarts et on solde les plans d'action. Cet onglet est <b>identique à celui de la Qualité et de l'Environnement</b> — mêmes quatre sous-onglets, même planning, seul le filtre normatif change (ici l'ISO 45001).</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Une barre de <b>quatre</b> sous-onglets, chacun avec son compteur (sauf <b>Référentiels</b>, qui n'est pas une liste) : <b>Programme</b> · <b>Constats &amp; plans d'action</b> · <b>Grilles</b> · <b>Référentiels</b>. Le bouton actif est bleu, les autres gris ; le contenu change sous la barre sans recharger la page, et <b>Programme</b> s'affiche à l'ouverture.</p>
+    <ul class="points">
+      <li><b>Programme</b> — le planning d'audit interne, <b>commun avec le service Qualité</b> mais <b>filtré sur l'ISO 45001</b> : seules remontent ici les lignes portant ce référentiel ou le <b>thème I</b>, et les compteurs ne comptent que ce périmètre. Écran détaillé au paragraphe suivant.</li>
+      <li><b>Constats &amp; plans d'action</b> — les écarts relevés pendant les audits (<span class="b b-crit">NC</span> ou <span class="b b-warn">Axe</span>) avec leur preuve et l'action décidée. Le bouton <b>« Convertir en NC »</b> bascule un constat dans le cycle 8D de la Qualité.</li>
+      <li><b>Grilles</b> — les questionnaires d'audit <b>qui posent au moins une question de santé-sécurité</b> ; les grilles purement qualité ou informatique ne remontent pas ici. Chaque grille est affichée <b>entière</b> (elle reste le document de terrain, identique au PDF vierge imprimable) et porte un repère <span class="b b-info">N question(s) ISO 45001</span> indiquant ce qui vous concerne. Pour chaque question : libellé, preuve attendue, clause, thème et <b>mode</b> (<span class="b b-ok">AUTO</span> pré-rempli par les sondes de l'ERP, <span class="b b-info">ASSISTÉ</span>, <span class="b b-mut">MANUEL</span>).</li>
+      <li><b>Référentiels</b> — la documentation normative <b>de ce service uniquement</b> : le thème d'audit processus <b>I</b> (santé-sécurité au travail), les thèmes terrain <b>T5, T7, T8, T9</b>, et la grille de conformité clause par clause de l'<b>ISO 45001</b>. Les autres normes du SMI (ISO 9001, EN 9100, ISO 14001, ISO 27001) sont dans <b>Qualité › Audit Conformité › Référentiels</b>, qui reste le hub du système.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/securite-audit.png" alt="Capture de l'onglet Audit Conformité (ISO 45001)" loading="lazy">
+      <figcaption><b>Audit Conformité</b> — les quatre sous-onglets standard, ouverts sur le programme d'audit filtré ISO 45001, planning annuel compris. Exactement la même barre qu'en Qualité et en Environnement.</figcaption>
+    </figure>
+
+    <h3>Le programme d'audit, écran par écran</h3>
+    <p>Le sous-onglet <b>Programme</b> est <b>identique à celui du service Qualité</b> : c'est le même <b>ordonnancement annuel des audits internes (EN 9100 §9.2)</b>, simplement <b>filtré sur le référentiel du service</b> — ici l'ISO 45001. Une ligne créée par la Qualité avec ce référentiel apparaît donc ici, et réciproquement.</p>
+    <ol class="steps">
+      <li><b>Choisissez l'exercice.</b> Les pastilles d'années, en haut à gauche, basculent le programme d'une année sur l'autre ; l'exercice le plus récent est sélectionné à l'ouverture.</li>
+      <li><b>Lisez les quatre indicateurs</b> de l'exercice affiché : <b>Lignes au programme</b>, <b>Taux de réalisation</b>, <b>En retard</b> (date cible passée sans audit réalisé) et <b>Plans d'action soldés</b>. Ils ne comptent que le périmètre du service.</li>
+      <li><b>Servez-vous du planning annuel</b> — les douze mois de l'exercice, une case par jour, colorée selon l'état : <b>bleu</b> = audit programmé, <b>jaune</b> = pas fait (échéance dépassée), <b>rouge</b> = non conforme (NC ouverte), <b>vert</b> = soldé conforme ; une case pâle signifie qu'aucun audit n'est prévu ce jour-là. Cliquez une case occupée pour consulter l'audit ou le <b>déprogrammer</b> ; cliquez une case vide pour y <b>affecter</b> un audit non encore programmé (ou en déplacer un).</li>
+      <li><b>Ajoutez une ligne</b> avec <b>« + Nouvelle ligne »</b> : le formulaire demande le <b>type</b> (processus, poste, flash, procédé spécial, exigence client), la <b>famille</b> de processus, l'<b>entité auditée</b> (obligatoire), les <b>thèmes</b>, les <b>référentiels couverts</b> (cases à cocher), la <b>date cible</b>, le <b>temps estimé</b>, l'<b>auditeur</b>, l'<b>audité principal</b> et la <b>grille associée</b>. Sous le planning, les lignes se rangent dans les tableaux <b>« Audits de processus »</b> et <b>« Audits de poste &amp; flash »</b>.</li>
+      <li><b>Reconduisez le programme</b> en fin d'exercice avec <b>« Reconduire pour <em>année+1</em> »</b> : tout le programme est recopié sur l'année suivante, les dates décalées d'un an et les statuts remis à « planifié ».</li>
+    </ol>
+    <div class="note"><b>Bon à savoir :</b> le planning est <b>partagé avec la Qualité</b> — un seul calendrier pour tout le SMI. Le filtre porte sur le <b>référentiel</b> : une ligne créée depuis cet écran sans cocher l'ISO 45001 (et sans thème I) n'y réapparaîtra pas. Cochez donc toujours le référentiel.</div>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le programme d'audit est <b>partagé</b> avec le service Qualité : une ligne créée ici (référentiel 45001) apparaît aussi dans Qualité › Audit, et réciproquement — un seul planning pour tout le SMI.</li>
+      <li>Les <b>obligations réglementaires</b> ne sont plus dans cet onglet : elles ont leur propre onglet <b>Veille réglementaire</b> (le précédent). L'audit vérifie, la veille recense — deux gestes différents.</li>
+      <li>Cet onglet a <b>exactement la même structure</b> en Qualité, en Sécurité et en Environnement : ce que vous apprenez ici vaut dans les trois services.</li>
+    </ul>
+  </section>
+  <!-- ═══════════════ ONGLET 8 : RÉFÉRENTIELS ═══════════════ -->
+  <section class="tab" id="tab-referentiels">
+    <div class="tab-head"><span class="tab-num">8</span><h2>Référentiels</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est la page de <b>consultation</b> des vocabulaires contrôlés QHSE, partagée entre Qualité et Sécurité : elle garantit que tout le monde emploie les mêmes mots et les mêmes codes dans les formulaires. Aucune saisie ici — on s'y réfère quand on hésite sur un acronyme, une famille de risque ou un code de zone.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Des cartes de référence empilées :</p>
+    <ul class="points">
+      <li><b>Acronymes</b> et <b>Imputation / secteurs</b> (code → service) — le lexique commun QHSE.</li>
+      <li><b>Types de NC, types de défaut, types de cause, décisions qualité, dérogations</b> (AT = Accord Total, AL = Accord Limité, R = Refus) — vocabulaires partagés avec le service Qualité.</li>
+      <li><b>Sécurité</b> — les types d'événements et les secteurs.</li>
+      <li><b>Familles de risque DUER — INRS ED 840 (2023)</b> — les 20 familles, en conformité stricte : aucune famille hors nomenclature.</li>
+      <li><b>Unités de travail (DUER)</b> — les 14 unités canoniques utilisées dans les formulaires.</li>
+      <li><b>Zones atelier</b> (code → secteur : Z1 Dissipation/Tronçonnage … Z7 Montage Puissance, A Allée piétonne) et <b>EPI de l'atelier</b> (les 6 EPI de la matrice).</li>
+      <li><b>Bonnes pratiques sécurité</b> — les 7 consignes affichées en atelier.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/securite-referentiels.png" alt="Capture de l'onglet Référentiels" loading="lazy">
+      <figcaption><b>Référentiels</b> — les cartes de vocabulaires contrôlés QHSE, dont les 20 familles ED 840 et les zones atelier.</figcaption>
+    </figure>
+
+    <h3>Pas à pas</h3>
+    <ol class="steps">
+      <li>Ouvrez l'onglet quand un formulaire vous demande une valeur codée (famille de risque, zone, secteur, type de dérogation…).</li>
+      <li>Repérez la carte correspondante et utilisez la valeur exacte du référentiel dans votre saisie — les listes déroulantes des formulaires reprennent ces mêmes valeurs.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Les acronymes notés « à confirmer » sont <b>déduits</b> : signalez toute correction au référent QHSE.</li>
+      <li>Ces référentiels sont la <b>source unique</b> Qualité / Sécurité : ne pas inventer de variantes dans les champs libres.</li>
+    </ul>
+  </section>
+
+  <!-- ═══════════════ ONGLET 9 : TABLEAU DE BORD ═══════════════ -->
+  <section class="tab" id="tab-dashboard">
+    <div class="tab-head"><span class="tab-num">9</span><h2>Tableau de bord</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> La photographie chiffrée de la sécurité de l'entreprise : accidentologie de l'année, taux réglementaires TF/TG, alertes (EPI, VGP, conformité, FDS) et dépenses. C'est l'onglet à projeter en réunion sécurité ou en revue de direction — tout s'y calcule automatiquement à partir de ce que vous avez saisi dans les autres onglets.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Quatorze tuiles d'indicateurs :</p>
+    <ul class="points">
+      <li><b>Jours sans accident</b> (avec la date du dernier accident du travail) · <b>Accidents de l'année</b> (dont avec arrêt) · <b>Presqu'accidents de l'année</b> (remontées terrain).</li>
+      <li><b>Taux de fréquence (TF)</b> = accidents avec arrêt × 1 000 000 / heures travaillées, et <b>Taux de gravité (TG)</b> = jours d'arrêt × 1 000 / heures travaillées — les heures viennent des pointages du module RH ; sans heures saisies, les taux affichent « — ».</li>
+      <li><b>EPI à renouveler</b> (péremption sous 30 jours ou dépassée) · <b>VGP en retard</b> · <b>Alertes conformité</b> (obligations non conformes ou échues) · <b>FDS manquantes</b> (produits chimiques sans FDS) · <b>Conformité</b> (obligations conformes / total).</li>
+      <li><b>Eau (mois)</b> et <b>Déchets (mois)</b> — mesures environnementales du mois en cours.</li>
+      <li><b>Dépenses EPI/matériel de l'année</b> (somme des prix des dotations, avec rappel des dotations sans prix) · <b>Items sans fournisseur</b> (EPI et produits chimiques à relier au référentiel Achats).</li>
+    </ul>
+    <p>Sous les tuiles, le <b>schéma corporel des accidents</b> : deux silhouettes (face et dos) colorées en dégradé (jaune → rouge) selon le nombre de cas par partie du corps — main/doigts, yeux, oreille, dos/colonne, tête, bras/épaule/coude, jambe/genou, pied/cheville, cou/nuque, tronc — accompagnées du <b>top des localisations</b> et de l'échelle « Moins → Plus ». Il se construit à partir du champ « Partie du corps » des accidents et soins déclarés dans l'onglet Événements.</p>
+    <figure class="shot">
+      <img src="../../assets/securite-dashboard.png" alt="Capture du tableau de bord Sécurité" loading="lazy">
+      <figcaption><b>Tableau de bord</b> — les tuiles TF/TG et alertes en haut, le schéma corporel face/dos avec le top des localisations en dessous.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — préparer la réunion sécurité</h3>
+    <ol class="steps">
+      <li>Vérifiez d'abord les tuiles d'<b>alerte</b> : VGP en retard, EPI à renouveler, alertes conformité, FDS manquantes — chacune renvoie à l'onglet où agir (Contrôles, EPI, Conformité, Chimie).</li>
+      <li>Commentez l'accidentologie : jours sans accident, TF/TG, presqu'accidents — et appuyez-vous sur le <b>schéma corporel</b> pour cibler la prévention (ex. beaucoup de mains → campagne gants).</li>
+      <li>Si TF et TG affichent « — », faites saisir les <b>heures travaillées</b> dans RH › Système de pointage : les taux se calculent dès que des heures existent sur l'année.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le tableau de bord ne se saisit pas : il <b>reflète</b> les autres onglets. Un chiffre faux se corrige à la source (l'événement, la dotation, la VGP…).</li>
+      <li>Les tuiles Eau et Déchets proviennent des mesures environnementales — désormais saisies dans le service <b>Environnement</b>.</li>
+      <li>Le schéma corporel ne compte que les événements dont la <b>partie du corps</b> est renseignée : soignez ce champ à la déclaration.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> la tuile « Items sans fournisseur » est votre checklist de fiabilisation des données : reliez chaque EPI et chaque produit chimique à son fournisseur pour fiabiliser les dépenses et les réapprovisionnements.</div>
+  </section>
+
+  <div class="docnav">
+    <a href="index.html">← Sommaire des manuels</a>
+    <a href="environnement.html">Manuel suivant : Environnement →</a>
+  </div>
+
+  <footer class="doc">
+    ERP Seem Semrac — manuel utilisateur généré depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs). En cas d'écart entre ce manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
+  </footer>
+
+</div>
+</body>
+</html>

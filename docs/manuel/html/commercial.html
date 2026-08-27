@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manuel — Commercial · ERP Seem Semrac</title>
+<link rel="stylesheet" href="manuel.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <div class="brandrow">
+      <div class="logo">SS</div>
+      <div>
+        <div class="co">SEEM · SEMRAC — ERP</div>
+        <div class="eyebrow">Manuel utilisateur</div>
+      </div>
+      <div class="kind">docs/manuel/html</div>
+    </div>
+    <h1>Service <span class="hi">Commercial</span></h1>
+    <p class="lede">Le service Commercial est la porte d'entrée de toutes les affaires : il réceptionne les demandes (site internet ou directes), crée les Demandes de Travaux, transforme les analyses du Bureau d'Études en offres chiffrées, valide les commandes et gère les avoirs. Le fil conducteur est le <b>numéro d'affaire unique</b> : DT-2026-XXXX = OFF-2026-XXXX = CMD-2026-XXXX.</p>
+    <div class="metachips">
+      <span class="chip">👤 Pour qui : <b>Chargé(e) d'affaires / commercial</b></span>
+      <span class="chip">🧭 Dans l'ERP : <b>Sidebar → Commercial</b></span>
+      <span class="chip">🗂 <b>8 onglets</b></span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-t">Sommaire</div>
+    <ol>
+      <li><a href="#tab-site">Demandes site internet</a></li>
+      <li><a href="#tab-dt">DT / Demande travaux</a></li>
+      <li><a href="#tab-offre">Offre (PRC1-D5)</a></li>
+      <li><a href="#tab-avoirs">Avoirs &amp; Commandes P</a></li>
+      <li><a href="#tab-clients">Liste clients</a></li>
+      <li><a href="#tab-cmd">Commandes validées</a></li>
+      <li><a href="#tab-affaires">Affaires (circuit)</a></li>
+      <li><a href="#tab-dashboard">Dashboard Commercial</a></li>
+    </ol>
+  </nav>
+
+  <!-- ══════════ 1. DEMANDES SITE INTERNET ══════════ -->
+  <section class="tab" id="tab-site">
+    <div class="tab-head"><span class="tab-num">1</span><h2>Demandes site internet</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Cet onglet réceptionne en temps réel les demandes envoyées depuis le formulaire « Contactez-nous » du site internet de l'entreprise. C'est souvent le premier contact d'un prospect : le commercial y trie les demandes, les prend en charge, puis les transforme si besoin en Demande de Travaux (onglet suivant).</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Quatre tuiles de comptage en haut de l'écran : <b>Nouvelles</b>, <b>En cours</b>, <b>Traitées</b> et <b>Total</b>. En dessous, le tableau des demandes avec les colonnes : <b>Contact</b> (nom, email et téléphone), <b>Société</b>, <b>Type de demande</b>, <b>Message</b> (aperçu tronqué à 80 caractères), <b>Priorité</b>, <b>Reçu le</b> (date et heure), <b>Statut</b> et <b>Actions</b>. Les statuts possibles : <span class="b b-info">Nouveau</span> <span class="b b-warn">En cours</span> <span class="b b-ok">Traité ✓</span> <span class="b b-mut">Archivé</span>. Tant qu'aucune demande n'est arrivée, l'écran affiche « Aucune demande reçue pour le moment ».</p>
+    <figure class="shot">
+      <img src="../../assets/commercial-site.png" alt="Capture de l'onglet Demandes site internet" loading="lazy">
+      <figcaption><b>Demandes site internet</b> — tuiles de comptage par statut et tableau des demandes reçues depuis le formulaire de contact du site.</figcaption>
+    </figure>
+
+    <h3>Pas à pas</h3>
+    <ol class="steps">
+      <li>Ouvrez <b>Commercial → Demandes site internet</b> (c'est l'onglet affiché par défaut à l'arrivée sur le service).</li>
+      <li>Repérez les demandes au statut <span class="b b-info">Nouveau</span> — la tuile « Nouvelles » vous donne le compte d'un coup d'œil.</li>
+      <li>Lisez le message et les coordonnées du contact, puis cliquez sur le bouton <b>Traiter</b> de la ligne pour prendre la demande en charge.</li>
+      <li>Si la demande débouche sur un chiffrage, passez à l'onglet <b>DT / Demande travaux</b> pour créer la Demande de Travaux correspondante (le client sera créé au passage s'il est nouveau).</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Les demandes arrivent automatiquement : il n'y a rien à saisir ici, uniquement à trier et traiter.</li>
+      <li>La priorité (normal / urgent / critique) est indiquée par une pastille de couleur — traitez d'abord les demandes critiques.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> l'onglet actif est mémorisé dans l'adresse de la page (ex. <code>#dt</code>, <code>#offre</code>) — vous pouvez mettre en favori l'onglet sur lequel vous travaillez le plus.</div>
+  </section>
+
+  <!-- ══════════ 2. DT / DEMANDE TRAVAUX ══════════ -->
+  <section class="tab" id="tab-dt">
+    <div class="tab-head"><span class="tab-num">2</span><h2>DT / Demande travaux</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> La Demande de Travaux (DT) est l'acte de naissance d'une affaire : elle enregistre le client, les pièces demandées (référence, plan, quantités) et les exigences. Sa création attribue le <b>numéro d'affaire unique</b> qui suivra le dossier jusqu'à la facture. Une fois validée, la DT part au Bureau d'Études pour analyse et chiffrage.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>En haut : un champ <b>Rechercher…</b> et le bouton <b>Créer</b> (ouvre le formulaire de nouvelle DT). L'onglet est divisé en deux sous-onglets à bascule, chacun avec son compteur :</p>
+    <h3>Sous-onglet « DT enregistrées non finies »</h3>
+    <p>Les DT en cours de saisie ou en attente de validation. Le tableau affiche : <b>N° Affaire / DT</b>, <b>Client</b>, <b>Pièce(s)</b> (avec quantités), <b>Type</b>, <b>Analyste</b>, <b>Priorité</b>, <b>Statut</b> et <b>Actions</b>. Trois boutons par ligne : <b>Valider</b> (envoie la DT au BE), <b>Modifier</b> (crayon, ouvre la fiche d'édition) et <b>Supprimer</b> (poubelle).</p>
+    <h3>Sous-onglet « DT validées »</h3>
+    <p>Les DT déjà envoyées au BE ou plus avancées dans le circuit. Les statuts que vous y rencontrerez : <span class="b b-warn">En attente analyse BE</span> <span class="b b-info">Nomenclature à faire</span> <span class="b b-info">Dans la liste des offres</span> <span class="b b-ok">Commande créée ✓</span> <span class="b b-crit">Refus</span>. Les lignes validées portent un badge vert « Validée » à la place du bouton Valider, mais restent modifiables (crayon).</p>
+    <figure class="shot">
+      <img src="../../assets/commercial-dt.png" alt="Capture de l'onglet DT / Demande travaux" loading="lazy">
+      <figcaption><b>DT / Demande travaux</b> — sous-onglets « non finies / validées » avec compteurs, et tableau des DT avec statut du circuit.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — créer une DT</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>Créer</b> : le formulaire « Nouvelle DT » s'ouvre. Le <b>N° DT</b> est attribué automatiquement (DT-2026-XXXX) — c'est le futur numéro d'affaire.</li>
+      <li>Recherchez le <b>client</b> dans le champ à autocomplétion. S'il n'existe pas, cliquez sur <b>Nouveau client</b> : un sous-formulaire s'ouvre (raison sociale obligatoire, SIRET, contact, email, téléphone, adresse, mode de facturation) ; le client créé est aussitôt sélectionné.</li>
+      <li>Choisissez la <b>priorité</b> (Normal / Urgent / Critique) et la <b>date besoin</b> du client.</li>
+      <li>Remplissez le premier bloc <b>Produit</b> (voir tableau des champs ci-dessous). Un point important : l'<b>Activité</b> (SEEM/SEMRAC) et le <b>Type de DT</b> se choisissent <b>par produit</b> — un produit peut être « Nouveau produit » et un autre « Produit à jour » dans la même DT.</li>
+      <li>Besoin de chiffrer plusieurs quantités pour la même pièce ? Cliquez sur <b>+ Ajouter une quantité</b> : chaque case quantité donnera sa propre ligne de prix dans l'analyse du BE.</li>
+      <li>Ajoutez d'autres pièces avec <b>Produit supplémentaire</b> si l'affaire en compte plusieurs, puis cliquez sur <b>Créer la DT</b>. Elle apparaît dans « DT enregistrées non finies ».</li>
+    </ol>
+
+    <h3>Pas à pas — valider une DT (envoi au BE)</h3>
+    <ol class="steps">
+      <li>Dans « DT enregistrées non finies », cliquez sur <b>Valider</b> sur la ligne concernée et confirmez.</li>
+      <li>L'ERP oriente automatiquement la DT selon son contenu : s'il y a au moins une pièce nouvelle ou à mettre à jour, elle part dans la file <b>Nomenclatures à créer</b> du BE ; s'il s'agit d'une mise à jour de prix ou de pièces déjà à jour, elle part <b>directement en Analyse DT</b> du BE.</li>
+      <li>La DT bascule dans le sous-onglet « DT validées » avec le statut <span class="b b-warn">En attente analyse BE</span> ou <span class="b b-info">Nomenclature à faire</span>. Quand le BE aura terminé son analyse, l'offre apparaîtra dans l'onglet <b>Offre (PRC1-D5)</b>.</li>
+    </ol>
+
+    <h3>Formulaire « Nouvelle DT » — champ par champ</h3>
+    <figure class="shot">
+      <img src="../../assets/form-commercial-dt.png" alt="Formulaire de création d'une DT" loading="lazy">
+      <figcaption><b>Formulaire Nouvelle DT</b> — en-tête (client, priorité, date) puis un bloc par produit avec ses quantités, son activité, son type et ses exigences.</figcaption>
+    </figure>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+        <tbody>
+          <tr><td>Client</td><td>Recherche / autocomplétion</td><td>Oui</td><td>Client existant, ou création à la volée via « Nouveau client ».</td></tr>
+          <tr><td>N° DT</td><td>Automatique (lecture seule)</td><td>—</td><td>Numéro d'affaire unique DT-AAAA-XXXX, repris par l'offre et la commande.</td></tr>
+          <tr><td>Priorité</td><td>Liste : Normal / Urgent / Critique</td><td>Non</td><td>Pilote la pastille de priorité dans les listes.</td></tr>
+          <tr><td>Date besoin</td><td>Date</td><td>Non</td><td>Date souhaitée par le client.</td></tr>
+          <tr><td>Réf. interne pièce</td><td>Texte (suggestions)</td><td>Oui (par produit)</td><td>N° de nomenclature / référence de la pièce chez nous.</td></tr>
+          <tr><td>Nom du plan</td><td>Texte (suggestions)</td><td>Non</td><td>Ex. PLAN-DISSIP-A24-v3.</td></tr>
+          <tr><td>Réf. pièce client</td><td>Texte (suggestions)</td><td>Non</td><td>Référence de la pièce chez le client (ex. LGR-A-20485).</td></tr>
+          <tr><td>Quantité</td><td>Nombre entier</td><td>Oui (par produit)</td><td>Quantité principale à chiffrer.</td></tr>
+          <tr><td>Quantités supplémentaires</td><td>Une case par quantité (bouton +)</td><td>Non</td><td>Chaque quantité ajoutée aura son propre prix dans l'analyse du BE.</td></tr>
+          <tr><td>Activité</td><td>Liste : SEEM / SEMRAC</td><td>Oui (par produit)</td><td>Site qui produira la pièce.</td></tr>
+          <tr><td>Type de DT</td><td>Liste : Maj prix / Maj produit / Nouveau produit / Produit à jour</td><td>Oui (par produit)</td><td>Détermine le circuit au BE (nomenclature à créer ou analyse directe).</td></tr>
+          <tr><td>Plan — PDF ou STEP</td><td>Fichier (.pdf, .step, .stp)</td><td>Non</td><td>Plan joint au produit, repris par le BE.</td></tr>
+          <tr><td>Exigences normatives</td><td>Cases : ISO 9001, EN 9100, REACH, RoHS, EN 13485</td><td>Non</td><td>Exigences client tracées jusque dans l'offre (bloc traçabilité).</td></tr>
+          <tr><td>Oxydation anodique sulfurique</td><td>Case à cocher</td><td>Non</td><td>Traitement de surface OAS ; ouvre l'option complémentaire ci-dessous.</td></tr>
+          <tr><td>Oxydation noire (en complément)</td><td>Case à cocher</td><td>Non</td><td>Visible uniquement si l'oxydation anodique est cochée.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>À la création : le client est obligatoire, il faut au moins une pièce avec quantité, et chaque produit doit avoir son Activité et son Type de DT — sinon l'enregistrement est refusé avec un message d'erreur.</li>
+      <li><b>Auto-complétion du répertoire</b> : quand vous saisissez une réf. client ou une réf. interne déjà connue, l'ERP relie automatiquement les autres champs vides (réf. interne ↔ réf. client ↔ plan) depuis le répertoire des références clients.</li>
+      <li>Le bouton <b>Modifier</b> ouvre une fenêtre d'édition complète (client, priorité, délai, pièces) ; les modifications sont <b>automatiquement répercutées dans l'analyse DT du Bureau d'Études</b>.</li>
+    </ul>
+    <div class="note"><b>Verrou d'édition :</b> si un collègue est déjà en train de modifier la même DT, l'ERP vous l'indique (« DT en cours d'édition par… ») et bloque l'ouverture — réessayez quand il aura terminé.</div>
+    <div class="warn"><b>Attention :</b> la suppression d'une DT (bouton poubelle) est définitive après confirmation. Ne supprimez jamais une DT déjà partie au BE sans vous coordonner avec lui.</div>
+  </section>
+
+  <!-- ══════════ 3. OFFRE (PRC1-D5) ══════════ -->
+  <section class="tab" id="tab-offre">
+    <div class="tab-head"><span class="tab-num">3</span><h2>Offre (PRC1-D5)</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est ici que le devis prend forme et se joue : les offres générées par le BE après analyse y arrivent « à traiter ». Le commercial fixe la marge, envoie l'offre au client, gère la négociation (versions successives) puis la validation — qui crée automatiquement la commande en Production.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Deux sous-onglets à bascule avec compteurs, et quatre tuiles de pipeline : <b>Offre en attente</b>, <b>Attente réponse client</b>, <b>Acceptées</b>, <b>Annulées</b>.</p>
+    <h3>Sous-onglet « Offres à traiter »</h3>
+    <p>Les offres en statut <span class="b b-warn">Offre en attente</span>, <span class="b b-warn">En attente réponse client</span> ou <span class="b b-info">Négociation</span>. Colonnes du tableau : <b>N° OFF / Affaire</b> (avec badge <b>v2, v3…</b> si l'offre a été révisée en négociation), <b>DT liée</b>, <b>Client</b>, <b>Pièces · CRU · PV</b> (par pièce : coût de revient unitaire et prix de vente calculé avec la marge de l'offre, plus les puces « ×quantité → PV/pièce » pour les chiffrages multi-quantités), <b>Montant HT</b>, <b>Coût revient</b>, <b>Marge</b>, <b>Validité</b>, <b>Statut</b> et <b>Actions</b>. Une pastille <span class="b b-warn">À relancer</span> apparaît sous le statut quand une offre envoyée attend une réponse depuis plus de 7 jours.</p>
+    <h3>Sous-onglet « Offres validées »</h3>
+    <p>Les offres <span class="b b-ok">Acceptée ✓</span> par le client — prêtes à devenir des commandes (ou déjà transformées).</p>
+    <figure class="shot">
+      <img src="../../assets/commercial-offre.png" alt="Capture de l'onglet Offre" loading="lazy">
+      <figcaption><b>Offre (PRC1-D5)</b> — pipeline en tuiles, tableau des offres avec détail CRU/PV par pièce et boutons d'action selon le statut.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — traiter une offre de bout en bout</h3>
+    <ol class="steps">
+      <li>Une offre arrive du BE en statut <span class="b b-warn">Offre en attente</span>. Cliquez sur le bouton <b>Éditer</b> (crayon) : la page d'édition s'ouvre avec, pour chaque produit, le <b>résumé des coûts issu de l'analyse DT</b> (matière, accessoires, MO + machine, sous-traitance, frais généraux par lot, CRU par pièce) et le <b>coefficient de marge</b> à saisir (PV = CRU × coefficient ; le taux de marque, la marge en € et le PV se recalculent en direct). Le tableau interne « COEFFICIENT DE MARGES » est consultable depuis cette page. Les certifications exigées et les avoirs applicables du client y sont rappelés.</li>
+      <li>De retour sur la liste, cliquez sur <b>Envoyer</b> puis confirmez : l'offre passe en <span class="b b-warn">En attente réponse client</span>.</li>
+      <li>Pour transmettre le devis, cliquez sur l'icône <b>PDF</b> : une fenêtre d'impression s'ouvre avec le devis au logo de la société (choisissez « Enregistrer en PDF »).</li>
+      <li><b>Si le client négocie</b> : cliquez sur <b>Négocier</b>, indiquez éventuellement le point à négocier — l'offre est rouverte en révision (nouvelle version v2, v3…) et la page d'édition s'ouvre pour ajuster prix et marge. Le bouton d'envoi devient <b>Renvoyer</b>.</li>
+      <li><b>Si le client accepte</b> : cliquez sur <b>Valider</b>. La fenêtre récapitule montant et marge et propose une <b>date de livraison confirmée</b> (facultative — la Production peut la fixer ensuite). En confirmant : l'offre passe en <span class="b b-ok">Acceptée ✓</span>, la <b>commande est créée</b> (visible en Production « à programmer ») et les <b>avoirs en cours du client sont automatiquement déduits</b>.</li>
+    </ol>
+
+    <h3>Pas à pas — créer une offre manuellement</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>Créer</b> : le formulaire « Nouvelle offre » s'ouvre.</li>
+      <li>Sélectionnez la <b>DT associée</b> (seules les DT au statut « Dans la liste des offres » sont proposées), la <b>date de validité</b> et le <b>montant HT</b> ; le vendeur et le délai de livraison estimé sont facultatifs.</li>
+      <li>Cliquez sur <b>Envoyer l'offre</b>. Le numéro d'offre reprend le numéro d'affaire de la DT.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li><b>Marge = taux de marque</b> : (PV − PR) / PV. Le coefficient multiplicateur est la référence : ×2 → 50 %, ×2,5 → 60 %, ×3,05 → 67 %.</li>
+      <li>Le PV affiché dans la colonne « Pièces · CRU · PV » est calculé avec la <b>marge de l'offre</b> (fixée par le commercial), pas avec une marge d'analyse.</li>
+      <li>La validation d'une offre est <b>idempotente</b> : si la commande existe déjà, l'ERP le signale (« déjà créée ») sans créer de doublon.</li>
+      <li>Une offre déjà envoyée n'a plus de bouton « Envoyer » : seuls <b>Valider</b>, <b>Négocier</b>, le PDF, l'édition et la suppression restent disponibles.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> surveillez les pastilles <span class="b b-warn">À relancer</span> — plus de 7 jours sans réponse client, c'est le moment de rappeler.</div>
+    <div class="warn"><b>Attention :</b> pour le devis PDF, votre navigateur doit autoriser les fenêtres pop-up ; sinon l'ERP vous le signale et rien ne s'ouvre.</div>
+  </section>
+
+  <!-- ══════════ 4. AVOIRS & COMMANDES P ══════════ -->
+  <section class="tab" id="tab-avoirs">
+    <div class="tab-head"><span class="tab-num">4</span><h2>Avoirs &amp; Commandes P</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Cet onglet regroupe deux suites du service après-vente : les <b>avoirs</b> accordés aux clients (avances, retours, gestes commerciaux) et les <b>commandes prioritaires</b> (Commandes P) issues des retours clients acceptés en refabrication côté Qualité. Les avoirs sont ensuite déduits automatiquement des factures ou de la commande suivante.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Deux sous-onglets à bascule : <b>Avoirs</b> (avec compteur) et <b>Commandes P</b> (compteur des commandes restant à lancer).</p>
+    <h3>Sous-onglet « Avoirs »</h3>
+    <p>Quatre tuiles : <b>Avoirs actifs</b>, <b>Partiels</b>, <b>Clôturés</b>, <b>Total</b>. Le tableau liste : <b>N° Avoir</b>, <b>Client</b>, <b>Motif</b>, <b>Montant</b>, <b>Solde</b> (restant à consommer, en vert s'il est positif), <b>Date</b>, <b>Saisi par</b>, <b>Statut</b> — <span class="b b-ok">Actif</span> <span class="b b-warn">Partiel</span> <span class="b b-mut">Clôturé</span>, complété le cas échéant du badge de décision Direction — et <b>Actions</b> (modifier / supprimer).</p>
+    <figure class="shot">
+      <img src="../../assets/commercial-avoirs.png" alt="Capture du sous-onglet Avoirs" loading="lazy">
+      <figcaption><b>Avoirs</b> — tuiles par statut et liste des avoirs avec montant, solde restant et suivi de qui a saisi.</figcaption>
+    </figure>
+    <h3>Sous-onglet « Commandes P »</h3>
+    <p>Le bandeau rappelle le circuit : un retour client accepté en relance (Qualité → NC client → « Retour ») crée une commande prioritaire numérotée <b>CMDP-AAAA-XX</b> sur l'affaire d'origine. Le tableau affiche : <b>N° Commande P</b>, <b>Client</b>, <b>Réf. / Désignation</b>, <b>Qté</b>, <b>Coût revient unit.</b> (ou la mention « à chiffrer »), <b>Montant estimé</b>, <b>NC origine</b>, <b>Statut</b> — <span class="b b-warn">À faire</span> ou <span class="b b-ok">Lancée</span> —, <b>Date</b> et l'action <b>Lancer la production</b>.</p>
+    <figure class="shot">
+      <img src="../../assets/commercial-avoirs-cmdp.png" alt="Capture du sous-onglet Commandes P" loading="lazy">
+      <figcaption><b>Commandes P</b> — commandes prioritaires issues des retours clients, avec leur NC d'origine et le bouton de lancement en production.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — émettre un avoir</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>Créer</b> : le formulaire « Nouvel avoir » s'ouvre.</li>
+      <li>Sélectionnez le <b>client</b> et le <b>type d'avoir</b> : <b>Avance</b> (matière / outil / consignation — saisie par le Commercial) ou <b>Réclamation</b> (réservée au service Qualité).</li>
+      <li>Choisissez la <b>restitution</b> : « Déduire d'une facture en cours » ou « Déduire de la commande suivante » (l'avoir sera alors proposé automatiquement à la prochaine offre du client).</li>
+      <li>Facultatif : <b>chargez une facture client</b> (cela renseigne automatiquement l'affaire et sélectionne le client) et/ou <b>rattachez l'avoir à une affaire</b>. Un aperçu du numéro s'affiche : <b>AV-AAAA-&lt;affaire&gt;</b> si rattaché, <b>AVL-AAAA-…</b> (libre, incrémental) sinon.</li>
+      <li>Saisissez le <b>montant</b>, la <b>date</b> et le <b>motif</b>. Si nécessaire, cochez « <b>Soumettre cet avoir à la validation de la Direction</b> » — il apparaîtra alors dans la file « À valider » du service Direction.</li>
+      <li>Cliquez sur <b>Émettre l'avoir</b>. Il apparaît dans la liste en <span class="b b-ok">Actif</span> ; son solde diminuera au fil des déductions jusqu'à <span class="b b-mut">Clôturé</span>.</li>
+    </ol>
+
+    <h3>Pas à pas — lancer une commande prioritaire</h3>
+    <ol class="steps">
+      <li>Ouvrez le sous-onglet <b>Commandes P</b> et repérez les lignes <span class="b b-warn">À faire</span>.</li>
+      <li>Cliquez sur <b>Lancer la production</b> puis confirmez : l'ERP crée la commande prioritaire, un lot <b>LOTP</b> et les bons de travail <b>BDTP/BDSP</b>, qui apparaissent <b>encadrés en rouge</b> dans le planning de Production.</li>
+      <li>La ligne passe en <span class="b b-ok">Lancée</span> avec le numéro de la commande créée. Le suivi se poursuit côté Production.</li>
+    </ol>
+
+    <h3>Formulaire « Nouvel avoir » — champ par champ</h3>
+    <figure class="shot">
+      <img src="../../assets/form-commercial-avoir.png" alt="Formulaire de création d'un avoir" loading="lazy">
+      <figcaption><b>Formulaire Nouvel avoir</b> — type, mode de restitution, rattachement à une facture ou une affaire, et case de validation Direction.</figcaption>
+    </figure>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+        <tbody>
+          <tr><td>Client</td><td>Liste des clients</td><td>Oui</td><td>Bénéficiaire de l'avoir (rempli automatiquement si une facture est chargée).</td></tr>
+          <tr><td>Type d'avoir</td><td>Liste : Avance / Réclamation</td><td>Oui</td><td>Avance = Commercial ; Réclamation = circuit Qualité.</td></tr>
+          <tr><td>Restitution de l'avoir</td><td>Liste : facture en cours / commande suivante</td><td>Oui</td><td>« Commande suivante » = proposé automatiquement à la prochaine offre.</td></tr>
+          <tr><td>Origine</td><td>Liste : Commercial-avance / Achat de matière / Non-conformité</td><td>Non</td><td>« Achat de matière » ouvre le bloc de liaison des factures.</td></tr>
+          <tr><td>Facture d'affaire interne (cible)</td><td>Liste des factures</td><td>Non</td><td>Visible si origine = matière : facture sur laquelle l'avoir sera déduit.</td></tr>
+          <tr><td>Charger une facture client</td><td>Liste des factures</td><td>Non</td><td>Renseigne automatiquement l'affaire et le client.</td></tr>
+          <tr><td>Rattacher à une affaire</td><td>N° d'affaire (suggestions)</td><td>Non</td><td>Vide = avoir libre AVL-AAAA-… ; rempli = AV-AAAA-&lt;affaire&gt;.</td></tr>
+          <tr><td>Montant (€)</td><td>Nombre</td><td>Oui</td><td>Montant de l'avoir (doit être supérieur à 0).</td></tr>
+          <tr><td>Date de l'avoir</td><td>Date</td><td>Oui</td><td>Date d'émission.</td></tr>
+          <tr><td>Motif / Description</td><td>Texte libre</td><td>Oui</td><td>Justification de l'avoir.</td></tr>
+          <tr><td>Validation Direction</td><td>Case à cocher</td><td>Non</td><td>Soumet l'avoir à la file de validation de la Direction.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li><b>Avoir = prix de vente</b> des pièces retournées (AV-AAAA-XX) ; <b>Commande P = coût de revient</b> (CMDP-AAAA-XX) : deux logiques différentes pour le même retour client.</li>
+      <li>Le bouton <b>Modifier</b> d'un avoir rouvre le même formulaire pré-rempli (titre « Modifier l'avoir ») ; l'enregistrement met à jour l'avoir existant.</li>
+      <li>Les avoirs « à déduire de la commande suivante » sont proposés automatiquement dans la page d'édition d'offre du même client.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> le lancement d'une commande prioritaire crée immédiatement lot et bons de travail prioritaires dans le planning — assurez-vous que le coût de revient est chiffré et que la décision de refabrication est actée côté Qualité.</div>
+  </section>
+
+  <!-- ══════════ 5. LISTE CLIENTS ══════════ -->
+  <section class="tab" id="tab-clients">
+    <div class="tab-head"><span class="tab-num">5</span><h2>Liste clients</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Le référentiel clients de l'entreprise : identité, contacts multiples, adresses, mode de règlement, et le chiffre d'affaires facturé par client. C'est ici que l'on crée et met à jour les fiches ; les informations sont propagées automatiquement aux DT, offres et commandes.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>En haut : le compteur de clients, l'outil de <b>sélection multiple</b> (suppression groupée), une <b>recherche ciblée</b> par champ (Raison sociale, Contact, Email, Téléphone, Mode facturation, SIRET), le bouton <b>Exporter (Excel)</b> — tous les clients et les produits qu'ils ont commandés, avec feuille Données et feuille TCD — et le bouton <b>Nouveau client</b>.</p>
+    <p>Une barre de filtres <b>Activité</b> (Tous / SEEM / SEMRAC / SEEM &amp; SEMRAC, chacun avec son compte) et des boutons de <b>tri</b> : A → Z, CA de l'année en cours, CA total (le CA est le chiffre d'affaires <b>facturé HT</b>). Le tableau affiche : <b>Raison sociale</b> (avec l'identifiant), <b>Contact</b> (et sa fonction), <b>Email</b>, <b>Téléphone</b>, <b>Mode facturation</b>, <b>SIRET</b>, <b>CA année</b>, <b>CA total</b>, <b>Crédits</b> (pastille orange si le client a un avoir en cours) et <b>Actions</b> (crayon Modifier / poubelle Supprimer). Un clic n'importe où sur la ligne ouvre la <b>fiche client</b>.</p>
+    <figure class="shot">
+      <img src="../../assets/commercial-clients.png" alt="Capture de l'onglet Liste clients" loading="lazy">
+      <figcaption><b>Liste clients</b> — filtres par activité, tris par CA, colonnes de CA facturé et accès à la fiche client d'un clic sur la ligne.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — créer ou modifier un client</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>Nouveau client</b> (ou sur le crayon d'une ligne existante) : la fenêtre client s'ouvre.</li>
+      <li>Saisissez la <b>raison sociale</b> (seul champ obligatoire). Astuce : saisissez d'abord le <b>N° TVA intracommunautaire</b> — le <b>SIRET</b> se remplit automatiquement (retrait du préfixe pays et des espaces).</li>
+      <li>Choisissez le <b>mode de règlement</b> (Proforma, Virement 30/45/60 j, 30/45/60 j net ou fin de mois, Traite 30 j) : il sera appliqué par défaut aux factures de ce client.</li>
+      <li>Ajoutez les <b>contacts</b> (nom, fonction, email, téléphone) avec « Ajouter un contact » ; cochez la puce ◉ du contact <b>principal</b>.</li>
+      <li>Renseignez l'<b>adresse postale</b> (rue, code postal, ville). Si la facturation part ailleurs, cochez « <b>Adresse de facturation différente</b> » et complétez le bloc dédié.</li>
+      <li>Cliquez sur <b>Créer le client</b> (ou <b>Enregistrer</b> en modification).</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-commercial-client.png" alt="Formulaire de création / modification d'une fiche client" loading="lazy">
+      <figcaption><b>Fenêtre client</b> — seule la <b>raison sociale</b> est obligatoire ; le N° TVA intracommunautaire remplit le SIRET automatiquement, le mode de règlement devient le défaut des factures, et les blocs <b>contacts</b> (avec la puce du contact principal) &amp; <b>adresse</b> (option « adresse de facturation différente ») se déplient à la demande. À l'enregistrement, la fiche est immédiatement disponible dans les DT, offres et commandes.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — consulter la fiche client</h3>
+    <ol class="steps">
+      <li>Cliquez sur la ligne du client : la fiche s'ouvre avec l'identité complète (contact principal, email, adresse, SIRET, TVA, mode de règlement, mode de livraison).</li>
+      <li>Le bloc <b>Pilotage 360</b> montre : CA facturé, encours impayé, marge cumulée, offres gagnées / perdues et crédit, puis les tableaux Commandes et Factures.</li>
+      <li>Le tableau <b>Produits achetés par ce client</b> croise réf. interne ↔ réf. client ↔ désignation ↔ plan (ouvrable d'un clic s'il est en GED) ↔ affaires rattachées : chaque numéro d'affaire est cliquable vers sa fiche.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le CA affiché est le chiffre d'affaires <b>facturé</b> (HT) : un client sans facture affiche « — » même s'il a des commandes en cours.</li>
+      <li>La modification d'un client est protégée par le <b>verrou d'édition</b> : si un collègue édite déjà la fiche, vous êtes prévenu et devez attendre.</li>
+      <li>Les filtres Activité et la recherche se cumulent : vous pouvez chercher « virement » dans le mode de facturation en n'affichant que les clients SEEM.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> la suppression d'un client (individuelle ou groupée) est définitive après confirmation. Vérifiez qu'aucune affaire en cours ne lui est rattachée.</div>
+  </section>
+
+  <!-- ══════════ 6. COMMANDES VALIDÉES ══════════ -->
+  <section class="tab" id="tab-cmd">
+    <div class="tab-head"><span class="tab-num">6</span><h2>Commandes validées</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> La vue de contrôle du carnet de commandes : toutes les commandes clients validées des <b>365 derniers jours</b>, avec leur montant, leur date de livraison et leur état d'avancement. C'est un onglet de consultation — la commande naît de la validation d'une offre (onglet Offre), pas d'une saisie directe ici.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Le compteur de commandes sur un an, une <b>recherche ciblée</b> (Client, Pièce(s), Statut, N° affaire) et le tableau : <b>N° CMD / Affaire</b>, <b>Client</b>, <b>Pièce(s)</b>, <b>Montant</b>, <b>Date CMD</b>, <b>Livraison</b> et <b>Statut</b>. Les statuts de commande : <span class="b b-warn">À programmer</span> <span class="b b-info">Attente prépa</span> <span class="b b-info">Attente matière</span> <span class="b b-ok">En production</span> <span class="b b-info">À expédier</span> <span class="b b-ok">Expédié ✓</span> <span class="b b-crit">Annulé</span>.</p>
+    <figure class="shot">
+      <img src="../../assets/commercial-cmd.png" alt="Capture de l'onglet Commandes validées" loading="lazy">
+      <figcaption><b>Commandes validées</b> — carnet de commandes sur 365 jours avec statut d'avancement de chaque commande.</figcaption>
+    </figure>
+
+    <h3>Pas à pas</h3>
+    <ol class="steps">
+      <li>Utilisez la recherche ciblée pour retrouver une commande : choisissez le champ (ex. « N° affaire ») puis tapez votre critère — la liste se filtre en direct.</li>
+      <li>Lisez le statut pour connaître l'étape en cours ; pour le détail production (lots, BDT, coûts), ouvrez l'affaire correspondante dans l'onglet <b>Affaires (circuit)</b>.</li>
+      <li>Si un client demande où en est sa commande, la colonne <b>Livraison</b> donne la date confirmée (ou « — » si la Production ne l'a pas encore fixée).</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La liste est limitée aux 365 derniers jours pour rester lisible ; les commandes plus anciennes restent consultables via la fiche affaire.</li>
+      <li>Le numéro de commande reprend le numéro d'affaire : CMD-2026-XXXX = OFF-2026-XXXX = DT-2026-XXXX.</li>
+    </ul>
+    <div class="note"><b>Bon à savoir :</b> l'avancement fin (BDT soldés, coûts réels, marge) se consulte dans la fiche affaire ou côté Production — cet onglet donne la photo commerciale du carnet.</div>
+  </section>
+
+  <!-- ══════════ 7. AFFAIRES (CIRCUIT) ══════════ -->
+  <section class="tab" id="tab-affaires">
+    <div class="tab-head"><span class="tab-num">7</span><h2>Affaires (circuit)</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> La vue « dossier » du Commercial : chaque numéro d'affaire regroupe tout son circuit — DT → offre → commande → production → livraison → facturation. En un tableau, vous voyez où en est chaque affaire ; en un clic, vous ouvrez sa fiche 360 complète.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Le tableau des affaires, triées de la plus récente à la plus ancienne : <b>N° Affaire</b>, <b>Client</b>, <b>Circuit</b> (trois pastilles DT / Offre / Commande, colorées si l'étape existe, grisées sinon), <b>Montant</b> (celui de la commande, sinon de l'offre), <b>Statut</b> (le plus avancé du circuit) et le bouton <b>Ouvrir</b>.</p>
+    <figure class="shot">
+      <img src="../../assets/commercial-affaires.png" alt="Capture de l'onglet Affaires" loading="lazy">
+      <figcaption><b>Affaires (circuit)</b> — une ligne par numéro d'affaire avec les pastilles d'avancement DT / Offre / Commande.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — exploiter la fiche affaire 360</h3>
+    <ol class="steps">
+      <li>Cliquez sur une ligne (ou sur <b>Ouvrir</b>) : la fiche « Affaire N° … » s'ouvre.</li>
+      <li>En tête, le bloc <b>Pilotage 360</b> : montant offre, montant commande, CA facturé, coût de revient, marge (en € et en %) et avancement (BDT soldés / total). Juste dessous, le <b>chemin de l'affaire</b> en 6 étapes : DT, Offre, Commande, Production, Livraison, Facturation — chaque étape s'allume quand elle est franchie.</li>
+      <li>Descendez pour le détail, tableau par tableau : demandes de travaux, offres, commandes, lots de production, bons de travail avec opérateurs et temps, matières consommées, bons de livraison, factures, PV de contrôle, non-conformités et avoirs liés. Les liens « Analyse », « Éditer », « Suivi » renvoient directement vers le BE, l'édition d'offre ou le suivi de production.</li>
+      <li>Le bouton « Retour aux affaires » vous ramène à la liste.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>L'affaire agrège tout ce qui porte le même numéro d'affaire : c'est le fil conducteur de l'ERP — d'où l'importance de ne jamais créer d'offre ou de commande « hors DT ».</li>
+      <li>Si une affaire n'a ni DT, ni offre, ni commande, la fiche l'indique clairement (« Aucune donnée trouvée »).</li>
+      <li>La marge affichée est calculée sur le CA facturé quand il existe, sinon sur le budget : elle s'affine au fil de la vie de l'affaire.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> la fiche affaire est le meilleur écran à ouvrir pendant un appel client — tout le dossier y est, de la demande initiale à la facture.</div>
+  </section>
+
+  <!-- ══════════ 8. DASHBOARD COMMERCIAL ══════════ -->
+  <section class="tab" id="tab-dashboard">
+    <div class="tab-head"><span class="tab-num">8</span><h2>Dashboard Commercial</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Le tableau de bord de pilotage du service : chiffre d'affaires commandé, charge du pipeline (DT chez le BE, offres sans réponse, commandes à programmer) et poids des avoirs actifs. Il se calcule en direct sur les données réelles du service.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Quatre indicateurs en tuiles : <b>CA commandé</b> du mois en cours (avec le cumul annuel en sous-titre), <b>DT en attente BE</b> (à analyser), <b>Offres en cours</b> (sans réponse client) et <b>Avoirs actifs</b> (montant total et nombre). En dessous : le graphique en barres <b>CA commandé mensuel</b> de l'année (un mois par ligne jusqu'au mois courant, avec le total cumulé), le bloc <b>Top Clients</b>, puis le <b>Pipeline Commercial</b> en trois colonnes — DT en attente BE, Offres en attente de réponse, Commandes à programmer — chaque affaire y figurant sous forme de carte (numéro + client).</p>
+    <figure class="shot">
+      <img src="../../assets/commercial-dashboard.png" alt="Capture du Dashboard Commercial" loading="lazy">
+      <figcaption><b>Dashboard Commercial</b> — KPI du mois, CA mensuel de l'année et pipeline des affaires en cours en trois colonnes.</figcaption>
+    </figure>
+
+    <h3>Pas à pas</h3>
+    <ol class="steps">
+      <li>Commencez la journée par ce tableau de bord : les trois colonnes du pipeline vous disent immédiatement où agir (relancer le BE, relancer un client, pousser une commande vers la programmation).</li>
+      <li>Comparez le CA du mois au cumul annuel pour situer votre progression ; le graphique mensuel montre la saisonnalité.</li>
+      <li>Surveillez la tuile <b>Avoirs actifs</b> : un montant qui grimpe signale des retours ou avances à solder.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le CA de ce tableau de bord est le CA <b>commandé</b> (montants des commandes validées de l'année), à distinguer du CA <b>facturé</b> affiché dans la Liste clients.</li>
+      <li>Un tableau de bord Commercial plus complet et filtrable existe aussi dans le service <b>Tableaux de bord</b> de la sidebar.</li>
+    </ul>
+    <div class="note"><b>Bon à savoir :</b> les compteurs affichés sur les onglets du service (badges) reprennent les mêmes chiffres : nombre de demandes site, de DT, d'offres à traiter, d'avoirs, de clients, de commandes et d'affaires.</div>
+  </section>
+
+  <div class="docnav">
+    <a href="index.html">← Sommaire des manuels</a>
+    <a href="be.html">Bureau d'Études →</a>
+  </div>
+
+  <footer class="doc">
+    ERP Seem Semrac — manuel utilisateur généré depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs). En cas d'écart entre ce manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
+  </footer>
+
+</div>
+</body>
+</html>

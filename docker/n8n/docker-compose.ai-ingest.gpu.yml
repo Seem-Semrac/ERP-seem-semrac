@@ -1,0 +1,19 @@
+# ══════════════════════════════════════════════════════════════
+# Overlay GPU (opt-in) — à ajouter APRÈS docker-compose.ai-ingest.yml.
+# Prérequis : nvidia-container-toolkit installé + un GPU NVIDIA réellement
+# exposé à l'hôte Docker (`docker run --rm --gpus all nvidia/cuda:12-base nvidia-smi`
+# doit fonctionner). Sinon Ollama tourne en CPU sans cet overlay.
+#
+#   docker compose -f docker-compose.observ.yml \
+#     -f docker-compose.ai-ingest.yml \
+#     -f docker-compose.ai-ingest.gpu.yml --env-file ../.env up -d
+# ══════════════════════════════════════════════════════════════
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

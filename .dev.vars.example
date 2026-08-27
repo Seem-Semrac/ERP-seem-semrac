@@ -1,0 +1,11 @@
+# Variables SECRÈTES pour le développement local (wrangler pages dev).
+# Copiez ce fichier en `.dev.vars` (déjà gitignored) et mettez vos valeurs.
+# En PRODUCTION, ces valeurs sont posées comme SECRETS Pages (voir DEPLOY.md), PAS ici.
+
+# Secret de signature des sessions JWT (obligatoire quand AUTH_ENFORCE=on).
+# Générer un secret fort : `openssl rand -base64 48`  (ou Node : require('crypto').randomBytes(48).toString('base64'))
+JWT_SECRET="mettez-un-secret-fort-different-de-la-prod"
+
+# Compte de secours anti-verrouillage (pour se connecter et créer les premiers comptes).
+BOOTSTRAP_MATRICULE="ADMIN"
+BOOTSTRAP_PIN="0000"

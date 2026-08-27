@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manuel — Production · ERP Seem Semrac</title>
+<link rel="stylesheet" href="manuel.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <div class="brandrow">
+      <div class="logo">SS</div>
+      <div>
+        <div class="co">SEEM · SEMRAC — ERP</div>
+        <div class="eyebrow">Manuel utilisateur</div>
+      </div>
+      <div class="kind">docs/manuel/html</div>
+    </div>
+    <h1>Service <span class="hi">Production</span></h1>
+    <p class="lede">La Production planifie la fabrication et en trace l'exécution : les commandes clients sont découpées en lots, chaque lot en BDT (bons de travail, réalisés à l'atelier) et en BST/BDS (bons de sous-traitance, envoyés chez un prestataire). Un <b>planning unique</b> (page « Production », par poste de travail) porte les deux Gantt — <b>BDT</b> à l'atelier et <b>BST</b> chez les sous-traitants — ainsi que l'affectation des opérateurs aux postes par créneau. Ce manuel le couvre, plus la présence, les commandes &amp; lots, les postes/machines et les deux dashboards.</p>
+    <div class="metachips">
+      <span class="chip">👤 Pour qui : <b>Programmation (Sylvie) · chefs d'atelier · opérateurs</b></span>
+      <span class="chip">🧭 Dans l'ERP : <b>Sidebar → Production</b></span>
+      <span class="chip">🗂 <b>7 onglets</b></span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-t">Sommaire</div>
+    <ol>
+      <li><a href="#tab-gantt-bdt">Planning Gantt BDT</a></li>
+      <li><a href="#tab-gantt-bst">Planning Gantt BST (sous-traitance)</a></li>
+      <li><a href="#tab-presence">Présence opérateurs</a></li>
+      <li><a href="#tab-commandes">Commandes &amp; Lots</a></li>
+      <li><a href="#tab-machines">Process Ateliers (machines + postes &amp; process)</a></li>
+      <li><a href="#tab-dash-prog">Dashboard Programmation</a></li>
+      <li><a href="#tab-dash-prod">Dashboard Production</a></li>
+    </ol>
+  </nav>
+
+  <!-- ════════ 1. GANTT BDT (PROGRAMMATION) ════════ -->
+  <section class="tab" id="tab-gantt-bdt">
+    <div class="tab-head"><span class="tab-num">1</span><h2>Planning Gantt BDT</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le planning de la journée d'atelier, organisé par <b>poste de travail</b> (et non par personne) : chaque ligne du Gantt est un poste, chaque barre est un BDT — une opération de fabrication d'un lot. La Programmation y classe les BDT en attente, les glisse sur les postes au bon horaire, puis suit leur avancement (programmé → reçu → soldé). C'est aussi ici que l'on affecte les opérateurs aux postes par plage horaire.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>C'est désormais le <b>seul</b> planning de l'atelier : il n'y a plus de page « Affectation » séparée, tout se fait ici. De haut en bas :</p>
+    <ul class="points">
+      <li><b>Barre d'outils</b> : sélecteur de date avec flèches ‹ › (jour précédent / suivant), filtres d'activité et de type de process (voir sous-onglets ci-dessous), légende des couleurs, champ de recherche « N° d'affaire… » et bouton orange <b>« Nouveau BDT »</b>. Un bouton <b>« Demande d'achat »</b> (borne opérateur au matricule + PIN) est disponible dans le bandeau du service.</li>
+      <li><b>7 tuiles de statistiques</b> : Programmés, Reçus, Soldés, Soldés NC, En attente, Sous-trait., Process.</li>
+      <li><b>Goulotte « BDT à classer / en attente de programmation »</b> au-dessus du planning : les cartes y sont triées par échéance client puis par chemin critique (séquence des opérations du lot). Chaque carte porte la couleur de son lot, la pièce, la durée, l'activité et l'échéance. On peut aussi y <em>redéposer</em> une barre du planning pour la déprogrammer.</li>
+      <li><b>Le Gantt</b> : lignes = postes de travail (avec le nombre de process et de machines du poste), colonnes = heures de 5&nbsp;h à 23&nbsp;h. Chaque barre BDT est colorée selon son statut et porte un liseré gauche à la <b>couleur de son lot</b> — la même couleur que sur le planning BST, pour suivre un lot d'un planning à l'autre. Dans la colonne de gauche, chaque poste offre trois sous-cases <b>Matin / Ap-m / Soir</b> qui reçoivent les opérateurs affectés.</li>
+      <li><b>« Affectation des ressources aux postes »</b> : les opérateurs du jour classés en quatre colonnes (Matin, Après-midi, Soir, Absent). On glisse une carte — ou on la sélectionne au clic — vers une sous-case de process du planning.</li>
+    </ul>
+    <p>Couleurs des barres et statuts d'un BDT :
+      <span class="b b-mut">à programmer</span> (dans la goulotte),
+      <span class="b b-info">programmé</span> (bleu, bordure pointillée),
+      <span class="b b-warn">reçu</span> (jaune : l'opérateur a pris le travail),
+      <span class="b b-ok">soldé</span> (vert : opération terminée),
+      <span class="b b-crit">soldé NC</span> (rouge : terminé avec non-conformité).
+      Un petit carré blanc ou noir devant le numéro du BDT signale une oxydation <em>incolore</em> ou <em>noire</em> à produire pour le lot.</p>
+    <figure class="shot">
+      <img src="../../assets/production-service.png" alt="Capture du planning Gantt BDT par poste" loading="lazy">
+      <figcaption><b>Planning Gantt BDT</b> — la goulotte des BDT à classer au-dessus, le Gantt par poste au-dessous ; notez le liseré de couleur « lot » sur chaque barre et les sous-cases Matin / Ap-m / Soir des postes.</figcaption>
+    </figure>
+
+    <h3>Pas à pas</h3>
+    <p><b>Programmer un BDT sur un poste :</b></p>
+    <ol class="steps">
+      <li>Choisissez la date en haut à gauche (le planning affiche les BDT prévus ce jour-là).</li>
+      <li>Prenez une carte dans la goulotte <b>« BDT à classer »</b> et glissez-la sur la ligne du poste : un guide vertical orange indique l'heure de dépôt (arrondie au quart d'heure). Vous pouvez aussi <em>cliquer</em> la carte puis cliquer le poste.</li>
+      <li>L'ERP vérifie qu'un process du poste est compatible (même activité Seem/Semrac que le BDT) ; sinon le dépôt est refusé avec un message. Si c'est bon, le BDT passe <span class="b b-info">programmé</span> à la date et l'heure choisies.</li>
+      <li>Pour déplacer un BDT déjà programmé, glissez sa barre sur un autre poste ou un autre horaire. Pour le remettre en attente : clic droit → <b>« Déprogrammer (retour en attente) »</b>, ou glissez la barre dans la goulotte.</li>
+    </ol>
+    <p><b>Réceptionner puis solder un BDT (traçabilité opérateur au PIN) :</b></p>
+    <ol class="steps">
+      <li>Quand l'opérateur démarre l'opération : clic droit sur la barre → <b>« Réceptionner (Reçu) »</b>. La modale demande le <b>matricule</b> et le <b>code PIN</b> de l'opérateur ; l'heure de début réelle est enregistrée et la barre passe en jaune.</li>
+      <li>À la fin : clic droit → <b>« Solder le BDT »</b>. Saisissez l'heure de fin réelle, le résultat (✅ Conforme, ⚠️ Reprise partielle, ❌ Non-conformité), d'éventuelles observations, puis le matricule + PIN de l'opérateur.</li>
+      <li>Si le résultat est « Non-conformité », un champ <b>Gravité</b> apparaît (Mineure / Majeure / Critique / Bloquante). La fiche NC part automatiquement à la Qualité ; une gravité <b>Critique</b> ou <b>Bloquante</b> bloque l'expédition de l'affaire jusqu'à traitement ou dérogation.</li>
+      <li>Le temps réel est calculé et comparé au temps alloué — il alimente le journal des temps et les indicateurs (TRS, écarts).</li>
+    </ol>
+    <p><b>Déclarer une sortie matière :</b> double-cliquez une barre BDT → la modale « Déclaration de sortie matière » s'ouvre. Choisissez le type (<b>Matière</b>, <b>Fourniture</b> ou <b>Consommable machine</b>), l'article du stock, la quantité, et pour un consommable la <b>machine</b> ou le <b>poste</b> concerné (traçage OPEX). La sortie décrémente le stock et se rattache au coût du lot.</p>
+    <p><b>Affecter les opérateurs aux postes :</b> dans le bloc « Affectation des ressources », glissez une carte opérateur (ou cliquez-la pour la sélectionner) puis déposez-la dans une sous-case <b>Matin / Ap-m / Soir</b> d'un poste du planning. L'affectation est enregistrée et tracée pour le jour ; la croix sur l'étiquette la retire. Un opérateur peut tenir plusieurs process et créneaux.</p>
+    <ul class="points">
+      <li>Les opérateurs sont classés automatiquement dans la colonne correspondant à leur <b>présence du jour</b> (Matin, Après-midi, Soir) — celle que vous saisissez dans l'onglet <b>Présence opérateurs</b>.</li>
+      <li>Un opérateur <b>absent</b> ou <b>non planifié</b> (présence non saisie) apparaît grisé dans la colonne « Absent » et n'est <b>pas déplaçable</b> : passez d'abord par l'onglet Présence pour le rendre affectable.</li>
+      <li>Le contrôle de <b>compétence</b> reste porté par le process : un BDT ne peut être programmé que sur un poste dont un process couvre son opération et son activité (Seem/Semrac).</li>
+    </ul>
+
+    <h3>Filtres activité Seem/Semrac</h3>
+    <p>Les boutons <b>Tous / Seem / Semrac</b> filtrent à la fois les postes du Gantt, les cartes de la goulotte et les tuiles de statistiques. Les postes « both » (Seem &amp; Semrac) restent visibles dans les deux cas.</p>
+
+    <h3>Filtres process machine/manuel</h3>
+    <p>Les boutons <b>Tous process / Machine / Manuel</b> restreignent les statistiques aux process nécessitant une machine ou réalisés à la main. La recherche « N° d'affaire… » surligne en orange les BDT de l'affaire cherchée (planning + goulotte) et estompe les autres.</p>
+
+    <h3>Se concentrer sur une étape</h3>
+    <p>Un <b>clic simple</b> sur une barre BDT (ou la sélection d'une carte en attente) resserre le planning autour de l'<b>étape cliquée</b> : au lieu d'afficher tous les postes traversés par le lot, l'ERP ne garde que <b>trois lignes au maximum</b> — le poste de l'étape précédente, celui de l'étape cliquée et celui de l'étape suivante de la gamme. Vous voyez ainsi « d'où arrive » et « où repart » la pièce, sans le bruit du reste de l'atelier.</p>
+    <ol class="steps">
+      <li>Cliquez une barre BDT du Gantt (ou une carte de la goulotte) : les lignes de postes sans rapport avec l'étape disparaissent.</li>
+      <li>Un <b>bandeau violet « Focus étape »</b> s'affiche au-dessus du planning et résume la position dans la gamme, par exemple : <span class="b b-mut">LOT-2026-0042 · etape 2/4 — Pliage (avant : Poinçonnage · apres : ST Aalberts)</span>. Si le lot ne comporte qu'une opération, le bandeau indique « seule etape ».</li>
+      <li>Pour revenir à la vue complète : bouton <b>« Tout afficher »</b> du bandeau, ou re-cliquez la <b>même</b> barre. Cliquer une <em>autre</em> barre déplace simplement le focus sur cette nouvelle étape.</li>
+      <li>Le focus se libère aussi automatiquement dès que vous programmez le BDT sélectionné.</li>
+    </ol>
+    <div class="note"><b>Bon à savoir — les étapes sous-traitées :</b> la gamme d'un lot mélange des opérations faites à l'atelier (BDT) et des opérations confiées à un prestataire (BST/BDS). Si l'étape d'avant ou d'après est <b>sous-traitée</b>, elle est nommée dans le bandeau sous la forme <b>« ST &lt;nom du sous-traitant&gt; »</b> — mais elle n'ajoute évidemment <b>aucune ligne</b> au planning des postes, puisqu'elle ne se fait pas dans l'atelier. Le comptage des étapes (« etape 2/4 ») tient bien compte des deux, internes et sous-traitées.</div>
+
+    <h3>Fractionner un BDT (Séparer)</h3>
+    <p>Un BDT long peut être découpé en plusieurs morceaux à répartir sur plusieurs jours ou postes : clic droit sur la barre → <b>« Séparer en morceaux »</b> (disponible tant que le BDT n'est ni reçu ni soldé).</p>
+    <ol class="steps">
+      <li>La modale affiche la durée totale du BDT. Choisissez le <b>nombre de morceaux</b> (2 à 12) — « Répartir également » égalise les durées.</li>
+      <li>Ajustez librement la durée de chaque morceau ; la somme est contrôlée en direct. Si elle diffère de la durée d'origine, la répartition est ajustée au prorata à l'enregistrement.</li>
+      <li>Cliquez <b>« Séparer »</b> : le BDT d'origine est réduit au premier morceau, les suivants sont créés avec les suffixes <b>-M2</b>, <b>-M3</b>… et arrivent dans la goulotte, à programmer.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-production-separer.png" alt="Modale de fractionnement d'un BDT en morceaux" loading="lazy">
+      <figcaption><b>Séparer le BDT en morceaux</b> — la durée totale d'origine en haut, le <b>nombre de morceaux</b> (2 à 12) et la ligne de durée de chaque morceau ; surveillez le contrôle de la <b>somme</b> qui se met à jour en direct — si elle diffère du total, l'enregistrement répartit au prorata, puis les morceaux <b>-M2</b>, <b>-M3</b>… repartent dans la goulotte à programmer.</figcaption>
+    </figure>
+
+    <h3>Formulaire « Créer / Affecter un BDT »</h3>
+    <p>Le bouton <b>« Nouveau BDT »</b> ouvre la modale de création (pour un travail ponctuel hors cascade commande → lots) :</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+      <tbody>
+        <tr><td>N° Commande</td><td>Texte (CMD-2026-XXXX)</td><td>Oui</td><td>Commande / affaire de rattachement.</td></tr>
+        <tr><td>Client</td><td>Texte</td><td>Oui</td><td>Raison sociale du client final.</td></tr>
+        <tr><td>Activité</td><td>Liste : Seem / Semrac</td><td>Oui</td><td>Site concerné — conditionne la liste des opérations.</td></tr>
+        <tr><td>Opération</td><td>Liste (selon l'activité)</td><td>Oui</td><td>Opération de fabrication (Usinage CN, Pliage, Soudure…).</td></tr>
+        <tr><td>Pièce</td><td>Texte</td><td>Oui</td><td>Référence de la pièce fabriquée.</td></tr>
+        <tr><td>Durée (h)</td><td>Nombre (pas 0,5)</td><td>Oui</td><td>Temps alloué à l'opération.</td></tr>
+        <tr><td>Heure début</td><td>Heure (défaut 06:00)</td><td>Non</td><td>Position initiale de la barre sur le Gantt.</td></tr>
+        <tr><td>Priorité</td><td>Normal / Urgent / Critique</td><td>Non</td><td>Colore la carte en attente (vert / orange / rouge).</td></tr>
+        <tr><td>Process atelier</td><td>Liste des process compatibles</td><td>Non</td><td>Laisser vide = le BDT reste en attente dans la goulotte.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li><b>Porte matière + prépa technique</b> : un BDT créé par la cascade d'acceptation d'offre n'apparaît dans ce planning que lorsque <b>toute la matière de l'affaire est réceptionnée</b> (tous les BC matière reçus) <b>et</b> que la <b>préparation technique</b> de l'affaire est terminée. Tant que ce n'est pas le cas, le BDT existe en base mais <b>n'est visible ni dans la goulotte ni dans le Gantt</b> : suivez son avancement depuis l'onglet <b>Commandes &amp; Lots</b> (section 4) ou depuis la préparation technique du Bureau d'Études.</li>
+      <li>Les process de traitement de surface (OAS, oxydation, Surtec…) n'apparaissent <b>jamais</b> dans ce planning : ils se pilotent dans le service OAS.</li>
+      <li>La goulotte trie automatiquement par échéance client puis par séquence d'opérations (chemin critique du lot) : traitez-la de haut en bas.</li>
+      <li>Pendant un glisser, tous les BDT du même lot sont surlignés en jaune — pratique pour repérer l'opération précédente.</li>
+      <li>Clic droit sur une barre : le menu propose aussi <b>« Aller à la commande rattachée »</b> et <b>« Aller au lot rattaché »</b>. Double-clic sur une carte en attente : ouvre la commande mère.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> réceptionner et solder exigent le matricule + code PIN de l'opérateur — c'est la signature de traçabilité (EN 9100). Un BDT soldé ne peut plus être déplacé ni séparé ; une NC Critique/Bloquante bloque l'expédition de toute l'affaire.</div>
+    <div class="astuce"><b>Astuce :</b> le survol d'une barre affiche une infobulle complète (client, pièce, durée, process, statut). Rappel des gestes : <b>clic</b> = focus étape (3 lignes max) · <b>double-clic</b> = sortie matière · <b>clic droit</b> = statuts et navigation.</div>
+  </section>
+
+  <!-- ════════ 2. GANTT BST ════════ -->
+  <section class="tab" id="tab-gantt-bst">
+    <div class="tab-head"><span class="tab-num">2</span><h2>Planning Gantt BST (sous-traitance)</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Les opérations confiées à un prestataire extérieur (oxydation, zingage, peinture poudre, traitement thermique…) sont portées par des BST (bons de sous-traitance). Cet onglet les planifie sur une grille jour par jour : quel sous-traitant, quel jour d'envoi, quelle durée — et suit leur retour. L'affectation d'un BST crée automatiquement le bon de commande sous-traitant côté Expéditions.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>Barre d'outils</b> : date de début de la fenêtre avec navigation ±7 jours (‹ ›) et ±1 jour (−1j / +1j), rappel « Vue 21 jours · BST de 1 à 20+ jours · couleur = lot », légende des statuts et bouton violet <b>« Nouveau BST »</b>.</li>
+      <li><b>5 tuiles KPI</b> : BST total, À planifier, En attente d'envoi, Envoyés (chez ST), Revenus.</li>
+      <li><b>La grille</b> : lignes = sous-traitants (nom, localisation, qualification, pastilles des prestations maîtrisées, <b>OTD</b> en % coloré vert ≥ 90, orange ≥ 75, rouge en dessous) ; colonnes = 21 jours (week-ends grisés, aujourd'hui surligné orange). Chaque barre BST porte la couleur de son <b>lot</b> (la même que sur le Gantt BDT) et son statut en contour : <span class="b b-warn">en attente d'envoi</span> (pointillé orange), <span class="b b-info">envoyé</span> (contour bleu), <span class="b b-ok">revenu</span> (contour vert).</li>
+      <li><b>« BST à planifier »</b> <b>au-dessus</b> de la grille (comme la goulotte des BDT sur le Gantt d'atelier) : les cartes sans date ni sous-traitant. Glissez-en une sur la case d'un jour, sur la ligne du sous-traitant, pour la planifier.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/production-gantt-bst.png" alt="Capture du planning BST jour par jour" loading="lazy">
+      <figcaption><b>Planning Gantt BST</b> — le bac « BST à planifier » au-dessus, puis la grille 21 jours par sous-traitant (avec OTD et prestations) et les barres colorées par lot.</figcaption>
+    </figure>
+
+    <h3>Pas à pas</h3>
+    <p><b>Planifier un BST :</b></p>
+    <ol class="steps">
+      <li>Prenez une carte dans <b>« BST à planifier »</b> (ou cliquez-la pour la sélectionner) et déposez-la sur la case du jour d'envoi, sur la ligne du sous-traitant choisi.</li>
+      <li>Le BST passe <span class="b b-warn">en attente d'envoi</span> et l'ERP <b>crée automatiquement le BC sous-traitant</b> lié — il apparaît dans Expéditions → Bons de Commande, prêt à être envoyé.</li>
+      <li>Ensuite, le statut du BST est <b>piloté par ce BC</b> : BC envoyé/accusé → le BST passe « envoyé » ; BC reçu → « revenu ». On ne change donc pas le statut depuis le planning, mais depuis le BC en Expéditions.</li>
+      <li>Pour déplacer un BST, glissez sa barre sur une autre case. Clic droit → <b>« Déplanifier (retour à l'attente) »</b> pour le remettre dans le bac.</li>
+    </ol>
+    <p><b>Créer un BST (modale « Nouveau BST ») :</b></p>
+    <div class="tbl"><table>
+      <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+      <tbody>
+        <tr><td>Lot lié</td><td>Liste des lots</td><td>Oui</td><td>Le lot dont l'opération part en sous-traitance.</td></tr>
+        <tr><td>Sous-traitant</td><td>Liste des sous-traitants</td><td>Oui</td><td>Prestataire pressenti.</td></tr>
+        <tr><td>Opération ST</td><td>Liste (oxydation, zingage, sérigraphie…)</td><td>Non</td><td>Prestation demandée.</td></tr>
+        <tr><td>Qté</td><td>Nombre</td><td>Non</td><td>Par défaut, la quantité du lot.</td></tr>
+        <tr><td>Date envoi</td><td>Date</td><td>Non</td><td>Jour de départ prévu chez le prestataire.</td></tr>
+        <tr><td>Durée (jours)</td><td>Nombre 1–60 (défaut 5)</td><td>Non</td><td>Longueur de la barre sur la grille.</td></tr>
+      </tbody>
+    </table></div>
+    <figure class="shot">
+      <img src="../../assets/form-production-st.png" alt="Formulaire de sous-traitance" loading="lazy">
+      <figcaption><b>Nouvelle sous-traitance</b> — le formulaire d'envoi d'une opération chez un prestataire (commande, client final, opération, sous-traitant, date de retour, priorité).</figcaption>
+    </figure>
+
+    <h3>Se concentrer sur une étape</h3>
+    <p>Comme sur le Gantt BDT, un <b>clic simple</b> sur une barre BST (ou sur une carte à planifier) resserre la grille autour de l'<b>étape cliquée</b> : ne restent que les lignes des sous-traitants de l'étape précédente, de l'étape cliquée et de l'étape suivante de la gamme. Le bandeau violet <b>« Focus étape »</b> rappelle la position dans la gamme (« … · etape 3/5 — Zingage (avant : atelier Pliage · apres : Peinture poudre) »).</p>
+    <ul class="points">
+      <li>Si l'étape voisine est réalisée <b>à l'atelier</b> (et non chez un prestataire), le bandeau la nomme <b>« atelier &lt;opération&gt; »</b> : elle n'ajoute aucune ligne à cette grille, qui ne liste que des sous-traitants.</li>
+      <li>Pour sortir du focus : bouton <b>« Tout afficher »</b> du bandeau, ou nouveau clic sur la même barre.</li>
+    </ul>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La couleur d'une barre = son <b>lot</b>, partagée entre les plannings BDT et BST : un même lot garde sa couleur partout.</li>
+      <li>Le clic droit propose aussi la navigation : <b>Ouvrir la commande</b>, <b>Ouvrir le lot</b>, <b>Ouvrir le BC sous-traitant</b> (s'il existe). Double-clic sur une barre : ouvre la commande mère.</li>
+      <li>L'OTD affiché sur chaque ligne aide à choisir le prestataire le plus fiable en délai.</li>
+    </ul>
+    <div class="note"><b>Bon à savoir :</b> le passage « envoyé » / « revenu » se fait dans <b>Expéditions</b> (envoi du BC, réception du BL) — le planning reflète l'état du BC lié en temps réel.</div>
+  </section>
+
+  <!-- ════════ 3. PRÉSENCE OPÉRATEURS ════════ -->
+  <section class="tab" id="tab-presence">
+    <div class="tab-head"><span class="tab-num">3</span><h2>Présence opérateurs</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> On y programme les horaires des opérateurs Seem et Semrac, semaine par semaine : matin, journée, soir ou absent. Cette présence pilote directement la disponibilité dans le bloc « Affectation des ressources aux postes » du planning — un opérateur non programmé n'est pas affectable. L'onglet traite aussi les demandes de congés des opérateurs.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Deux vues, commutées par les deux boutons du haut :</p>
+    <ul class="points">
+      <li><b>Planning de présence</b> : une grille opérateurs × 7 jours de la semaine, avec navigation ‹ › entre semaines et filtres Tous / Seem / Semrac. Chaque cellule est colorée : <span class="b b-info">Matin</span> (bleu, 06h-14h), <span class="b b-ok">Journée</span> (vert, 08h-17h), <span class="b" style="background:#ede9fe;color:#5b21b6">Soir</span> (violet, 14h-22h), <span class="b b-crit">Absent</span> (rouge), <span class="b b-mut">Non programmé</span> (gris).</li>
+      <li><b>Demandes de congés à traiter</b> : la liste des demandes des opérateurs (type, dates, heures/jours, motif) avec les boutons <b>Approuver</b> et refuser (✕).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/production-presence.png" alt="Capture du planning de présence hebdomadaire" loading="lazy">
+      <figcaption><b>Présence opérateurs</b> — la grille hebdomadaire : cliquez une cellule pour faire défiler les shifts ; les cases verrouillées (cadenas) sont des absences RH.</figcaption>
+    </figure>
+
+    <h3>Pas à pas</h3>
+    <ol class="steps">
+      <li><b>Programmer un jour</b> : cliquez la cellule de l'opérateur — chaque clic fait défiler matin → journée → soir → absent → vide. La sauvegarde est immédiate.</li>
+      <li><b>Programmer une semaine entière</b> : bouton orange <b>« Programmer la semaine »</b> → choisissez le shift à appliquer, les jours (Lun → Ven ou Lun → Dim), cochez les opérateurs (boutons rapides : Tout cocher / Seem / Semrac) puis <b>« Appliquer à la semaine »</b>. Les jours en absence RH ne sont pas touchés.</li>
+      <li><b>Traiter un congé</b> : vue « Demandes de congés » → <b>Approuver</b> pose l'absence sur le planning de présence <em>et</em> décompte les heures du solde de congés du salarié ; ✕ refuse la demande.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Les absences RH (congés validés, maladie) arrivent automatiquement et sont <b>verrouillées</b> ici (icône cadenas) — elles se gèrent côté RH.</li>
+      <li>La présence saisie ici détermine la colonne (Matin / Après-midi / Soir) des opérateurs dans le bloc « Affectation des ressources aux postes » du planning (section 1), et le calcul de capacité du Dashboard Programmation.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> programmez la semaine type en une fois avec « Programmer la semaine », puis corrigez les exceptions cellule par cellule.</div>
+  </section>
+
+  <!-- ════════ 4. COMMANDES & LOTS ════════ -->
+  <section class="tab" id="tab-commandes">
+    <div class="tab-head"><span class="tab-num">4</span><h2>Commandes &amp; Lots</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> La vue d'ensemble du carnet de fabrication : toutes les commandes en cours et leur avancement, et tous les lots avec leur progression opération par opération. C'est le point d'entrée vers les fiches détaillées (commande → lots → BDT/BDS) et l'ordre de fabrication.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Deux sous-vues commutées par les boutons <b>Commandes</b> et <b>Lots</b> (avec leur compteur) :</p>
+    <ul class="points">
+      <li><b>Commandes en cours</b> — colonnes : N° CMD / Affaire, Client, Pièces, Montant, Date cmd, Livraison, Statut (badge <span class="b b-crit">Retard</span> si la date est dépassée), <b>Avancement BDT</b> (barre de progression % = BDT soldés / total) et ST (badge si la commande passe en sous-traitance).</li>
+      <li><b>Lots en cours</b> — colonnes : Réf. Lot, Client, Pièce, Qté, Début, Fin, Statut, <b>Avancement</b> (opérations soldées — BDT usine + BDS revenus — sur le total, ex. « 3/5 »), Commande (lien direct).</li>
+      <li>Au-dessus de chaque tableau : une <b>recherche</b> avec choix du champ (N° affaire, client, statut… ). Un clic sur une ligne ouvre la fiche détaillée.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/production-commandes.png" alt="Capture de l'onglet Commandes et Lots" loading="lazy">
+      <figcaption><b>Commandes &amp; Lots</b> — le tableau des commandes avec la barre d'avancement BDT ; le bouton « Lots » bascule sur la vue par lot.</figcaption>
+    </figure>
+
+    <h3>Pas à pas</h3>
+    <ol class="steps">
+      <li>Recherchez la commande (choisissez le champ, tapez le texte) puis <b>cliquez la ligne</b> : la fiche commande liste tous ses lots, chacun découpé en opérations ordonnées (badge <span class="b b-info">BDT</span> pour l'usine, <span class="b" style="background:#ede9fe;color:#6d28d9">BDS</span> pour la sous-traitance) avec leur statut, plus des cartes KPI d'avancement.</li>
+      <li>Depuis la vue Lots, cliquez un lot pour ouvrir sa fiche : les étapes de production dans l'ordre, et l'impression de l'<b>ordre de fabrication</b> (OF) à joindre au dossier atelier.</li>
+      <li>Depuis un BDT du planning, le clic droit « Aller à la commande / au lot rattaché » mène aux mêmes fiches.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>L'avancement d'un lot compte les BDT <b>soldés</b> et les BDS <b>revenus</b> — un BST encore chez le prestataire ne compte pas.</li>
+      <li>Une commande passe automatiquement à 100 % quand toutes ses opérations sont soldées ; son coût réel est consolidé au soldage.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> depuis la fiche d'un lot, vous pouvez rejoindre le planning avec le BDT déjà surligné (lien « planning » avec focus).</div>
+  </section>
+
+  <!-- ════════ 5. PROCESS ATELIERS ════════ -->
+  <section class="tab" id="tab-machines">
+    <div class="tab-head"><span class="tab-num">5</span><h2>Process Ateliers (machines + postes &amp; process)</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le référentiel de l'atelier : les <b>postes de travail</b> regroupent machines et process ; le planning est organisé sur ces postes, et leurs coûts (OPEX, taux horaire effectif) alimentent le calcul du coût de revient des pièces (CRU). On y crée et gère postes, process et machines, on y suit l'OPEX réel, et on y déclare une panne machine.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>4 tuiles KPI</b> : Machines actives, En maintenance, Arrêtées, OPEX annuel estimé.</li>
+      <li>Deux volets commutés par les boutons <b>« Postes &amp; Process »</b> (par défaut) et <b>« Machines »</b>.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/production-process.png" alt="Capture de l'onglet Process Ateliers" loading="lazy">
+      <figcaption><b>Process Ateliers</b> — les tuiles KPI du parc et la bascule entre les volets « Postes &amp; Process » et « Machines ».</figcaption>
+    </figure>
+
+    <h3>Volet « Postes &amp; Process »</h3>
+    <p>Le tableau des postes de travail — colonnes : Poste (avec sa pastille couleur et une flèche pour déplier ses process et machines), Code, Activité (Seem / Semrac / both / OAS), Machines, Process, <b>OPEX réel (YTD)</b>, OPEX théorique/an, <b>Taux/h effectif</b> et Actions. Les lignes se réordonnent par glisser-déposer (l'ordre est celui du planning). Boutons d'action par poste : <b>+ Process</b> (créer un process directement dans le poste), main-euro (fixer / réinitialiser un <b>taux horaire manuel</b>, avec confirmation), crayon (modifier), corbeille (supprimer). Le bouton <b>« Nouveau poste »</b> ouvre la modale : Nom*, Code, Activité, Couleur (planning), Ordre d'affichage.</p>
+    <figure class="shot">
+      <img src="../../assets/production-postes.png" alt="Capture du volet Postes et Process" loading="lazy">
+      <figcaption><b>Postes de travail</b> — OPEX réel/théorique et colonne « Taux/h effectif » (base machines + achats de l'année) qui alimente le CRU des pièces.</figcaption>
+    </figure>
+
+    <h3>Volet « Machines »</h3>
+    <p>Le parc machines — colonnes : Machine, Code, Activité (filtres Tous / SEEM / SEMRAC / OAS), Catégorie, Taux/h, Capa./j, OPEX théorique/an, <b>OPEX réel conso. (YTD)</b>, Postes (bouton ouvrant le détail des postes de dépenses consommables), Statut (✔ Opérationnel / ⚙ Maintenance / ✖ Arrêt) et Actions : <b>« Panne »</b> (déclare la machine en panne → service Maintenance) ou <b>« Réparée »</b> (remise en service), modifier, supprimer. En dessous, le graphique d'évolution mensuelle de l'OPEX.</p>
+    <p>Modale « Nouvelle machine » (bouton orange), champ par champ :</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+      <tbody>
+        <tr><td>Nom de la machine</td><td>Texte</td><td>Oui</td><td>Ex. « Tour CNC Mazak QT-200 ».</td></tr>
+        <tr><td>Code</td><td>Texte</td><td>Non</td><td>Code court (CNC-03…).</td></tr>
+        <tr><td>Activité</td><td>Seem / Semrac / both / OAS</td><td>Oui</td><td>Une machine OAS est hors planning (traitement de surface).</td></tr>
+        <tr><td>Catégorie</td><td>Texte</td><td>Non</td><td>Usinage, Découpe…</td></tr>
+        <tr><td>Capacité (h/jour)</td><td>Nombre (défaut 8)</td><td>Non</td><td>Base du calcul d'OPEX théorique et d'utilisation.</td></tr>
+        <tr><td>Coût machine (€/h)</td><td>Nombre (défaut 35)</td><td>Non</td><td>Taux horaire — alimente le taux du poste et le CRU.</td></tr>
+        <tr><td>Tolérance ± (mm)</td><td>Nombre</td><td>Non</td><td>Sert aux études de capabilité (Qualité).</td></tr>
+        <tr><td>Statut</td><td>Opérationnel / Maintenance / Arrêt</td><td>Non</td><td>État courant de la machine.</td></tr>
+        <tr><td>Poste de travail</td><td>Liste des postes</td><td>Non</td><td>Poste de rattachement (planning + OPEX du poste).</td></tr>
+        <tr><td>Machine CNC</td><td>Case à cocher</td><td>Non</td><td>Une CNC porte des codes programme (saisis en préparation technique).</td></tr>
+        <tr><td>Opérations possibles</td><td>Texte (séparées par virgule)</td><td>Non</td><td>Opérations que la machine sait réaliser.</td></tr>
+        <tr><td>Process rattachés</td><td>Cases (process du poste)</td><td>Non</td><td>Process alimentés par cette machine ; option « créer aussi un nouveau process » au nom de la machine.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Pas à pas</h3>
+    <ol class="steps">
+      <li><b>Créer un poste</b> : « Nouveau poste » → nom, activité, couleur → le poste apparaît (vide). Rattachez-y ensuite machines et process.</li>
+      <li><b>Créer un process dans un poste</b> : bouton <b>+ Process</b> de la ligne du poste → nom, type (<b>Machine</b> / <b>Manuel</b> / <b>OAS</b>), machine rattachée le cas échéant. Le crayon d'un process permet ensuite de changer son nom, sa machine, son taux horaire et son poste.</li>
+      <li><b>Déclarer une panne</b> : volet Machines → bouton <b>« Panne »</b> sur la ligne → la machine passe en arrêt et le service Maintenance est saisi ; « Réparée » la remet en service.</li>
+      <li><b>Fixer un taux horaire manuel</b> : bouton main-euro du poste → saisir le taux (ou vider pour revenir à l'automatique) → double confirmation, car ce taux prime en absolu sur le calcul et impacte le CRU.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li><b>OPEX réel</b> d'une machine = somme des sorties stock « consommable » déclarées sur ses BDT (quantité × prix d'achat HT), en temps réel. L'OPEX d'un <b>poste</b> = somme de ses machines + consommables tirés directement au poste. Ce calcul est repris à l'identique en Maintenance.</li>
+      <li><b>Taux/h effectif</b> d'un poste = moyenne pondérée du coût/h de ses machines + achats machine reçus dans l'année / heures budgétées. C'est ce taux qui alimente le CRU des pièces usinées au poste.</li>
+      <li>Un poste ou process <b>OAS</b> n'apparaît pas au planning ; ses process alimentent les types de bain de l'onglet OAS.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> supprimer un process ou une machine est définitif (confirmation demandée). Un process « Machine » sans machine rattachée est signalé « à rattacher » — faites-le, sinon son coût machine est nul dans le CRU.</div>
+  </section>
+
+  <!-- ════════ 6. DASHBOARD PROGRAMMATION ════════ -->
+  <section class="tab" id="tab-dash-prog">
+    <div class="tab-head"><span class="tab-num">6</span><h2>Dashboard Programmation</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Le tableau de bord de la charge : combien de commandes et de lots sont en cours, combien de BDT restent actifs, et surtout si la capacité des opérateurs présents absorbe la charge de la semaine. C'est l'outil d'arbitrage de Sylvie avant de programmer.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>4 cartes KPI</b> : Commandes en cours (avec le nombre en retard), Lots en cours (avec les bloqués), BDT actifs, Charge journée en % (heures de BDT / capacité = opérateurs × 8 h).</li>
+      <li><b>« Charge opérateurs par jour »</b> : un histogramme Lun → Dim, calculé sur les présences réelles (présents × 8 h par jour) ; les barres passent de vert à orange (≥ 70 %) puis rouge (≥ 85 %), le jour courant est encadré. Navigation par semaine avec ‹ › et le sélecteur de date.</li>
+      <li>Deux tableaux : <b>Lots en cours · étape de production</b> (Planifié / Production / Sous-traitance / Bloqué, fin prévue) et <b>Commandes · avancement</b> (barre %, OK / Retard).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/production-dash-prog.png" alt="Capture du dashboard Programmation" loading="lazy">
+      <figcaption><b>Dashboard Programmation</b> — surveillez l'histogramme de charge : un jour rouge (≥ 85 %) signifie qu'il faut lisser, décaler ou sous-traiter.</figcaption>
+    </figure>
+
+    <h3>Pas à pas</h3>
+    <ol class="steps">
+      <li>Consultez la charge de la semaine : si un jour dépasse 85 %, retournez au planning (onglet 1) pour déplacer des BDT vers un jour creux, ou vérifiez la présence (onglet 3) pour renforcer l'équipe.</li>
+      <li>Contrôlez les tableaux du bas : un lot « Bloqué » ou une commande « Retard » se traite en priorité — ouvrez la fiche depuis Commandes &amp; Lots.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La capacité quotidienne dépend des <b>présences saisies</b> : un jour sans présence programmée affiche 0 % — pensez à remplir l'onglet Présence.</li>
+    </ul>
+  </section>
+
+  <!-- ════════ 7. DASHBOARD PRODUCTION ════════ -->
+  <section class="tab" id="tab-dash-prod">
+    <div class="tab-head"><span class="tab-num">7</span><h2>Dashboard Production</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Le tableau de bord de la performance : rendement des machines (TRS/TRG/TRE), coûts d'exploitation du parc (OPEX) et liste des BDT actifs du jour. Il est calculé sur les données réelles tracées par les soldages au PIN.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>Trois jauges</b> : TRS (Taux de Rendement Synthétique), TRG (Global), TRE (Économique), accompagnées des trois composantes en barres : <b>Disponibilité</b> (machines opérationnelles), <b>Performance</b> (temps alloué / temps réel des BDT soldés) et <b>Qualité</b> (BDT soldés sans NC).</li>
+      <li><b>OPEX Machines · YTD</b> : par machine, le taux/h, l'utilisation (charge BDT / capacité hebdo) et l'OPEX cumulé de l'année, avec le total du parc.</li>
+      <li><b>BDTs du jour</b> : les BDT actifs (client, pièce, opération, priorité, statut, durée) avec un bouton <b>« Dupliquer »</b> pour recréer un BDT identique et le réaffecter.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/production-dash-prod.png" alt="Capture du dashboard Production" loading="lazy">
+      <figcaption><b>Dashboard Production</b> — jauges TRS/TRG/TRE avec leurs composantes, table OPEX machines et BDT actifs du jour.</figcaption>
+    </figure>
+
+    <h3>Pas à pas</h3>
+    <ol class="steps">
+      <li>Lisez le TRS puis identifiez la composante faible : Disponibilité basse → voir Maintenance (pannes) ; Performance basse → temps réels supérieurs aux temps alloués (revoir les gammes) ; Qualité basse → NC au soldage (voir la Qualité).</li>
+      <li>Pour dupliquer un BDT récurrent : bouton « Dupliquer » sur la ligne → choisissez l'opérateur et l'heure de début → « Dupliquer &amp; Affecter ».</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Ces indicateurs ne valent que si les BDT sont réellement réceptionnés et soldés au fil de l'eau — les temps réels viennent exclusivement des soldages au PIN.</li>
+    </ul>
+  </section>
+
+  <div class="docnav">
+    <a href="index.html">← Sommaire des manuels</a>
+    <a href="oas.html">Manuel suivant : OAS →</a>
+  </div>
+
+  <footer class="doc">
+    ERP Seem Semrac — manuel utilisateur généré depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs). En cas d'écart entre ce manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
+  </footer>
+
+</div>
+</body>
+</html>

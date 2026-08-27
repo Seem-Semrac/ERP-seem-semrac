@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manuel — Qualité · ERP Seem Semrac</title>
+<link rel="stylesheet" href="manuel.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <div class="brandrow">
+      <div class="logo">SS</div>
+      <div>
+        <div class="co">SEEM · SEMRAC — ERP</div>
+        <div class="eyebrow">Manuel utilisateur</div>
+      </div>
+      <div class="kind">docs/manuel/html</div>
+    </div>
+    <h1>Service <span class="hi">Qualité</span></h1>
+    <p class="lede">Le service Qualité est la tour de contrôle de la conformité : il centralise les PV de contrôle, les non-conformités et leur résolution (8D), les dérogations, la libération des lots avant expédition, la quarantaine, le parc d'équipements de mesure (ECME), la capabilité des machines, les périssables, le plan de contrôle EN&nbsp;9100 et le programme d'audits internes. Ce manuel décrit chacun des 13 onglets, écran par écran.</p>
+    <div class="metachips">
+      <span class="chip">👤 Pour qui : <b>Qualiticien(ne)</b> (écriture : Qualité, Sécurité · lecture : BE, Production, OAS, Expéditions, Stock, Maintenance)</span>
+      <span class="chip">🧭 Dans l'ERP : <b>Sidebar → Qualité</b></span>
+      <span class="chip">🗂 <b>13 onglets</b></span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-t">Sommaire</div>
+    <ol>
+      <li><a href="#tab-pv">PV de Contrôle</a></li>
+      <li><a href="#tab-nc">Non-Conformités</a></li>
+      <li><a href="#tab-8d">Rapports 8D</a></li>
+      <li><a href="#tab-derogations">Dérogations</a></li>
+      <li><a href="#tab-liberation">Libération Lots</a></li>
+      <li><a href="#tab-quarantaine">Quarantaine</a></li>
+      <li><a href="#tab-ecme">Contrôle des ECME</a></li>
+      <li><a href="#tab-capabilite">Étude de capabilité</a></li>
+      <li><a href="#tab-perissables">Produits Périssables</a></li>
+      <li><a href="#tab-plan-controle">Plan de contrôle</a></li>
+      <li><a href="#tab-audit">Audit Conformité</a></li>
+      <li><a href="#tab-referentiels">Référentiels</a></li>
+      <li><a href="#tab-dashboard">Dashboard Qualité</a></li>
+    </ol>
+  </nav>
+
+  <!-- ══════════════ 1. PV DE CONTRÔLE ══════════════ -->
+  <section class="tab" id="tab-pv">
+    <div class="tab-head"><span class="tab-num">1</span><h2>PV de Contrôle</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Cet onglet rassemble tous les procès-verbaux de contrôle qualité de l'usine, quelle que soit leur origine : un PV peut provenir de l'<b>OAS</b> (balancelle clôturée), d'un <b>BDT</b> soldé, d'un <b>BL fournisseur</b> (contrôle de réception), d'un <b>BL sous-traitant</b> (retour de sous-traitance) ou d'un <b>retour client</b>. C'est le registre de preuve du contrôle : chaque PV porte un statut, une décision de libération et, le cas échéant, les indices Cp/Cpk.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>En haut, une rangée de <b>filtres par origine</b> (Tous · OAS · BDT · BL Fournisseur · BL Sous-traitant · Retour client), chacun avec son compteur. À droite, un champ <b>Rechercher…</b> et le bouton rouge <b>« Nouveau PV »</b>. Le tableau liste les PV avec les colonnes : N°&nbsp;PV, Date, Origine, Type contrôle, Lien (badge <span class="b b-info">Lot</span> ou <span class="b b-warn">BL</span> suivi du numéro), Pièce, Client / Fourn., Cp/Cpk, Statut, Décision, Actions.</p>
+    <ul class="points">
+      <li>Statuts possibles : <span class="b b-info">En cours</span> · <span class="b b-ok">Validé ✓</span> · <span class="b b-crit">Refusé</span> · <span class="b b-warn">NC ouverte</span>.</li>
+      <li>Décisions : <span class="b b-ok">Libéré ✓</span> · <span class="b b-warn">Libéré (dérogation)</span> · <span class="b b-crit">Bloqué ✗</span> (ou « — » si aucune décision).</li>
+      <li>La colonne Cp/Cpk est colorée : vert si Cpk ≥ 1,33, orange entre 1 et 1,33, rouge en dessous de 1 ; « N/A » si le PV n'a pas de mesure.</li>
+      <li>Deux boutons d'action par ligne : <b>Ouvrir NC</b> (triangle rouge — bascule vers l'onglet Non-Conformités avec le formulaire de création) et <b>Libérer lot</b> (cadenas vert — bascule vers l'onglet Libération Lots).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/qualite-pv.png" alt="Capture de l'onglet PV de Contrôle" loading="lazy">
+      <figcaption><b>PV de Contrôle</b> — les pastilles d'origine en haut filtrent le tableau ; repérez les colonnes Statut et Décision qui résument le sort de chaque contrôle.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — créer un PV manuellement</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Nouveau PV »</b> : la fenêtre de saisie s'ouvre.</li>
+      <li>Renseignez la <b>date</b> et le <b>type de contrôle</b> (autocontrôle, intermédiaire, final, réception fournisseur).</li>
+      <li>Choisissez le rattachement : <b>« Lié à un Lot »</b> ou <b>« Lié à un BL »</b>, puis saisissez le numéro correspondant (LOT-2026-XXX ou BL-2026-XXX).</li>
+      <li>Complétez la pièce, le client, éventuellement les indices <b>Cp</b> et <b>Cpk</b>, et vos observations.</li>
+      <li>Cliquez sur <b>« Créer le PV »</b> : le PV rejoint la liste.</li>
+    </ol>
+
+    <div class="tbl"><table>
+      <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+      <tbody>
+        <tr><td>Date PV</td><td>Date</td><td>Recommandé</td><td>Date du contrôle.</td></tr>
+        <tr><td>Type contrôle</td><td>Liste</td><td>Recommandé</td><td>Autocontrôle · intermédiaire · final · réception fournisseur.</td></tr>
+        <tr><td>Lié à un Lot / à un BL</td><td>Bouton bascule</td><td>Oui</td><td>Détermine si le PV se rattache à un lot de production ou à un bon de livraison.</td></tr>
+        <tr><td>N° Lot ou N° BL</td><td>Texte</td><td>Oui</td><td>Numéro du lot (LOT-2026-XXX) ou du BL (BL-2026-XXX) contrôlé.</td></tr>
+        <tr><td>Pièce / Client</td><td>Texte</td><td>Non</td><td>Référence de la pièce et raison sociale concernées.</td></tr>
+        <tr><td>Cp / Cpk</td><td>Nombres</td><td>Non</td><td>Indices de capabilité si un relevé de cotes a été fait.</td></tr>
+        <tr><td>Observations</td><td>Texte libre</td><td>Non</td><td>Constat du contrôle.</td></tr>
+      </tbody>
+    </table></div>
+    <figure class="shot">
+      <img src="../../assets/form-qualite-pv.png" alt="Formulaire Nouveau PV de contrôle" loading="lazy">
+      <figcaption><b>Nouveau PV</b> — le rattachement Lot/BL se choisit avec les deux boutons bleus au centre du formulaire.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La plupart des PV arrivent <b>automatiquement</b> depuis les autres services (OAS, Production, Expéditions) : la création manuelle sert surtout aux cas hors flux.</li>
+      <li>Utilisez le filtre d'origine avant de chercher : un PV de réception se trouve sous « BL Fournisseur », pas sous « BDT ».</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> le bouton « Libérer lot » d'une ligne de PV est le raccourci le plus court vers l'onglet Libération Lots quand le contrôle final vient d'être passé.</div>
+  </section>
+
+  <!-- ══════════════ 2. NON-CONFORMITÉS ══════════════ -->
+  <section class="tab" id="tab-nc">
+    <div class="tab-head"><span class="tab-num">2</span><h2>Non-Conformités</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le registre central des non-conformités (NC). Les NC peuvent être créées <b>automatiquement</b> par l'ERP (fin de balancelle OAS non conforme, soldage de BDT, réception fournisseur) ou <b>manuellement</b> ici. De chaque NC partent les suites : rapport 8D, dérogation, mise en quarantaine, et — pour une NC client — le traitement du retour (avoir ou commande prioritaire).</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Sous le bandeau d'information, deux rangées de filtres : <b>Catégorie</b> (Toutes · Administratif · Production) et <b>Entité</b> (Toutes · Seem · Semrac), plus un champ de recherche et le bouton <b>« Nouvelle NC »</b>. Le tableau est très complet : N°&nbsp;NC, Entrée, Fin traitement, Type NC, Catégorie, Entité, Lot, Article, Fournisseur, Client, Détection, Imputation, FRC, Gravité, Statut, Actions.</p>
+    <ul class="points">
+      <li>Gravité : <span class="b b-warn">Mineure</span> · <span class="b b-warn">Majeure</span> · <span class="b b-crit">Critique</span> · <span class="b b-crit">Bloquante</span> (badge sombre à l'écran).</li>
+      <li>Statut : <span class="b b-info">En cours</span> · <span class="b b-warn">8D ouvert</span> · <span class="b b-ok">Clôturé ✓</span> / <span class="b b-ok">Traité ✓</span>. Un badge supplémentaire apparaît si la NC est passée en validation Direction.</li>
+      <li>Le <b>numéro de NC est cliquable</b> (souligné) : il rouvre la NC dans son formulaire pour la modifier.</li>
+      <li>Actions par ligne : <b>« Ouvrir 8D »</b> (ou « 8D en cours » si déjà lancé), <b>créer une dérogation liée</b> (icône signature), <b>mettre en quarantaine</b> (icône caisse) et, sur les NC de type client, le bouton violet <b>« Retour »</b> — remplacé par un badge vert une fois le retour traité (Avoir AV-…, Cmd P …, ou Refusé).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/qualite-nc.png" alt="Capture de l'onglet Non-Conformités" loading="lazy">
+      <figcaption><b>Non-Conformités</b> — les boutons d'action à droite déclenchent tout le circuit aval : 8D, dérogation, quarantaine, retour client.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — déclarer une NC</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Nouvelle NC »</b>.</li>
+      <li>Choisissez la <b>catégorie</b> : « Administratif » ou « Production ». Pour une NC de production, choisissez aussi l'<b>entité</b> (Seem ou Semrac) — une NC administrative n'est pas rattachée à une entité (le champ disparaît).</li>
+      <li>Renseignez le type de NC, la gravité, le détecteur, la nature du défaut et de la cause, l'action immédiate, le lot, l'article, le lieu de détection et l'imputation (voir tableau ci-dessous).</li>
+      <li>Cochez si besoin <b>« Soumettre à la validation de la Direction »</b> : la NC apparaîtra dans Direction › À valider (automatique en priorité « urgent » pour une gravité Critique ou Bloquante).</li>
+      <li>Cliquez sur <b>« Créer NC »</b> : la NC est numérotée et rejoint la liste.</li>
+    </ol>
+
+    <h3>Pas à pas — traiter un retour client</h3>
+    <ol class="steps">
+      <li>Sur une NC de <b>type client</b>, cliquez sur <b>« Retour »</b> : la fenêtre « Traiter le retour client » s'ouvre, préremplie (client, référence, lot, nombre de pièces).</li>
+      <li>Renseignez le <b>n° de facture</b> et le <b>n° d'affaire</b> — ce dernier sert de base à la numérotation : l'aperçu affiche en direct les futurs numéros <b>AV-AAAA-XXX</b> (avoir) et <b>CMDP-AAAA-XXX</b> (commande prioritaire).</li>
+      <li>Saisissez le nombre de <b>pièces NC</b>, le <b>prix de vente unitaire</b> (→ montant de l'avoir, calculé en direct) et/ou le <b>coût de revient unitaire</b> (→ coût de la relance).</li>
+      <li>Choisissez la décision : <b>« Refuser le retour »</b>, <b>« Faire un avoir »</b> ou <b>« Commande prioritaire »</b>. L'avoir ou la commande P créés sont visibles dans <b>Commercial › Avoirs &amp; Commandes P</b> ; la décision s'affiche ensuite en badge sur la ligne de NC (le traitement n'est pas rejouable).</li>
+    </ol>
+
+    <h3>Pas à pas — mettre un objet en quarantaine depuis une NC</h3>
+    <ol class="steps">
+      <li>Cliquez sur l'icône caisse (« Mettre un objet en quarantaine ») de la ligne concernée.</li>
+      <li>Décrivez l'<b>objet</b> isolé — n'importe quel objet de l'usine : lot, palette, outillage, réception… (champ obligatoire, prérempli depuis la NC), la référence de lot éventuelle et le motif.</li>
+      <li>Validez : l'objet apparaît dans l'onglet <b>Quarantaine</b>, où la décision de sortie sera prise.</li>
+    </ol>
+
+    <div class="tbl"><table>
+      <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+      <tbody>
+        <tr><td>Date détection</td><td>Date</td><td>Non</td><td>Jour du constat.</td></tr>
+        <tr><td>Type NC</td><td>Liste</td><td>Oui</td><td>Interne, fournisseur, client, procédé… (vocabulaire du référentiel qualité).</td></tr>
+        <tr><td>Catégorie</td><td>Administratif / Production</td><td>Oui</td><td>Détermine le filtre de la liste et si une entité est requise.</td></tr>
+        <tr><td>Entité</td><td>Seem / Semrac</td><td>Oui si Production</td><td>Site concerné — masqué pour une NC administrative.</td></tr>
+        <tr><td>Gravité</td><td>Mineure / Majeure / Critique / Bloquante</td><td>Non (Majeure par défaut)</td><td>Pilote l'urgence ; Critique/Bloquante = priorité « urgent » en validation Direction.</td></tr>
+        <tr><td>Détecteur</td><td>Opérateur / Contrôleur / Client / Auditeur / Réception</td><td>Non</td><td>Qui a détecté — détermine le badge d'origine (Auto-BDT, Auto-OAS, Client, Fournisseur, Audit, Manuel).</td></tr>
+        <tr><td>Nature de la NC / de la cause</td><td>Listes</td><td>Non</td><td>Vocabulaires contrôlés — alimentent le Pareto du Dashboard.</td></tr>
+        <tr><td>Action immédiate / Statut / Responsable</td><td>Listes</td><td>Non</td><td>Suivi du traitement.</td></tr>
+        <tr><td>Fournisseur / ST · Client</td><td>Texte</td><td>Non</td><td>Raison sociale selon l'origine — le champ Client active le bouton « Retour ».</td></tr>
+        <tr><td>FRC client</td><td>Texte</td><td>Non</td><td>Numéro de la NC dans le système du client.</td></tr>
+        <tr><td>LOT concerné · Code article · Désignation</td><td>Texte</td><td>Non</td><td>Rattachement à la production (LOT-2026-XXXX, code nomenclature).</td></tr>
+        <tr><td>Poste (lieu de détection) · Imputation</td><td>Listes</td><td>Non</td><td>Où le défaut a été vu, et quel service en porte la responsabilité.</td></tr>
+        <tr><td>Description</td><td>Texte libre</td><td>Non</td><td>Constat détaillé.</td></tr>
+        <tr><td>Soumettre à la validation de la Direction</td><td>Case à cocher</td><td>Non</td><td>Envoie la NC dans le circuit Direction › À valider.</td></tr>
+      </tbody>
+    </table></div>
+    <figure class="shot">
+      <img src="../../assets/form-qualite-nc.png" alt="Formulaire Nouvelle Non-Conformité" loading="lazy">
+      <figcaption><b>Nouvelle NC</b> — la catégorie conditionne l'affichage du champ Entité ; la case Direction est tout en bas.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Une NC <b>critique ou bloquante</b> sur un lot bloque ses bons de livraison (porte qualité) : l'expédition refusera le BL tant que la NC n'est pas traitée.</li>
+      <li>La colonne « Fin traitement » se remplit seule quand le statut devient clôturé/traité ; avant cela elle affiche « en cours ».</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> le traitement d'un retour client est <b>définitif</b> : une fois l'avoir ou la commande P créés, le bouton « Retour » est remplacé par le badge de la décision — impossible de le rejouer.</div>
+    <div class="astuce"><b>Astuce :</b> remplissez soigneusement Nature, Cause, Poste et Imputation : ce sont les axes du Pareto du Dashboard Qualité, qui oriente les actions de fond.</div>
+  </section>
+
+  <!-- ══════════════ 3. RAPPORTS 8D ══════════════ -->
+  <section class="tab" id="tab-8d">
+    <div class="tab-head"><span class="tab-num">3</span><h2>Rapports 8D</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Le 8D est la méthode de résolution structurée des problèmes (8 disciplines, exigence EN&nbsp;9100 §10.2). L'onglet liste les rapports en cours et complétés ; la rédaction elle-même se fait sur une <b>page dédiée</b> (<code>/qualite/8d</code>) qui guide pas à pas de D1 à D8. Un rapport peut être ouvert <b>librement</b> ou <b>depuis une NC</b> (bouton « Ouvrir 8D » de l'onglet Non-Conformités).</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>En haut, le bouton <b>« Créer un rapport 8D »</b> ouvre un formulaire de création rapide directement dans la page. En dessous, deux listes : <b>« Rapports 8D à compléter / en cours »</b> (colonnes : N°&nbsp;8D, Problème, Gravité, Client, Responsable, Statut, Avancement, Actions) et <b>« Rapports 8D complétés »</b> (avec la date de clôture et un bouton « Voir »).</p>
+    <ul class="points">
+      <li>Statuts : <span class="b b-info">Ouvert</span> · <span class="b b-warn">En cours</span> · <span class="b b-info">À valider</span> · <span class="b b-ok">Clôturé</span>.</li>
+      <li>La colonne <b>Avancement</b> montre une barre de progression « D<i>x</i>/8 » : le nombre d'étapes D1→D8 réellement renseignées.</li>
+      <li>Actions : <b>« Compléter »</b> (ouvre la page 8D du rapport) et <b>✓</b> (marquer le rapport comme complété — il passe dans la liste du bas).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/qualite-8d.png" alt="Capture de l'onglet Rapports 8D" loading="lazy">
+      <figcaption><b>Rapports 8D</b> — la barre d'avancement D<i>x</i>/8 indique d'un coup d'œil où en est chaque résolution.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — créer un rapport 8D</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Créer un rapport 8D »</b> : le formulaire se déplie.</li>
+      <li>Renseignez le <b>titre du problème</b> (obligatoire), le client concerné, la gravité (Majeure par défaut), le lot / la référence produit, le responsable 8D, la date de détection et la description du problème (trame QQOQCCP).</li>
+      <li>Cliquez sur <b>« Créer le rapport 8D »</b> : le rapport est numéroté puis la page dédiée s'ouvre automatiquement pour poursuivre la rédaction.</li>
+      <li>Alternative depuis une NC : onglet Non-Conformités → bouton <b>« Ouvrir 8D »</b> — la page 8D s'ouvre préremplie avec les données de la NC.</li>
+    </ol>
+
+    <h3>Pas à pas — dérouler les 8 disciplines (page /qualite/8d)</h3>
+    <p>La page dédiée affiche un <b>fil d'étapes</b> en haut : D1&nbsp;Équipe · D2&nbsp;Problème · D3&nbsp;Inhibition · D4&nbsp;Causes · D5&nbsp;Actions · D6&nbsp;Validation · D7&nbsp;Préventif · D8&nbsp;Clôture. Chaque étape est un écran guidé :</p>
+    <ol class="steps">
+      <li><b>D1 — Constitution de l'équipe</b> : responsable et membres du groupe de travail.</li>
+      <li><b>D2 — Description du problème</b> : trame <b>QQOQCCP</b> (Qui, Quoi, Où, Quand, Comment, Combien, Pourquoi) pour délimiter précisément le périmètre.</li>
+      <li><b>D3 — Actions d'inhibition</b> (containment) : mesures immédiates de protection du client, ajoutables ligne à ligne.</li>
+      <li><b>D4 — Recherche des causes</b> : diagramme d'<b>Ishikawa 6M</b> puis <b>5 Pourquoi</b> pour remonter à la cause racine.</li>
+      <li><b>D5 — Actions correctives permanentes</b> : les actions qui suppriment la cause racine, avec pilote et échéance.</li>
+      <li><b>D6 — Validation de l'efficacité</b> : preuve que les actions fonctionnent.</li>
+      <li><b>D7 — Actions préventives</b> : généralisation aux produits/process similaires.</li>
+      <li><b>D8 — Clôture</b> : liste de vérification récapitulant D1→D7, puis clôture du rapport (il passe dans « Rapports 8D complétés »).</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/qualite-8d-d1.png" alt="Page 8D, étape D1 équipe" loading="lazy">
+      <figcaption><b>Page 8D — D1</b> — le fil d'étapes D1→D8 en haut permet de naviguer entre les disciplines.</figcaption>
+    </figure>
+    <figure class="shot">
+      <img src="../../assets/qualite-8d-d5.png" alt="Page 8D, étape D5 actions correctives" loading="lazy">
+      <figcaption><b>Page 8D — D5</b> — les actions correctives permanentes se saisissent avec pilote et échéance.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>L'avancement D<i>x</i>/8 est calculé sur les champs réellement remplis : un rapport « en cours » à D2/8 n'a documenté que l'équipe et le problème.</li>
+      <li>Sur une NC dont le 8D est déjà ouvert, le bouton affiche « 8D en cours » : cliquer rouvre le rapport existant, il n'en crée pas un deuxième.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> le bouton <b>✓</b> de la liste permet de clôturer un rapport sans rouvrir la page 8D — pratique quand la validation D8 a été faite en réunion.</div>
+  </section>
+
+  <!-- ══════════════ 4. DÉROGATIONS ══════════════ -->
+  <section class="tab" id="tab-derogations">
+    <div class="tab-head"><span class="tab-num">4</span><h2>Dérogations</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Quand un produit s'écarte de la définition mais reste potentiellement acceptable, on demande au client une <b>dérogation</b> (formulaire bilingue PMQ3-D3, registre PMQ3-D4). L'onglet suit tout le circuit : rédaction → envoi au client → décision du client (accord total, accord limité, refus) → et, en cas de refus, la suite commerciale (avoir ou commande prioritaire).</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Quatre tuiles KPI : <b>Dérogations</b> (total, registre PMQ3-D4), <b>En cours</b>, <b>Accordées</b> (AT + AL), <b>Refusées</b>. Puis une recherche, le bouton <b>« Nouvelle dérogation »</b> et le tableau : N°&nbsp;/&nbsp;Date, Client / Contact, Désignation, Réf., Type, Décision, Statut, Actions.</p>
+    <ul class="points">
+      <li>Décision client : <span class="b b-ok">Accord total</span> (AT) · <span class="b b-warn">Accord limité</span> (AL) · <span class="b b-crit">Refus</span> (R) · <span class="b b-mut">en attente</span>.</li>
+      <li>Statut du dossier : <span class="b b-warn">En cours</span> · <span class="b b-info">Envoyée (attente)</span> · <span class="b b-ok">Soldée</span> · <span class="b b-mut">Annulée</span>.</li>
+      <li>Actions : <b>Traiter le refus</b> (marteau, visible seulement si la décision est « R » et le dossier non soldé), <b>Exporter PDF</b>, <b>Modifier</b>.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/qualite-derogations.png" alt="Capture de l'onglet Dérogations" loading="lazy">
+      <figcaption><b>Dérogations</b> — les KPI en tête donnent le solde du registre ; la colonne Décision reflète la réponse du client.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — le circuit complet d'une dérogation</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Nouvelle dérogation »</b> (ou, depuis une NC, sur l'icône signature : le formulaire s'ouvre prérempli et un bandeau rappelle la NC liée).</li>
+      <li>Remplissez les blocs <b>Émetteur</b>, <b>Destinataire</b>, <b>Références</b> et le <b>descriptif</b> de la demande (voir tableau).</li>
+      <li>Enregistrez en statut <b>« En cours (brouillon) »</b>, puis exportez le <b>PDF</b> (document bilingue français/anglais avec logo) et envoyez-le au client. Passez alors le statut à <b>« Envoyée au client (attente réponse) »</b>.</li>
+      <li>À réception de la réponse, rouvrez la dérogation et saisissez la <b>décision</b> : AT (accord total), AL (accord limité) ou R (refus), puis le statut « Soldée » si le dossier est terminé.</li>
+      <li>Si la décision est <b>R — Refus</b> : cliquez sur le bouton marteau <b>« Traiter le refus »</b>. Renseignez le n° d'affaire (base de numérotation — l'aperçu affiche AV-AAAA-XXX et CMDP-AAAA-XXX), le nombre de pièces, le prix de vente unitaire (→ avoir) et/ou le coût de revient unitaire (→ commande P), puis choisissez : <b>Refus sec</b>, <b>Faire un avoir</b> ou <b>Commande P</b>. Le résultat part dans <b>Commercial › Avoirs &amp; Commandes P</b> et la ligne affiche ensuite « ✓ » avec la décision retenue.</li>
+    </ol>
+
+    <div class="tbl"><table>
+      <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+      <tbody>
+        <tr><td>Émetteur : Date, Émise par, Service, Tél., Email</td><td>Texte / date</td><td>Non</td><td>Qui émet la demande (Service prérempli « Qualité », email prérempli qualite@seem-semrac.com).</td></tr>
+        <tr><td>Destinataire : Société, Nom, Tél., Email</td><td>Texte</td><td>Client ou désignation requis</td><td>Le client à qui la dérogation est adressée.</td></tr>
+        <tr><td>Désignation · Votre Cde · Votre Réf. · AR · Notre Réf. · Quantité</td><td>Texte / nombre</td><td>Non</td><td>Références croisées de la pièce et de la commande concernées.</td></tr>
+        <tr><td>Type de demande</td><td>AC / AE / AR</td><td>Non</td><td>Nature de la demande de dérogation.</td></tr>
+        <tr><td>Descriptif de la demande</td><td>Texte libre</td><td>Non</td><td>L'écart constaté et la justification — repris tel quel sur le PDF.</td></tr>
+        <tr><td>Décision</td><td>— / AT / AL / R</td><td>Non</td><td>Réponse du client (saisie au retour).</td></tr>
+        <tr><td>Statut</td><td>En cours / Envoyée / Soldée / Annulée</td><td>Non</td><td>Avancement du dossier.</td></tr>
+        <tr><td>Commentaire</td><td>Texte libre</td><td>Non</td><td>Précisions internes ou conditions de l'accord limité.</td></tr>
+      </tbody>
+    </table></div>
+    <figure class="shot">
+      <img src="../../assets/form-qualite-derogation.png" alt="Formulaire de demande de dérogation PMQ3-D3" loading="lazy">
+      <figcaption><b>Formulaire PMQ3-D3</b> — blocs Émetteur / Destinataire / Références / Décision client ; le bandeau rouge signale une dérogation créée depuis une NC.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Une dérogation peut aussi naître de l'onglet <b>Quarantaine</b> (branche « Dérogation » du bouton Statuer) : elle arrive ici préremplie, à compléter puis à envoyer.</li>
+      <li>Le traitement d'un refus est <b>idempotent</b> : une fois l'avoir ou la commande P créés, la ligne affiche la décision et le bouton marteau disparaît.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> le bouton « Exporter PDF » du formulaire fonctionne aussi sur un brouillon non enregistré — pratique pour faire relire le document avant envoi.</div>
+  </section>
+
+  <!-- ══════════════ 5. LIBÉRATION LOTS ══════════════ -->
+  <section class="tab" id="tab-liberation">
+    <div class="tab-head"><span class="tab-num">5</span><h2>Libération Lots</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le <b>contrôle qualité final avant expédition</b>. Un lot apparaît ici dès que <b>tous ses BDT sont soldés</b> : il doit alors passer un <b>PV de libération</b> — libéré, ou bloqué (départ en quarantaine) — avant de pouvoir partir. Une commande n'est expédiable que si <b>tous ses lots</b> sont libérés.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Deux tableaux : <b>« Lots terminés à libérer »</b> et <b>« Lots libérés »</b>, avec les colonnes N°&nbsp;Lot, Pièce, Commande, Qté, Production (nombre de BDT soldés, coche verte) et Action / Statut. Sur un lot à libérer, le bouton violet <b>« PV de libération »</b> ouvre la décision ; sur un lot libéré, le badge <span class="b b-ok">Libéré ✓</span> indique aussi qui a libéré.</p>
+    <figure class="shot">
+      <img src="../../assets/qualite-liberation.png" alt="Capture de l'onglet Libération Lots" loading="lazy">
+      <figcaption><b>Libération Lots</b> — en haut les lots en attente de décision, en bas l'historique des lots libérés.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — libérer (ou bloquer) un lot</h3>
+    <ol class="steps">
+      <li>Dans « Lots terminés à libérer », cliquez sur <b>« PV de libération »</b> du lot concerné.</li>
+      <li>Renseignez éventuellement <b>Cp</b> et <b>Cpk</b> (facultatifs) et vos <b>observations</b> (conformité dimensionnelle, aspect, documents…).</li>
+      <li>Choisissez : <b>« Libérer le lot »</b> — un PV est créé, le lot passe dans la liste des libérés et devient expédiable — ou <b>« Bloquer (quarantaine) »</b> — le lot est mis en quarantaine et se traite dans l'onglet Quarantaine.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Tant qu'un seul lot d'une commande n'est pas libéré, l'expédition de la commande reste bloquée côté Expéditions.</li>
+      <li>La colonne « Production » confirme le prérequis : le nombre de BDT soldés du lot.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> « Bloquer (quarantaine) » sort le lot du flux d'expédition ; sa remise en circulation exige ensuite une décision explicite dans l'onglet Quarantaine.</div>
+  </section>
+
+  <!-- ══════════════ 6. QUARANTAINE ══════════════ -->
+  <section class="tab" id="tab-quarantaine">
+    <div class="tab-head"><span class="tab-num">6</span><h2>Quarantaine</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> La quarantaine isole tout objet douteux — lot bloqué au contrôle final, palette, outillage, réception fournisseur — en attendant une décision. C'est un flux <b>séparé</b> de la libération : ce qui entre ici (depuis une NC, ou un blocage de libération) doit en sortir par une décision tracée.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Trois tuiles KPI : <b>Lots en quarantaine</b> (en attente de décision), <b>Durée max (jours)</b> (lot le plus ancien), <b>Libérés (total)</b>. Puis le tableau : N°&nbsp;Quarantaine, Lot / Réf., Pièce, Client, Motif, Mise en Q., Durée (j), Statut, Actions. La durée passe en orange au-delà de 2 jours et en rouge au-delà de 5.</p>
+    <ul class="points">
+      <li>Statuts : <span class="b b-warn">En quarantaine</span> · <span class="b b-info">Validation Direction</span> · <span class="b b-ok">Libéré ✓</span> · <span class="b b-info">Libéré (dérogation)</span> · <span class="b b-crit">Rejeté</span>.</li>
+      <li>Sur une ligne « En quarantaine », le bouton violet <b>« Statuer »</b> ouvre la décision de sortie ; une ligne déjà statuée affiche qui a décidé et quand.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/qualite-quarantaine.png" alt="Capture de l'onglet Quarantaine" loading="lazy">
+      <figcaption><b>Quarantaine</b> — surveillez la colonne Durée : rouge = plus de 5 jours sans décision.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — statuer la sortie de quarantaine (3 branches)</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Statuer »</b> : la fenêtre affiche l'objet concerné et le champ « Décision par » (prérempli « Qualité »).</li>
+      <li><b>Branche 1 — Validation managériale</b> : choisissez la priorité (normale ou critique) et cliquez sur <b>« Soumettre à la Direction »</b>. Le dossier passe en statut « Validation Direction » ; la décision prise par la Direction (dans Direction › À valider) <b>libère ou rejette automatiquement</b> l'objet.</li>
+      <li><b>Branche 2 — Dérogation</b> : cliquez sur <b>« Créer une dérogation »</b>. Le lot est libéré <b>sous dérogation</b> et une demande préremplie est créée, à compléter et envoyer depuis l'onglet Dérogations.</li>
+      <li><b>Branche 3 — Décision immédiate</b> : saisissez le texte de la décision (ex. « Libéré après retouche », « Rebut », « Accepté en l'état ») puis cliquez sur <b>« Libérer »</b> ou <b>« Rejeter »</b>. Le texte de décision est obligatoire.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Un objet en quarantaine bloque les BL qui le concernent (porte qualité côté Expéditions).</li>
+      <li>L'entrée en quarantaine se fait depuis une NC (onglet Non-Conformités) ou par le blocage d'un lot à la libération — pas directement ici.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> réservez la branche « Validation managériale » aux cas à enjeu (client sensible, coût élevé) : la Direction est notifiée et sa décision s'applique sans autre manipulation.</div>
+  </section>
+
+  <!-- ══════════════ 7. CONTRÔLE DES ECME ══════════════ -->
+  <section class="tab" id="tab-ecme">
+    <div class="tab-head"><span class="tab-num">7</span><h2>Contrôle des ECME</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Cet onglet gère le parc d'<b>Équipements de Contrôle, Mesure &amp; Essai</b> (pieds à coulisse, micromètres, tampons, balances…) : identité de chaque instrument, <b>statut périodique calculé en direct</b> à partir de la prochaine échéance, saisie des <b>PV de vérification</b> (avec calcul automatique des erreurs de justesse Ej et de fidélité Ef) et <b>fiche de vie</b> complète imprimable.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Cinq tuiles KPI : <b>ECME au parc</b> (avec le nombre de vérifications tracées), <b>Valides</b>, <b>À vérifier &lt; 30 j</b>, <b>En retard</b>, <b>Réformés</b>. Dessous, le bandeau <b>« Contrôles à faire »</b> liste sous forme de pastilles cliquables les ECME en retard ou à échéance ≤ 30 jours (actualisé chaque jour) — ou un bandeau vert si tout le parc est dans sa validité. Des filtres (Tous · En retard · À vérifier bientôt · Valides · Réformés) précèdent le tableau : Code, Désignation, Type, Localisation, Périod., Dernière vérif., Prochaine (avec « X j de retard » ou « dans X j »), Statut, Actions.</p>
+    <ul class="points">
+      <li>Statut <b>live</b> (recalculé à l'affichage, jamais stocké) : <span class="b b-ok">Valide</span> · <span class="b b-warn">À vérifier bientôt</span> (échéance ≤ 30 j) · <span class="b b-crit">En retard</span> · <span class="b b-mut">Réformé</span> · « À planifier » si aucune échéance n'est connue.</li>
+      <li>Quatre actions par ligne : <b>Nouvelle vérification (PV)</b> (règle violette), <b>Fiche de vie</b> (document bleu, avec le compteur de vérifications), <b>Modifier l'identité</b> (crayon), <b>Supprimer</b>.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/qualite-ecme.png" alt="Capture de l'onglet Contrôle des ECME" loading="lazy">
+      <figcaption><b>Contrôle des ECME</b> — le bandeau « Contrôles à faire » est votre liste de travail du jour : chaque pastille ouvre directement le PV de vérification.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — créer un ECME</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Nouvel ECME »</b> et renseignez l'identité : code d'identification (ex. « JP 1 »), <b>désignation</b> (obligatoire), type (liste des familles : PC pied à coulisse, JP jauge de profondeur, MI micromètre, tampons filetés, balance…), marque, modèle, n° série, n° de commande d'achat, emplacement, activité (Seem / Semrac), responsable, capacité/étendue, précision, incertitude.</li>
+      <li>Indiquez la <b>périodicité</b> (12 mois par défaut), la date de dernière vérification et la mise en service ; pour un étalonnage externe, l'organisme et la référence du certificat.</li>
+      <li>Enregistrez : l'ECME rejoint le parc et son statut périodique se calcule aussitôt.</li>
+    </ol>
+
+    <h3>Pas à pas — saisir un PV de vérification</h3>
+    <ol class="steps">
+      <li>Cliquez sur la règle violette (ou sur une pastille du bandeau « Contrôles à faire ») : la fenêtre <b>« PV de vérification »</b> s'ouvre.</li>
+      <li>Renseignez la date, l'intervenant, le <b>lieu</b> (interne ou externe), l'étalon utilisé (cale n°), la réf. du PV, l'indice et les interventions réalisées.</li>
+      <li>En interne, remplissez la <b>grille de mesures adaptée à la famille</b> de l'instrument : pour un <b>pied à coulisse (PC)</b>, 5 sections de becs avec valeur de cale (Vc) et 3 relevés → la moyenne Vcr et l'écart Ej se calculent seuls ; pour les familles JP, MI, CO, FO, 4 points de mesure avec cote nominale (Cn) et 5 relevés → moyenne MJ et <b>Ej = Cn − MJ</b> calculés automatiquement, <b>Ef</b> = étendue des relevés au point de plus fort écart. Les familles sans grille détaillée se contentent du résultat et de la décision.</li>
+      <li><b>Ej et Ef s'affichent automatiquement</b> ; lisez la <b>classe</b> sur votre tableau des écarts et saisissez-la (classe justesse, fidélité, classe retenue) — l'ERP n'invente aucun seuil.</li>
+      <li>Choisissez le <b>résultat</b> (B — Bon, M — Moyen, HS — Hors service), la <b>décision</b> (Conforme / Non conforme, avec motif si NC), le visa du responsable et la date « À refaire avant » (proposée automatiquement = date + périodicité).</li>
+      <li>Cliquez sur <b>« Enregistrer le PV »</b> : la vérification alimente la fiche de vie et <b>recalcule la prochaine échéance</b> de l'instrument.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-qualite-ecme.png" alt="Formulaire ECME" loading="lazy">
+      <figcaption><b>PV de vérification ECME</b> — la grille de mesures dépend de la famille ; Ej et Ef (encadré violet) se calculent en direct pendant la saisie.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — consulter la fiche de vie</h3>
+    <ol class="steps">
+      <li>Cliquez sur l'icône document bleu : la <b>fiche de vie</b> s'ouvre — identité complète de l'instrument + <b>journal des opérations</b> (date, intervenant, lieu, interventions, Ej, Ef, résultat, décision/classe, visa, prochaine échéance).</li>
+      <li>Le bouton <b>« PDF »</b> imprime la fiche de vie ; le bouton <b>« Nouvelle vérification »</b> enchaîne directement sur la saisie d'un PV.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le statut n'est <b>jamais figé en base</b> : il se déduit chaque jour de la prochaine échéance — un instrument « Valide » aujourd'hui peut être « À vérifier bientôt » demain.</li>
+      <li>Cochez <b>« Réformé »</b> dans l'identité pour sortir définitivement un instrument du service : il quitte les alertes mais reste consultable.</li>
+      <li>Pour un étalonnage <b>externe</b>, la grille de mesures est remplacée par les champs organisme + référence du certificat.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> « Supprimer » efface l'ECME <b>et tout son historique</b> de vérifications. Pour un instrument hors service, préférez toujours « Réformé ».</div>
+  </section>
+
+  <!-- ══════════════ 8. ÉTUDE DE CAPABILITÉ ══════════════ -->
+  <section class="tab" id="tab-capabilite">
+    <div class="tab-head"><span class="tab-num">8</span><h2>Étude de capabilité</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Cet onglet mesure la <b>capabilité des machines et process</b> de l'atelier (SPC) : chaque contrôle de cote — saisi ici par la Qualité ou par les opérateurs depuis leur BDT — alimente une <b>carte de contrôle aux écarts réduits</b>, qui produit les indices <b>Cp / Cpk</b>, le pourcentage conforme et le PPM. On sait ainsi quelles machines tiennent leurs tolérances.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>À gauche, la liste <b>« Process &amp; machines »</b> avec recherche : chaque ressource porte un badge <span class="b b-info">Machine</span> ou <span class="b b-mut">Manuel</span> et son dernier Cpk (ou « non étudié »). En cliquant sur une ressource, l'espace de travail à droite affiche : l'en-tête (machine liée et sa tolérance par défaut, nombre de contrôles, bouton <b>« Nouveau contrôle »</b>) et trois vues :</p>
+    <ul class="points">
+      <li><b>Liste des contrôles</b> — colonnes Date, Cote, Pièce, Mesure, Écart réd. (rouge si |écart| &gt; 1), Par (Qualité en violet, opérateur en vert), Conf. — triable par opérateur d'une case à cocher.</li>
+      <li><b>Carte complète</b> — la carte aux écarts réduits de <b>tous</b> les contrôles (opérateurs + qualité) : verdict <span class="b b-ok">Capable</span> (Cpk ≥ 1,33) · <span class="b b-warn">Limite</span> (≥ 1) · <span class="b b-crit">Non capable</span> (&lt; 1) · <span class="b b-mut">À étoffer</span>, avec Cp, Cpk, σ réduit, % conforme et PPM. Sur le graphique : point rouge = hors tolérance, violet = contrôle qualité.</li>
+      <li><b>Par opérateur</b> — une carte individuelle par contrôleur (et une pour la Qualité), chacune avec son propre Cp/Cpk.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/qualite-capabilite.png" alt="Capture de l'onglet Étude de capabilité" loading="lazy">
+      <figcaption><b>Étude de capabilité</b> — sélectionnez une ressource à gauche ; la carte complète donne le verdict Capable / Limite / Non capable de la machine.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — enregistrer un contrôle de cote</h3>
+    <ol class="steps">
+      <li>Sélectionnez la ressource dans la liste de gauche, puis cliquez sur <b>« Nouveau contrôle »</b>.</li>
+      <li>Vérifiez la <b>machine</b>, saisissez la pièce, la <b>cote</b> (ex. Ø12 H7), la valeur <b>nominale</b> et la <b>mesure</b> relevée.</li>
+      <li>Les tolérances <b>mini (LSL)</b> et <b>maxi (USL)</b> se préremplissent depuis la tolérance par défaut de la machine — ajustez-les si le plan impose autre chose. Indiquez le contrôleur.</li>
+      <li>Cliquez sur <b>« Enregistrer »</b> : le point s'ajoute aux cartes et les indices se recalculent.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-qualite-capabilite.png" alt="Fenêtre Contrôle de cote — Qualité de l'étude de capabilité" loading="lazy">
+      <figcaption><b>Contrôle de cote — Qualité</b> — la <b>Machine</b> est présélectionnée depuis la ressource choisie à gauche ; saisissez Pièce, Cote (ex.&nbsp;Ø12&nbsp;H7), Nominale et Mesure, puis vérifiez le couple <b>Tol.&nbsp;mini (LSL)</b> / <b>Tol.&nbsp;maxi (USL)</b> prérempli. « Enregistrer » ajoute le point à la carte aux écarts réduits et recalcule Cp/Cpk ; le <b>Contrôleur</b> saisi ici détermine la carte individuelle de la vue « Par opérateur ».</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Les contrôles saisis par les <b>opérateurs sur leurs BDT</b> remontent automatiquement sur la machine correspondante : la carte complète agrège tout, toutes pièces confondues.</li>
+      <li>La carte travaille en <b>écarts réduits</b> (position de la mesure dans sa tolérance) : c'est ce qui permet de mélanger des pièces et des cotes différentes sur une même machine.</li>
+      <li>Cote, nominale, mesure et les deux tolérances sont obligatoires pour enregistrer.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> la vue « Par opérateur » sert aussi à détecter un écart de méthode de mesure : si un seul contrôleur dérive, le problème est plus probablement humain que machine.</div>
+  </section>
+
+  <!-- ══════════════ 9. PRODUITS PÉRISSABLES ══════════════ -->
+  <section class="tab" id="tab-perissables">
+    <div class="tab-head"><span class="tab-num">9</span><h2>Produits Périssables</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Suivi des produits à durée de vie limitée (colles, résines, produits chimiques…) <b>par lot</b>, conformément au formulaire PRA2-D1 : réception, péremption, date d'alerte, lieu d'utilisation, et consommation en FIFO. Le statut de chaque lot est <b>recalculé automatiquement</b> à partir des dates.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Des bandeaux d'alerte apparaissent si nécessaire : rouge « X lot(s) expiré(s) — retrait immédiat requis » et orange « X lot(s) à renouveler / proches péremption ». Puis des filtres (Tous · Valides · À renouveler · Expirés · Archivés / épuisés), la recherche, le bouton <b>« Nouveau lot »</b> et le tableau : Produit (avec fournisseur et n° de lot fournisseur), Code, Réception, Péremption, Alerte, Lieu, Inventaire (quantité courante / initiale + unité), Sorties, Statut, Actions (Sortie · Modifier · Supprimer).</p>
+    <ul class="points">
+      <li>Statuts calculés : <span class="b b-ok">Valide ✓</span> · <span class="b b-warn">À renouveler ⚠</span> (date d'alerte atteinte, ou péremption dans ≤ 30 jours) · <span class="b b-crit">Expiré ✗</span> (péremption dépassée — la ligne est surlignée) · <span class="b b-mut">Archivé</span>.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/qualite-perissables.png" alt="Capture de l'onglet Produits Périssables" loading="lazy">
+      <figcaption><b>Produits Périssables</b> — les bandeaux d'alerte en tête signalent les lots expirés ou proches de la péremption ; la colonne Inventaire suit la consommation.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — enregistrer un lot puis suivre sa consommation</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Nouveau lot »</b> et renseignez au minimum le <b>nom du produit</b> (obligatoire), puis les dates (réception, <b>péremption</b>, <b>alerte</b>), les quantités et le lieu (voir tableau).</li>
+      <li>Enregistrez : le statut du lot se calcule aussitôt selon les dates saisies.</li>
+      <li>À chaque consommation, cliquez sur l'icône <b>Sortie</b> de la ligne : indiquez la quantité sortie (bornée par le reste), la date, le n° de commande client et le motif, puis <b>« Valider la sortie »</b> — l'inventaire courant se décrémente et la sortie s'ajoute au compteur.</li>
+    </ol>
+
+    <div class="tbl"><table>
+      <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+      <tbody>
+        <tr><td>Produit</td><td>Texte</td><td>Oui</td><td>Nom du produit périssable.</td></tr>
+        <tr><td>Code produit</td><td>Texte</td><td>Non</td><td>Référence fabricant.</td></tr>
+        <tr><td>Fournisseur</td><td>Texte (aide à la saisie)</td><td>Non</td><td>Choisi dans la liste des fournisseurs connus de l'ERP.</td></tr>
+        <tr><td>N° lot fournisseur · N° commande fourn.</td><td>Texte</td><td>Non</td><td>Traçabilité amont du lot.</td></tr>
+        <tr><td>Date réception · Date péremption · Date d'alerte</td><td>Dates</td><td>Recommandé</td><td>Les deux dernières pilotent le statut (À renouveler / Expiré).</td></tr>
+        <tr><td>Délai appro</td><td>Texte</td><td>Non</td><td>Ex. « 8 semaines » — pour anticiper le renouvellement.</td></tr>
+        <tr><td>Lieu d'utilisation</td><td>Texte</td><td>Non</td><td>Zone ou machine où le produit est utilisé.</td></tr>
+        <tr><td>Qté initiale · Inventaire courant · Unité</td><td>Nombres / texte</td><td>Non</td><td>Stock du lot (boîtier, L, kg…) — l'inventaire baisse à chaque sortie.</td></tr>
+        <tr><td>Observations</td><td>Texte</td><td>Non</td><td>Remarques libres.</td></tr>
+      </tbody>
+    </table></div>
+    <figure class="shot">
+      <img src="../../assets/form-qualite-perissable.png" alt="Formulaire Nouveau lot périssable" loading="lazy">
+      <figcaption><b>Nouveau lot périssable</b> — les trois dates (réception, péremption, alerte) déterminent le statut affiché dans la liste.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Un lot <b>expiré</b> doit être retiré immédiatement de l'atelier : c'est une exigence d'audit (préservation du produit).</li>
+      <li>La consommation suit la logique <b>FIFO</b> : sortez d'abord le lot le plus ancien.</li>
+      <li>Même sans date d'alerte saisie, un lot passe « À renouveler » quand sa péremption est à 30 jours ou moins.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> renseignez la date d'alerte en tenant compte du <b>délai d'approvisionnement</b> : alerte = péremption − délai appro, pour recommander à temps.</div>
+  </section>
+
+  <!-- ══════════════ 10. PLAN DE CONTRÔLE ══════════════ -->
+  <section class="tab" id="tab-plan-controle">
+    <div class="tab-head"><span class="tab-num">10</span><h2>Plan de contrôle</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Le plan de contrôle (référence PRP1-D9) est le <b>plan d'inspection EN&nbsp;9100 / ISO&nbsp;9001</b> de l'entreprise : pour chaque opération, de la réception au contrôle final, il fixe les paramètres à contrôler, l'ECME ou l'outil à utiliser, la fréquence et l'échantillonnage, le critère d'acceptation (règle <b>C=0</b>, zéro défaut), le responsable, le type de contrôle et le plan de réaction en cas d'écart.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Quatre tuiles KPI : <b>Lignes de contrôle</b>, <b>Opérations couvertes</b>, <b>Avec ECME/outil</b>, <b>Contrôles destructifs</b>. Puis la recherche, les boutons <b>« Exporter PDF »</b> et <b>« Nouvelle ligne »</b>, et le tableau : N°, Opération / Classification, Paramètres, ECME / Outils, Fréquence &amp; échantillon, Critère, Responsable, Type (<span class="b b-ok">Non destructif</span> / <span class="b b-warn">Destructif</span>), Plan de réaction, Actions (Modifier · Supprimer).</p>
+    <figure class="shot">
+      <img src="../../assets/qualite-plan-controle.png" alt="Capture de l'onglet Plan de contrôle" loading="lazy">
+      <figcaption><b>Plan de contrôle</b> — une ligne par opération contrôlée ; l'export PDF produit le document A4 paysage à jour pour les audits.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — ajouter ou modifier une ligne</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Nouvelle ligne »</b> (ou le crayon d'une ligne existante).</li>
+      <li>Renseignez le n° de ligne, l'<b>opération</b> (obligatoire — la liste propose les process de l'atelier), la classification client, les <b>paramètres à contrôler</b>, l'<b>ECME / outil</b> (la liste propose le parc ECME de l'onglet 7), la fréquence &amp; l'échantillonnage, le <b>critère d'acceptation</b> (par défaut « C=0 (Zéro défaut) »), le responsable, le type de contrôle, l'activité (Seem / Semrac) et le <b>plan de réaction</b> en cas d'écart.</li>
+      <li>Enregistrez. Pour diffuser le document, cliquez sur <b>« Exporter PDF »</b> : le plan complet s'imprime, trié par n° de ligne, avec le logo et la mention de la règle C=0.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-qualite-plan-controle.png" alt="Fenêtre Nouvelle ligne de contrôle du plan de contrôle" loading="lazy">
+      <figcaption><b>Nouvelle ligne de contrôle</b> — la fenêtre reprend exactement les colonnes du tableau : N°&nbsp;ligne, <b>Opération</b> (obligatoire) et Classification client en tête, puis Paramètres à contrôler, <b>ECME&nbsp;/&nbsp;outils</b>, Fréquence &amp; échantillonnage, Critère d'acceptation (« C=0 (Zéro défaut) » par défaut), Responsable, Type de contrôle (Non destructif&nbsp;/&nbsp;Destructif), Activité et <b>Plan de réaction (en cas d'écart)</b>. « Enregistrer » insère la ligne dans le plan et elle part aussitôt dans l'export PDF d'audit.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le champ « Opération » est obligatoire ; nommer l'ECME depuis la liste garantit la cohérence avec le parc réel.</li>
+      <li>Le plan de réaction est ce que l'auditeur vérifie en premier : décrivez la conduite à tenir concrète (tri, blocage, NC…).</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> après toute évolution du parc ECME ou d'un process, relisez les lignes concernées — le plan de contrôle doit toujours refléter les moyens réellement disponibles.</div>
+  </section>
+
+  <!-- ══════════════ 11. AUDIT CONFORMITÉ ══════════════ -->
+  <section class="tab" id="tab-audit">
+    <div class="tab-head"><span class="tab-num">11</span><h2>Audit Conformité</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le module d'<b>audits internes du SMI</b> (système de management intégré) couvrant Qualité (ISO&nbsp;9001 / EN&nbsp;9100), Sécurité (ISO&nbsp;45001), Environnement (ISO&nbsp;14001) et Sécurité de l'information (ISO&nbsp;27001). Il ordonnance le programme annuel, fait réaliser les audits sur des grilles de questions (dont des questions <b>AUTO</b> pré-remplies par l'ERP), transforme les écarts en NC et trace les plans d'action jusqu'à clôture. Quatre sous-onglets : <b>Programme</b>, <b>Constats &amp; plans d'action</b>, <b>Grilles</b>, <b>Référentiels</b>.</p>
+
+    <h3>Sous-onglet Programme</h3>
+    <p>L'ordonnancement annuel (EN&nbsp;9100 §9.2). En haut : le <b>sélecteur d'exercice</b> (une pastille par année), le bouton <b>« Reconduire pour AAAA+1 »</b> et <b>« Nouvelle ligne »</b>. Pour l'exercice affiché : quatre KPI (Lignes au programme, Taux de réalisation, En retard, Plans d'action soldés), puis le <b>calendrier annuel</b> — 12 mois, une case par jour, colorée selon l'état : bleu pâle = aucun audit, bleu foncé = programmé, jaune = pas fait (échéance dépassée), rouge = non conforme (NC ouverte), vert = soldé conforme. Les lignes du programme sont ensuite regroupées en sections : <b>Audits de processus</b> (thèmes A–K), <b>Audits de poste &amp; flash</b> (thèmes T1–T9), <b>Procédés spéciaux</b> (soudure, traitement de surface OAS / Surtec 650, CND…), <b>Exigences client</b>. Colonnes : Entité auditée, Type, Thèmes, Référentiels, Date cible (avec alerte retard), Auditeur, Statut, Actions.</p>
+    <ul class="points">
+      <li>Statuts d'une ligne : <span class="b b-mut">À planifier</span> · <span class="b b-info">Planifié</span> · <span class="b b-warn">Réalisé</span> · <span class="b b-info">Rapport envoyé</span> · <span class="b b-info">Retour reçu</span> · <span class="b b-ok">Clôturé</span>.</li>
+      <li>Actions par ligne : <b>✎ Modifier</b> (date, auditeur, statut, thèmes, référentiels, grille…), <b>fiche d'évaluation</b> (réaliser l'audit), <b>📄 Rapport PDF</b> (téléchargeable <i>seulement une fois l'audit soldé</i>), <b>🗑 Supprimer</b>.</li>
+      <li>Le calendrier est interactif : cliquer une case avec audit permet de le consulter ou le <b>déprogrammer</b> ; cliquer une case vide propose d'<b>affecter</b> un audit non programmé (ou d'en déplacer un) à cette date.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/qualite-audit-programme.png" alt="Capture du sous-onglet Programme d'audit" loading="lazy">
+      <figcaption><b>Audit › Programme</b> — le calendrier annuel code l'état de chaque journée d'audit ; les sections regroupent processus, postes et procédés spéciaux.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — réaliser un audit</h3>
+    <ol class="steps">
+      <li>Sur la ligne du programme, cliquez sur la <b>fiche d'évaluation</b> (icône presse-papiers) : la fiche s'agrandit avec les questions de la grille associée.</li>
+      <li>Pour chaque question, cochez <b>Conforme</b> / <b>Non conforme</b> / <b>Axe d'amélioration</b> et saisissez la preuve ou le constat. Les questions en mode <b>AUTO</b> arrivent pré-remplies depuis les sondes de l'ERP (parc ECME, habilitations, DUER, FDS, périssables, VGP, bains, NC ouvertes…) avec leur preuve.</li>
+      <li>Ajoutez un constat global si besoin, puis choisissez : <b>« Enregistrer (réalisé) »</b> — l'audit reste modifiable — ou <b>« Solder l'audit »</b> — clôture définitive, le <b>rapport PDF devient téléchargeable</b> sur la ligne.</li>
+    </ol>
+
+    <h3>Pas à pas — reconduire le programme pour l'année suivante</h3>
+    <ol class="steps">
+      <li>En fin d'exercice, cliquez sur <b>« Reconduire pour AAAA+1 »</b> et confirmez.</li>
+      <li>Tout le programme est recopié vers l'année suivante : les dates sont décalées d'un an et les statuts remis à « planifié ».</li>
+    </ol>
+
+    <h3>Sous-onglet Constats &amp; plans d'action</h3>
+    <p>Chaque réponse « Non conforme » ou « Axe » des fiches d'évaluation devient un constat listé ici (Audit / entité, Type <span class="b b-crit">NC</span> ou <span class="b b-warn">Axe</span>, Constat, Preuve, Action). Le bouton <b>« Convertir en NC »</b> crée une non-conformité avec le détecteur « Audit » : elle suit alors le cycle normal (8D → clôture) dans l'onglet Non-Conformités ; une fois convertie, le badge <span class="b b-ok">NC …</span> remplace le bouton.</p>
+    <figure class="shot">
+      <img src="../../assets/qualite-audit-constats.png" alt="Capture du sous-onglet Constats et plans d'action" loading="lazy">
+      <figcaption><b>Audit › Constats</b> — chaque écart d'audit se convertit en NC d'un clic ; le suivi se poursuit dans l'onglet Non-Conformités.</figcaption>
+    </figure>
+
+    <h3>Sous-onglet Grilles</h3>
+    <p>La bibliothèque de questionnaires réutilisables (issus du classeur qualité : contrôle final, soudure, emballage, informatique…). Chaque grille affiche son titre, sa cible (poste / processus / procédé), son référentiel et ses questions : n°, libellé (avec la preuve attendue), clause (ex. EN&nbsp;9100 §8.5.2), thème, <b>mode</b> (<span class="b b-ok">AUTO</span> · <span class="b b-info">ASSISTÉ</span> · <span class="b b-mut">MANUEL</span>) et <b>sonde ERP</b> pour le mode auto. Boutons : « vierge » (grille imprimable PDF), « + question », ✎ modifier / × supprimer une question, supprimer la grille, et <b>« Nouvelle grille »</b> en tête. Les grilles ne sont pas figées : vous pouvez les enrichir à tout moment.</p>
+    <figure class="shot">
+      <img src="../../assets/qualite-audit-grilles.png" alt="Capture du sous-onglet Grilles d'audit" loading="lazy">
+      <figcaption><b>Audit › Grilles</b> — le mode AUTO relie une question à une sonde ERP : la réponse se pré-remplit toute seule lors de l'audit.</figcaption>
+    </figure>
+
+    <h3>Sous-onglet Référentiels</h3>
+    <p>La documentation de référence du module : les <b>thèmes d'audit processus A–K</b> (code, thème, chapitres/clauses, périmètre), les <b>thèmes de poste / terrain T1–T9</b>, et les <b>grilles de conformité clause-par-clause</b> pour l'auto-évaluation, une par norme : ISO&nbsp;9001, EN&nbsp;9100, ISO&nbsp;45001, ISO&nbsp;14001, ISO&nbsp;27001 (boutons de bascule entre normes).</p>
+    <figure class="shot">
+      <img src="../../assets/qualite-audit-ref.png" alt="Capture du sous-onglet Référentiels d'audit" loading="lazy">
+      <figcaption><b>Audit › Référentiels</b> — thèmes A–K et T1–T9, puis les grilles clause-par-clause des cinq normes du SMI.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le rapport PDF d'un audit n'est disponible qu'une fois l'audit <b>soldé</b> — l'icône reste grisée avant.</li>
+      <li>Chaque processus, poste et procédé doit être audité <b>au moins une fois par an</b> (EN&nbsp;9100 §9.2) : la matrice de couverture du Dashboard Qualité montre les trous.</li>
+      <li>La « Conformité vive » (surveillance auto-observée des sondes) et le tableau de bord des audits sont dans l'onglet <b>Dashboard Qualité</b>.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> « Solder l'audit » est une clôture : la fiche n'est plus modifiable ensuite. Utilisez « Enregistrer (réalisé) » tant que des réponses peuvent encore évoluer.</div>
+  </section>
+
+  <!-- ══════════════ 12. RÉFÉRENTIELS ══════════════ -->
+  <section class="tab" id="tab-referentiels">
+    <div class="tab-head"><span class="tab-num">12</span><h2>Référentiels</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le dictionnaire QHSE de l'entreprise : les <b>vocabulaires contrôlés</b> utilisés partout ailleurs (formulaires de NC, dérogations, sécurité). Source unique partagée entre les services Qualité et Sécurité — on le consulte quand on hésite sur un code ou un terme.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Des cartes de consultation (lecture seule) : <b>Acronymes</b>, <b>Imputation / secteurs</b> (code → service), <b>Types de NC</b>, <b>Types de défaut</b>, <b>Types de cause</b>, <b>Décisions qualité</b>, <b>Dérogations</b> (types de demande et résultats : R = Refus, AT = Accord Total, AL = Accord Limité) et <b>Sécurité</b> (types et secteurs). Les acronymes notés « à confirmer » sont déduits du contexte.</p>
+    <figure class="shot">
+      <img src="../../assets/qualite-referentiels.png" alt="Capture de l'onglet Référentiels" loading="lazy">
+      <figcaption><b>Référentiels</b> — le vocabulaire officiel : c'est ici que l'on vérifie la signification d'un code avant de le saisir dans une NC ou une dérogation.</figcaption>
+    </figure>
+
+    <h3>Pas à pas</h3>
+    <ol class="steps">
+      <li>Ouvrez l'onglet quand un code ou un acronyme vous échappe (ex. la signification d'une imputation ou d'un type de cause).</li>
+      <li>Utilisez les mêmes libellés dans vos saisies : c'est ce qui rend les Pareto et les filtres fiables.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Onglet en <b>consultation</b> : les listes se retrouvent automatiquement dans les menus déroulants des formulaires (NC, dérogations…).</li>
+    </ul>
+  </section>
+
+  <!-- ══════════════ 13. DASHBOARD QUALITÉ ══════════════ -->
+  <section class="tab" id="tab-dashboard">
+    <div class="tab-head"><span class="tab-num">13</span><h2>Dashboard Qualité</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> La synthèse chiffrée du service : état des NC, des 8D, de la quarantaine et des PV, analyse Pareto des non-conformités, et le pilotage du programme d'audits avec la <b>« Conformité vive »</b> — une surveillance automatique qui détecte les écarts directement dans les données de l'ERP.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li>Quatre tuiles KPI : <b>NC ouvertes</b> (dont critiques/bloquantes), <b>Rapports 8D actifs</b>, <b>Lots en quarantaine</b> (avec la durée max), <b>PV validés</b> (sur le total).</li>
+      <li><b>Répartition NC par gravité</b> — barres Mineure / Majeure / Critique / Bloquante.</li>
+      <li><b>Conformité audits</b> — les derniers audits réalisés avec leur score, et la prochaine échéance.</li>
+      <li><b>Pareto des non-conformités</b> — barres triées décroissantes + courbe de % cumulé + seuil 80/20, sur six axes au choix : Nature, Cause (5M), Poste, Imputation, Type NC, Responsable. Sur l'axe <b>Nature</b>, cliquez une grande famille pour <b>zoomer sur ses sous-catégories</b> (bouton « ← toutes familles » pour revenir).</li>
+      <li>Section <b>Audits de conformité</b> : KPI (Réalisation du programme, Audits en retard, Items auto conformes, Plans d'action soldés) ; le bandeau <b>Conformité vive</b> — chaque sonde (ECME, habilitations, DUER, FDS, VGP, bains, NC…) affiche une carte <span class="b b-ok">Conforme</span> / <span class="b b-crit">Écart détecté</span> / <span class="b b-mut">Non renseigné</span> avec sa preuve ; un item au rouge signifie que l'ERP n'est pas rempli au bon endroit — le constat s'écrit tout seul.</li>
+      <li><b>Matrice de couverture Processus × Thèmes (A–K)</b> — coche verte = audité, point bleu = planifié, « · » = jamais couvert (exhaustivité EN&nbsp;9100 §9.2).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/qualite-dashboard.png" alt="Capture de l'onglet Dashboard Qualité" loading="lazy">
+      <figcaption><b>Dashboard Qualité</b> — le Pareto se pilote par axes ; plus bas, la Conformité vive et la matrice de couverture des audits.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — exploiter le Pareto</h3>
+    <ol class="steps">
+      <li>Choisissez l'axe d'analyse (Nature, Cause 5M, Poste, Imputation, Type NC, Responsable) avec les pastilles en haut à droite du graphique.</li>
+      <li>Repérez les barres à gauche du seuil 80/20 : ce sont les familles qui concentrent l'essentiel des NC.</li>
+      <li>Sur l'axe Nature, cliquez une barre pour descendre dans ses sous-catégories et cibler l'action corrective.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La qualité du Pareto dépend directement de la saisie des champs Nature / Cause / Poste / Imputation dans les NC (onglet 2).</li>
+      <li>Un « écart » de la Conformité vive n'est pas forcément un problème terrain : c'est d'abord une donnée manquante ou périmée dans l'ERP — corrigez la saisie à la source.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> avant un audit de certification, passez la Conformité vive au vert et vérifiez la matrice de couverture : ce sont les deux premiers écrans qu'un auditeur comprendra immédiatement.</div>
+  </section>
+
+  <div class="docnav">
+    <a href="index.html">← Sommaire des manuels</a>
+    <a href="expeditions.html">Manuel suivant : Expéditions →</a>
+  </div>
+
+  <footer class="doc">
+    ERP Seem Semrac — manuel utilisateur généré depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs). En cas d'écart entre ce manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
+  </footer>
+
+</div>
+</body>
+</html>

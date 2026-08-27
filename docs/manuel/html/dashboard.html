@@ -1,0 +1,705 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manuel — Tableaux de bord · ERP Seem Semrac</title>
+<link rel="stylesheet" href="manuel.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <div class="brandrow">
+      <div class="logo">SS</div>
+      <div>
+        <div class="co">SEEM · SEMRAC — ERP</div>
+        <div class="eyebrow">Manuel utilisateur</div>
+      </div>
+      <div class="kind">docs/manuel/html</div>
+    </div>
+    <h1>Service <span class="hi">Tableaux de bord</span></h1>
+    <p class="lede">Les Tableaux de bord ne saisissent rien : ils <b>lisent</b> ce que les autres services ont enregistré (devis, commandes, BDT, PV, NC, BL, factures, pointages, relevés) et le transforment en indicateurs chiffrés. Un hub d'entrée donne le chiffre phare de chaque service ; derrière, quinze dashboards détaillés partagent la même barre de filtres (période, site, client/machine/fournisseur, comparaison N-1, export PDF). Ce manuel décrit d'abord cette barre commune, puis chacun des quinze dashboards.</p>
+    <div class="metachips">
+      <span class="chip">👤 Pour qui : <b>Direction, responsables de service, encadrement</b> — chaque dashboard suit le droit de <b>lecture</b> du service correspondant</span>
+      <span class="chip">🧭 Dans l'ERP : <b>Sidebar → Tableaux de bord</b></span>
+      <span class="chip">🗂 <b>16 onglets</b> (1 hub + 15 dashboards)</span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-t">Sommaire</div>
+    <ol>
+      <li><a href="#tab-hub">Vue d'ensemble (hub) &amp; barre de filtres</a></li>
+      <li><a href="#tab-direction">Dashboard Direction</a></li>
+      <li><a href="#tab-commercial">Dashboard Commercial</a></li>
+      <li><a href="#tab-finance">Dashboard Finance</a></li>
+      <li><a href="#tab-be">Dashboard Bureau Études</a></li>
+      <li><a href="#tab-achats">Dashboard Achats</a></li>
+      <li><a href="#tab-fournisseurs">Dashboard Fournisseurs</a></li>
+      <li><a href="#tab-production">Dashboard Production</a></li>
+      <li><a href="#tab-programmation">Dashboard Programmation</a></li>
+      <li><a href="#tab-qualite">Dashboard Qualité</a></li>
+      <li><a href="#tab-oas">Dashboard OAS</a></li>
+      <li><a href="#tab-maintenance">Dashboard Maintenance</a></li>
+      <li><a href="#tab-stock">Dashboard Stock</a></li>
+      <li><a href="#tab-expedition">Dashboard Expéditions</a></li>
+      <li><a href="#tab-rh">Dashboard RH</a></li>
+      <li><a href="#tab-environnement">Dashboard Environnement</a></li>
+    </ol>
+  </nav>
+
+  <!-- ══════════════ 1. HUB + BARRE DE FILTRES ══════════════ -->
+  <section class="tab" id="tab-hub">
+    <div class="tab-head"><span class="tab-num">1</span><h2>Vue d'ensemble (hub)</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Le hub est la porte d'entrée des tableaux de bord : une carte par dashboard, avec son <b>chiffre phare du moment</b>. En un écran, vous voyez si le carnet se remplit, si la qualité dérape, si l'atelier est saturé ou si la trésorerie tient — puis vous cliquez la carte qui vous intéresse pour ouvrir le dashboard détaillé. C'est aussi la section où est décrite la <b>barre de filtres</b>, identique sur les quinze dashboards : la comprendre une fois suffit pour toutes les autres pages.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Une grille de <b>quinze cartes cliquables</b>. Chaque carte porte une icône colorée, une valeur en gros caractères, le libellé de ce que compte cette valeur, et le nom du dashboard suivi d'une flèche. Les valeurs affichées sont celles de l'instant (aucun filtre sur le hub) :</p>
+    <ul class="points">
+      <li><b>Direction</b> — CA cumulé · <b>Commercial</b> — CA facturé (mois) · <b>Finance</b> — Trésorerie nette</li>
+      <li><b>Bureau Études</b> — DT à analyser · <b>Achats</b> — DA à traiter · <b>Fournisseurs</b> — OTD global</li>
+      <li><b>Production</b> — OTD · <b>Programmation</b> — Charge atelier · <b>Qualité</b> — NC ouvertes</li>
+      <li><b>OAS</b> — Sessions OAS · <b>Maintenance</b> — Disponibilité · <b>Stock</b> — Valorisation</li>
+      <li><b>Expéditions</b> (BL &amp; OTD) et <b>Environnement</b> (ISO 14001 · GES · RSE) n'affichent qu'une flèche : ces deux dashboards n'ont pas un chiffre unique qui les résume.</li>
+      <li><b>RH</b> — Effectif actif.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/dash-hub.png" alt="Capture du hub des tableaux de bord" loading="lazy">
+      <figcaption><b>Vue d'ensemble</b> — une carte par dashboard ; le gros chiffre est le KPI phare du service, la flèche ouvre le tableau de bord détaillé.</figcaption>
+    </figure>
+
+    <h3>La barre de filtres, commune aux quinze dashboards</h3>
+    <p>Dès que vous ouvrez un dashboard, une barre blanche <b>reste collée en haut de l'écran</b> pendant que vous faites défiler la page. Elle contient, de gauche à droite : les six boutons de période, les dates personnalisées (si période « Perso »), le choix du site, éventuellement un champ contextuel (client, machine ou fournisseur), le bouton de comparaison <b>vs N-1</b>, puis, à droite, <b>Réinit.</b> et <b>Exporter</b>.</p>
+
+    <div class="tbl"><table>
+      <thead><tr><th>Bouton</th><th>Période couverte</th><th>Quand l'utiliser</th></tr></thead>
+      <tbody>
+        <tr><td><b>Ce mois</b> (par défaut)</td><td>Du 1<sup>er</sup> du mois en cours à aujourd'hui.</td><td>Point de situation quotidien / hebdomadaire.</td></tr>
+        <tr><td><b>Mois -1</b></td><td>Le mois précédent, complet (du 1<sup>er</sup> au dernier jour).</td><td>Bilan du mois écoulé, une fois toutes les saisies faites.</td></tr>
+        <tr><td><b>YTD</b></td><td>Du 1<sup>er</sup> janvier de l'année en cours à aujourd'hui.</td><td>Cumul annuel « où en est-on depuis janvier ».</td></tr>
+        <tr><td><b>12 mois</b></td><td>Les douze derniers mois glissants, jusqu'à aujourd'hui.</td><td>Voir une saisonnalité sans coupure au 1<sup>er</sup> janvier.</td></tr>
+        <tr><td><b>Année</b></td><td>Année civile entière (1<sup>er</sup> janvier → 31 décembre).</td><td>Comparaison d'années pleines, revue annuelle.</td></tr>
+        <tr><td><b>Perso</b></td><td>Deux champs de date apparaissent : début → fin, à votre main.</td><td>Une campagne, un chantier, un audit sur une fenêtre précise.</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="tbl"><table>
+      <thead><tr><th>Contrôle</th><th>Choix</th><th>Ce que ça change</th><th>Où on le trouve</th></tr></thead>
+      <tbody>
+        <tr><td><b>Site</b></td><td>Tous sites (défaut) · Seem · Semrac</td><td>Ne garde que les lignes rattachées au site choisi.</td><td>Les quinze dashboards.</td></tr>
+        <tr><td><b>Client…</b></td><td>Champ avec liste de suggestions, alimentée par les clients réellement présents dans les données de la page.</td><td>Restreint tous les indicateurs à ce client.</td><td>Direction, Commercial, Finance, Bureau Études, Production, Programmation, Qualité, Expéditions.</td></tr>
+        <tr><td><b>Fournisseur…</b></td><td>Champ avec liste de suggestions (fournisseurs des BC, des factures et des DA).</td><td>Restreint les achats et les retards à ce fournisseur.</td><td>Achats.</td></tr>
+        <tr><td><b>Machine…</b></td><td>Champ avec liste de suggestions (parc machines).</td><td>Restreint disponibilité, MTBF/MTTR, OM et OPEX à cette machine.</td><td>Maintenance.</td></tr>
+        <tr><td><b>vs N-1</b></td><td>Bouton bascule (violet quand il est actif)</td><td>Ajoute sur les graphes une <b>courbe grise en pointillé</b> : la même mesure, un an plus tôt.</td><td>Les quinze dashboards (sur les graphes qui ont une série mensuelle).</td></tr>
+        <tr><td><b>Réinit.</b></td><td>Lien rouge, n'apparaît que si un filtre est actif</td><td>Remet tout à zéro : « Ce mois », tous sites, aucun client/machine/fournisseur, comparaison désactivée.</td><td>Les quinze dashboards.</td></tr>
+        <tr><td><b>Exporter</b></td><td>Bouton sombre avec l'icône PDF</td><td>Ouvre un <b>nouvel onglet en version imprimable</b> : sidebar et barre de filtres masquées, mise en page A4 paysage, et la fenêtre d'impression s'ouvre seule une fois les graphes dessinés.</td><td>Les quinze dashboards.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Lire une tuile KPI</h3>
+    <p>Toutes les tuiles suivent le même dessin : une icône, la <b>valeur</b>, le <b>libellé</b>, puis une ligne grise de contexte (le cumul, le nombre d'éléments comptés…). Selon l'indicateur s'y ajoutent :</p>
+    <ul class="points">
+      <li>Un <b>badge de tendance</b> en haut à droite : <span class="b b-ok">▲ +x %</span> par rapport à la période précédente, <span class="b b-crit">▼ -x %</span> si la valeur recule.</li>
+      <li>Une <b>mini-courbe</b> (sparkline) sous la valeur : l'évolution mois par mois de la même mesure.</li>
+      <li>Une <b>ligne d'objectif</b> avec une pastille de couleur : <span class="b b-ok">atteint</span> (vert), <span class="b b-warn">à surveiller</span> (orange, entre le seuil d'alerte et la cible), <span class="b b-crit">sous l'objectif</span> (rouge). Les cibles se règlent dans <b>Réglages › Objectifs / Cibles KPI</b> ; si rien n'y est saisi, l'ERP applique ses valeurs par défaut (OTD 95 %, OTK 92 %, marge 25 %, DSO 45 j, taux de NC ≤ 2 %, Cpk 1,33, disponibilité machines 90 %, absentéisme ≤ 4 %, rotation de stock 6…).</li>
+      <li>Certaines tuiles sont <b>cliquables</b> : elles ouvrent la liste correspondante <b>en conservant vos filtres</b>. C'est le « drill-down ».</li>
+    </ul>
+    <ul class="points">
+      <li>Commercial → <b>Taux conversion</b> ouvre la liste des offres · <b>Carnet de commandes</b> ouvre la liste des DT.</li>
+      <li>Bureau Études → <b>DT à analyser</b> ouvre la liste des DT.</li>
+      <li>Achats → <b>DA à traiter</b> ouvre la liste des demandes d'achat.</li>
+      <li>Programmation → <b>BDT actifs</b> et Production → <b>Avancement BDT</b> ouvrent la liste des bons de travail.</li>
+      <li>Qualité → <b>NC ouvertes</b> ouvre la liste des non-conformités.</li>
+      <li>RH → <b>Habilitations</b> ouvre la page Compétences.</li>
+    </ul>
+
+    <h3>Pas à pas — analyser une période puis la partager</h3>
+    <ol class="steps">
+      <li>Depuis la sidebar, ouvrez <b>Tableaux de bord</b>, puis cliquez la carte du service qui vous concerne.</li>
+      <li>Choisissez la période : par exemple <b>Mois -1</b> pour le bilan du mois écoulé, ou <b>Perso</b> puis les deux dates si vous visez une fenêtre précise.</li>
+      <li>Si besoin, restreignez avec <b>Site</b> (Seem ou Semrac) et le champ contextuel (client, fournisseur ou machine selon la page).</li>
+      <li>Activez <b>vs N-1</b> : les graphes affichent en pointillé gris la même période l'an dernier — c'est ce qui transforme un chiffre en tendance.</li>
+      <li>Cliquez une tuile KPI pour descendre dans le détail : vous arrivez sur la liste correspondante, déjà filtrée comme le dashboard.</li>
+      <li>Pour diffuser l'analyse, cliquez <b>Exporter</b> : un onglet s'ouvre en version imprimable et propose l'impression ou l'enregistrement en PDF.</li>
+      <li>Pour revenir à l'état d'origine, cliquez <b>Réinit.</b></li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li><b>Vos filtres sont dans l'adresse de la page</b> : vous pouvez mettre une vue filtrée en favori ou en copier le lien pour un collègue — il verra exactement la même chose (s'il a les droits de lecture du service).</li>
+      <li>Le hub, lui, <b>n'a pas de barre de filtres</b> : il montre toujours la situation du moment.</li>
+      <li>L'accès est calqué sur les droits de lecture : un profil qui ne lit pas la comptabilité n'ouvre pas le Dashboard Finance, un profil sans lecture RH n'ouvre pas le Dashboard RH.</li>
+      <li>Aucun chiffre n'est inventé : quand une table est vide, l'ERP affiche <b>0</b>, un tiret <b>—</b> ou un message du type « Aucune donnée sur la période ». Ce n'est pas une panne, c'est une saisie qui manque dans le service source.</li>
+    </ul>
+    <div class="note"><b>Le filtre Site est tolérant.</b> Il n'écarte une ligne que si celle-ci porte réellement un site. Les données qui n'ont pas de rattachement Seem/Semrac (bons de livraison, relevés OAS, ordres de maintenance…) restent affichées même quand vous choisissez un site : c'est volontaire, pour ne pas faire disparaître des informations en donnant l'illusion d'un périmètre propre.</div>
+    <div class="warn"><b>Attention :</b> un dashboard ne corrige rien. S'il affiche un indicateur faux, la cause est <b>toujours</b> dans la saisie amont (une date de livraison non renseignée, un BDT jamais soldé, une facture au mauvais statut). Corrigez à la source : le dashboard suivra à la prochaine ouverture.</div>
+    <div class="astuce"><b>Astuce :</b> les mesures « instantanées » (stock, retards, backlog, quarantaines) ne dépendent pas de la période choisie — elles décrivent l'état d'aujourd'hui. Seules les séries mensuelles et les cumuls suivent la période.</div>
+  </section>
+
+  <!-- ══════════════ 2. DIRECTION ══════════════ -->
+  <section class="tab" id="tab-direction">
+    <div class="tab-head"><span class="tab-num">2</span><h2>Dashboard Direction</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est la vision consolidée de l'entreprise : commerce, finance, production, qualité, RH et maintenance sur un même écran, complétés par le <b>carnet à venir</b> (le CA déjà vendu mais pas encore livré) et par le suivi <b>objectifs vs réel</b>. On l'ouvre pour la revue de direction, la préparation d'un comité, ou simplement pour savoir ce qui brûle aujourd'hui.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li>Six tuiles en haut : <b>CA facturé (mois)</b> avec le cumul et la tendance, <b>Marge brute</b>, <b>OTD global</b> avec le lead time, <b>NC actives</b> (dont 8D et taux de NC), <b>DSO</b> avec l'encours clients, <b>Dispo machines</b> avec l'absentéisme.</li>
+      <li><b>CA vs Charges (k€)</b> — deux courbes mensuelles, plus la courbe N-1 en pointillé si la comparaison est active.</li>
+      <li><b>Jalons critiques</b> — la liste des vrais points durs du moment, chacun avec une flèche qui mène droit au bon écran : NC critiques ou bloquantes, impayés en retard, ruptures de stock, congés en attente de validation, audits à préparer.</li>
+      <li>Section <b>Chiffre d'affaires prévisionnel</b> : Carnet total à venir, CA programmé sur 6 mois, <b>À livrer en retard</b>, Au-delà de 6 mois ; puis le CA programmé par mois de livraison (barres Seem / Semrac empilées) et son détail mensuel en euros.</li>
+      <li>Section <b>Objectifs vs Réel</b> : quatre jauges « bullet » (OTD livraison, marge brute, disponibilité machines, absentéisme) où le trait noir marque la cible ; à côté, la répartition du CA par client.</li>
+      <li>Quatre cartes de synthèse en bas : <b>Qualité</b>, <b>RH</b>, <b>Stock &amp; Achats</b>, et <b>Accès rapide</b> (Finance, Stock, Fournisseurs, Validations, Objectifs KPI).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/dash-direction.png" alt="Capture du Dashboard Direction" loading="lazy">
+      <figcaption><b>Dashboard Direction</b> — les six tuiles donnent le pouls ; à droite, les « Jalons critiques » listent ce qui doit être traité aujourd'hui.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — préparer la revue de direction</h3>
+    <ol class="steps">
+      <li>Sélectionnez <b>YTD</b> (ou <b>Année</b> pour une revue annuelle) et activez <b>vs N-1</b>.</li>
+      <li>Commentez les six tuiles : la pastille de couleur sous chacune dit immédiatement si l'objectif est atteint, à surveiller, ou manqué.</li>
+      <li>Descendez sur <b>Objectifs vs Réel</b> : les quatre bullets montrent l'écart à la cible. Si une cible ne correspond plus à la réalité de l'entreprise, ouvrez <b>Objectifs KPI</b> depuis la carte Accès rapide et corrigez-la.</li>
+      <li>Passez au carnet à venir : « À livrer en retard » et « CA programmé (6 mois) » indiquent si la charge vendue est tenable.</li>
+      <li>Traitez les <b>Jalons critiques</b> un par un en cliquant la flèche de chaque ligne (NC, impayés, ruptures, congés, audits).</li>
+      <li>Cliquez <b>Exporter</b> pour joindre l'état au compte rendu.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le graphe du <b>CA programmé</b> ne peut se remplir que si les commandes portent une <b>date de livraison</b> : sans elle, le message « renseignez la date de livraison des commandes » s'affiche à la place.</li>
+      <li>Les jalons ne sont pas une liste de tâches à cocher : ce sont des sondes automatiques. Un jalon disparaît quand la donnée qui l'a déclenché est traitée dans son service.</li>
+      <li>Les cartes Maintenance et RH de cette page donnent l'état global du parc et de l'effectif, indépendamment du client sélectionné.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> « Marge réelle prod. » (carte Stock &amp; Achats) ne s'affiche que pour les commandes dont la marge a été recalculée au soldage — c'est le meilleur juge de paix entre le chiffrage du BE et la réalité de l'atelier.</div>
+  </section>
+
+  <!-- ══════════════ 3. COMMERCIAL ══════════════ -->
+  <section class="tab" id="tab-commercial">
+    <div class="tab-head"><span class="tab-num">3</span><h2>Dashboard Commercial</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Il suit le cycle de vente de bout en bout : ce qui est facturé, ce qui est proposé et attend une réponse, ce qui est signé mais pas encore livré, et sur quels clients repose le chiffre. C'est l'écran du point commercial hebdomadaire.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>CA facturé</b> sur la période, avec le cumul, le badge de tendance et la mini-courbe mensuelle.</li>
+      <li><b>Taux conversion</b> — offres gagnées / offres envoyées, avec l'objectif (30 % par défaut) ; la tuile ouvre la liste des offres.</li>
+      <li><b>Pipeline en attente</b> — la valeur des offres encore sans réponse, et leur nombre.</li>
+      <li><b>Carnet de commandes</b> — le montant des commandes non soldées, et le panier moyen ; la tuile ouvre la liste des DT.</li>
+      <li><b>Commandes Seem vs Semrac (k€)</b> — barres mensuelles par site (+ total N-1 en pointillé si la comparaison est active).</li>
+      <li><b>Concentration clients</b> — anneau des principaux clients, titre rappelant la part du premier, et un Pareto avec le pourcentage cumulé.</li>
+      <li><b>DT en cours</b> — les six premières, avec un liseré de couleur selon la priorité (rouge = critique, orange = urgent, vert = normal) et un lien « Voir toutes les DT ».</li>
+      <li><b>Offres en attente réponse</b> — numéro d'affaire, client, montant et date d'offre, avec un lien vers la liste complète.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/dash-commercial.png" alt="Capture du Dashboard Commercial" loading="lazy">
+      <figcaption><b>Dashboard Commercial</b> — CA, conversion, pipeline et carnet en haut ; en dessous, la répartition Seem/Semrac et la concentration clients.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — relancer le pipeline</h3>
+    <ol class="steps">
+      <li>Laissez la période sur <b>Ce mois</b> et regardez la tuile <b>Pipeline en attente</b> : c'est l'argent qui dort.</li>
+      <li>Dans la carte <b>Offres en attente réponse</b>, repérez les offres dont la date est la plus ancienne : ce sont les relances prioritaires.</li>
+      <li>Cliquez <b>« Voir toutes les offres »</b> pour ouvrir la liste et traiter chaque offre dans le service Commercial.</li>
+      <li>Après relance, revenez au dashboard : le taux de conversion se met à jour dès qu'une offre passe en acceptée.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Une offre en brouillon n'est <b>pas</b> comptée comme envoyée : elle ne pèse ni sur le taux de conversion ni sur le pipeline.</li>
+      <li>Le carnet de commandes additionne les commandes <b>ouvertes</b> ; une commande soldée en sort automatiquement.</li>
+      <li>Le CA vient des <b>factures client</b>, pas des commandes : un mois sans facturation affiche zéro même si l'atelier a produit.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> une concentration élevée (le premier client au-delà de 40 % du carnet) est un risque commercial ; le Pareto sous l'anneau vous dit combien de clients font 80 % du chiffre.</div>
+  </section>
+
+  <!-- ══════════════ 4. FINANCE ══════════════ -->
+  <section class="tab" id="tab-finance">
+    <div class="tab-head"><span class="tab-num">4</span><h2>Dashboard Finance</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le tableau de bord de la trésorerie et de la rentabilité : ce qui est facturé, ce qui est dépensé, ce qui est réellement encaissé, et ce que les clients doivent encore. On l'ouvre avant un point banque, avant une campagne de relance, ou pour vérifier que la marge tient.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>CA HT</b> de la période (avec la marge en euros et la mini-courbe), <b>Taux de marge</b> (CA − charges, objectif 25 %), <b>Trésorerie nette</b> (encaissé − décaissé, en vert si positive, en rouge sinon), <b>DSO</b> en jours avec l'encours clients.</li>
+      <li><b>CA vs Charges (HT)</b> — deux courbes mensuelles (+ CA N-1 en pointillé).</li>
+      <li><b>Top clients (CA HT)</b> — barres classées.</li>
+      <li><b>Encaissements vs Décaissements (TTC)</b> — barres vertes et rouges par mois, à partir des dates de paiement.</li>
+      <li><b>Balance âgée</b> — deux blocs symétriques (créances clients puis dettes fournisseurs) découpés en 0–30 j, 30–60 j, 60–90 j et +90 j, suivis des <b>Impayés en retard</b> et du <b>DPO fournisseurs</b>.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/dash-finance.png" alt="Capture du Dashboard Finance" loading="lazy">
+      <figcaption><b>Dashboard Finance</b> — la balance âgée en bas à droite : plus les barres glissent vers « +90 j », plus le recouvrement est en retard.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — préparer une campagne de relance</h3>
+    <ol class="steps">
+      <li>Choisissez <b>YTD</b> pour raisonner sur l'ensemble de l'année.</li>
+      <li>Lisez le <b>DSO</b> : au-delà de la cible (45 jours par défaut), la pastille passe à l'orange puis au rouge.</li>
+      <li>Dans la <b>Balance âgée</b>, repérez le poids des tranches 60–90 j et +90 j, et le montant des <b>impayés en retard</b>.</li>
+      <li>Filtrez sur un <b>client</b> pour isoler son encours avant de l'appeler.</li>
+      <li>Traitez les règlements dans le service Comptabilité : le passage d'une facture au statut « payée » alimente immédiatement la trésorerie et les encaissements.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La <b>trésorerie</b> affichée n'est pas un solde bancaire : c'est la différence entre les factures client encaissées et les factures fournisseur payées sur la période.</li>
+      <li>Le <b>DSO</b> se lit « nombre de jours de chiffre d'affaires immobilisés dans les créances » ; le <b>DPO</b> est son équivalent côté fournisseurs (une valeur plus haute y est plutôt favorable à la trésorerie).</li>
+      <li>Les brouillons et les factures annulées sont exclus des encours et de la balance âgée.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> sans <b>date d'échéance</b> sur les factures, la balance âgée reste vide. Sans <b>date de paiement</b>, le graphe encaissements/décaissements reste vide alors même que la facture est marquée payée.</div>
+  </section>
+
+  <!-- ══════════════ 5. BUREAU ÉTUDES ══════════════ -->
+  <section class="tab" id="tab-be">
+    <div class="tab-head"><span class="tab-num">5</span><h2>Dashboard Bureau Études</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Il mesure le travail du bureau d'études : le flux de demandes de travaux à analyser, la qualité du chiffrage (coût de revient unitaire, structure de coût, marge) et la complétude des nomenclatures. C'est l'écran qui dit si le BE est en retard sur les analyses et si les prix tiennent la route.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>DT à analyser</b> (avec le nombre total de DT ouvertes) — la tuile ouvre la liste des DT ; <b>DT analysées</b> en pourcentage ; <b>CRU moyen</b> en euros par pièce avec le nombre de nomenclatures chiffrées ; <b>Marge brute moyenne</b> avec le détail Seem / Semrac (objectif 25 %).</li>
+      <li><b>Structure de coût moyenne du CRU</b> — une barre empilée horizontale décomposant matière, main d'œuvre, machine et sous-traitance, avec les montants rappelés en dessous.</li>
+      <li><b>Corrélation CRU ↔ marge</b> — un nuage de points (axe X : coût de revient par pièce, axe Y : marge en %) : il montre si l'on marge moins sur les pièces chères.</li>
+      <li><b>Pièces les plus coûteuses</b> — classement des CRU par pièce.</li>
+      <li><b>Complétude des nomenclatures</b> — un pourcentage et une barre : une nomenclature est dite complète quand elle a une <b>gamme</b>, une <b>matière</b> et le statut <b>validée</b>.</li>
+      <li><b>DT entrantes par mois</b> (+ N-1 en pointillé) et la <b>file d'attente des DT à traiter</b>, avec la priorité en liseré, le site et le délai.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/dash-be.png" alt="Capture du Dashboard Bureau Études" loading="lazy">
+      <figcaption><b>Dashboard Bureau Études</b> — la structure de coût et la complétude des nomenclatures disent où le chiffrage est solide et où il est encore approximatif.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — assainir le chiffrage</h3>
+    <ol class="steps">
+      <li>Regardez la <b>Complétude des nomenclatures</b> : chaque point manquant (gamme, matière ou validation) fausse le CRU.</li>
+      <li>Ouvrez <b>Pièces les plus coûteuses</b> et vérifiez que les CRU les plus élevés correspondent bien à des pièces réellement complexes.</li>
+      <li>Dans le nuage <b>CRU ↔ marge</b>, repérez les points en bas à droite : pièces chères à faible marge — ce sont les prix à renégocier ou les gammes à revoir.</li>
+      <li>Traitez la <b>file d'attente</b> en commençant par les priorités critiques (liseré rouge) : la tuile « DT à analyser » ouvre la liste complète.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Une DT est comptée comme « analysée » dès qu'un <b>analyste</b> lui est affecté ; celles sans analyste rejoignent la file d'attente.</li>
+      <li>La marge affichée provient des <b>marges saisies pièce par pièce</b> lors de l'analyse : sans coefficient renseigné, la tuile affiche un tiret.</li>
+      <li>Le filtre <b>Site</b> agit ici sur l'entité de la nomenclature (Seem / Semrac).</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> la structure de coût est la réponse la plus rapide à « pourquoi cette pièce coûte-t-elle si cher ? » — si la sous-traitance domine, la piste d'économie n'est pas dans l'atelier.</div>
+  </section>
+
+  <!-- ══════════════ 6. ACHATS ══════════════ -->
+  <section class="tab" id="tab-achats">
+    <div class="tab-head"><span class="tab-num">6</span><h2>Dashboard Achats</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Il pilote les approvisionnements : les demandes d'achat en attente, les bons de commande en cours, les retards de livraison fournisseur et la dépense engagée. C'est l'écran du quotidien de l'acheteur.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>DA à traiter</b> avec le nombre de demandes critiques — la tuile ouvre la liste des DA ; <b>BC en cours</b> sur le total ; <b>Retards fournisseur</b> (vert s'il n'y en a aucun, rouge sinon) ; <b>Achats</b> de la période avec le cumul et la mini-courbe.</li>
+      <li><b>Dépenses achats mensuelles</b> — courbe des factures fournisseur HT (+ N-1 en pointillé).</li>
+      <li><b>Pareto dépense fournisseur</b> — barres avec le pourcentage cumulé. Le titre précise <b>« (BC engagés) »</b> quand aucune facture n'existe encore sur la période : le calcul bascule alors sur les montants des bons de commande.</li>
+      <li><b>Ancienneté des BC en retard</b> — l'argent en retard réparti en 0–30 j, 30–60 j, 60–90 j et +90 j, avec le total.</li>
+      <li><b>Répartition des DA par nature</b> — anneau par catégorie de demande.</li>
+      <li><b>DA en attente de traitement</b> — six lignes avec le demandeur, l'article, le statut et la priorité.</li>
+      <li><b>Performance fournisseurs (OTD)</b> — une jauge de l'OTD global des réceptions plus les six premiers fournisseurs avec leur OTD (vert à partir de 85 %) et leur statut.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/dash-achats.png" alt="Capture du Dashboard Achats" loading="lazy">
+      <figcaption><b>Dashboard Achats</b> — « Retards fournisseur » et « Ancienneté des BC en retard » chiffrent en euros ce que les retards immobilisent.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — traiter la journée d'achats</h3>
+    <ol class="steps">
+      <li>Ouvrez la page : la tuile <b>DA à traiter</b> donne la charge du jour, dont les critiques.</li>
+      <li>Cliquez la tuile (ou « Voir toutes les DA ») pour ouvrir la liste et transformer les demandes en bons de commande.</li>
+      <li>Revenez sur <b>Retards fournisseur</b> et sur l'ancienneté des BC : relancez d'abord les tranches les plus anciennes et les montants les plus lourds.</li>
+      <li>Filtrez sur un <b>fournisseur</b> pour préparer un point avec lui : dépense, retards et OTD s'ajustent à son périmètre.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Un BC est « en retard » dès que sa date de livraison est dépassée et qu'il n'est ni reçu ni clôturé.</li>
+      <li>Les indicateurs de retard et de backlog sont des <b>instantanés</b> : ils ne dépendent pas de la période choisie, seule la dépense la suit.</li>
+      <li>Le prix ne se saisit jamais sur un BC : il vient des demandes de prix (RFQ). Le dashboard ne fait que consolider ce qui a été engagé.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> pour un point fournisseur complet (scorecard, NC, concentration), passez au <b>Dashboard Fournisseurs</b> : les deux pages se complètent.</div>
+  </section>
+
+  <!-- ══════════════ 7. FOURNISSEURS ══════════════ -->
+  <section class="tab" id="tab-fournisseurs">
+    <div class="tab-head"><span class="tab-num">7</span><h2>Dashboard Fournisseurs</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est l'évaluation du panel : qui livre à l'heure, qui livre complet, qui coûte cher, qui génère des non-conformités. Il sert à préparer les revues fournisseurs, à décider d'une requalification et à surveiller la dépendance à un fournisseur unique.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>Fournisseurs / ST</b> — nombre total référencé et nombre d'actifs ; <b>OTD global</b> avec le <b>fill rate</b> (quantité reçue / quantité commandée) ; <b>Dépense</b> de la période avec le nombre de NC fournisseur ; <b>Concentration</b> — part du premier fournisseur dans la dépense, affichée en rouge au-delà de 40 %.</li>
+      <li><b>Scorecard fournisseurs</b> — le tableau central : Fournisseur, Type (<span class="b b-info">Fourn.</span> ou <span class="b b-info">ST</span>), OTD (vert ≥ 85 %, rouge en dessous), nombre de BC, Dépense, NC, Statut (<span class="b b-ok">actif</span> ou <span class="b b-warn">inactif</span>).</li>
+      <li><b>Dépense par fournisseur</b> — anneau de répartition.</li>
+      <li><b>Nuage OTD × dépense</b> — chaque bulle est un fournisseur : X = OTD, Y = dépense, taille = nombre de BC. Le quart en bas à gauche (peu ponctuel, peu de dépense) et surtout le quart en haut à gauche (gros budget, mauvaise ponctualité) sont les zones à traiter.</li>
+      <li><b>NC par fournisseur</b> — barres classées.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/dash-fournisseurs.png" alt="Capture du Dashboard Fournisseurs" loading="lazy">
+      <figcaption><b>Dashboard Fournisseurs</b> — la scorecard croise ponctualité, volume, dépense et non-conformités : c'est le support de la revue de panel.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — préparer une revue fournisseur</h3>
+    <ol class="steps">
+      <li>Choisissez <b>12 mois</b> pour lisser les à-coups d'un mois isolé.</li>
+      <li>Triez visuellement la <b>scorecard</b> : elle est déjà classée par dépense décroissante, donc les enjeux sont en haut.</li>
+      <li>Croisez avec le <b>nuage OTD × dépense</b> : une grosse bulle à gauche du graphe = beaucoup d'argent chez un fournisseur peu ponctuel.</li>
+      <li>Regardez la colonne <b>NC</b> et le graphe « NC par fournisseur » pour objectiver la qualité de la réception.</li>
+      <li>Exportez la page en PDF : elle constitue la pièce jointe de la revue.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>L'OTD est calculé sur la <b>première</b> date de livraison promise : décaler la date d'un BC déjà en retard ne rattrape pas la note du fournisseur.</li>
+      <li>Un fournisseur sans BC daté et réceptionné affiche « — » : la note ne s'invente pas.</li>
+      <li>Le fill rate se calcule sur les quantités commandées et reçues des BC ; il reste à 0 tant que ces quantités ne sont pas saisies.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> une concentration au-delà de 40 % signale une dépendance. C'est une alerte de gestion des risques (rupture, hausse de prix), même si le fournisseur donne entière satisfaction.</div>
+  </section>
+
+  <!-- ══════════════ 8. PRODUCTION ══════════════ -->
+  <section class="tab" id="tab-production">
+    <div class="tab-head"><span class="tab-num">8</span><h2>Dashboard Production</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Il mesure la performance de l'atelier : tenue des délais (OTD), tenue des délais <i>et</i> de la conformité (OTK), rythme (takt time), durée de traversée (lead time), reprises, et charge prévisionnelle. C'est l'écran du responsable de production et du point quotidien.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li>Cinq tuiles : <b>Avancement BDT</b> (bons soldés / total, la tuile ouvre la liste des BDT), <b>OTD</b> (objectif 95 %), <b>OTK</b> — « à l'heure &amp; conforme » (objectif 92 %), <b>Lead time moyen</b> en jours (commande → livraison), <b>Taux de reprise</b> avec l'en-cours (WIP), objectif 3 %.</li>
+      <li>Trois <b>jauges</b> (OTD, OTK, Avancement) avec le repère de cible, et la <b>charge par opération</b> des BDT actifs en heures.</li>
+      <li><b>Takt time &amp; incidents</b> — takt Seem et takt Semrac en minutes, NC ouvertes et reprises.</li>
+      <li><b>BDT récents</b> — tableau BDT / Opération / Durée / Statut (les bons soldés portent un badge vert).</li>
+      <li><b>Charge atelier prévisionnelle (8 semaines)</b> — barres des heures planifiées, en <span class="b b-crit">rouge</span> lorsqu'elles dépassent la ligne noire de capacité ; à côté, une synthèse : capacité par semaine, opérateurs actifs, semaines en surcharge, heures en retard à replanifier, heures au-delà de 8 semaines.</li>
+      <li><b>Distribution du lead time</b> (&lt; 7 j / 7–14 j / 14–30 j / 30 j et +) et <b>Productivité — temps alloué vs réel</b> avec l'écart en pourcentage (vert si l'on est sous le temps alloué, rouge si on le dépasse).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/dash-production.png" alt="Capture du Dashboard Production" loading="lazy">
+      <figcaption><b>Dashboard Production</b> — les jauges OTD/OTK portent le repère noir de la cible ; plus bas, la charge prévisionnelle signale les semaines en surcharge.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — comprendre un OTK qui décroche</h3>
+    <ol class="steps">
+      <li>Comparez <b>OTD</b> et <b>OTK</b> : si l'OTD est bon mais l'OTK mauvais, le problème n'est pas le délai mais la conformité.</li>
+      <li>Regardez la carte <b>Takt time &amp; incidents</b> : le nombre de NC ouvertes et de reprises explique l'écart.</li>
+      <li>Ouvrez le <b>Dashboard Qualité</b> pour identifier les familles de défauts (Pareto par type et par gravité).</li>
+      <li>Vérifiez enfin <b>temps alloué vs réel</b> : un écart fortement positif signale des gammes sous-estimées, qui poussent aux reprises et aux retards.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>L'<b>OTD</b> compare la date de livraison réellement constatée (BL) à la date promise ; si l'une des deux manque, la commande n'entre pas dans le calcul.</li>
+      <li>L'<b>OTK</b> part de l'OTD et le dégrade en fonction des NC <b>critiques ou bloquantes</b> encore ouvertes : il ne peut donc jamais dépasser l'OTD.</li>
+      <li>La capacité de l'atelier est estimée à <b>7 heures par opérateur présent</b> ; un opérateur en absence du jour n'est pas compté.</li>
+      <li>Les heures « en retard (à replanifier) » correspondent à des BDT dont la date prévue est déjà passée : elles ne disparaîtront pas seules.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> le takt time n'apparaît que si des lots ont été terminés dans le mois de référence ; sans quantité livrée, il affiche « — ».</div>
+  </section>
+
+  <!-- ══════════════ 9. PROGRAMMATION ══════════════ -->
+  <section class="tab" id="tab-programmation">
+    <div class="tab-head"><span class="tab-num">9</span><h2>Dashboard Programmation</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le tableau de bord de l'ordonnanceur : ce qui reste à programmer, ce qui n'est pas affecté à un opérateur, ce qui n'a pas de date, et si la charge des huit prochaines semaines tient dans la capacité. Il complète le planning unique du service Production.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>BDT actifs</b> avec le nombre restant à affecter (la tuile ouvre la liste des BDT) ; <b>Charge atelier</b> en pourcentage, avec le détail « opérateurs disponibles / total » et « heures planifiées / capacité » — la tuile passe au rouge à partir de 90 % ; <b>Cmd à programmer</b> (commandes ouvertes sans lot ni BDT créé) ; <b>ST en cours</b> (bons de sous-traitance actifs).</li>
+      <li><b>Charge prévisionnelle 8 semaines</b> — barres des heures planifiées face à la ligne de capacité, et une <b>synthèse planning</b> (capacité hebdomadaire, opérateurs actifs, semaines en surcharge, heures en retard, heures au-delà de 8 semaines).</li>
+      <li><b>Charge par opérateur — aujourd'hui</b> — une barre par opérateur (verte, orange dès 70 %, rouge dès 90 %), un badge <span class="b b-crit">Absent</span> pour les absents du jour, et le lien <b>« Ouvrir Gantt → »</b> vers le planning.</li>
+      <li><b>Charge par opération (h)</b>, <b>Sous-traitance active</b>, <b>Commandes en attente prog.</b> avec le bouton <b>« Ordonnancer → »</b>.</li>
+      <li><b>File d'ordonnancement — BDT à traiter</b> — deux compteurs (à affecter / non planifiés) puis la liste des BDT avec leur durée et le badge « à affecter ».</li>
+      <li><b>Charge ouverte par site (h)</b> — anneau Seem / Semrac.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/dash-programmation.png" alt="Capture du Dashboard Programmation" loading="lazy">
+      <figcaption><b>Dashboard Programmation</b> — la charge des huit semaines à venir et la file d'ordonnancement : ce qui n'est ni affecté ni daté est listé noir sur blanc.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — vider la file d'ordonnancement</h3>
+    <ol class="steps">
+      <li>Lisez la tuile <b>Charge atelier</b> : au-delà de 90 %, toute nouvelle affectation créera du retard.</li>
+      <li>Ouvrez la carte <b>File d'ordonnancement</b> : le compteur orange donne les BDT sans opérateur, le rouge ceux sans date.</li>
+      <li>Cliquez <b>« Ordonnancer → »</b> pour ouvrir l'écran de programmation et donner à chaque BDT un poste et une date.</li>
+      <li>Affectez les opérateurs depuis <b>« Ouvrir Gantt → »</b> en évitant ceux qui sont déjà au rouge et ceux marqués Absent.</li>
+      <li>Traitez enfin les <b>Commandes en attente prog.</b> : chacune doit donner lieu à un lot puis à ses BDT.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La charge affichée ici est <b>recalculée sur le périmètre filtré</b> : si vous choisissez le site Seem, la capacité ne compte que les opérateurs de Seem — le chiffre peut donc différer de celui du Dashboard Production.</li>
+      <li>Une semaine dont la barre dépasse la ligne noire est <b>en surcharge</b> : il faut décaler, sous-traiter ou renforcer.</li>
+      <li>Les BDT sans date prévue n'apparaissent dans <b>aucune</b> semaine du graphe : la file d'ordonnancement est le seul endroit où on les voit.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> « Cmd à programmer » à zéro et file d'ordonnancement vide, c'est le signe que le carnet est entièrement traduit en travail planifié — l'objectif de fin de journée pour l'ordonnancement.</div>
+  </section>
+
+  <!-- ══════════════ 10. QUALITÉ ══════════════ -->
+  <section class="tab" id="tab-qualite">
+    <div class="tab-head"><span class="tab-num">10</span><h2>Dashboard Qualité</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Il donne l'état de la conformité : non-conformités ouvertes et leur ancienneté, taux de NC, capabilité des cotes (Cp/Cpk, PPM), libération des PV, quarantaines et 8D, plus le rappel des ECME à étalonner et des audits à planifier. C'est le support de la revue qualité et de la préparation d'audit.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li>Cinq tuiles : <b>NC ouvertes</b> avec le nombre de critiques (la tuile ouvre la liste des NC), <b>Taux de NC</b> (NC rapportées aux lots, cible ≤ 2 %), <b>Cpk moyen</b> avec le nombre de contrôles et le PPM (cible 1,33), <b>Libération PV</b> en pourcentage (cible 95 %), <b>Quarantaines</b> avec la durée moyenne et le nombre de 8D en cours.</li>
+      <li><b>Non-conformités par mois</b> — courbe (+ N-1 en pointillé).</li>
+      <li>Une jauge <b>Conformité cotes</b> avec le rappel Cp · Cpk · PPM (ou un message si aucun contrôle de cote n'a été saisi).</li>
+      <li><b>NC actives à traiter</b> — six NC avec type, gravité, statut et date ; le fond et le liseré passent au rouge pour les gravités critiques et bloquantes.</li>
+      <li><b>Contrôles &amp; audits</b> — deux compteurs : <b>ECME à étalonner</b> (sur le total d'instruments) et <b>Audits à planifier</b>.</li>
+      <li>Section <b>Analyse des non-conformités</b> : <b>Pareto NC par type</b>, <b>NC par gravité</b> (anneau) et <b>Ancienneté des NC ouvertes</b> (0–30 j, 30–60 j, 60–90 j, 90 j et +).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/dash-qualite.png" alt="Capture du Dashboard Qualité" loading="lazy">
+      <figcaption><b>Dashboard Qualité</b> — l'ancienneté des NC ouvertes (en bas à droite) révèle les dossiers oubliés, souvent invisibles dans le compteur global.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — la revue qualité hebdomadaire</h3>
+    <ol class="steps">
+      <li>Période <b>Ce mois</b>, comparaison <b>vs N-1</b> activée : la courbe des NC dit si la situation s'améliore ou se dégrade d'une année sur l'autre.</li>
+      <li>Traitez d'abord les NC critiques et bloquantes de la carte « NC actives » : elles bloquent aussi les expéditions des lots concernés.</li>
+      <li>Regardez l'<b>ancienneté des NC ouvertes</b> : toute barre à droite (60 j et plus) est un dossier qui traîne.</li>
+      <li>Utilisez le <b>Pareto par type</b> pour choisir la famille de défauts à attaquer en action de fond.</li>
+      <li>Vérifiez les compteurs <b>ECME à étalonner</b> et <b>Audits à planifier</b> avant toute échéance de certification.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le <b>taux de NC</b> rapporte le nombre de NC au nombre de lots : sans lots enregistrés, il reste à 0 même s'il existe des NC.</li>
+      <li>Le <b>Cpk</b> est agrégé à partir des contrôles de cotes saisis ; il faut au minimum deux mesures exploitables pour qu'il s'affiche.</li>
+      <li>La <b>libération PV</b> compte les PV qui ne sont ni bloqués ni refusés : elle chute dès qu'un contrôle final reste en attente de décision.</li>
+      <li>Le filtre <b>Site</b> s'applique ici à l'entité de la NC (Seem / Semrac).</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> ce dashboard est la vue « chiffres » ; l'onglet <b>Dashboard Qualité</b> du service Qualité propose en plus le Pareto multi-axes et la « Conformité vive » des audits. Les deux se complètent.</div>
+  </section>
+
+  <!-- ══════════════ 11. OAS ══════════════ -->
+  <section class="tab" id="tab-oas">
+    <div class="tab-head"><span class="tab-num">11</span><h2>Dashboard OAS</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Il surveille l'atelier d'oxydation anodique : le volume de sessions traitées, la conformité des bains (concentration, température, pH) et l'autosurveillance des rejets d'eau. C'est à la fois un outil de production et une pièce de preuve pour l'environnement.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>Sessions OAS</b> sur la période et au total ; <b>Conformité bains</b> en pourcentage avec le nombre de relevés et, le cas échéant, le nombre de relevés non conformes — la mini-courbe suit le pH du bain principal ; <b>Conformité sessions</b> avec le nombre de sessions terminées ; <b>Durée moyenne</b> de traitement en minutes.</li>
+      <li><b>État des bains — derniers paramètres</b> — une carte par bain avec sa concentration (g/L), sa température et son pH, sur fond vert avec la pastille <span class="b b-ok">OK</span> ou sur fond orange avec <span class="b b-warn">⚠</span>.</li>
+      <li><b>Sessions par mois</b> — barres (+ N-1 en pointillé).</li>
+      <li><b>Relevés d'eau (autosurveillance rejets)</b> — tableau Date, Volume, pH, Chlore, Turbidité et une colonne Conforme (<span class="b b-ok">✓</span> ou <span class="b b-crit">✗ NC</span>).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/dash-oas.png" alt="Capture du Dashboard OAS" loading="lazy">
+      <figcaption><b>Dashboard OAS</b> — l'état des bains affiche le <i>dernier</i> relevé de chaque bain : c'est la photo de l'instant, pas une moyenne.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — contrôle de début de journée</h3>
+    <ol class="steps">
+      <li>Ouvrez le dashboard et lisez <b>État des bains</b> : un bain sur fond orange signale un dernier relevé non conforme.</li>
+      <li>Retournez dans le service OAS pour refaire le relevé et corriger le bain avant de lancer les balancelles.</li>
+      <li>Contrôlez la tuile <b>Conformité sessions</b> : elle compare les sessions terminées conformes au total des sessions terminées.</li>
+      <li>Vérifiez le tableau des <b>relevés d'eau</b> : toute ligne « ✗ NC » doit être justifiée dans le suivi environnemental.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La conformité des <b>bains</b> et celle des <b>sessions</b> sont deux choses différentes : la première vient des relevés de bain, la seconde du résultat des balancelles terminées.</li>
+      <li>Les bains affichent l'état <b>instantané</b> (dernier relevé connu par bain) : ils ne bougent pas quand vous changez la période.</li>
+      <li>Un relevé de bain non conforme déclenche une non-conformité côté Qualité : le suivi ne s'arrête pas à ce dashboard.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> exportez cette page en PDF avant une visite d'inspection : elle rassemble sur une feuille l'état des bains et l'autosurveillance des rejets.</div>
+  </section>
+
+  <!-- ══════════════ 12. MAINTENANCE ══════════════ -->
+  <section class="tab" id="tab-maintenance">
+    <div class="tab-head"><span class="tab-num">12</span><h2>Dashboard Maintenance</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Il donne la santé du parc machines : disponibilité, pannes en cours, MTBF/MTTR, part du préventif face au correctif, coût de maintenance et OPEX par machine. C'est le seul dashboard qui contient aussi une <b>action</b> : générer les ordres de maintenance préventifs échus.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>Machines en panne</b> avec le nombre d'OM ouverts ; <b>Disponibilité parc</b> avec l'OEE et le nombre de machines (objectif 90 %) ; <b>MTTR moyen</b> en heures avec le MTBF ; <b>Ratio préventif</b> avec le décompte préventif / correctif et, si l'OPEX est renseigné, le coût horaire réel.</li>
+      <li>Une <b>jauge de disponibilité</b>, un anneau <b>Préventif vs Correctif</b>, et la liste <b>Statut machines</b> (<span class="b b-ok">opérationnel</span>, <span class="b b-info">maintenance</span>, <span class="b b-crit">autre état</span>).</li>
+      <li><b>Prochaines maintenances</b> — les échéances préventives et les OM datés, triés par date, précédés du bouton <b>« Générer les OM préventifs dus »</b>.</li>
+      <li><b>Backlog OM par âge</b> — 0–7 j, 8–30 j, 31–90 j, plus de 90 j, suivi des OM ouverts les plus anciens.</li>
+      <li><b>Coût de maintenance mensuel</b> (+ N-1 en pointillé), <b>OPEX par machine</b> avec le total, les heures productives et le coût horaire réel, et le tableau <b>MTBF / MTTR par machine</b> (Machine, MTBF, MTTR, Dispo, Pannes) classé du plus long temps de réparation au plus court.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/dash-maintenance.png" alt="Capture du Dashboard Maintenance" loading="lazy">
+      <figcaption><b>Dashboard Maintenance</b> — le bouton jaune « Générer les OM préventifs dus » et, plus bas, le backlog des OM par âge.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — générer les préventifs échus</h3>
+    <ol class="steps">
+      <li>Ouvrez la carte <b>Prochaines maintenances</b> et vérifiez les échéances listées.</li>
+      <li>Cliquez <b>« Générer les OM préventifs dus »</b>.</li>
+      <li>Un message confirme le nombre d'ordres créés (« <i>n</i> OM préventif(s) généré(s). »), puis la page se recharge.</li>
+      <li>Les ordres créés sont désormais dans le service <b>Maintenance</b> : affectez-les et planifiez-les comme des OM ordinaires.</li>
+      <li>Contrôlez ensuite le <b>Ratio préventif</b> : il doit remonter à mesure que le préventif est réellement exécuté.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le filtre <b>Machine</b> restreint tout l'écran (disponibilité, OM, MTBF/MTTR, OPEX) à un seul équipement : idéal pour instruire une machine à problèmes.</li>
+      <li>La disponibilité provient des relevés MTBF quand ils existent ; à défaut, elle est estimée par la part de machines à l'état « opérationnel ».</li>
+      <li>L'<b>OPEX par machine</b> reste vide tant que les consommations et achats rattachés aux machines ne sont pas saisis — le coût horaire réel n'apparaît alors pas non plus.</li>
+      <li>Le <b>backlog</b> se calcule depuis la date de signalement : un OM ouvert sans date de signalement n'y figure pas.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> « Générer les OM préventifs dus » <b>crée réellement</b> des ordres de maintenance dans l'ERP. Ne cliquez pas « pour voir » : lancez-le quand vous êtes prêt à les traiter.</div>
+  </section>
+
+  <!-- ══════════════ 13. STOCK ══════════════ -->
+  <section class="tab" id="tab-stock">
+    <div class="tab-head"><span class="tab-num">13</span><h2>Dashboard Stock</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Il répond à trois questions : combien vaut le stock, qu'est-ce qui manque, et qu'est-ce qui dort. Il fournit aussi le classement ABC (où concentrer les efforts de gestion) et des suggestions de réapprovisionnement prêtes à commander.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>Valorisation stock</b> avec le nombre de références ; <b>Ruptures</b> (articles à zéro) et le nombre d'articles sous le mini ; <b>Rotation stock</b> avec la couverture moyenne en mois (objectif 6) ; <b>Dead stock (&gt; 6 mois)</b> avec la valeur immobilisée.</li>
+      <li><b>Flux entrées / sorties</b> — barres mensuelles vertes et rouges (+ sorties N-1 en pointillé).</li>
+      <li><b>Valeur par activité</b> — anneau.</li>
+      <li><b>Classement ABC (Pareto valeur)</b> — barres de valeur, courbe du pourcentage cumulé et trois pavés récapitulatifs : <span class="b b-crit">A</span> (jusqu'à 80 % de la valeur), <span class="b b-warn">B</span> (80 à 95 %), <span class="b b-ok">C</span> (le reste), chacun avec son nombre de références et son montant.</li>
+      <li><b>Suggestions de réappro</b> — tableau Référence, Stock, Point de commande, À commander, avec un badge <span class="b b-info">AUTO</span> pour les articles en réapprovisionnement automatique, et un lien « Gérer le stock ».</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/dash-stock.png" alt="Capture du Dashboard Stock" loading="lazy">
+      <figcaption><b>Dashboard Stock</b> — le classement ABC et les suggestions de réappro : la liste de courses est déjà triée par urgence.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — lancer un réapprovisionnement</h3>
+    <ol class="steps">
+      <li>Contrôlez les tuiles <b>Ruptures</b> et « sous le mini » : ce sont les urgences.</li>
+      <li>Descendez sur <b>Suggestions de réappro</b> : les lignes sont classées des plus critiques (stock le plus loin sous le point de commande) aux moins urgentes.</li>
+      <li>Notez la colonne <b>À commander</b> : c'est la quantité calculée (quantité de commande paramétrée, ou l'écart au stock maxi).</li>
+      <li>Cliquez <b>« Gérer le stock → »</b> pour créer les demandes d'achat correspondantes dans le service Stock, qui alimenteront ensuite les Achats.</li>
+      <li>Surveillez enfin le <b>Dead stock</b> : ce sont des références sans entrée depuis plus de six mois — candidates au déstockage plutôt qu'au réachat.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le stock est un <b>niveau instantané</b> : le filtre Site s'applique, mais la période choisie n'agit que sur le graphe des flux mensuels.</li>
+      <li>La <b>rotation</b> et la <b>couverture</b> reposent sur la consommation mensuelle renseignée sur l'article : sans elle, ces indicateurs affichent « — ».</li>
+      <li>La <b>valorisation</b> utilise le prix d'achat HT de la fiche article ; un prix manquant sous-évalue le stock.</li>
+      <li>Les articles désactivés sont exclus de tous les calculs.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> concentrez les inventaires tournants et les négociations d'achat sur la <b>classe A</b> : peu de références, l'essentiel de la valeur.</div>
+  </section>
+
+  <!-- ══════════════ 14. EXPÉDITIONS ══════════════ -->
+  <section class="tab" id="tab-expedition">
+    <div class="tab-head"><span class="tab-num">14</span><h2>Dashboard Expéditions</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Il prépare et contrôle les départs : quelles commandes sont prêtes à partir, lesquelles sont bloquées par la qualité, combien de bons de livraison ont été émis, et si les délais promis aux clients sont tenus.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>Cmd à expédier</b> — commandes dont la production est soldée et la qualité au vert ; la ligne de contexte indique « Production soldée + qualité OK », ou passe en rouge avec le nombre de commandes <b>bloquées qualité</b>.</li>
+      <li><b>OTD livraisons</b> en pourcentage avec le nombre de commandes évaluées (objectif 95 %).</li>
+      <li><b>BL clients (total)</b> et le nombre émis sur la période.</li>
+      <li><b>Retards en cours</b> — commandes ouvertes marquées en retard.</li>
+      <li><b>Commandes en attente d'expédition</b> — client, montant, date de livraison prévue et statut, avec le lien « Voir tous les BL ».</li>
+      <li><b>BL clients par mois</b> (+ N-1 en pointillé), <b>Volume expédié (qté) par mois</b> et <b>Répartition par transporteur</b> (anneau).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/dash-expedition.png" alt="Capture du Dashboard Expéditions" loading="lazy">
+      <figcaption><b>Dashboard Expéditions</b> — la première tuile distingue ce qui est réellement expédiable de ce que la qualité retient.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — organiser les départs du jour</h3>
+    <ol class="steps">
+      <li>Lisez la tuile <b>Cmd à expédier</b> : si elle est rouge, des commandes prêtes sont retenues par une non-conformité.</li>
+      <li>Parcourez <b>Commandes en attente d'expédition</b> et triez mentalement par date de livraison promise.</li>
+      <li>Cliquez <b>« Voir tous les BL → »</b> pour créer les bons de livraison dans le service Expéditions.</li>
+      <li>Pour les commandes bloquées, passez par le <b>Dashboard Qualité</b> ou la liste des NC : la levée de la NC débloque l'expédition.</li>
+      <li>En fin de mois, contrôlez l'<b>OTD livraisons</b> et le volume expédié pour la revue avec le commerce.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Une commande n'est proposée à l'expédition que si <b>tous</b> ses bons de travail sont soldés.</li>
+      <li>Une NC <b>critique ou bloquante</b> encore ouverte sur un lot de la commande la fait basculer en « bloquée qualité » : c'est la porte qualité, elle est volontaire.</li>
+      <li>Le compteur « BL clients » ne prend que les livraisons <b>clients</b> : les bons de réception et les bons de sous-traitance en sont exclus.</li>
+      <li>L'OTD affiché est le même que celui du Dashboard Production : une seule définition pour toute l'entreprise.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> la répartition par transporteur reste vide tant que le champ transport n'est pas renseigné sur les BL — c'est une saisie à ne pas négliger si vous voulez négocier avec vos transporteurs.</div>
+  </section>
+
+  <!-- ══════════════ 15. RH ══════════════ -->
+  <section class="tab" id="tab-rh">
+    <div class="tab-head"><span class="tab-num">15</span><h2>Dashboard RH</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Il suit l'effectif, les absences, les heures travaillées et surtout les <b>habilitations</b> — le point le plus sensible en aéronautique, où une certification périmée peut interdire une opération. On l'ouvre pour le suivi mensuel et pour anticiper les renouvellements.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>Effectif actif</b> avec le nombre d'opérateurs ; <b>Absences</b> sur la période avec le taux d'absentéisme (cible ≤ 4 %) ; <b>Habilitations ⚠</b> avec le nombre qui expire sous 30 jours (la tuile ouvre la page Compétences) ; <b>Heures</b> de la période dont les heures supplémentaires.</li>
+      <li><b>Effectif par entité</b> et <b>Répartition par type de contrat</b> — deux anneaux.</li>
+      <li><b>Tendance absentéisme</b> — courbe du nombre d'absences par mois (+ N-1 en pointillé).</li>
+      <li><b>Ancienneté des habilitations</b> — quatre pavés : <span class="b b-crit">Déjà expiré</span>, <span class="b b-warn">&lt; 30 j</span>, <span class="b b-warn">30–60 j</span>, <span class="b b-ok">60–90 j</span>.</li>
+      <li><b>Présence opérateurs — aujourd'hui</b> — badge <span class="b b-ok">Présent</span> ou <span class="b b-crit">Absent</span> par opérateur.</li>
+      <li><b>Habilitations / Certifications</b> — salarié, intitulé et statut, avec le lien « Gérer les compétences ».</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/dash-rh.png" alt="Capture du Dashboard RH" loading="lazy">
+      <figcaption><b>Dashboard RH</b> — les quatre pavés d'ancienneté des habilitations donnent le calendrier des renouvellements à lancer.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — anticiper les renouvellements d'habilitation</h3>
+    <ol class="steps">
+      <li>Regardez le pavé <b>Déjà expiré</b> : ces habilitations ne couvrent plus rien, les opérations associées doivent être réaffectées immédiatement.</li>
+      <li>Traitez ensuite <b>&lt; 30 j</b>, puis 30–60 j : ce sont les formations à programmer maintenant.</li>
+      <li>Cliquez la tuile <b>Habilitations</b> ou le lien <b>« Gérer les compétences → »</b> pour ouvrir la page des compétences et mettre à jour les dates.</li>
+      <li>Contrôlez enfin la <b>Présence opérateurs</b> du jour avant de valider le planning d'atelier.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le <b>taux d'absentéisme</b> rapporte les jours d'absence de la période à l'effectif multiplié par les jours ouvrés : il n'a de sens que si les absences sont saisies au fil de l'eau.</li>
+      <li>Les <b>heures</b> et les <b>heures supplémentaires</b> proviennent des pointages ; sans pointage, les tuiles restent à zéro.</li>
+      <li>Le filtre <b>Site</b> agit sur l'entité du salarié ; absences, pointages et certifications, qui n'ont pas de site propre, ne sont pas écartés.</li>
+      <li>Ce dashboard est réservé aux profils qui ont la <b>lecture RH</b>.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> les heures relevées ici sont la base des exports de paie : un écart entre « Heures » et ce que vous attendez signale d'abord un pointage manquant, pas une erreur de calcul.</div>
+  </section>
+
+  <!-- ══════════════ 16. ENVIRONNEMENT ══════════════ -->
+  <section class="tab" id="tab-environnement">
+    <div class="tab-head"><span class="tab-num">16</span><h2>Dashboard Environnement</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le tableau de bord du système de management environnemental (ISO 14001) : déchets et filières, rejets, conformité réglementaire et veille, aspects environnementaux significatifs, consommations d'eau et d'énergie, bilan carbone et indicateurs RSE. Il sert au pilotage courant et à la préparation des audits ou des contrôles ICPE.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li>Six tuiles : <b>Déchets tracés</b> (dont dangereux) ; <b>Conformité réglementaire</b> en pourcentage des obligations applicables (objectif 98 %) ; <b>Rejets hors VLE</b> — les mesures qui dépassent les valeurs limites ; <b>Aspects significatifs</b> sur le total des aspects recensés ; <b>BSD conformes</b> (bordereaux de suivi des déchets dangereux, objectif 100 %) ; <b>Incidents env. (an)</b> avec les revues ATEX dues, objectif ≤ 3 par an.</li>
+      <li>Deux jauges (<b>Taux de conformité</b> et <b>Déchets valorisés</b>), l'anneau <b>DD / DND</b>, et trois bullets d'objectifs quantitatifs : déchets dangereux (t/an), déchets non dangereux (t/an), consommation d'eau (m³/an).</li>
+      <li><b>Déchets produits par mois</b> (barres empilées dangereux / non dangereux, en kg) et <b>Déchets par filière</b>.</li>
+      <li><b>Indicateur de la veille réglementaire</b> — barres groupées par domaine (ICPE, ISO 14001, RSE, ISO 26000, ATEX, Autre) et par état : <span class="b b-ok">Conforme</span>, <span class="b b-crit">Non conforme</span>, <span class="b b-warn">Partiel</span>, <span class="b b-mut">À vérifier</span>.</li>
+      <li><b>Consommation eau / énergie</b> (deux courbes), <b>Risque chimique — environnement (SEIRICH)</b> (produits classés au niveau 2 et au-delà, avec quantité et pastille de niveau) et <b>Aspects environnementaux par milieu</b>.</li>
+      <li><b>Bilan GES par scope</b> (scope 1 direct, scope 2 électricité, scope 3 indirect) avec le total en tCO₂e, et les <b>Postes d'émission</b>.</li>
+      <li><b>Veille réglementaire en alerte</b> — le nombre d'obligations à traiter puis leur détail (obligation, domaine, échéance, état) ; <b>Incidents / rejets hors VLE par mois</b> ; et, si des indicateurs RSE sont saisis, un bloc <b>social · environnement · gouvernance</b> avec valeur et cible.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/dash-environnement.png" alt="Capture du Dashboard Environnement" loading="lazy">
+      <figcaption><b>Dashboard Environnement</b> — conformité, déchets et veille réglementaire sur un même écran : la base du dossier ISO 14001.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — préparer un audit environnemental</h3>
+    <ol class="steps">
+      <li>Choisissez <b>Année</b> pour couvrir l'exercice complet.</li>
+      <li>Vérifiez la tuile <b>Conformité réglementaire</b> puis ouvrez <b>Veille réglementaire en alerte</b> : chaque ligne est une obligation à régulariser ou à documenter avant l'audit.</li>
+      <li>Contrôlez <b>BSD conformes</b> : un bordereau manquant sur un déchet dangereux est un écart immédiat.</li>
+      <li>Comparez les bullets d'objectifs (déchets dangereux, non dangereux, eau) à leurs cibles — les cibles sont modifiables dans les objectifs KPI.</li>
+      <li>Regardez le <b>bilan GES</b> et les postes d'émission pour le volet carbone, puis exportez la page en PDF pour le dossier.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le <b>bilan GES</b> est calculé par <b>méthode monétaire</b> à partir des factures fournisseur : c'est un ordre de grandeur de pilotage, pas un bilan carbone réglementaire certifié.</li>
+      <li>Le <b>risque chimique</b> présenté ici est la lecture environnementale de l'évaluation SEIRICH : seuls les produits de niveau 2 et au-delà sont listés. L'évaluation elle-même se fait dans le service Sécurité.</li>
+      <li>Chaque bloc reste vide et affiche son propre message tant que la donnée correspondante n'est pas saisie (déchets, mesures, aspects, obligations, indicateurs RSE) : la page ne s'effondre pas, elle indique simplement ce qui manque.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> l'indicateur de veille croise domaine et état : une colonne entière en « À vérifier » signale une famille d'obligations jamais instruite — c'est en général le premier constat d'un auditeur.</div>
+  </section>
+
+  <div class="docnav">
+    <a href="index.html">← Sommaire des manuels</a>
+    <a href="index.html">Sommaire des manuels →</a>
+  </div>
+
+  <footer class="doc">
+    ERP Seem Semrac — manuel utilisateur généré depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs). En cas d'écart entre ce manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
+  </footer>
+
+</div>
+</body>
+</html>

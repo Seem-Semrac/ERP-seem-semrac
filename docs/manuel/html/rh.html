@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manuel — RH · ERP Seem Semrac</title>
+<link rel="stylesheet" href="manuel.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <div class="brandrow">
+      <div class="logo">SS</div>
+      <div>
+        <div class="co">SEEM · SEMRAC — ERP</div>
+        <div class="eyebrow">Manuel utilisateur</div>
+      </div>
+      <div class="kind">docs/manuel/html</div>
+    </div>
+    <h1>Service <span class="hi">RH</span></h1>
+    <p class="lede">Le service RH tient le registre du personnel et tout ce qui en découle dans l'ERP : la fiche de chaque salarié (qui donne son matricule, son code PIN et donc ses droits d'accès), ses habilitations et certifications, son niveau de compétence par process d'atelier, son rattachement hiérarchique, ses heures et ses congés. Rien n'y est décoratif : un salarié sans fiche ne peut ni pointer, ni solder un bon de travail ; un congé validé ici crée les absences du planning de production ; les heures cumulées ici partent en paie. Le service se parcourt <b>page par page</b> (barre de navigation violette en haut), et non par onglets.</p>
+    <div class="metachips">
+      <span class="chip">👤 Pour qui : <b>RH</b> (écriture) · lecture : Production, Sécurité, Comptabilité</span>
+      <span class="chip">🧭 Dans l'ERP : <b>Sidebar → RH</b></span>
+      <span class="chip">🗂 <b>7 pages</b></span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-t">Sommaire</div>
+    <ol>
+      <li><a href="#tab-employes">Employés</a></li>
+      <li><a href="#tab-habilitations">Habilitations &amp; Certifications</a></li>
+      <li><a href="#tab-competences">Matrice Compétences</a></li>
+      <li><a href="#tab-organigramme">Organigramme</a></li>
+      <li><a href="#tab-temps">Gestion des Temps</a></li>
+      <li><a href="#tab-dashboard">Dashboard RH</a></li>
+      <li><a href="#tab-pointage">Système de pointage</a></li>
+    </ol>
+  </nav>
+
+  <!-- ══════════════ 1. EMPLOYÉS ══════════════ -->
+  <section class="tab" id="tab-employes">
+    <div class="tab-head"><span class="tab-num">1</span><h2>Employés</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le fichier du personnel, et c'est aussi la porte d'entrée dans l'ERP : créer une fiche salarié, c'est lui attribuer un matricule, un code PIN et un ou plusieurs rôles — donc lui ouvrir exactement les écrans dont il a besoin. Toutes les autres pages RH (habilitations, compétences, organigramme, temps, congés) et une bonne partie de l'atelier (pointage, soldage des bons, autocontrôle) s'appuient sur cette liste.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>En haut de page, le compteur <b>« Effectif (N) »</b>, un champ <b>Rechercher…</b> qui filtre la liste au fil de la frappe (nom ou prénom) et le bouton violet <b>« Nouvel employé »</b>. En dessous, l'effectif est découpé en trois blocs, chacun avec son compteur : <b>Opérateurs Seem</b>, <b>Opérateurs Semrac</b> et <b>Fonctions support</b>. Les colonnes sont : ID&nbsp;/&nbsp;Matricule, Nom Prénom (avec l'e-mail en dessous), Rôle, Poste, Contrat, Shift, ERP, Statut et Action.</p>
+    <ul class="points">
+      <li>La colonne <b>ERP</b> affiche une clé : <b>verte</b> = identifiant ERP actif (le salarié a un code PIN, il peut se connecter et pointer) · <b>grise</b> = pas de code PIN, donc pas d'accès.</li>
+      <li>Statut : <span class="b b-ok">actif</span> ou <span class="b b-crit">inactif</span>. Un second badge apparaît sous le statut si la fiche a été soumise à la Direction (décision de validation).</li>
+      <li>Le <b>rôle</b> est affiché en pastille : Opérateur (bleu pour Seem, rose pour Semrac), OAS (opérateur), Qualité, Commercial, Bureau d'Études, Achats, Logistique, Production, Comptable, Maintenance, RH, Direction.</li>
+      <li>Shifts proposés : <b>Matin 6h-14h</b>, <b>Après-midi 14h-22h</b>, <b>Journée 7h-17h</b>, <b>Nuit</b>.</li>
+      <li>Deux boutons par ligne : <b>« Fiche »</b> (ouvre la fiche complète — un clic n'importe où sur la ligne fait la même chose) et la <b>corbeille</b> (supprimer le salarié).</li>
+      <li>Un bandeau jaune <b>« Salariés à rattacher »</b> peut s'afficher au-dessus de la liste : ce sont des noms cités ailleurs dans l'ERP (accidents du travail, dotations EPI, habilitations) mais qui n'ont pas de fiche. Chaque ligne indique la provenance (<span class="b b-crit">accident(s)</span>, <span class="b b-info">EPI</span>, <span class="b b-mut">habilit.</span>) et propose <b>« Créer &amp; rattacher »</b>, qui ouvre une fiche vierge préremplie avec le nom.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/rh-employes.png" alt="Capture de la page Employés" loading="lazy">
+      <figcaption><b>Employés</b> — l'effectif séparé en Opérateurs Seem / Opérateurs Semrac / Fonctions support ; regardez la colonne ERP (clé) pour savoir qui peut réellement se connecter.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — créer un salarié et lui ouvrir l'accès à l'ERP</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Nouvel employé »</b> : la fiche s'ouvre en fenêtre, vide, avec le bouton « Créer le salarié » en bas.</li>
+      <li>Saisissez le <b>Nom</b> (seul champ réellement obligatoire) et le prénom.</li>
+      <li>Choisissez le <b>Rôle principal</b>. Si vous choisissez <b>Opérateur</b> ou <b>OAS</b>, un champ <b>Activité</b> apparaît pour désigner le site (Seem ou Semrac) ; pour tous les autres rôles ce champ disparaît (le salarié est rattaché aux fonctions support). Sous le bloc « Identifiants ERP », une ligne rappelle en clair les <b>autorisations</b> que le rôle choisi accorde.</li>
+      <li>Complétez le poste, le contrat, le shift et la date d'entrée. Le <b>taux horaire chargé</b> est masqué : <b>maintenez le clic</b> sur le champ pour le révéler ou le saisir (il n'est modifiable qu'avec les droits d'écriture RH).</li>
+      <li>Si la personne cumule plusieurs casquettes, cochez des <b>Rôles supplémentaires</b> : le rôle principal fixe le métier et l'entité, les rôles cochés <b>ajoutent</b> leurs droits (les permissions se cumulent).</li>
+      <li>Dans le cadre bleu <b>« Identifiants ERP »</b>, renseignez l'<b>Identifiant / Matricule</b> (celui qui sera tapé sur la borne de pointage) et le <b>Code PIN</b>, puis les soldes de congés et de RTT en heures.</li>
+      <li>Renseignez le cadre vert <b>« Données sociales »</b> (sexe, travailleur handicapé, date de sortie) : ces informations alimentent les indicateurs RSE.</li>
+      <li>Dans le cadre jaune <b>« Habilitation requise »</b>, saisissez le <b>matricule</b> et le <b>code PIN d'un responsable RH ou Direction</b> : sans cette double signature, la création est refusée.</li>
+      <li>Cochez si besoin <b>« Soumettre cette fiche à la validation de la Direction »</b> (embauche ou changement de rôle) : la fiche apparaîtra dans <b>Direction › À valider</b>.</li>
+      <li>Cliquez sur <b>« Créer le salarié »</b>. Le message de confirmation indique « Identifiants ERP actifs » et, le cas échéant, le nombre d'enregistrements Sécurité (accidents, EPI, habilitations) automatiquement rattachés à la nouvelle fiche.</li>
+    </ol>
+
+    <h3>Pas à pas — modifier une fiche existante</h3>
+    <ol class="steps">
+      <li>Cliquez sur la ligne du salarié (ou sur son bouton <b>« Fiche »</b>).</li>
+      <li>Modifiez les champs voulus. Laisser le <b>Code PIN</b> vide conserve le code actuel ; y saisir une valeur le remplace.</li>
+      <li>Pour désactiver un départ, passez le <b>Statut</b> à « Inactif » et renseignez la <b>date de sortie</b> — la fiche reste consultable mais le salarié sort des listes actives (matrice de compétences, organigramme).</li>
+      <li>Cliquez sur <b>« Enregistrer »</b>. La modification est immédiate ; si vous avez changé le rôle, les droits d'accès du salarié sont recalculés dans la foulée.</li>
+    </ol>
+
+    <div class="tbl"><table>
+      <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+      <tbody>
+        <tr><td>Nom</td><td>Texte</td><td>Oui</td><td>Refus d'enregistrement si vide.</td></tr>
+        <tr><td>Prénom</td><td>Texte</td><td>Non</td><td>Sert à composer le nom affiché partout dans l'ERP.</td></tr>
+        <tr><td>Rôle principal</td><td>Liste (12 rôles)</td><td>Oui</td><td>Fixe le métier, l'entité et le socle d'autorisations dans l'ERP.</td></tr>
+        <tr><td>Activité (opérateur)</td><td>Seem / Semrac</td><td>Oui si Opérateur ou OAS</td><td>Site de rattachement ; le champ est masqué pour les fonctions support.</td></tr>
+        <tr><td>Poste</td><td>Texte</td><td>Non</td><td>Intitulé métier libre (ex. « Usinage CN ») — visible dans l'organigramme.</td></tr>
+        <tr><td>Contrat</td><td>CDI / CDD / Apprenti / Interim / Stage</td><td>Non (CDI par défaut)</td><td>Nature du contrat.</td></tr>
+        <tr><td>Shift</td><td>Matin / Après-midi / Journée / Nuit</td><td>Non</td><td>Horaire théorique — sert à reconstituer les temps quand il n'y a pas de pointage.</td></tr>
+        <tr><td>Date d'entrée</td><td>Date</td><td>Non</td><td>Date d'embauche (aujourd'hui par défaut).</td></tr>
+        <tr><td>Taux horaire chargé (€/h)</td><td>Nombre, masqué</td><td>Non</td><td>Confidentiel : révélé seulement en maintenant le clic, et seulement avec les droits d'écriture RH. Alimente la masse salariale du Dashboard.</td></tr>
+        <tr><td>E-mail · Téléphone · Adresse</td><td>Texte</td><td>Non</td><td>Coordonnées.</td></tr>
+        <tr><td>Statut</td><td>Actif / Inactif</td><td>Non (Actif par défaut)</td><td>Un salarié inactif disparaît des listes opérationnelles.</td></tr>
+        <tr><td>Rôles supplémentaires</td><td>Cases à cocher</td><td>Non</td><td>Cumul d'accès : les droits des rôles cochés s'ajoutent à ceux du rôle principal.</td></tr>
+        <tr><td>Identifiant / Matricule</td><td>Texte</td><td>Non mais fortement recommandé</td><td>Identifiant tapé sur la borne de pointage et à la connexion. Si vous ne le renseignez pas, l'ERP en génère un.</td></tr>
+        <tr><td>Code PIN (MDP)</td><td>Chiffres</td><td>Non</td><td>Mot de passe du salarié. Sans PIN, pas de connexion ni de pointage (clé grise dans la liste).</td></tr>
+        <tr><td>Solde congés payés (h)</td><td>Nombre</td><td>Non (175 h par défaut)</td><td>Exprimé en heures — 175 h correspond à 25 jours × 7 h. Décrémenté à chaque congé payé validé.</td></tr>
+        <tr><td>Solde RTT / repos (h)</td><td>Nombre</td><td>Non (0 par défaut)</td><td>Décrémenté à chaque RTT validé.</td></tr>
+        <tr><td>Sexe · Travailleur handicapé (OETH) · Date de sortie</td><td>Listes / Date</td><td>Non</td><td>Données sociales RSE : égalité femmes-hommes, OETH, turnover.</td></tr>
+        <tr><td>Matricule + PIN validateur</td><td>Texte + code</td><td>Oui à la création</td><td>Signature d'un responsable RH ou Direction. Sans elle, la création est refusée.</td></tr>
+        <tr><td>Soumettre à la validation de la Direction</td><td>Case à cocher</td><td>Non</td><td>Envoie la fiche dans le circuit Direction › À valider.</td></tr>
+      </tbody>
+    </table></div>
+    <figure class="shot">
+      <img src="../../assets/form-rh-employe.png" alt="Fenêtre Nouvel employé" loading="lazy">
+      <figcaption><b>Nouvel employé</b> — le rôle principal en haut à gauche commande l'affichage du champ « Activité » ; les rôles supplémentaires (cases à cocher) cumulent les droits ; le bloc « Identifiants ERP » plus bas contient matricule, PIN et soldes.</figcaption>
+    </figure>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Créer une fiche = ouvrir des droits. Choisissez le rôle avec soin : c'est lui, et lui seul, qui décide des services accessibles (les rôles supplémentaires ne font qu'élargir).</li>
+      <li>Le <b>matricule</b> saisi ici est celui que le salarié tapera sur la borne de pointage et à la connexion : évitez de le changer une fois diffusé.</li>
+      <li>Les soldes de congés sont en <b>heures</b>, pas en jours (base 7 h par jour ouvré).</li>
+      <li>Le bandeau « Salariés à rattacher » signale des données Sécurité orphelines : traitez-le, sinon les accidents et les dotations EPI de ces personnes resteront hors statistiques.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> la <b>suppression</b> d'un salarié est irréversible et libère son matricule. L'ERP demande d'abord une confirmation, puis le <b>matricule</b> et le <b>code PIN</b> d'un valideur RH / Direction. Pour un départ ordinaire, préférez le passage en statut « Inactif » avec une date de sortie : l'historique reste lisible.</div>
+    <div class="astuce"><b>Astuce :</b> la colonne ERP est le meilleur contrôle du lundi matin — une clé grise sur un opérateur signifie qu'il ne pourra ni pointer, ni solder son bon de travail.</div>
+  </section>
+
+  <!-- ══════════════ 2. HABILITATIONS & CERTIFICATIONS ══════════════ -->
+  <section class="tab" id="tab-habilitations">
+    <div class="tab-head"><span class="tab-num">2</span><h2>Habilitations &amp; Certifications</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le registre des titres détenus par le personnel : habilitations (soudure, pontier, électrique…), diplômes, certifications et formations. En aéronautique, la preuve qu'un opérateur est habilité au moment où il a travaillé est exigible en audit ; cette page tient cette preuve et surveille les dates de fin de validité. Elle est partagée avec la Qualité et la Sécurité, qui y ont aussi accès en écriture.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Trois boutons en haut de page organisent l'écran : <b>« Vue d'ensemble »</b>, <b>« Alertes (N) »</b> — le compteur est le nombre de titres qui ne sont pas valides — et <b>« Ajouter »</b>. En « Vue d'ensemble », une rangée de pastilles filtre par type : <b>Toutes (N)</b>, <b>Habilitations</b>, <b>Certifications</b>, <b>Diplômes</b>, <b>Formations</b>. Le tableau liste : Employé, Type, Intitulé, Organisme, Obtention, Expiration, Statut, Critique, Actions.</p>
+    <ul class="points">
+      <li>Statuts : <span class="b b-ok">Valide</span> · <span class="b b-warn">À renouveler</span> · <span class="b b-crit">Expiré</span>.</li>
+      <li>La colonne <b>Expiration</b> affiche « Illimitée » quand aucune date n'a été saisie, et passe en rouge dès que le titre n'est plus valide.</li>
+      <li>La colonne <b>Critique</b> affiche <b>⚠️ OUI</b> pour les habilitations déclarées critiques au sens EN&nbsp;9100 (celles dont la péremption interdit de produire), « Non » sinon.</li>
+      <li>Deux icônes par ligne : le <b>crayon</b> (modifier) et la <b>corbeille</b> (supprimer).</li>
+      <li>Sous <b>« Alertes »</b>, deux blocs se succèdent : <b>« Habilitations EXPIRÉES — Action immédiate requise »</b> (encadré rouge) puis <b>« À renouveler prochainement »</b> (encadré orange). Chaque carte rappelle le salarié, l'intitulé, l'organisme, la date, le badge <b>CRITIQUE</b> le cas échéant, et porte un bouton <b>« Renouveler »</b>. Si tout est en ordre, un bandeau vert annonce « Aucune alerte ».</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/rh-habilitations.png" alt="Capture de la page Habilitations et Certifications" loading="lazy">
+      <figcaption><b>Habilitations &amp; Certifications</b> — les trois boutons du haut (Vue d'ensemble / Alertes / Ajouter) commandent la page ; le compteur d'alertes est le premier chiffre à regarder.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — déclarer une habilitation</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Ajouter »</b> : le formulaire s'affiche, vierge.</li>
+      <li>Choisissez le <b>Salarié</b> dans la liste déroulante (obligatoire — une habilitation est toujours rattachée à une fiche salarié).</li>
+      <li>Choisissez le <b>Type</b> : habilitation, diplôme, certification ou formation.</li>
+      <li>Saisissez l'<b>Intitulé</b> (obligatoire), l'<b>Organisme</b> émetteur, la <b>date d'obtention</b> et la <b>date d'expiration</b>.</li>
+      <li>Cochez <b>« Habilitation critique (EN 9100) »</b> si l'absence de ce titre empêche de tenir le poste.</li>
+      <li>Ajoutez éventuellement des <b>Notes</b>, puis cliquez sur <b>« Enregistrer »</b> : le titre rejoint la liste et, s'il est proche de l'échéance, il apparaît immédiatement dans les Alertes et sur le Dashboard RH.</li>
+    </ol>
+
+    <h3>Pas à pas — renouveler un titre expiré</h3>
+    <ol class="steps">
+      <li>Ouvrez <b>« Alertes »</b> et repérez la carte du salarié concerné.</li>
+      <li>Cliquez sur <b>« Renouveler »</b> : le titre repasse en <span class="b b-ok">Valide</span> avec la date du jour comme nouvelle date d'obtention.</li>
+      <li>Rouvrez ensuite la ligne avec le <b>crayon</b> pour saisir la nouvelle <b>date d'expiration</b> et, si elle a changé, l'organisme — sans quoi le titre resterait sans échéance de surveillance.</li>
+    </ol>
+
+    <div class="tbl"><table>
+      <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+      <tbody>
+        <tr><td>Salarié</td><td>Liste des salariés</td><td>Oui</td><td>Rattachement à une fiche existante — créez d'abord la fiche si elle manque.</td></tr>
+        <tr><td>Type</td><td>habilitation / diplome / certification / formation</td><td>Oui</td><td>Détermine la pastille de couleur et le filtre de la liste.</td></tr>
+        <tr><td>Intitulé</td><td>Texte</td><td>Oui</td><td>Libellé exact du titre tel qu'il figure sur l'attestation.</td></tr>
+        <tr><td>Organisme</td><td>Texte</td><td>Non</td><td>Émetteur (organisme de formation, client, interne…).</td></tr>
+        <tr><td>Date obtention</td><td>Date</td><td>Non (aujourd'hui par défaut)</td><td>Point de départ de la validité.</td></tr>
+        <tr><td>Date expiration</td><td>Date</td><td>Non</td><td>Sans date, le titre est considéré comme « Illimitée » et ne déclenche aucune alerte.</td></tr>
+        <tr><td>Habilitation critique (EN 9100)</td><td>Case à cocher</td><td>Non</td><td>Marque le titre comme bloquant : il ressort en rouge dans les alertes et sur le Dashboard.</td></tr>
+        <tr><td>Notes</td><td>Texte libre</td><td>Non</td><td>Numéro d'attestation, restrictions, commentaire d'audit.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Un titre <b>sans date d'expiration</b> ne sera jamais signalé : ne laissez le champ vide que pour les diplômes réellement définitifs.</li>
+      <li>Les titres non valides remontent automatiquement dans <b>Dashboard RH</b> (tuiles « Habilit. expirées » et « À renouveler ≤30j ») et dans la revue de conformité de la Qualité.</li>
+      <li>Ce registre est le même pour la RH, la Qualité et la Sécurité : ne créez pas de doublon parce que la ligne n'apparaît pas sous le type attendu — vérifiez d'abord avec le filtre « Toutes ».</li>
+    </ul>
+    <div class="note"><b>À savoir :</b> une personne citée dans une habilitation mais absente du fichier du personnel réapparaît dans le bandeau <b>« Salariés à rattacher »</b> de la page Employés. C'est le signe qu'il faut lui créer une fiche.</div>
+  </section>
+
+  <!-- ══════════════ 3. MATRICE COMPÉTENCES ══════════════ -->
+  <section class="tab" id="tab-competences">
+    <div class="tab-head"><span class="tab-num">3</span><h2>Matrice Compétences</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est la polyvalence de l'atelier vue d'un seul écran : pour chaque process (tronçonnage, usinage CN, pliage, soudure, montage…), qui sait faire, et à quel niveau. Elle sert à répartir le travail, à repérer les process tenus par une seule personne, et à préparer les plans de formation. C'est aussi une pièce que les auditeurs demandent.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Deux boutons en haut : <b>« Matrice Production »</b> et <b>« Diagramme »</b>. La matrice croise les <b>process d'atelier</b> (en lignes, issus du référentiel Production) et les <b>opérateurs actifs</b> (en colonnes, représentés par une pastille d'initiales — bleue pour Seem, rose pour Semrac, violette pour les deux — avec le prénom en dessous). Chaque case contient le niveau. Un filtre segmenté en haut à droite propose <b>Tous</b>, <b>Seem</b> et <b>Semrac</b> avec leurs compteurs. Sous le tableau, un rappel indique le nombre d'opérateurs actifs et de process affichés.</p>
+    <ul class="points">
+      <li>Légende des niveaux : <span class="b b-mut">— Non formé</span> · <span class="b b-warn">★ En formation</span> · <span class="b b-ok">★★ Autonome</span> · <span class="b b-info">★★★ Expert</span>.</li>
+      <li>Le filtre Seem / Semrac masque à la fois les colonnes et les lignes du site non concerné ; les process communs aux deux sites restent affichés quel que soit le filtre.</li>
+      <li>Seuls les <b>opérateurs actifs</b> apparaissent : une fiche passée en « Inactif » disparaît de la matrice.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/rh-competences.png" alt="Capture de la page Matrice Compétences" loading="lazy">
+      <figcaption><b>Matrice Compétences</b> — process en lignes, opérateurs en colonnes ; la légende des quatre niveaux est rappelée au-dessus du tableau.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — mettre à jour le niveau d'un opérateur</h3>
+    <ol class="steps">
+      <li>Choisissez le site avec le filtre <b>Tous / Seem / Semrac</b> pour réduire le tableau à ce qui vous intéresse.</li>
+      <li>Repérez la case au croisement du <b>process</b> (ligne) et de l'<b>opérateur</b> (colonne).</li>
+      <li><b>Cliquez sur la case</b> : le niveau avance d'un cran à chaque clic — <b>—</b> → <b>★</b> → <b>★★</b> → <b>★★★</b> → puis retour à <b>—</b>.</li>
+      <li>La sauvegarde est <b>automatique</b> : un message « Niveau enregistré » confirme. En cas de problème réseau, la case revient d'elle-même à sa valeur précédente : recommencez.</li>
+    </ol>
+
+    <h3>Sous-onglet « Diagramme »</h3>
+    <p>Cette seconde vue lit la même donnée à l'envers, <b>par process</b> : une ligne par process, avec à droite les pastilles de tous les opérateurs habilités (niveau ★ ou plus), triés du plus expert au moins expérimenté, et le décompte « N opérateurs habilités ». Quand personne n'est habilité, la ligne affiche en rouge <b>« Aucun opérateur habilité — risque de blocage »</b> : c'est l'alerte la plus utile de la page. En dessous figure l'<b>organigramme des services</b> Seem &amp; Semrac, sous forme arborescente à partir de la Direction Générale.</p>
+    <p>L'ERP se souvient du sous-onglet que vous consultiez : si vous quittez la page en vue « Diagramme », vous la retrouverez en « Diagramme ».</p>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Un clic de trop fait repasser la case de <b>★★★</b> à <b>—</b> : le cycle boucle. Vérifiez toujours l'état final de la case après vos clics.</li>
+      <li>La liste des process vient du <b>référentiel Production</b> : pour ajouter une ligne à la matrice, il faut créer le process côté Production, pas ici.</li>
+      <li>Les process affichant « Aucun opérateur habilité » sont des points de fragilité industrielle : traitez-les en plan de formation avant qu'une absence ne bloque un lot.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> avant de valider un congé long (page Gestion des Temps), passez par le Diagramme : il montre en une ligne s'il reste quelqu'un d'habilité sur les process concernés.</div>
+  </section>
+
+  <!-- ══════════════ 4. ORGANIGRAMME ══════════════ -->
+  <section class="tab" id="tab-organigramme">
+    <div class="tab-head"><span class="tab-num">4</span><h2>Organigramme</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Cette page dessine la hiérarchie réelle de l'entreprise à partir d'une seule information par salarié : son responsable. Elle sert à situer chacun, à documenter les lignes de reporting pour les audits, et à savoir à qui remonte une demande.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Le titre <b>Organigramme</b>, deux boutons de bascule — <b>« Vue organigramme »</b> et <b>« Liens hiérarchiques »</b> — et, à droite, le compteur <b>« N salariés actifs »</b>. En vue organigramme, l'arbre est composé de cartes reliées par des traits ; chaque carte porte les initiales dans une pastille de couleur, le nom complet, le poste, le badge d'entité (<span class="b b-info">Seem</span>, <span class="b b-crit">Semrac</span> ou <span class="b b-mut">Support</span>) et, s'il y a lieu, le nombre de personnes rattachées. Les salariés sans responsable désigné forment le sommet de l'arbre.</p>
+    <figure class="shot">
+      <img src="../../assets/rh-organigramme.png" alt="Capture de la page Organigramme" loading="lazy">
+      <figcaption><b>Organigramme</b> — l'arbre se construit tout seul à partir des rattachements ; tant qu'aucun responsable n'est défini, tout le monde apparaît au même niveau.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — construire ou corriger la hiérarchie</h3>
+    <ol class="steps">
+      <li>Cliquez sur <b>« Liens hiérarchiques »</b> : la page bascule sur une liste, une ligne par salarié actif.</li>
+      <li>Sur la ligne du salarié, ouvrez le menu <b>« Responsable : »</b> et choisissez la personne à laquelle il est rattaché. L'option <b>« — Aucun (sommet) — »</b> place le salarié au sommet de l'arbre (typiquement la Direction).</li>
+      <li>Le choix est enregistré <b>immédiatement</b> — le message « Rattachement mis à jour » s'affiche et la page se rafraîchit.</li>
+      <li>Revenez sur <b>« Vue organigramme »</b> pour vérifier le résultat.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Seuls les salariés <b>actifs</b> figurent sur cette page : un départ passé en « Inactif » disparaît de l'arbre.</li>
+      <li>Un salarié ne peut pas être son propre responsable ; l'ERP ignore ce choix.</li>
+      <li>Il n'y a pas de bouton « Enregistrer » : chaque sélection dans un menu déroulant est écrite aussitôt. Ne quittez pas la page en pensant devoir valider.</li>
+      <li>Le poste affiché sur les cartes est celui saisi dans la fiche salarié (page Employés) : pour corriger un libellé, c'est là qu'il faut le faire.</li>
+    </ul>
+    <div class="note"><b>À savoir :</b> l'organigramme <b>par services</b> (Direction Générale → Commercial, Bureau d'Études, Qualité, Production, Maintenance, OAS) est une vue distincte, présentée en bas du sous-onglet « Diagramme » de la Matrice Compétences.</div>
+  </section>
+
+  <!-- ══════════════ 5. GESTION DES TEMPS ══════════════ -->
+  <section class="tab" id="tab-temps">
+    <div class="tab-head"><span class="tab-num">5</span><h2>Gestion des Temps</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le poste de pilotage des heures et des absences. On y relit les pointages de la journée venus de la borne, on les corrige si nécessaire (avec autorisation), on suit le cumul mensuel de chacun, on traite les demandes de congé — et on exporte le tout vers la paie. Un congé validé ici ne reste pas dans le module RH : il crée les absences du planning de production et rend au pool les bons de travail déjà affectés.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Tout en haut, la barre <b>« Export paie (Silae) »</b> : un sélecteur de mois et le bouton <b>« Exporter CSV »</b>. En dessous, trois boutons organisent l'écran : <b>« Journée (date du jour) »</b>, <b>« Historique »</b> et <b>« Corrections »</b>. La vue « Journée » affiche le tableau des pointages : Employé, Arrivée, Départ, Pause, Heures, Type, Statut, Validé par, Actions, suivi d'une ligne <b>TOTAL JOURNÉE</b>. Un encart bleu rappelle que les pointages proviennent de la page <b>Pointage</b> et que les corrections nécessitent une autorisation. Enfin, deux cartes se partagent le bas de page : <b>« Cumul du mois »</b> et <b>« Absences &amp; congés »</b>.</p>
+    <ul class="points">
+      <li>Statut d'un pointage : <span class="b b-info">En cours</span> (arrivée pointée, pas encore de sortie) · <span class="b b-ok">Validé</span> · <span class="b b-warn">Corrigé</span>.</li>
+      <li>Tant que la personne n'a pas pointé sa sortie, la colonne Départ affiche <b>« En cours »</b> en bleu et les heures ne sont pas encore calculées.</li>
+      <li><b>« Cumul du mois »</b> additionne les heures par salarié et les compare à la base mensuelle de <b>151,67 h</b> : le pourcentage est vert au-delà, orange en dessous.</li>
+      <li>Statuts d'un congé : <span class="b b-warn">En attente</span> · <span class="b b-ok">Validé</span> · <span class="b b-crit">Refusé</span> · <span class="b b-mut">Annulé</span>.</li>
+      <li>Si aucune badgeuse n'a alimenté la journée, l'ERP reconstitue les temps à partir de la <b>présence saisie en Production</b> : l'horaire du shift du salarié est appliqué (6h-14h, 14h-22h, 7h-17h ou nuit), le type affiché est « présence » et la colonne « Validé par » indique « Planning présence ».</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/rh-temps.png" alt="Capture de la page Gestion des Temps" loading="lazy">
+      <figcaption><b>Gestion des Temps</b> — la barre d'export Silae en haut, les pointages du jour au centre, le cumul mensuel et les congés en bas de page.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — enregistrer et valider une demande de congé</h3>
+    <ol class="steps">
+      <li>Dans la carte <b>« Absences &amp; congés »</b>, bloc <b>« Nouvelle demande »</b>, choisissez le <b>salarié</b> — la liste rappelle son solde d'heures entre parenthèses.</li>
+      <li>Choisissez le <b>type</b> : Congé payé, RTT, Maladie, Sans solde, Événement familial, Formation ou Récupération, et saisissez un motif si utile.</li>
+      <li>Renseignez la <b>date de début</b> et la <b>date de fin</b>. Laissez le champ <b>Heures</b> vide pour laisser l'ERP calculer : jours ouvrés (week-ends exclus) × 7 h.</li>
+      <li>Cliquez sur <b>« Soumettre la demande »</b> : elle apparaît sous <b>« À valider (N) »</b> avec le badge <span class="b b-warn">En attente</span>.</li>
+      <li>Pour trancher, utilisez les deux boutons de la ligne : <b>« Valider »</b> (coche verte) ou <b>refuser</b> (croix rouge).</li>
+      <li>À la validation, l'ERP enchaîne tout seul : il pose <b>une absence par jour ouvré</b> dans le planning de présence, <b>libère les bons de travail</b> déjà affectés à l'opérateur sur la période (ils repartent au pool à réaffecter) et <b>décrémente le solde</b> — congés payés ou RTT selon le type. Le message de confirmation indique le nombre de jours réellement posés.</li>
+    </ol>
+
+    <h3>Pas à pas — corriger un pointage</h3>
+    <ol class="steps">
+      <li>Dans la vue <b>« Journée »</b>, cliquez sur <b>« Modifier »</b> sur la ligne concernée.</li>
+      <li>Saisissez l'<b>heure d'arrivée</b> et/ou l'<b>heure de départ</b> corrigées, puis le <b>Motif</b> (obligatoire — il est tracé).</li>
+      <li>Dans le cadre jaune, saisissez le <b>matricule RH habilité</b> et le <b>code secret</b> : sans cette autorisation, la correction est refusée.</li>
+      <li>Cliquez sur <b>« Valider »</b>.</li>
+      <li>Variante : le bouton <b>« Corrections »</b> en haut de page ouvre un formulaire de <b>demande</b> de correction (employé, date concernée, heures corrigées, autorisation accordée par, motif obligatoire) destiné aux cas traités en différé.</li>
+    </ol>
+
+    <figure class="shot">
+      <img src="../../assets/form-rh-correction.png" alt="Fenêtre de correction d'un pointage" loading="lazy">
+      <figcaption><b>Corriger un pointage</b> — le nom du salarié et la date sont rappelés en tête ; on ne resaisit que l'heure d'arrivée et/ou de départ à rectifier. Le <b>motif</b> est obligatoire et reste tracé, et le cadre jaune du bas (matricule RH habilité + code secret) conditionne l'enregistrement : sans lui, « Valider » refuse la correction. Après validation, la ligne repasse en statut <b>Corrigé</b> dans le tableau de la journée.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — exporter les temps vers la paie</h3>
+    <ol class="steps">
+      <li>En haut de page, choisissez le <b>mois</b> dans le sélecteur « Export paie (Silae) ».</li>
+      <li>Cliquez sur <b>« Exporter CSV »</b> : le fichier <b>silae_temps_AAAA-MM.csv</b> se télécharge.</li>
+      <li>Il contient une ligne par salarié : matricule, nom, prénom, entité, période, <b>heures normales</b>, <b>heures supplémentaires</b>, <b>heures de nuit</b>, <b>jours d'absence</b> et <b>jours de congés</b> — à mapper une fois pour toutes aux rubriques de Silae.</li>
+      <li>Sous « Historique », le bouton <b>« Exporter Excel »</b> propose un export de confort du détail des pointages.</li>
+    </ol>
+
+    <figure class="shot">
+      <img src="../../assets/form-rh-conge.png" alt="Bloc Nouvelle demande de congé sur la page Gestion des Temps" loading="lazy">
+      <figcaption><b>Nouvelle demande de congé</b> — dans la carte « Absences &amp; congés » : salarié, type, motif, dates, puis heures laissées vides pour le calcul automatique ; les demandes en attente s'empilent juste en dessous sous « À valider ».</figcaption>
+    </figure>
+
+    <div class="tbl"><table>
+      <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+      <tbody>
+        <tr><td>Salarié</td><td>Liste</td><td>Oui</td><td>Le solde de congés en heures est rappelé à côté du nom.</td></tr>
+        <tr><td>Type</td><td>Congé payé / RTT / Maladie / Sans solde / Événement familial / Formation / Récupération</td><td>Oui</td><td>Détermine le solde décrémenté (congés payés ou RTT) et la nature de l'absence posée au planning (maladie ou congé).</td></tr>
+        <tr><td>Motif</td><td>Texte</td><td>Non</td><td>Précision libre.</td></tr>
+        <tr><td>Date début · Date fin</td><td>Dates</td><td>Oui</td><td>Bornes incluses ; seuls les jours ouvrés sont comptés.</td></tr>
+        <tr><td>Heures</td><td>Nombre</td><td>Non</td><td>Laissé vide : calcul automatique (jours ouvrés × 7 h). Rempli : votre valeur fait foi.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le décompte ignore les <b>samedis et dimanches</b> mais pas les jours fériés : ajustez le champ Heures pour une période qui en contient.</li>
+      <li>La validation d'un congé est le seul geste qui <b>écrit dans le planning de production</b> : ne la faites qu'une fois la décision prise.</li>
+      <li>Si le message de confirmation annonce moins de jours posés que prévu, un avertissement le signale : vérifiez le planning de présence avant de considérer l'absence comme acquise.</li>
+      <li>Les corrections de pointage sont <b>tracées</b> (motif + matricule autorisant) : c'est ce qui rend l'export de paie défendable.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> valider un congé <b>libère les bons de travail</b> affectés à l'opérateur sur la période — ils retournent au pool des bons à affecter. Prévenez la Production, sinon des bons attendront sans titulaire au planning.</div>
+    <div class="astuce"><b>Astuce :</b> lancez l'export Silae en tout début de mois suivant, après avoir purgé les pointages « En cours » (sorties oubliées) via le bouton « Modifier » : une sortie manquante, ce sont des heures absentes du CSV.</div>
+  </section>
+
+  <!-- ══════════════ 6. DASHBOARD RH ══════════════ -->
+  <section class="tab" id="tab-dashboard">
+    <div class="tab-head"><span class="tab-num">6</span><h2>Dashboard RH</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est la page d'accueil du service RH : elle répond en un coup d'œil aux quatre questions du matin — combien de personnes présentes, qui est absent, quelles habilitations sont en péril, et où en est la masse salariale. Elle ne se saisit pas : elle agrège ce qui a été renseigné sur les autres pages.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Cinq tuiles en haut de page, puis deux tableaux côte à côte.</p>
+    <ul class="points">
+      <li><b>Effectif actif</b> — nombre de salariés au statut actif, détaillé en dessous : N Seem · N Semrac · N Admin.</li>
+      <li><b>Absences aujourd'hui</b> — congés et arrêts maladie du jour.</li>
+      <li><b>Habilit. expirées</b> — titres dont la validité est dépassée : <i>action requise urgente</i>.</li>
+      <li><b>À renouveler ≤30j</b> — titres dont l'échéance approche.</li>
+      <li><b>Masse salariale / mois</b> — estimation du brut chargé : somme des taux horaires chargés × 151,67 h.</li>
+      <li><b>« Habilitations à surveiller »</b> — les cinq premiers titres non valides, avec le salarié, l'intitulé (marqué <b>⚠️ CRITIQUE</b> le cas échéant), la date d'expiration et le statut. Quand tout est en règle, un message vert l'annonce.</li>
+      <li><b>« Pointages du jour »</b> — pour la date du jour : employé, arrivée, départ (ou « En cours »), heures, statut, et le total de la journée.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/rh-dashboard.png" alt="Capture du Dashboard RH" loading="lazy">
+      <figcaption><b>Dashboard RH</b> — les deux tuiles rouge et orange (habilitations expirées / à renouveler) sont celles qui appellent une action ; le détail est juste en dessous.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — la revue quotidienne</h3>
+    <ol class="steps">
+      <li>Regardez la tuile <b>Habilit. expirées</b>. Si elle n'est pas à zéro, ouvrez la page <b>Habilitations &amp; Certifications</b> → bouton <b>« Alertes »</b> et traitez les cartes rouges en priorité.</li>
+      <li>Regardez <b>À renouveler ≤30j</b> : ce sont les formations à programmer maintenant pour éviter la case rouge le mois prochain.</li>
+      <li>Parcourez <b>« Pointages du jour »</b> : une ligne restée « En cours » en fin de journée signale une sortie non pointée, à corriger sur la page <b>Gestion des Temps</b>.</li>
+      <li>Comparez l'<b>Effectif actif</b> aux <b>Absences aujourd'hui</b> pour anticiper la charge d'atelier avec la Production.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La <b>masse salariale</b> n'est qu'une estimation : elle vaut ce que valent les taux horaires chargés saisis dans les fiches salarié. Une fiche sans taux compte pour zéro.</li>
+      <li>Les chiffres sont calculés à l'ouverture de la page : rechargez-la après une saisie faite sur une autre page RH.</li>
+      <li>Le Dashboard ne corrige rien : chaque tuile est une invitation à ouvrir la page correspondante.</li>
+    </ul>
+  </section>
+
+  <!-- ══════════════ 7. SYSTÈME DE POINTAGE ══════════════ -->
+  <section class="tab" id="tab-pointage">
+    <div class="tab-head"><span class="tab-num">7</span><h2>Système de pointage</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est la <b>borne d'atelier</b> : un écran plein, prévu pour rester allumé sur un poste partagé à l'entrée de la production. Chacun y déclare son arrivée, ses pauses et sa sortie avec son matricule et son code PIN — sans avoir à se connecter à l'ERP. Tout ce qui est badgé ici alimente la page Gestion des Temps, puis l'export de paie. C'est aussi depuis cette borne qu'un salarié peut déposer une demande de congé.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Un écran sombre, sans barre latérale ni menus : une <b>horloge géante</b> qui défile à la seconde, le titre <b>« Terminal de Pointage · Seem Semrac »</b>, la date du jour en toutes lettres et un lien discret <b>« Service RH »</b> en haut à gauche pour revenir à l'ERP. Au centre, quatre grands boutons, puis un bouton pleine largeur pour les congés, et enfin le journal <b>« Derniers pointages du jour »</b>.</p>
+    <ul class="points">
+      <li><b>Arrivée</b> (vert) — <i>Début de service</i>.</li>
+      <li><b>Début Pause</b> (orange) — <i>Pause déjeuner</i>.</li>
+      <li><b>Fin Pause</b> (bleu) — <i>Retour en service</i>.</li>
+      <li><b>Sortie</b> (rouge) — <i>Fin de service</i>.</li>
+      <li><b>« Faire une demande de congé »</b> (bandeau turquoise) — accessible à tous les salariés.</li>
+      <li>Le journal du bas récapitule les passages de la journée, heure par heure, avec le nom et le type d'événement (arrivée en vert, sortie en rouge).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/rh-pointage.png" alt="Capture de l'écran de pointage" loading="lazy">
+      <figcaption><b>Système de pointage</b> — écran autonome plein écran : horloge, quatre boutons d'action, demande de congé et journal du jour.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — pointer son arrivée ou sa sortie</h3>
+    <ol class="steps">
+      <li>Appuyez sur le bouton correspondant : <b>Arrivée</b>, <b>Début Pause</b>, <b>Fin Pause</b> ou <b>Sortie</b>.</li>
+      <li>Une fenêtre <b>« Pointage — <i>action</i> »</b> s'ouvre : saisissez votre <b>matricule</b> (il se met automatiquement en majuscules) puis votre <b>code secret</b>.</li>
+      <li>Appuyez sur <b>« Valider le pointage »</b> — ou simplement sur la touche <b>Entrée</b> depuis le champ du code.</li>
+      <li>Le passage s'inscrit aussitôt en haut du journal et un message confirme le nom et l'heure. À la <b>sortie</b>, le message indique en plus le nombre d'heures travaillées : temps entre l'arrivée et la sortie, <b>moins la pause</b> si elle a été badgée.</li>
+    </ol>
+
+    <figure class="shot">
+      <img src="../../assets/form-rh-pointage.png" alt="Fenêtre de pointage à la borne : matricule et code secret" loading="lazy">
+      <figcaption><b>Pointage à la borne</b> — le titre de la fenêtre rappelle l'action badgée (Arrivée, Début Pause, Fin Pause ou Sortie) : vérifiez-le avant de saisir. Deux champs seulement, <b>Matricule</b> (passé automatiquement en majuscules) et <b>Code secret</b> ; la touche <b>Entrée</b> depuis le code équivaut au bouton « Valider le pointage ». Un matricule inconnu ou sans code PIN est refusé ici même.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — demander un congé depuis la borne</h3>
+    <ol class="steps">
+      <li>Appuyez sur <b>« Faire une demande de congé »</b>.</li>
+      <li>Saisissez votre <b>matricule</b> et votre <b>code secret</b> (obligatoires : ils authentifient la demande), puis vos <b>nom</b> et <b>prénom</b>.</li>
+      <li>Choisissez le <b>type</b> — Congé payé, RTT, Maladie, Sans solde ou Autre — et saisissez les <b>dates de début et de fin</b> (obligatoires) ainsi qu'un motif si vous le souhaitez.</li>
+      <li>Appuyez sur <b>« Envoyer la demande »</b>. Le décompte se fait tout seul en jours ouvrés × 7 h, et le message de confirmation indique <b>vers qui</b> part la demande : <b>Production (Présence opérateurs)</b> pour un opérateur, <b>Direction</b> pour une fonction support.</li>
+      <li>La demande apparaît alors dans <b>Gestion des Temps → « À valider »</b> avec le statut <span class="b b-warn">En attente</span>.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li><b>Pas de matricule ou pas de code PIN = pas de pointage.</b> Un salarié refusé à la borne a presque toujours une clé grise dans la colonne ERP de la page Employés : c'est là qu'on lui attribue son PIN.</li>
+      <li>On ne peut pointer son <b>arrivée qu'une fois par jour</b> : une seconde tentative renvoie « a déjà pointé son arrivée aujourd'hui ».</li>
+      <li>Impossible de pointer une pause ou une sortie sans avoir pointé l'arrivée : le message « doit d'abord pointer son arrivée » s'affiche. Dans ce cas, la RH régularise via <b>Gestion des Temps → Modifier</b>.</li>
+      <li>Une <b>sortie oubliée</b> laisse la journée en statut « En cours » et sans heures : elle sera absente de l'export de paie tant qu'elle n'est pas corrigée.</li>
+      <li>La borne n'affiche aucune donnée personnelle au-delà du journal des passages du jour : elle peut rester en libre accès à l'atelier.</li>
+    </ul>
+    <div class="note"><b>À savoir :</b> l'écran de pointage s'ouvre depuis le lien <b>« Système de pointage »</b> tout en bas de la barre latérale de l'ERP, ou directement à l'adresse <code>/rh/pointage</code> — c'est cette adresse qu'il faut mettre en page d'accueil du poste d'atelier.</div>
+    <div class="astuce"><b>Astuce :</b> demandez aux opérateurs de badger aussi <b>Début Pause</b> et <b>Fin Pause</b> : sans elles, la pause n'est pas déduite du calcul et le temps de présence est surestimé.</div>
+  </section>
+
+  <div class="docnav">
+    <a href="index.html">← Sommaire des manuels</a>
+    <a href="plans.html">Manuel suivant : Plan / Bâtiment →</a>
+  </div>
+
+  <footer class="doc">
+    ERP Seem Semrac — manuel utilisateur généré depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs). En cas d'écart entre ce manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
+  </footer>
+
+</div>
+</body>
+</html>

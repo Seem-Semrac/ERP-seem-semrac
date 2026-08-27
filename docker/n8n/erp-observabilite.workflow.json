@@ -1,0 +1,289 @@
+{
+  "name": "ERP — Observabilite (logs, incidents, triage IA, self-heal borne)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "toutes-les-5-min",
+      "name": "Toutes les 5 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "command": "printf '===CONTAINERS===\\n'; docker ps -a --filter name=erp- --format '{{.Names}}|{{.State}}|{{.Status}}' | while IFS='|' read -r n s st; do m=$(docker inspect -f '{{.State.OOMKilled}}|{{.RestartCount}}|{{.State.ExitCode}}' \"$n\" 2>/dev/null); printf '%s|%s|%s|%s\\n' \"$n\" \"$s\" \"$st\" \"$m\"; done; printf '===DISK===\\n'; docker system df --format '{{.Type}}|{{.Size}}|{{.Reclaimable}}'; printf '\\n===LOGS===\\n'; for n in $(docker ps -a --filter name=erp- --format '{{.Names}}'); do info=$(docker inspect -f '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \"$n\" 2>/dev/null); t=0; [ \"$n\" = erp-app ] && t=1; { [ \"$info\" != 'running|healthy' ] && [ \"$info\" != 'running|none' ]; } && t=1; [ \"$t\" = 1 ] && { printf -- '---%s---\\n' \"$n\"; docker logs --tail 60 \"$n\" 2>&1 | tail -60; }; done"
+      },
+      "id": "collecter-docker-",
+      "name": "Collecter (Docker)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = (($input.first().json.stdout) || '') + '';\nconst sec = (name) => { const parts = out.split('===' + name + '==='); if (parts.length < 2) return ''; return parts[1].split('===')[0]; };\nconst containers = sec('CONTAINERS').trim().split('\\n').filter(Boolean).map(function(l){ const p = l.split('|'); return { name:p[0], state:p[1]||'', status:p[2]||'', oom:(p[3]==='true'), restarts:parseInt(p[4]||'0',10)||0, exit:parseInt(p[5]||'0',10)||0 }; });\nconst disk = sec('DISK').trim().split('\\n').filter(Boolean).map(function(l){ const p = l.split('|'); return { type:p[0], size:p[1], reclaimable:p[2] }; });\nconst logs = sec('LOGS').trim();\nconst problems = [];\nfor (const c of containers) {\n  if (c.state === 'exited' && c.exit !== 0) problems.push({ cible:c.name, type:'infra', gravite:'haute', signal:'conteneur arrete (exit ' + c.exit + ')', action:'restart' });\n  else if (c.oom) problems.push({ cible:c.name, type:'infra', gravite:'haute', signal:'tue par OOM (memoire insuffisante)', action:'restart' });\n  else if (/unhealthy/.test(c.status)) problems.push({ cible:c.name, type:'infra', gravite:'moyenne', signal:'healthcheck KO (unhealthy)', action:'restart' });\n  else if (c.state !== 'running' && c.state !== 'created') problems.push({ cible:c.name, type:'infra', gravite:'moyenne', signal:'etat ' + c.state, action:'restart' });\n  if (c.restarts >= 5) problems.push({ cible:c.name, type:'infra', gravite:'moyenne', signal:'boucle de redemarrage (' + c.restarts + ' restarts)', action:'inspecter' });\n}\nconst gb = function(s){ const m = /([0-9.]+)\\s*GB/.exec(s || ''); return m ? parseFloat(m[1]) : 0; };\nfor (const d of disk) { if ((d.type === 'Build Cache' || d.type === 'Images') && gb(d.reclaimable) >= 2) problems.push({ cible:'docker/' + d.type, type:'infra', gravite:'basse', signal:d.type + ' recuperable ' + d.reclaimable, action:'prune' }); }\nconst errLines = logs.split('\\n').filter(function(l){ return /error|exception|unhandled|econnrefused|fatal|panic|traceback|\\b5\\d\\d\\b/i.test(l); }).slice(0, 40);\nif (errLines.length) problems.push({ cible:'logs applicatifs', type:'applicatif', gravite:'a trier', signal:errLines.length + ' ligne(s) d erreur dans les logs', action:'triage' });\nreturn [{ json: { hasProblems: problems.length > 0, nbProblemes: problems.length, problems, containers, disk, logSample: errLines.join('\\n').slice(0, 4000), generatedAt: new Date().toISOString() } }];"
+      },
+      "id": "detecter",
+      "name": "Detecter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{$json.hasProblems}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      },
+      "id": "des-problemes-",
+      "name": "Des problemes ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{$env.ANTHROPIC_API_KEY}}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: ($env.CLAUDE_MODEL || 'claude-opus-4-8'), max_tokens: 2000, system: \"Tu es ingenieur SRE + developpeur pour l ERP Seem Semrac (Hono/TypeScript + Supabase, conteneurs Docker). On te fournit un JSON d incidents detectes (etat des conteneurs + extrait de logs). Ta mission : (1) classer chaque incident en \\\"infra\\\", \\\"applicatif\\\" ou \\\"faux-positif\\\" ; (2) pour les bugs APPLICATIFS, proposer un correctif concret (fichier concerne + diff ou etapes) SANS jamais l appliquer ; (3) une synthese courte. Reponds STRICTEMENT en JSON, sans texte autour : {\\\"synthese\\\":\\\"...\\\",\\\"incidents\\\":[{\\\"cible\\\":\\\"...\\\",\\\"classe\\\":\\\"infra|applicatif|faux-positif\\\",\\\"gravite\\\":\\\"basse|moyenne|haute\\\",\\\"diagnostic\\\":\\\"...\\\",\\\"correctif_propose\\\":\\\"...\\\"}]}.\", messages: [{ role: 'user', content: JSON.stringify({ problems: $json.problems, containers: $json.containers, logSample: $json.logSample }) }] }) }}"
+      },
+      "id": "triage-ia-claude-",
+      "name": "Triage IA (Claude)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1140,
+        220
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const det = $('Detecter').first().json;\nlet ai = null;\ntry { const r = $('Triage IA (Claude)').first().json; if (r && Array.isArray(r.content)) { const txt = (r.content.find(function(b){ return b.type === 'text'; }) || {}).text || ''; const s = txt.indexOf('{'); const e = txt.lastIndexOf('}'); if (s >= 0 && e > s) ai = JSON.parse(txt.slice(s, e + 1)); } } catch (err) { ai = null; }\n// Rapport lisible\nconst lines = [];\nlines.push('*ERP Seem Semrac — ' + det.nbProblemes + ' incident(s) detecte(s)* (' + det.generatedAt + ')');\nif (ai && ai.synthese) lines.push('_Synthese IA :_ ' + ai.synthese);\nfor (const p of det.problems) {\n  let extra = '';\n  if (ai && Array.isArray(ai.incidents)) { const m = ai.incidents.find(function(x){ return (x.cible || '').indexOf(p.cible) >= 0 || p.cible.indexOf(x.cible || '') >= 0; }); if (m) { extra = ' — [' + (m.classe || '?') + '] ' + (m.diagnostic || ''); if (m.correctif_propose) extra += ' | Correctif propose : ' + m.correctif_propose; } }\n  lines.push('• [' + p.type + '/' + p.gravite + '] ' + p.cible + ' : ' + p.signal + extra);\n}\nconst report = lines.join('\\n');\n// Reparation infra BORNEE : liste blanche + plafond, jamais de volumes, jamais de patch de code\nconst ALLOW = ['erp-app','erp-kong','erp-rest','erp-storage','erp-meta','erp-studio','erp-imgproxy','erp-db'];\nconst restarts = [];\nfor (const p of det.problems) { if (p.type === 'infra' && p.action === 'restart' && ALLOW.indexOf(p.cible) >= 0) restarts.push(p.cible); }\nconst uniqRestarts = restarts.filter(function(v, i){ return restarts.indexOf(v) === i; }).slice(0, 3);\nconst needPrune = det.problems.some(function(p){ return p.action === 'prune'; });\nconst cmds = [];\nfor (const n of uniqRestarts) cmds.push('docker restart ' + n);\nif (needPrune) { cmds.push('docker image prune -f'); cmds.push('docker builder prune -f'); }\nconst repairCmd = cmds.length ? cmds.join(' ; ') : 'echo \\\"aucune action infra sure\\\"';\nconst autoheal = (($env.AUTOHEAL_ENABLED || 'false') + '').toLowerCase() === 'true';\nreturn [{ json: { report, repairCmd, autoheal, canRepair: (autoheal && cmds.length > 0), actions: cmds } }];"
+      },
+      "id": "rapport",
+      "name": "Rapport",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.ALERT_WEBHOOK_URL}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $json.report }) }}"
+      },
+      "id": "alerte-webhook-",
+      "name": "Alerte (webhook)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1580,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c2",
+              "leftValue": "={{$json.canRepair}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      },
+      "id": "auto-reparation-",
+      "name": "Auto-reparation ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{$json.repairCmd}}"
+      },
+      "id": "reparer-borne-",
+      "name": "Reparer (borne)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2020,
+        220
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Toutes les 5 min": {
+      "main": [
+        [
+          {
+            "node": "Collecter (Docker)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collecter (Docker)": {
+      "main": [
+        [
+          {
+            "node": "Detecter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detecter": {
+      "main": [
+        [
+          {
+            "node": "Des problemes ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Des problemes ?": {
+      "main": [
+        [
+          {
+            "node": "Triage IA (Claude)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Triage IA (Claude)": {
+      "main": [
+        [
+          {
+            "node": "Rapport",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rapport": {
+      "main": [
+        [
+          {
+            "node": "Alerte (webhook)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alerte (webhook)": {
+      "main": [
+        [
+          {
+            "node": "Auto-reparation ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto-reparation ?": {
+      "main": [
+        [
+          {
+            "node": "Reparer (borne)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "webapp",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "wrangler pages dev",
+    "deploy": "npm run build && wrangler pages deploy",
+    "start:node": "tsx src/server.node.ts",
+    "dev:node": "tsx watch src/server.node.ts",
+    "typecheck": "tsc --noEmit",
+    "verify": "tsc --noEmit && vite build && node scripts_doc/harness_all_pages.mjs",
+    "docs": "node scripts_doc/refresh.mjs",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "prebuild": "node scripts_doc/gen_manuels_module.mjs && node scripts_doc/sync_manuel_assets.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.11",
+    "@supabase/supabase-js": "^2.105.3",
+    "fflate": "^0.8.3",
+    "hono": "^4.12.5"
+  },
+  "devDependencies": {
+    "@hono/vite-build": "^1.2.0",
+    "@hono/vite-dev-server": "^0.18.2",
+    "marked": "^18.0.5",
+    "playwright": "^1.61.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.6.3",
+    "vite": "^6.3.5",
+    "wrangler": "^4.4.0"
+  }
+}

@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manuel — Comptabilité · ERP Seem Semrac</title>
+<link rel="stylesheet" href="manuel.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc">
+    <div class="brandrow">
+      <div class="logo">SS</div>
+      <div>
+        <div class="co">SEEM · SEMRAC — ERP</div>
+        <div class="eyebrow">Manuel utilisateur</div>
+      </div>
+      <div class="kind">docs/manuel/html</div>
+    </div>
+    <h1>Service <span class="hi">Comptabilité</span></h1>
+    <p class="lede">La Comptabilité suit tout l'argent de l'entreprise : les factures clients à encaisser, les factures fournisseurs et sous-traitants à régler, les écritures du Grand Livre (alimentées automatiquement par l'activité), la TVA à déclarer et la trésorerie. Vous apprendrez ici à suivre et encaisser vos factures, saisir et payer les factures fournisseurs, préparer la déclaration de TVA et exporter le FEC pour l'expert-comptable.</p>
+    <div class="metachips">
+      <span class="chip">👤 Pour qui : <b>Comptable</b> (écriture — l'export FEC est aussi ouvert à la Direction)</span>
+      <span class="chip">🧭 Dans l'ERP : <b>Sidebar → Comptabilité</b></span>
+      <span class="chip">🗂 <b>5 onglets</b></span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-t">Sommaire</div>
+    <ol>
+      <li><a href="#tab-0">Facturation</a></li>
+      <li><a href="#tab-1">Grand Livre</a></li>
+      <li><a href="#tab-2">TVA &amp; Déclarations</a></li>
+      <li><a href="#tab-3">Balance &amp; Trésorerie</a></li>
+      <li><a href="#tab-4">Dashboard</a></li>
+    </ol>
+  </nav>
+
+  <div class="note"><b>Le principe du service :</b> la comptabilité s'alimente en grande partie <b>toute seule</b>. Chaque facture client émise génère automatiquement une écriture au journal des <b>ventes (VTE)</b>, chaque facture fournisseur enregistrée une écriture au journal des <b>achats (ACH)</b> : le Grand Livre, la TVA et la Balance reflètent donc l'activité sans ressaisie. À l'ouverture, la page s'affiche sur l'onglet <b>Facturation</b> ; les pastilles des onglets Facturation et Grand Livre indiquent respectivement le nombre de factures (clients + fournisseurs) et le nombre d'écritures.</div>
+
+  <section class="tab" id="tab-0">
+    <div class="tab-head"><span class="tab-num">1</span><h2>Facturation</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le poste de travail quotidien du comptable : d'un côté les <b>factures clients</b> (suivre les règlements, relancer les retards, encaisser), de l'autre les <b>factures fournisseurs et sous-traitants</b> à valider puis à payer. Tout ce qui est saisi ou soldé ici alimente directement le Grand Livre, la marge brute du Dashboard et la prévision de trésorerie.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Deux grands volets à bascule en haut de l'onglet : <b>« Factures clients »</b> et <b>« Factures fournisseurs / sous-traitants »</b> — ce dernier porte une pastille rouge avec le nombre de factures restant à traiter (à valider, validées ou à payer). Chaque volet a ensuite ses propres sous-onglets, détaillés ci-dessous.</p>
+    <figure class="shot">
+      <img src="../../assets/compta.png" alt="Capture de l'onglet Facturation" loading="lazy">
+      <figcaption><b>Facturation</b> — les deux volets à bascule (clients / fournisseurs-ST) et, dessous, les sous-onglets du volet actif.</figcaption>
+    </figure>
+
+    <h3>Factures clients — sous-onglet « Liste »</h3>
+    <p>Deux tableaux superposés : <b>« Factures en attente de règlement »</b> (compteur orange et total TTC en jeu) puis <b>« Factures réglées »</b> (compteur vert et total TTC encaissé). Colonnes : <b>N° Facture</b>, <b>Client</b>, <b>Affaire</b>, <b>Date</b>, <b>Échéance</b>, <b>HT</b>, <b>TTC</b>, <b>Statut</b> et <b>Actions</b>. Les statuts possibles : <span class="b b-mut">Brouillon</span>, <span class="b b-info">Envoyée</span>, <span class="b b-warn">Partiel.</span> (partiellement payée), <span class="b b-ok">Payée</span>, <span class="b b-crit">En retard</span> (accompagné du nombre de jours de dépassement <b>J+X</b> en rouge) et <b>Litige</b> (badge violet). Une petite étiquette <b>« partielle »</b> à côté du numéro signale une facture émise sur une livraison partielle. Selon le statut, trois boutons d'action : <b>« Envoyer »</b> (brouillons uniquement), <b>« Payée »</b> (toute facture envoyée non soldée) et <b>« PDF »</b> (toujours disponible).</p>
+
+    <h3>Pas à pas — suivre et encaisser une facture client</h3>
+    <ol class="steps">
+      <li>Repérez la facture dans le tableau <b>« Factures en attente de règlement »</b> ; l'échéance et l'éventuel <b>J+X</b> vous disent si elle est en retard.</li>
+      <li>Pour produire le document à transmettre, cliquez <b>« PDF »</b> : une fenêtre d'impression s'ouvre avec la facture complète au logo Seem Semrac (client, affaire, lignes, totaux HT / TVA / TTC, mention « PAYÉE » ou « EN ATTENTE DE RÈGLEMENT »). Imprimez ou enregistrez en PDF depuis le navigateur.</li>
+      <li>Si la facture est encore <span class="b b-mut">Brouillon</span>, cliquez <b>« Envoyer »</b> : l'ERP confirme l'envoi et la facture passe au statut <span class="b b-info">Envoyée</span>.</li>
+      <li>Quand le règlement du client arrive en banque, cliquez <b>« Payée »</b> : la facture passe au statut <span class="b b-ok">Payée</span>, la page se recharge en douceur et la facture bascule dans le tableau « Factures réglées ». L'encaissement remonte aussitôt dans le Dashboard et l'historique des règlements.</li>
+    </ol>
+
+    <h3>Factures clients — sous-onglet « Créer facture »</h3>
+    <p>Un formulaire pour émettre une facture client manuelle. Le montant HT saisi calcule automatiquement la <b>TVA à 20 %</b> et le <b>TTC</b> (champs grisés, non modifiables). Le bouton <b>« Créer la facture »</b> confirme la création (« Facture créée. Prête à envoyer. ») ; <b>« Annuler »</b> ramène à la liste.</p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+        <tbody>
+          <tr><td>Client</td><td>Liste déroulante</td><td><b>Oui</b></td><td>Choisi parmi les clients déjà facturés dans l'ERP.</td></tr>
+          <tr><td>N° Affaire</td><td>Texte (ex. CMD-2026-xxx)</td><td><b>Oui</b></td><td>Rattache la facture à l'affaire ; elle apparaîtra dans la fiche 360 de l'affaire côté Commercial.</td></tr>
+          <tr><td>Date facture</td><td>Date</td><td><b>Oui</b></td><td>Date d'émission.</td></tr>
+          <tr><td>Date d'échéance</td><td>Date</td><td><b>Oui</b></td><td>Date limite de règlement ; sert au calcul des retards (J+X) et des relances.</td></tr>
+          <tr><td>Désignation / Prestations</td><td>Texte libre</td><td><b>Oui</b></td><td>Détail des prestations ou références facturées.</td></tr>
+          <tr><td>Montant HT (€)</td><td>Nombre</td><td><b>Oui</b></td><td>Sa saisie remplit automatiquement TVA et TTC.</td></tr>
+          <tr><td>TVA 20 % (€)</td><td>Calculé</td><td>—</td><td>Champ automatique, non modifiable.</td></tr>
+          <tr><td>Montant TTC (€)</td><td>Calculé</td><td>—</td><td>Champ automatique, non modifiable.</td></tr>
+          <tr><td>Mode de paiement</td><td>Liste : Virement / Chèque / Prélèvement / LCR</td><td>Non</td><td>Mode de règlement attendu.</td></tr>
+          <tr><td>Notes internes</td><td>Texte libre</td><td>Non</td><td>Observations, conditions particulières — visibles en interne.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><b>Bon à savoir :</b> la plupart des factures clients ne se créent pas ici — elles sont générées automatiquement par l'ERP au moment de la <b>livraison</b> (bon de livraison client, service Expéditions), y compris pour les livraisons partielles. Ce formulaire sert aux facturations manuelles ou exceptionnelles.</div>
+
+    <h3>Factures clients — sous-onglet « Relances »</h3>
+    <p>Le sous-onglet porte une pastille rouge avec le nombre de factures à relancer (toutes les factures <span class="b b-info">Envoyée</span>, <span class="b b-warn">Partiel.</span> ou <span class="b b-crit">En retard</span>). Un bandeau ambre récapitule ce nombre et le <b>montant total en jeu</b>. Le tableau affiche N° Facture, Client, Échéance (avec J+X si dépassée), Montant TTC, Statut, <b>Nb relances</b> déjà effectuées, et un bouton vert <b>« Envoyer relance »</b> par ligne.</p>
+    <ol class="steps">
+      <li>Ouvrez le sous-onglet <b>Relances</b> et triez mentalement par urgence : les J+X les plus élevés d'abord.</li>
+      <li>Cliquez <b>« Envoyer relance »</b> sur la ligne concernée : l'ERP confirme (« Relance envoyée à [client]. Notification email déclenchée. »).</li>
+      <li>La colonne <b>Nb relances</b> vous permet de suivre l'historique : au-delà de 2 relances sans effet, envisagez le passage en <b>Litige</b> avec la Direction.</li>
+    </ol>
+
+    <h3>Factures fournisseurs / sous-traitants — saisir une facture (« À régler »)</h3>
+    <p>Le second volet s'ouvre sur une barre d'action : un rappel (« Saisissez les factures fournisseurs et sous-traitants à régler — elles alimentent la marge brute du dashboard ») et le bouton vert <b>« Nouvelle facture fournisseur / ST »</b> qui ouvre la fenêtre de saisie. Dessous, quatre sous-onglets : <b>Fournisseurs</b>, <b>Sous-traitants</b>, <b>Historique règlements</b> et <b>Énergie / EDF</b>.</p>
+    <ol class="steps">
+      <li>Cliquez <b>« Nouvelle facture fournisseur / ST »</b> et remplissez la fenêtre (champs détaillés ci-dessous). Le TTC se calcule automatiquement à partir du HT et du taux de TVA.</li>
+      <li>Si le montant le justifie, cochez <b>« Soumettre cette facture à la validation de la Direction »</b> : une demande de validation est créée dans le service Direction et un badge de décision (accordée / refusée) s'affichera ensuite sur la ligne de la facture.</li>
+      <li>Cliquez <b>« Enregistrer »</b> : la facture apparaît dans la liste avec le statut <span class="b b-warn">À valider</span>.</li>
+      <li>Contrôlez la facture (rapprochement avec le bon de commande et le bon de livraison côté Expéditions), puis cliquez <b>« Valider »</b> : elle passe au statut prêt au règlement.</li>
+      <li>Au moment du règlement, cliquez <b>« Payer »</b> : la facture passe <span class="b b-ok">Payée</span> à la date du jour (mode Virement) et le Dashboard est mis à jour.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-compta-fournisseur.png" alt="Fenêtre Nouvelle facture fournisseur / sous-traitant" loading="lazy">
+      <figcaption><b>Nouvelle facture fournisseur / ST</b> — le TTC se calcule seul ; la case jaune du bas soumet la facture à la validation de la Direction.</figcaption>
+    </figure>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+        <tbody>
+          <tr><td>Type</td><td>Liste : Fournisseur / Sous-traitant</td><td><b>Oui</b></td><td>Détermine le sous-onglet dans lequel la facture sera classée.</td></tr>
+          <tr><td>N° Facture</td><td>Texte (ex. FOURN-2026-XXXX)</td><td>Non</td><td>Numéro porté sur la facture du fournisseur ; attribué automatiquement si laissé vide.</td></tr>
+          <tr><td>Fournisseur / Sous-traitant</td><td>Texte (raison sociale)</td><td><b>Oui</b></td><td>Nom du tiers — refusé s'il est vide.</td></tr>
+          <tr><td>Date facture</td><td>Date</td><td>Non</td><td>Pré-remplie à la date du jour à l'ouverture de la fenêtre.</td></tr>
+          <tr><td>Échéance</td><td>Date</td><td>Non</td><td>Date limite de paiement ; alimente les échéances du Dashboard et la prévision de trésorerie.</td></tr>
+          <tr><td>Montant HT</td><td>Nombre</td><td><b>Oui</b> (&gt; 0)</td><td>Montant hors taxes — refusé s'il est nul.</td></tr>
+          <tr><td>TVA %</td><td>Nombre</td><td>Non</td><td>20 % par défaut ; modifiable.</td></tr>
+          <tr><td>Montant TTC</td><td>Calculé</td><td>—</td><td>Recalculé automatiquement à chaque saisie du HT ou du taux.</td></tr>
+          <tr><td>Compte de charge</td><td>Liste : 601100 – Matières premières / 604100 – Sous-traitance / 606100 – Consommables / 606300 – Énergie / 615000 – Entretien-maintenance / Autres</td><td>Non</td><td>Classe la dépense ; sert au tableau « Charges à payer par catégorie » du Dashboard et à l'échéancier EDF.</td></tr>
+          <tr><td>Notes</td><td>Texte</td><td>Non</td><td>Affichées sous forme d'icône d'alerte au survol de la ligne.</td></tr>
+          <tr><td>Validation Direction</td><td>Case à cocher</td><td>Non</td><td>Envoie la facture dans la file « À valider » du service Direction.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Sous-onglets « Fournisseurs » et « Sous-traitants »</h3>
+    <p>Chaque sous-onglet liste ses factures avec les colonnes <b>N° Facture</b>, <b>Fournisseur</b> (ou Sous-traitant), <b>Date</b>, <b>Échéance</b>, <b>HT</b>, <b>TTC</b>, <b>Compte charge</b>, <b>Statut</b> et <b>Actions</b>. Statuts : <span class="b b-warn">À valider</span>, <span class="b b-info">Validée</span>, <span class="b b-crit">À payer</span>, <span class="b b-ok">Payée</span> et <b>Litige</b> (badge violet) ; un second badge indique le cas échéant la décision de la Direction. Sur le sous-onglet Fournisseurs, des pastilles filtrent la liste : <b>Tous</b>, <b>À valider (n)</b>, <b>À payer (n)</b>, <b>Litiges</b>. En bas de chaque liste, un bandeau rouge affiche le <b>total à régler</b> (factures à payer et validées).</p>
+
+    <h3>Sous-onglet « Historique règlements »</h3>
+    <p>Toutes les factures <b>payées</b>, clients comme fournisseurs, dans un seul tableau trié du règlement le plus récent au plus ancien : <b>Type</b> (étiquette CLIENT bleue ou FOURN. orange), <b>N° Facture</b>, <b>Tiers</b>, <b>Date paiement</b>, <b>Mode</b> de règlement et <b>Montant TTC</b> (en vert pour les encaissements clients, en rouge pour les décaissements fournisseurs). C'est votre journal de caisse consultable en un coup d'œil.</p>
+
+    <h3>Sous-onglet « Énergie / EDF »</h3>
+    <p>L'échéancier des factures <b>EDF</b> : mensualités estimées et régularisation annuelle. Chaque échéance est une facture fournisseur au compte <b>606300 – Énergie</b> ; l'ERP regroupe ici automatiquement les factures de ce compte (ou dont le fournisseur évoque EDF / électricité / énergie), triées par échéance. Trois tuiles résument <b>Total EDF</b>, <b>Payé</b> et <b>Reste à payer (report)</b> — ce report est repris automatiquement dans la prévision de trésorerie. Le bouton orange <b>« Nouvelle échéance EDF »</b> ouvre la fenêtre de saisie habituelle, pré-remplie (fournisseur EDF, compte 606300 – Énergie, numéro EDF-année) : il ne reste qu'à saisir le montant et l'échéance. La validation et le paiement se font ensuite avec les mêmes boutons <b>« Valider »</b> / <b>« Payer »</b> que les autres factures.</p>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Chaque facture émise ou enregistrée génère <b>automatiquement son écriture comptable</b> (journal VTE côté ventes, ACH côté achats) : ne créez jamais d'écriture à la main en double.</li>
+      <li>Le total du bandeau rouge « Total à régler » ne compte que les factures <b>à payer</b> et <b>validées</b> — les factures encore « à valider » n'y figurent pas mais restent dans la pastille rouge du volet.</li>
+      <li>Les factures fournisseurs marquées payées le sont <b>à la date du jour</b>, en mode Virement : soldez-les le jour effectif du règlement.</li>
+      <li>Une facture soumise à la Direction reste réglable normalement : le badge de décision est un <b>avis</b> visible sur la ligne, pas un blocage technique. Attendez la décision avant de payer les montants concernés.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> le bouton <b>« PDF »</b> ouvre la facture dans une fenêtre surgissante — si votre navigateur bloque les pop-ups, l'ERP vous le signale : autorisez les pop-ups pour ce site, sinon aucune fenêtre d'impression ne s'ouvrira.</div>
+    <div class="astuce"><b>Astuce :</b> traitez les factures fournisseurs en deux temps avec les pastilles de filtre : d'abord <b>« À valider »</b> (contrôle facture / commande / réception), puis <b>« À payer »</b> le jour des règlements. Vous viderez la pastille rouge du volet méthodiquement.</div>
+  </section>
+
+  <section class="tab" id="tab-1">
+    <div class="tab-head"><span class="tab-num">2</span><h2>Grand Livre</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Le Grand Livre est le registre de <b>toutes les écritures comptables</b> de l'entreprise, classées par journal. Il s'alimente automatiquement : facturation client → journal des ventes, facture fournisseur → journal des achats. C'est ici que vous contrôlez les écritures, recherchez une pièce et exportez le <b>FEC</b> pour Sage ou l'expert-comptable.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>En haut, des pastilles de filtre par journal : <b>Tous journaux</b>, puis <b>VTE</b> (ventes, badge bleu), <b>ACH</b> (achats, orange), <b>BQ</b> (banque, vert), <b>OD</b> (opérations diverses, gris) et <b>SAL</b> (salaires, violet). À droite : un champ <b>« Rechercher compte / libellé… »</b> qui filtre le tableau au fil de la frappe, un champ <b>année d'exercice</b> et le bouton vert <b>« Export FEC (Sage) »</b>. Le tableau liste chaque écriture : <b>Date</b>, <b>Journal</b> (badge), <b>Pièce</b> (référence du document d'origine), <b>Compte</b>, <b>Libellé</b>, <b>Débit</b> (en bleu), <b>Crédit</b> (en rouge), <b>Lettrage</b> et <b>Validé</b> (coche verte = écriture validée, horloge orange = en attente). La ligne <b>TOTAUX</b> du bas affiche le total débit, le total crédit et le solde (D ou C).</p>
+    <figure class="shot">
+      <img src="../../assets/compta-grand-livre.png" alt="Capture de l'onglet Grand Livre" loading="lazy">
+      <figcaption><b>Grand Livre</b> — les pastilles de journaux, la recherche, le bouton « Export FEC (Sage) » et les totaux débit / crédit en pied de tableau.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — contrôler les écritures et exporter le FEC</h3>
+    <ol class="steps">
+      <li>Filtrez par journal (par exemple <b>VTE</b> pour ne voir que les ventes) ou tapez un numéro de compte ou un mot du libellé dans la recherche : le tableau se réduit instantanément.</li>
+      <li>Vérifiez l'équilibre : sur la ligne <b>TOTAUX</b>, débit et crédit doivent être égaux (solde nul) — un écart signale une anomalie à investiguer.</li>
+      <li>Pour l'export : saisissez l'<b>année d'exercice</b> dans le petit champ (année en cours par défaut), puis cliquez <b>« Export FEC (Sage) »</b>. Le Fichier des Écritures Comptables se télécharge, prêt à être importé dans Sage ou transmis à l'expert-comptable.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le FEC (Fichier des Écritures Comptables) est le format légal exigé par l'administration fiscale : c'est le livrable à transmettre à l'expert-comptable en fin d'exercice.</li>
+      <li>L'export FEC est réservé aux rôles <b>Comptable</b> et <b>Direction</b>.</li>
+      <li>La colonne <b>Pièce</b> fait le lien avec le document d'origine (numéro de facture) : c'est votre piste d'audit entre une écriture et l'onglet Facturation.</li>
+      <li>Le <b>lettrage</b> rapproche une facture de son règlement (même code sur les deux écritures) ; une écriture non lettrée correspond à une facture non soldée.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> la recherche accepte aussi bien un début de compte (« 411 » pour tous les clients) qu'un mot du libellé (le nom d'un client, par exemple) — combinez-la avec un filtre de journal pour cibler très vite une écriture.</div>
+  </section>
+
+  <section class="tab" id="tab-2">
+    <div class="tab-head"><span class="tab-num">3</span><h2>TVA &amp; Déclarations</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Cet onglet calcule automatiquement votre TVA à partir des écritures du Grand Livre : TVA <b>collectée</b> sur les ventes, TVA <b>déductible</b> sur les achats, et TVA <b>nette à reverser</b>. Il vous rappelle l'échéance de la déclaration <b>CA3</b> et fournit le détail justificatif compte par compte du mois à déclarer.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Quatre tuiles pour le mois en cours : <b>TVA Collectée</b> (comptes 4457xx, au crédit), <b>TVA Déductible</b> (comptes 4456xx, au débit), <b>TVA nette à reverser</b> (collectée − déductible) et <b>Date déclaration CA3</b> (dépôt avant le 19 du mois suivant). Dessous, un tableau des deux périodes : le mois courant avec le statut <span class="b b-warn">En cours</span> et le mois précédent avec le statut <span class="b b-crit">À déclarer</span>, chacun avec ses montants collectée / déductible / nette et sa date limite CA3. Enfin, le bloc <b>« Détail déclaration »</b> du mois précédent présente côte à côte les écritures de TVA collectée et de TVA déductible (compte, libellé, montant, totaux), un bandeau violet avec la <b>TVA nette à reverser</b> et le bouton <b>« Préparer déclaration CA3 »</b>.</p>
+    <figure class="shot">
+      <img src="../../assets/compta-tva.png" alt="Capture de l'onglet TVA et Déclarations" loading="lazy">
+      <figcaption><b>TVA &amp; Déclarations</b> — les tuiles du mois en cours, le tableau des périodes et le détail justificatif du mois à déclarer.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — préparer la déclaration mensuelle</h3>
+    <ol class="steps">
+      <li>En début de mois, ouvrez l'onglet : la ligne du <b>mois précédent</b> porte le statut <span class="b b-crit">À déclarer</span> avec sa date limite (le 19 du mois en cours).</li>
+      <li>Contrôlez le bloc <b>« Détail déclaration »</b> : chaque montant de TVA doit correspondre à une facture identifiable par son libellé. Un doute ? Retrouvez l'écriture dans le <b>Grand Livre</b> (recherche « 4457 » ou « 4456 »).</li>
+      <li>Relevez la <b>TVA nette à reverser</b> du bandeau violet, puis cliquez <b>« Préparer déclaration CA3 »</b> : l'ERP confirme la préparation de la déclaration.</li>
+      <li>Reportez les montants sur le portail des impôts (télédéclaration CA3) avant la date limite — l'ERP prépare les chiffres, la télétransmission reste à faire sur le site officiel.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Les montants sont calculés en direct depuis les écritures : une facture saisie en retard dans le mois modifie la TVA affichée — saisissez les factures fournisseurs sans attendre.</li>
+      <li>Si la TVA déductible dépasse la collectée, la TVA nette est négative : c'est un <b>crédit de TVA</b> à reporter ou à demander en remboursement.</li>
+      <li>La date limite affichée est le <b>19 du mois suivant</b> la période : anticipez de quelques jours pour garder le temps de contrôler.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> l'ERP ne télédéclare pas à votre place. « Préparer déclaration CA3 » rassemble les chiffres — la déclaration officielle se fait sur le portail des impôts, avec ces montants.</div>
+  </section>
+
+  <section class="tab" id="tab-3">
+    <div class="tab-head"><span class="tab-num">4</span><h2>Balance &amp; Trésorerie</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> La <b>balance des comptes</b> donne la photographie comptable de l'entreprise : total débit, total crédit et solde de chaque grand compte. La partie <b>trésorerie</b> répond à la question quotidienne du dirigeant : combien avons-nous en banque, et à combien serons-nous dans 30 jours compte tenu des factures à encaisser et à payer ?</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>En haut, la <b>Balance des comptes</b> : un tableau avec <b>N° Compte</b>, <b>Intitulé</b>, <b>Total Débit</b>, <b>Total Crédit</b>, <b>Solde Débiteur</b> (bleu) et <b>Solde Créditeur</b> (rouge). Les grands comptes du plan comptable y figurent — 411 Clients, 401 Fournisseurs, 512 Banque, 531 Caisse, 421 et 431 (personnel et cotisations), 601 Achats matières premières, 604 Sous-traitance, 606 Énergie / fournitures, 607 Marchandises, 622 Honoraires, 641 Salaires, 681 Dotations, 701 / 706 / 707 (ventes et prestations), TVA collectée et déductible. Chaque ligne agrège tous les sous-comptes de sa racine, et les comptes sans mouvement sont masqués. En bas, deux cartes côte à côte : <b>« Trésorerie estimée »</b> — Solde bancaire (compte 512, caisse comprise), <b>Prévision J+30</b> (vert si positive, rouge sinon), Encaissements prévus et Décaissements prévus — et <b>« Tendance trésorerie »</b>, un graphique en barres du solde bancaire mois par mois depuis janvier, le mois le plus récent en vert.</p>
+    <figure class="shot">
+      <img src="../../assets/compta-balance.png" alt="Capture de l'onglet Balance et Trésorerie" loading="lazy">
+      <figcaption><b>Balance &amp; Trésorerie</b> — la balance par compte en haut, la trésorerie estimée et la tendance mensuelle en bas.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — lire la prévision de trésorerie</h3>
+    <ol class="steps">
+      <li>Partez du <b>Solde bancaire</b> : c'est le solde réel du compte banque (et de la caisse) reconstitué depuis les écritures.</li>
+      <li>Les <b>Encaissements prévus</b> additionnent les factures clients non payées dont l'échéance tombe dans les 30 jours ; les <b>Décaissements prévus</b>, les factures fournisseurs et sous-traitants non payées à échéance dans les 30 jours — y compris le report EDF.</li>
+      <li>La <b>Prévision J+30</b> = solde bancaire + encaissements − décaissements. Si elle vire au rouge, agissez en amont : relancez les clients (onglet Facturation → Relances) ou étalez des règlements fournisseurs.</li>
+      <li>La <b>Tendance trésorerie</b> montre si le solde s'améliore ou se dégrade sur l'année : une pente descendante régulière mérite une alerte à la Direction.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La fiabilité de la prévision dépend des <b>dates d'échéance</b> : une facture saisie sans échéance n'entre pas dans le calcul des 30 jours.</li>
+      <li>La balance doit être équilibrée : la ligne TOTAUX affiche le même montant en débit et en crédit. Un déséquilibre signale une écriture anormale — contrôlez au Grand Livre.</li>
+      <li>Les soldes « Clients » (411) et « Fournisseurs » (401) de la balance recoupent les encours de l'onglet Facturation : c'est un bon contrôle croisé mensuel.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> consultez cet onglet chaque lundi matin — cinq minutes suffisent pour vérifier le solde, la prévision J+30 et repérer une échéance fournisseur importante à venir.</div>
+  </section>
+
+  <section class="tab" id="tab-4">
+    <div class="tab-head"><span class="tab-num">5</span><h2>Dashboard</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Le tableau de bord financier de l'exercice : chiffre d'affaires facturé, encaissements et décaissements, marge brute, activité mensuelle en base 100, alertes sur les retards et litiges, meilleurs clients et prochaines échéances. C'est la synthèse à présenter à la Direction — elle se met à jour automatiquement à chaque facture émise ou soldée.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>Un bandeau <b>« Exercice AAAA »</b> précise l'année de référence (la plus récente présente dans les factures) : tous les indicateurs sont cumulés du 1<sup>er</sup> janvier au mois courant. Puis, de haut en bas :</p>
+    <ul class="points">
+      <li><b>5 tuiles principales</b> : CA facturé (HT, cumul annuel), Encaissé (règlements clients reçus TTC), Décaissé (fournisseurs + ST réglés TTC), En attente règlement (factures clients envoyées, partielles ou en retard) et Reste à payer F/ST (factures à valider + à payer).</li>
+      <li><b>Marge brute globale</b> : le chiffre clé <b>encaissé − payé</b> (le réalisé, en vert ou rouge), deux barres comparant « Rentré » et « Sorti », puis la <b>marge HT comptable</b> (CA HT − charges HT), le <b>taux de marge</b> et le <b>DSO</b> (délai moyen de paiement clients, en jours).</li>
+      <li><b>Base 100 annuelle</b> : l'indice mensuel du CA HT, base 100 = premier mois facturé de l'année. Barres vertes quand le mois progresse, rouges quand il recule, avec l'indice courant en grand et les cumuls CA HT / charges HT dessous.</li>
+      <li><b>4 tuiles secondaires</b> : Charges engagées HT, Trésorerie nette (encaissé − décaissé), nombre de factures clients émises et nombre de factures fournisseurs / ST reçues.</li>
+      <li><b>Alertes</b> : un bandeau rouge <b>« Factures en retard (n) »</b> détaille chaque facture concernée (numéro, client, montant, J+X, nombre de relances) ; un bandeau ambre <b>« Litiges en cours »</b> liste les litiges avec leurs notes.</li>
+      <li><b>Top 5 Clients par CA</b> (client, CA HT, nombre de factures) et <b>Charges à payer par catégorie</b> (par compte de charge, avec total) côte à côte.</li>
+      <li><b>Prochaines échéances – 30 jours</b> : les échéances proches, clients (étiquette bleue) et fournisseurs (étiquette orange) confondus, triées par date, avec <b>J+X</b> en rouge si l'échéance est déjà dépassée.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/compta-dashboard.png" alt="Capture de l'onglet Dashboard Comptabilité" loading="lazy">
+      <figcaption><b>Dashboard</b> — les tuiles de l'exercice, la marge brute « rentré / sorti » et la base 100 mensuelle du CA.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — la revue mensuelle en 4 points</h3>
+    <ol class="steps">
+      <li>Vérifiez la <b>marge brute réalisée</b> (encaissé − payé) : c'est l'argent réellement gagné, indépendamment de ce qui reste à encaisser.</li>
+      <li>Comparez-la à la <b>marge HT comptable</b> : un gros écart signifie que des factures clients traînent — contrôlez le <b>DSO</b> et le bandeau des retards.</li>
+      <li>Balayez les <b>alertes</b> : chaque facture en retard doit avoir une relance récente (le compteur de relances est affiché) ; chaque litige, un plan d'action.</li>
+      <li>Terminez par <b>Prochaines échéances</b> pour anticiper la semaine : les lignes fournisseurs vous donnent les sorties d'argent à préparer, les lignes clients les encaissements à surveiller.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>Le Dashboard ne se remplit pas à la main : il reflète les factures et statuts de l'onglet <b>Facturation</b>. Un chiffre étonnant se corrige donc là-bas, jamais ici.</li>
+      <li>La <b>base 100</b> mesure l'évolution relative de l'activité, pas sa valeur absolue : un indice 120 signifie « 20 % de mieux que le premier mois facturé de l'année ».</li>
+      <li>Le <b>DSO</b> se surveille dans la durée : s'il s'allonge de mois en mois, vos clients paient de plus en plus tard — intensifiez les relances.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> avant une réunion de Direction, ouvrez cet onglet et l'onglet Balance &amp; Trésorerie côte à côte : le premier raconte l'exercice, le second dit ce qu'il y a en banque et à 30 jours. Les deux ensemble font le point financier complet.</div>
+  </section>
+
+  <div class="docnav">
+    <a href="index.html">← Sommaire des manuels</a>
+    <a href="securite.html">Manuel suivant : Sécurité →</a>
+  </div>
+
+  <footer class="doc">
+    ERP Seem Semrac — manuel utilisateur généré depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs). En cas d'écart entre ce manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
+  </footer>
+
+</div>
+</body>
+</html>

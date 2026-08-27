@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feuille de route ERP — 2 mois (juillet → septembre 2026)</title>
+<style>
+  html,body{margin:0}
+  :root{
+    --ink:#17273B;
+    --ink-soft:#3D4E63;
+    --ink-faint:#6B7A8D;
+    --paper:#F4F6F9;
+    --card:#FFFFFF;
+    --line:#D8DFE8;
+    --cobalt:#2456D6;
+    --cobalt-soft:#E4EBFB;
+    --green:#1E7F4F;
+    --green-soft:#E3F1E9;
+    --amber:#B45309;
+    --amber-soft:#FBEEDD;
+    --red:#B3261E;
+    --red-soft:#FBE7E5;
+    --mono:Consolas,'Cascadia Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    line-height:1.5;
+    margin:0;
+    font-size:15px;
+  }
+  .wrap{max-width:1140px;margin:0 auto;padding:40px 28px 72px}
+
+  /* ===== typographic roles ===== */
+  h1,h2,h3{text-wrap:balance;margin:0}
+  .kicker{
+    font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--cobalt);font-weight:600;
+  }
+  h1{font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1.15;margin:6px 0 10px}
+  h2{font-size:21px;font-weight:750;letter-spacing:-.01em}
+  h3{font-size:15.5px;font-weight:700}
+  .section{margin-top:52px}
+  .section-head{display:flex;align-items:baseline;gap:14px;border-bottom:3px solid var(--ink);padding-bottom:10px;margin-bottom:22px}
+  .section-head .no{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--ink-faint)}
+  .section-head p{margin:0;font-size:13.5px;color:var(--ink-faint)}
+
+  .lede{font-size:16.5px;color:var(--ink-soft);max-width:70ch;margin:0}
+
+  /* ===== header ===== */
+  header.hero{
+    background:var(--ink);color:#EDF1F7;border-radius:6px;
+    padding:34px 36px 30px;position:relative;overflow:hidden;
+  }
+  header.hero .kicker{color:#9FB6E8}
+  header.hero h1{color:#fff}
+  header.hero .lede{color:#C4CEDC}
+  .hero-meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+  .hero-meta span{
+    font-family:var(--mono);font-size:12px;padding:5px 12px;border:1px solid #3B4E68;border-radius:3px;color:#C4CEDC;
+  }
+  .principe{
+    margin-top:22px;background:#22344C;border-left:4px solid var(--cobalt);
+    padding:14px 18px;border-radius:0 4px 4px 0;
+  }
+  .principe strong{color:#fff}
+  .principe p{margin:4px 0 0;font-size:14px;color:#C4CEDC;max-width:75ch}
+
+  /* ===== objectifs strip ===== */
+  .obj-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+  .obj-chip{
+    background:var(--card);border:1px solid var(--line);border-radius:5px;
+    padding:14px 16px;display:flex;gap:12px;align-items:flex-start;
+  }
+  .obj-chip .num{
+    font-family:var(--mono);font-weight:700;font-size:15px;color:#fff;background:var(--cobalt);
+    min-width:28px;height:28px;border-radius:4px;display:flex;align-items:center;justify-content:center;
+  }
+  .obj-chip b{display:block;font-size:14px;line-height:1.3}
+  .obj-chip small{color:var(--ink-faint);font-size:12.5px;line-height:1.4;display:block;margin-top:3px}
+  .obj-chip .sem{font-family:var(--mono);font-size:11px;color:var(--cobalt);margin-top:5px;display:block;letter-spacing:.05em}
+
+  /* ===== timeline ===== */
+  .legend{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:16px;font-size:12.5px;color:var(--ink-soft)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .month-label{
+    font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--ink-faint);margin:20px 0 10px;font-weight:600;
+  }
+  .month-label:first-of-type{margin-top:0}
+  .weeks{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:12px}
+  .week{
+    background:var(--card);border:1px solid var(--line);border-radius:5px;overflow:hidden;
+    display:flex;flex-direction:column;
+  }
+  .week-head{padding:11px 14px 9px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .week-head .code{
+    font-family:var(--mono);font-weight:700;font-size:14px;color:#fff;background:var(--ink);
+    padding:3px 9px;border-radius:3px;
+  }
+  .week-head .dates{font-family:var(--mono);font-size:11.5px;color:var(--ink-faint);font-variant-numeric:tabular-nums}
+  .week-body{padding:12px 14px 14px;flex:1;display:flex;flex-direction:column;gap:10px}
+  .week-theme{font-weight:700;font-size:14.5px;line-height:1.3}
+  .week-obj{display:flex;gap:5px;flex-wrap:wrap}
+  .week-obj i{
+    font-style:normal;font-family:var(--mono);font-size:10.5px;font-weight:700;
+    background:var(--cobalt-soft);color:var(--cobalt);padding:2px 7px;border-radius:3px;
+  }
+  .week-obj i.t{background:var(--red-soft);color:var(--red)}
+  .livrable{
+    margin-top:auto;background:var(--green-soft);border:1px dashed var(--green);border-radius:4px;
+    padding:8px 11px;font-size:12.5px;color:#14563A;line-height:1.4;
+  }
+  .livrable b{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;display:block;color:var(--green);margin-bottom:2px}
+  .week.aout{border-top:3px solid var(--amber)}
+  .week.juil{border-top:3px solid var(--cobalt)}
+  .conge{font-size:11.5px;color:var(--amber);font-style:italic}
+
+  /* ===== bandeau sauvegardes ===== */
+  .backup-band{
+    background:var(--red-soft);border:1.5px solid var(--red);border-radius:6px;
+    padding:22px 26px;
+  }
+  .backup-band .kicker{color:var(--red)}
+  .backup-band h2{color:var(--red);margin:4px 0 8px}
+  .backup-band>p{margin:0 0 14px;max-width:80ch;color:#6E2320;font-size:14.5px}
+  .backup-rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:10px}
+  .backup-rules div{
+    background:#fff;border:1px solid #E5B7B3;border-radius:4px;padding:11px 13px;font-size:13px;line-height:1.45;color:var(--ink-soft);
+  }
+  .backup-rules b{color:var(--red);display:block;font-size:12.5px;margin-bottom:2px}
+  .backup-band .footnote{margin:14px 0 0;font-size:13px;font-weight:600;color:var(--red)}
+
+  /* ===== fiches objectifs ===== */
+  .fiche{
+    background:var(--card);border:1px solid var(--line);border-radius:6px;margin-bottom:16px;overflow:hidden;
+  }
+  .fiche-head{
+    display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--line);
+    background:linear-gradient(to right,var(--cobalt-soft),#fff 65%);
+  }
+  .fiche-head .num{
+    font-family:var(--mono);font-weight:700;font-size:17px;color:#fff;background:var(--cobalt);
+    min-width:34px;height:34px;border-radius:5px;display:flex;align-items:center;justify-content:center;
+  }
+  .fiche-head .sem-tag{
+    margin-left:auto;font-family:var(--mono);font-size:11.5px;font-weight:700;color:var(--cobalt);
+    border:1px solid var(--cobalt);padding:3px 10px;border-radius:3px;white-space:nowrap;
+  }
+  .fiche-body{padding:16px 20px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px}
+  .fiche-col h4{
+    margin:0 0 8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+    display:flex;align-items:center;gap:7px;
+  }
+  .fiche-col h4::before{content:'';width:9px;height:9px;border-radius:2px;flex:none}
+  .col-fait h4{color:var(--green)} .col-fait h4::before{background:var(--green)}
+  .col-faire h4{color:var(--cobalt)} .col-faire h4::before{background:var(--cobalt)}
+  .col-maitrise h4{color:var(--amber)} .col-maitrise h4::before{background:var(--amber)}
+  .fiche-col ul{margin:0;padding-left:17px;font-size:13.5px;color:var(--ink-soft)}
+  .fiche-col li{margin-bottom:6px;line-height:1.45}
+  .fiche-col li:last-child{margin-bottom:0}
+  .fiche-col p{margin:0;font-size:13.5px;color:var(--ink-soft);line-height:1.5}
+  .fiche .deliv{
+    margin:0 20px 18px;background:var(--green-soft);border-left:3px solid var(--green);
+    padding:9px 14px;font-size:13px;color:#14563A;border-radius:0 4px 4px 0;
+  }
+  .fiche .deliv code{font-family:var(--mono);font-size:12px;background:#fff;padding:1px 5px;border-radius:3px;border:1px solid #BBDCC9}
+  .warn-inline{
+    background:var(--amber-soft);border-left:3px solid var(--amber);padding:8px 12px;border-radius:0 4px 4px 0;
+    font-size:13px;color:#7A4008;margin-top:10px;
+  }
+  code{font-family:var(--mono);font-size:.92em;background:var(--cobalt-soft);padding:1px 5px;border-radius:3px}
+  .pedago{
+    background:#EDF2FA;border:1px solid #C9D8F2;border-radius:4px;padding:9px 13px;
+    font-size:12.5px;color:var(--ink-soft);margin-top:10px;line-height:1.5;
+  }
+  .pedago b{color:var(--cobalt)}
+
+  /* tables */
+  .tbl-scroll{overflow-x:auto}
+  table{border-collapse:collapse;width:100%;font-size:13px;background:#fff}
+  th{
+    text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-faint);padding:8px 12px;border-bottom:2px solid var(--ink);white-space:nowrap;
+  }
+  td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-soft)}
+  td:first-child{font-weight:600;color:var(--ink);white-space:nowrap}
+
+  /* ===== annexes ===== */
+  .annexe-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px}
+  .annexe{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:18px 20px}
+  .annexe .kicker{font-size:11px}
+  .annexe h3{margin:3px 0 12px;font-size:16px}
+  .cat{margin-bottom:12px}
+  .cat:last-child{margin-bottom:0}
+  .cat b{font-size:12.5px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)}
+  .cat ul{margin:5px 0 0;padding-left:17px;font-size:13px;color:var(--ink-soft)}
+  .cat li{margin-bottom:4px;line-height:1.4}
+  .prio-badge{
+    font-family:var(--mono);font-size:10px;font-weight:700;color:#fff;background:var(--red);
+    padding:1px 7px;border-radius:3px;vertical-align:1px;margin-left:5px;letter-spacing:.05em;
+  }
+  .prio-badge.p2{background:var(--amber)} .prio-badge.p3{background:var(--cobalt)}
+  .checklist{list-style:none;margin:0;padding:0;font-size:13.5px}
+  .checklist li{
+    padding:7px 0 7px 30px;position:relative;color:var(--ink-soft);border-bottom:1px dashed var(--line);line-height:1.45;
+  }
+  .checklist li:last-child{border-bottom:none}
+  .checklist li::before{
+    content:'';position:absolute;left:2px;top:9px;width:15px;height:15px;
+    border:2px solid var(--ink-faint);border-radius:3px;background:#fff;
+  }
+  .clauses{counter-reset:cl;list-style:none;margin:0;padding:0;font-size:13.5px}
+  .clauses li{
+    counter-increment:cl;padding:9px 0 9px 36px;position:relative;color:var(--ink-soft);
+    border-bottom:1px dashed var(--line);line-height:1.5;
+  }
+  .clauses li:last-child{border-bottom:none}
+  .clauses li::before{
+    content:counter(cl);position:absolute;left:0;top:9px;
+    font-family:var(--mono);font-weight:700;font-size:12px;color:var(--red);
+    border:1.5px solid var(--red);width:22px;height:22px;border-radius:4px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .clauses b{color:var(--ink)}
+
+  /* ===== maîtrise finale + jalons ===== */
+  .skills{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;counter-reset:sk}
+  .skills div{
+    counter-increment:sk;background:var(--card);border:1px solid var(--line);border-radius:5px;
+    padding:12px 15px 12px 48px;position:relative;font-size:13.5px;color:var(--ink-soft);line-height:1.45;
+  }
+  .skills div::before{
+    content:counter(sk);position:absolute;left:13px;top:11px;
+    font-family:var(--mono);font-weight:700;font-size:13px;color:var(--amber);
+    border:1.5px solid var(--amber);width:24px;height:24px;border-radius:5px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .jalons{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:12px}
+  .jalon{
+    background:var(--card);border:1px solid var(--line);border-top:4px solid var(--cobalt);
+    border-radius:5px;padding:14px 16px;
+  }
+  .jalon .code{font-family:var(--mono);font-weight:700;font-size:13px;color:var(--cobalt)}
+  .jalon ul{list-style:none;margin:9px 0 0;padding:0;font-size:13px;color:var(--ink-soft)}
+  .jalon li{padding:5px 0 5px 26px;position:relative;line-height:1.4}
+  .jalon li::before{
+    content:'';position:absolute;left:0;top:7px;width:13px;height:13px;
+    border:2px solid var(--ink-faint);border-radius:3px;background:#fff;
+  }
+
+  .final-note{
+    margin-top:44px;background:var(--ink);color:#C4CEDC;border-radius:6px;padding:20px 26px;font-size:14px;
+  }
+  .final-note b{color:#fff}
+  .final-note .red{color:#F0A9A4;font-weight:700}
+
+  @media (max-width:640px){
+    .wrap{padding:20px 14px 48px}
+    h1{font-size:26px}
+    header.hero{padding:24px 20px}
+    .fiche-head{flex-wrap:wrap}
+    .fiche-head .sem-tag{margin-left:0}
+  }
+</style>
+
+<div class="wrap">
+
+  <!-- ============ HERO ============ -->
+  <header class="hero">
+    <div class="kicker">ERP Seem Semrac · Feuille de route</div>
+    <h1>Reprendre le contrôle en 8 semaines</h1>
+    <p class="lede">Rendre l'ERP <b>maintenable par un prestataire extérieur sans jamais perdre le contrôle</b>, sûr en cybersécurité, automatisable, déployable en Docker — et te rendre autonome sur la base de données et les imports. Chaque semaine se termine par un livrable concret.</p>
+    <div class="hero-meta">
+      <span>7 juillet → 4 septembre 2026</span>
+      <span>7 objectifs + 1 transverse</span>
+      <span>1 thème / semaine</span>
+      <span>Cap : « opérationnel et sûr », pas « parfait »</span>
+    </div>
+    <div class="principe">
+      <strong>Principe directeur — autonomie + propriété.</strong>
+      <p>Un prestataire peut travailler sur l'application, mais <b>rien de vital ne doit dépendre de lui</b>. Le code, les comptes, les secrets, les sauvegardes et la connaissance restent chez toi. Le prestataire est un exécutant remplaçable, pas un point de défaillance.</p>
+    </div>
+  </header>
+
+  <!-- ============ 7 OBJECTIFS ============ -->
+  <section class="section">
+    <div class="section-head">
+      <span class="no">01</span>
+      <h2>Les 7 objectifs</h2>
+      <p>chaque semaine du planning sert au moins l'un d'eux</p>
+    </div>
+    <div class="obj-grid">
+      <div class="obj-chip"><span class="num">1</span><div><b>Maintenabilité externe</b><small>Un tiers peut reprendre le code sans toi : doc, runbook, environnement reproductible.</small><span class="sem">S1 · S8</span></div></div>
+      <div class="obj-chip"><span class="num">2</span><div><b>Garder tous les droits</b><small>Propriété du code, des comptes et des données — tout au nom de l'entreprise, avec MFA.</small><span class="sem">S1</span></div></div>
+      <div class="obj-chip"><span class="num">3</span><div><b>Sécurité / cybersécurité</b><small>Fermer les failles résiduelles, sortir les secrets du code, RLS, RGPD, sauvegardes.</small><span class="sem">S2 · S4 · S8</span></div></div>
+      <div class="obj-chip"><span class="num">4</span><div><b>Maîtriser PostgreSQL</b><small>Lire et comprendre seul les requêtes, les liens entre tables, les policies et les logs.</small><span class="sem">S5</span></div></div>
+      <div class="obj-chip"><span class="num">5</span><div><b>Automatiser avec N8N</b><small>Recenser les tâches répétitives et brancher les workflows, auto-hébergé chez toi.</small><span class="sem">S7 · S8</span></div></div>
+      <div class="obj-chip"><span class="num">6</span><div><b>Importer sans fuite</b><small>Procédure autonome et sûre : tes données ne transitent jamais par un tiers.</small><span class="sem">S6</span></div></div>
+      <div class="obj-chip"><span class="num">7</span><div><b>Docker — auto-hébergement</b><small>Supabase + app + N8N sur TON serveur : installation et mise en prod reproductibles.</small><span class="sem">S3 · S4</span></div></div>
+    </div>
+    <div class="pedago"><b>Pourquoi ces 7-là ?</b> Ils forment un cercle : la propriété (2) n'existe que si tu peux faire tourner l'app sans le prestataire (1, 7), la sécurité (3) ne vaut que si tu comprends la base (4, 6), et l'automatisation (5) verrouille le tout — à commencer par les sauvegardes.</div>
+  </section>
+
+  <!-- ============ TIMELINE 8 SEMAINES ============ -->
+  <section class="section">
+    <div class="section-head">
+      <span class="no">02</span>
+      <h2>Le planning — 8 semaines, 8 livrables</h2>
+      <p>un thème dominant par semaine</p>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--cobalt)"></span>Juillet — pleine charge</span>
+      <span><span class="dot" style="background:var(--amber)"></span>Août — charge allégée (congés)</span>
+      <span><span class="dot" style="background:var(--green)"></span>Livrable de fin de semaine</span>
+      <span><i style="font-style:normal;font-family:var(--mono);font-size:10.5px;font-weight:700;background:var(--cobalt-soft);color:var(--cobalt);padding:2px 7px;border-radius:3px">OBJ n</i> objectif servi</span>
+    </div>
+
+    <div class="month-label">Juillet 2026</div>
+    <div class="weeks">
+      <div class="week juil">
+        <div class="week-head"><span class="code">S1</span><span class="dates">7 – 11 juil</span></div>
+        <div class="week-body">
+          <div class="week-theme">Propriété &amp; réversibilité</div>
+          <div class="week-obj"><i>OBJ 1</i><i>OBJ 2</i></div>
+          <p style="margin:0;font-size:12.5px;color:var(--ink-faint)">Inventaire de tous les comptes, org Git de l'entreprise, MFA partout, gestionnaire de mots de passe.</p>
+          <div class="livrable"><b>Livrable</b>Comptes, dépôt et secrets sécurisés au nom de l'entreprise</div>
+        </div>
+      </div>
+      <div class="week juil">
+        <div class="week-head"><span class="code">S2</span><span class="dates">14 – 18 juil</span></div>
+        <div class="week-body">
+          <div class="week-theme">Cybersécurité — durcissement</div>
+          <div class="week-obj"><i>OBJ 3</i><i class="t">TRANSVERSE</i></div>
+          <p style="margin:0;font-size:12.5px;color:var(--ink-faint)">Secrets hors du code, RLS sur RH/compta, RGPD, journalisation.</p>
+          <div class="livrable"><b>Livrable</b>Failles résiduelles fermées + sauvegardes automatiques</div>
+        </div>
+      </div>
+      <div class="week juil">
+        <div class="week-head"><span class="code">S3</span><span class="dates">21 – 25 juil</span></div>
+        <div class="week-body">
+          <div class="week-theme">Docker — Supabase auto-hébergé + app (local)</div>
+          <div class="week-obj"><i>OBJ 7</i><i class="t">TRANSVERSE</i></div>
+          <p style="margin:0;font-size:12.5px;color:var(--ink-faint)">Compose officiel Supabase, tes propres secrets, Dockerfile de l'app, schéma recréé.</p>
+          <div class="livrable"><b>Livrable</b>Toute la stack (Supabase + app) tourne en local dans Docker</div>
+        </div>
+      </div>
+      <div class="week juil">
+        <div class="week-head"><span class="code">S4</span><span class="dates">28 juil – 1 août</span></div>
+        <div class="week-body">
+          <div class="week-theme">Migration des données + mise en production</div>
+          <div class="week-obj"><i>OBJ 7</i><i>OBJ 3</i></div>
+          <p style="margin:0;font-size:12.5px;color:var(--ink-faint)">pg_dump du cloud → import chez toi, VPS entreprise, HTTPS, rate-limit, Studio verrouillé.</p>
+          <div class="livrable"><b>Livrable</b>Données migrées sur TON serveur, app en prod HTTPS</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="month-label">Août 2026 — charge allégée (congés)</div>
+    <div class="weeks">
+      <div class="week aout">
+        <div class="week-head"><span class="code">S5</span><span class="dates">4 – 8 août</span></div>
+        <div class="week-body">
+          <div class="week-theme">PostgreSQL — montée en compétence</div>
+          <div class="week-obj"><i>OBJ 4</i></div>
+          <p style="margin:0;font-size:12.5px;color:var(--ink-faint)">5 paliers, ~1 h/jour : lire, comprendre les liens, RLS, surveiller, vues &amp; alertes.</p>
+          <div class="livrable"><b>Livrable</b>Tu lis seul les requêtes, les logs et les RLS</div>
+        </div>
+      </div>
+      <div class="week aout">
+        <div class="week-head"><span class="code">S6</span><span class="dates">11 – 15 août</span></div>
+        <div class="week-body">
+          <div class="week-theme">Import de données à la main</div>
+          <div class="week-obj"><i>OBJ 6</i></div>
+          <p style="margin:0;font-size:12.5px;color:var(--ink-faint)">CSV propre → SQL/Table Editor ou scripts du dépôt, checklist anti-fuite, vérification.</p>
+          <div class="livrable"><b>Livrable</b>1 jeu de données réel importé par toi, sans fuite</div>
+        </div>
+      </div>
+      <div class="week aout">
+        <div class="week-head"><span class="code">S7</span><span class="dates">18 – 22 août</span></div>
+        <div class="week-body">
+          <div class="week-theme">N8N — socle + 3 automatisations</div>
+          <div class="week-obj"><i>OBJ 5</i><i class="t">TRANSVERSE</i></div>
+          <p style="margin:0;font-size:12.5px;color:var(--ink-faint)">N8N dans le même Docker, connecté à Supabase ; 3 workflows à plus fort impact.</p>
+          <div class="livrable"><b>Livrable</b>N8N installé + 3 workflows en production</div>
+        </div>
+      </div>
+      <div class="week aout">
+        <div class="week-head"><span class="code">S8</span><span class="dates">25 – 29 août</span></div>
+        <div class="week-body">
+          <div class="week-theme">N8N (suite) + contrat prestataire</div>
+          <div class="week-obj"><i>OBJ 5</i><i>OBJ 1</i><i>OBJ 3</i></div>
+          <p style="margin:0;font-size:12.5px;color:var(--ink-faint)">Déroulé du catalogue de workflows, clauses non négociables, pentest léger (recommandé).</p>
+          <div class="livrable"><b>Livrable</b>Catalogue complet + contrat de maintenance signé</div>
+        </div>
+      </div>
+    </div>
+    <div class="pedago"><b>Rythme réaliste :</b> deux mois tiennent <b>si</b> on avance un thème par semaine sans chercher la perfection. On vise « opérationnel et sûr », pas « parfait ». Le plan s'ajuste chaque fin de semaine selon ce qui a avancé.</div>
+  </section>
+
+  <!-- ============ SAUVEGARDES ============ -->
+  <section class="section">
+    <div class="backup-band">
+      <div class="kicker">Objectif transverse · Priorité absolue</div>
+      <h2>Les sauvegardes — la mesure n°1, non négociable</h2>
+      <p>Avec l'auto-hébergement, <b>plus personne ne sauvegarde à ta place</b> : le cloud Supabase le faisait, ton serveur ne le fera pas tout seul. C'est la seule protection contre une panne serveur, un ransomware, une erreur du prestataire ou une fausse manipulation. Sans backup, tout le reste est secondaire.</p>
+      <div class="backup-rules">
+        <div><b>Quotidienne &amp; automatique</b><code style="background:#fff">pg_dump</code> du conteneur PostgreSQL + copie du bucket Storage (documents/plans GED).</div>
+        <div><b>≥ 2 emplacements</b>Dont un <b>hors du serveur</b> (autre disque, stockage objet chiffré, hors-ligne) — sinon un serveur perdu = tout perdu.</div>
+        <div><b>Restauration testée</b>Au moins une fois. Une sauvegarde jamais testée ne compte pas.</div>
+        <div><b>Chiffrée</b>Elles contiennent des données RH et compta (données personnelles).</div>
+        <div><b>Automatisée</b>Par N8N (workflow n°1) dès qu'il tourne ; en attendant, un simple <code style="background:#fff">cron</code> + <code style="background:#fff">pg_dump</code> sur le serveur.</div>
+      </div>
+      <p class="footnote">→ À mettre en place la semaine même où la base est auto-hébergée (S3/S4), voire un pg_dump cron dès le premier jour de mise en ligne.</p>
+    </div>
+  </section>
+
+  <!-- ============ DÉTAIL PAR OBJECTIF ============ -->
+  <section class="section">
+    <div class="section-head">
+      <span class="no">03</span>
+      <h2>Le détail — objectif par objectif</h2>
+      <p>acquis · actions · ce que TU dois savoir faire à la fin</p>
+    </div>
+
+    <!-- OBJ 1 -->
+    <div class="fiche">
+      <div class="fiche-head"><span class="num">1</span><h3>Maintenabilité par une entreprise extérieure</h3><span class="sem-tag">S1 + S8</span></div>
+      <div class="fiche-body">
+        <div class="fiche-col col-fait"><h4>Déjà fait</h4>
+          <ul><li>Documentation technique complète (<code>docs/technique/</code>)</li><li>Manuel utilisateur + fiches de poste</li><li>6 skills, référence API et tables générées, CHANGELOG</li></ul>
+        </div>
+        <div class="fiche-col col-faire"><h4>À faire</h4>
+          <ul>
+            <li><b>Dépôt Git « source de vérité »</b> sur un compte de l'entreprise (GitHub/GitLab pro) — le prestataire est <i>collaborateur</i>, jamais propriétaire</li>
+            <li><b>Runbook d'exploitation</b> complété : panne, redéploiement, qui appeler, où sont les sauvegardes</li>
+            <li><b>Contrat de maintenance</b> avec les clauses non négociables (annexe C)</li>
+            <li><b>Environnement reproductible</b> = Docker : un nouveau développeur lance l'app en une commande</li>
+          </ul>
+        </div>
+        <div class="fiche-col col-maitrise"><h4>Tu dois maîtriser</h4>
+          <p>Cloner le dépôt, lancer l'app en local, lire le CHANGELOG et la doc technique pour <b>vérifier ce que le prestataire a livré</b>.</p>
+        </div>
+      </div>
+      <div class="deliv">📄 Runbook : <code>docs/technique/02-exploitation-runbook.md</code></div>
+    </div>
+
+    <!-- OBJ 2 -->
+    <div class="fiche">
+      <div class="fiche-head"><span class="num">2</span><h3>Garder tous les droits de l'application</h3><span class="sem-tag">S1</span></div>
+      <div class="fiche-body" style="grid-template-columns:1fr">
+        <div class="fiche-col col-faire"><h4>À faire — inventaire et reprise en main de tous les comptes (MFA partout)</h4>
+          <div class="tbl-scroll">
+            <table>
+              <thead><tr><th>Élément</th><th>Doit appartenir à</th><th>Action</th></tr></thead>
+              <tbody>
+                <tr><td>Dépôt Git (code)</td><td>Entreprise</td><td>Créer l'org, y transférer le repo, MFA obligatoire</td></tr>
+                <tr><td>Supabase / base de données</td><td>Entreprise</td><td><b>Auto-hébergé</b> (Docker, sur ton serveur) — les données ne quittent <b>jamais</b> ton infrastructure</td></tr>
+                <tr><td>Serveur d'hébergement</td><td>Entreprise</td><td>Serveur/VPS au nom de l'entreprise, accès SSH par clé, MFA</td></tr>
+                <tr><td>Nom de domaine</td><td>Entreprise</td><td>Vérifier le registrar, MFA</td></tr>
+                <tr><td>N8N (automatisations)</td><td>Entreprise</td><td>Auto-hébergé (Docker), pas de SaaS tiers</td></tr>
+                <tr><td>Secrets (mots de passe, clés)</td><td>Entreprise</td><td>Gestionnaire de mots de passe (voir S2)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="warn-inline"><b>Règle d'or :</b> aucun compte critique créé avec l'e-mail personnel du prestataire. S'il en existe, on les recrée au nom de l'entreprise et on invite le presta ensuite.</div>
+        </div>
+        <div class="fiche-col col-maitrise"><h4>Tu dois maîtriser</h4>
+          <p>Retirer l'accès d'un prestataire <b>en 2 minutes</b> (révoquer son invitation Git / Supabase / serveur) — c'est ta garantie de contrôle.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- OBJ 3 -->
+    <div class="fiche">
+      <div class="fiche-head"><span class="num">3</span><h3>Sécurité du code &amp; cybersécurité opérationnelle</h3><span class="sem-tag">S2 · S4 · S8</span></div>
+      <div class="fiche-body">
+        <div class="fiche-col col-fait"><h4>Déjà fait</h4>
+          <ul><li>Audit adversarial : 15/16 défauts corrigés</li><li>RBAC fermé par défaut</li><li>Signataires fiables (PIN/session)</li><li>Anti-abus formulaire public</li><li>Harnais anti-régression</li></ul>
+        </div>
+        <div class="fiche-col col-faire"><h4>À faire (S2) — de « bêta assumée » à « production sûre »</h4>
+          <ul>
+            <li><b>Sortir les secrets du code</b> : JWT secret et bootstrap <code>ADMIN/246810</code> → variables d'environnement (<code>.env</code> hors Git), secret JWT régénéré, PIN admin changé</li>
+            <li><b>Clés Supabase</b> : ton instance génère ses <b>nouvelles</b> clés ; la clé anon committée (cloud) devient caduque ; la clé <code>service_role</code> reste strictement côté serveur</li>
+            <li><b>RLS</b> table par table — priorité aux données <b>RH (pointages, salariés)</b> et <b>compta</b> (RGPD)</li>
+            <li><b>Anti-flood / rate-limit</b> via reverse-proxy ou pare-feu applicatif (Crowdsec, fail2ban) sur <code>/api/login</code> et <code>/api/contact</code> — à configurer en S4</li>
+            <li><b>Sauvegardes automatiques</b> — mesure n°1 (voir bandeau rouge)</li>
+            <li><b>RGPD</b> : registre des traitements, durées de conservation, information des salariés (pointages = sensibles)</li>
+            <li><b>Journalisation</b> des connexions et actions sensibles (déjà partielle via les historiques)</li>
+          </ul>
+        </div>
+        <div class="fiche-col col-maitrise"><h4>Tu dois maîtriser</h4>
+          <p>Lire les alertes du Security Advisor de Supabase, distinguer une <b>clé secrète</b> d'une <b>clé publique</b>, et vérifier que les sauvegardes tournent.</p>
+          <div class="warn-inline"><b>Fin S8 (optionnel, recommandé) :</b> pentest léger par un prestataire spécialisé une fois le durcissement fait → attestation de sécurité.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OBJ 4 -->
+    <div class="fiche">
+      <div class="fiche-head"><span class="num">4</span><h3>Maîtriser PostgreSQL — lire les interactions</h3><span class="sem-tag">S5 · ~1 h/jour</span></div>
+      <div class="fiche-body">
+        <div class="fiche-col col-faire" style="grid-column:1/-1"><h4>À faire — 5 paliers progressifs</h4>
+          <div class="tbl-scroll">
+            <table>
+              <thead><tr><th>Palier</th><th>Compétence</th><th>Concrètement</th></tr></thead>
+              <tbody>
+                <tr><td>1 — Lire</td><td>Table Editor &amp; SQL Editor</td><td>Écrire un <code>SELECT</code> simple, filtrer (<code>WHERE</code>), trier (<code>ORDER BY</code>), compter (<code>COUNT</code>)</td></tr>
+                <tr><td>2 — Comprendre les liens</td><td>Clés primaires / étrangères</td><td>Ex. un lot appartient à une commande ; jointure simple</td></tr>
+                <tr><td>3 — RLS</td><td>Lire une policy de sécurité</td><td>Comprendre « qui a le droit de voir quoi », repérer une table trop ouverte</td></tr>
+                <tr><td>4 — Surveiller</td><td>Logs Postgres</td><td>Repérer une requête lente, comprendre le Query Performance</td></tr>
+                <tr><td>5 — Vues &amp; alertes</td><td>Security Advisor</td><td>Reconnaître une vue, comprendre les alertes (déjà pratiqué)</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="deliv">📄 Mémo <code>docs/technique/10-postgres-pour-le-proprietaire.md</code> — 10 requêtes types prêtes à copier-coller (« qui s'est connecté aujourd'hui », « commandes en retard », « pointages du mois ») + checklist « lire une alerte de sécurité ».</div>
+    </div>
+
+    <!-- OBJ 5 -->
+    <div class="fiche">
+      <div class="fiche-head"><span class="num">5</span><h3>Automatiser avec N8N</h3><span class="sem-tag">S7 – S8</span></div>
+      <div class="fiche-body">
+        <div class="fiche-col col-faire"><h4>À faire — approche</h4>
+          <p style="margin-bottom:8px"><b>N8N</b> = outil visuel (boîtes reliées par des flèches) pour automatiser les tâches répétitives, <b>auto-hébergé</b> chez toi dans Docker — cohérent avec la propriété (obj. 2 et 7).</p>
+          <ul>
+            <li>Installer N8N dans le même Docker que l'app</li>
+            <li>Le connecter à Supabase (lecture/écriture via l'API)</li>
+            <li>Brancher les workflows <b>par ordre de valeur</b> (catalogue complet en annexe A)</li>
+          </ul>
+        </div>
+        <div class="fiche-col col-faire"><h4>Les 3 premiers workflows (plus fort impact)</h4>
+          <ul>
+            <li><b>1. Sauvegarde quotidienne</b> de la base (aussi un point cybersécurité)</li>
+            <li><b>2. Alertes d'échéances sécurité</b> — VGP, DUER, contrôles réglementaires à terme</li>
+            <li><b>3. Relance des factures impayées</b> — email automatique à J+30, J+45</li>
+          </ul>
+        </div>
+        <div class="fiche-col col-maitrise"><h4>Tu dois maîtriser</h4>
+          <p>Créer un workflow simple (déclencheur → action), le tester, le mettre en pause. <b>On en construit 1 ensemble, tu refais les suivants seul.</b></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- OBJ 6 -->
+    <div class="fiche">
+      <div class="fiche-head"><span class="num">6</span><h3>Importer des données à la main, sans fuite</h3><span class="sem-tag">S6</span></div>
+      <div class="fiche-body">
+        <div class="fiche-col col-faire"><h4>À faire — méthode</h4>
+          <ul>
+            <li><b>Le canal</b> : SQL Editor / Table Editor (import CSV intégré) OU les scripts du dépôt (<code>scripts_import/</code>) lancés sur ta machine. Les données ne transitent qu'entre ton poste et ta base — <b>jamais par un tiers</b></li>
+            <li><b>Checklist anti-fuite</b> (annexe B) : anonymiser les tests, rien de sensible dans un chat/IA, PAT et clés jamais partagés, fichiers temporaires supprimés</li>
+            <li><b>Procédure documentée</b> pas à pas avec captures : format CSV par table, vérification, annulation en cas d'erreur</li>
+          </ul>
+        </div>
+        <div class="fiche-col col-maitrise"><h4>Tu dois maîtriser</h4>
+          <p>Préparer un CSV propre (colonnes = celles de la table), l'importer, vérifier le nombre de lignes, corriger une erreur. <b>On fait le premier import ensemble.</b></p>
+        </div>
+      </div>
+      <div class="deliv">📄 Procédure : <code>docs/technique/11-import-de-donnees.md</code></div>
+    </div>
+
+    <!-- OBJ 7 -->
+    <div class="fiche">
+      <div class="fiche-head"><span class="num">7</span><h3>Docker — auto-hébergement complet (Supabase + app)</h3><span class="sem-tag">S3 – S4</span></div>
+      <div class="fiche-body">
+        <div class="fiche-col col-faire"><h4>Le choix retenu</h4>
+          <p style="margin-bottom:8px"><b>Tout auto-héberger sur ton propre serveur</b> — la base Supabase ET l'application, en Docker. Plus de dépendance à Cloudflare ni au cloud Supabase : <b>les données et l'infrastructure sont 100 % à toi.</b></p>
+          <p><b>Un seul <code>docker-compose.yml</code> :</b></p>
+          <ul>
+            <li><b>Stack Supabase</b> : PostgreSQL (la vraie base), PostgREST (l'API), GoTrue (auth), Storage (bucket GED), Studio (l'admin), Kong (passerelle) — compose officiel prêt à l'emploi</li>
+            <li><b>L'app ERP</b> (Hono en conteneur Node)</li>
+            <li><b>N8N</b> (automatisations)</li>
+            <li><b>Reverse-proxy</b> (Caddy ou Traefik) : HTTPS automatique + routage</li>
+          </ul>
+          <div class="warn-inline"><b>La contrepartie, en toute honnêteté :</b> ce que le cloud faisait pour toi (sauvegardes, mises à jour de sécurité, dispo 24/7) devient <b>ta responsabilité</b>. Gérable, mais ça impose de la rigueur : sauvegardes testées, mises à jour, surveillance. C'est le prix de la maîtrise totale.</div>
+        </div>
+        <div class="fiche-col col-faire"><h4>Étapes</h4>
+          <ul>
+            <li><b>S3 — En local d'abord</b> : compose officiel Supabase, générer <b>tes propres secrets</b> (JWT, mots de passe Postgres, clés anon/service), Dockerfile de l'app, adapter <code>src/db.ts</code>, recréer le schéma (<code>scripts_import/*.sql</code>)</li>
+            <li><b>S4 — Migrer + produire</b> :
+              <ol style="margin:5px 0 0;padding-left:18px">
+                <li>Export de la base cloud (<code>pg_dump</code>) → fichier <code>.sql</code></li>
+                <li>Import chez toi (<code>psql &lt; dump.sql</code>) ; vérifier les compteurs de lignes table par table</li>
+                <li>VPS (OVH / Scaleway / Hetzner) ou serveur interne, au nom de l'entreprise, SSH par clé</li>
+                <li><code>docker compose up -d</code>, domaine + HTTPS, checklist post-déploiement, <b>Studio verrouillé derrière un mot de passe fort</b> (accès total à la base)</li>
+              </ol>
+            </li>
+          </ul>
+        </div>
+        <div class="fiche-col col-maitrise"><h4>Tu dois maîtriser</h4>
+          <p><code>docker compose up -d / down / logs / ps</code>, savoir où est le <code>.env</code> (tes secrets) et <b>ne jamais le committer</b>. Comprendre que Studio auto-hébergé = le dashboard Supabase, mais chez toi.</p>
+        </div>
+      </div>
+      <div class="deliv">📄 <code>docs/technique/12-docker-installation.md</code> — installer toute la stack de zéro sur un serveur vierge. Le <code>docker-compose.yml</code> + <code>.env.example</code> versionnés = <b>la preuve ultime de réversibilité</b> : n'importe qui remonte tout en une commande.</div>
+    </div>
+  </section>
+
+  <!-- ============ ANNEXE A ============ -->
+  <section class="section">
+    <div class="section-head">
+      <span class="no">04</span>
+      <h2>Annexe A — Catalogue des workflows N8N</h2>
+      <p>recensés depuis les modules existants · à brancher par ordre de valeur</p>
+    </div>
+    <div class="annexe-grid">
+      <div class="annexe">
+        <div class="kicker" style="color:var(--red)">Technique / Cybersécurité — on commence ici</div>
+        <div class="cat"><ul>
+          <li><b>Sauvegarde quotidienne</b> base + Storage, chiffrée, vers stockage externe <span class="prio-badge">N°1</span></li>
+          <li><b>Contrôle de santé</b> : ping app + API Supabase toutes les 5 min → alerte si un conteneur tombe</li>
+          <li>Alerte <b>espace disque</b> du serveur (logs/sauvegardes peuvent saturer)</li>
+        </ul></div>
+      </div>
+      <div class="annexe">
+        <div class="kicker" style="color:var(--amber)">Sécurité / Qualité — fort enjeu réglementaire</div>
+        <div class="cat"><ul>
+          <li>Rappel <b>VGP / contrôles réglementaires</b> à échéance (30 j avant) <span class="prio-badge p2">N°2</span></li>
+          <li>Rappel <b>revue du DUER</b> (annuelle) + <b>habilitations salariés</b> expirant</li>
+          <li>Notification Qualité dès qu'une <b>NC bloquante</b> ou <b>quarantaine</b> est créée</li>
+          <li>Alerte <b>produits chimiques</b> dont la FDS est trop ancienne</li>
+        </ul></div>
+      </div>
+      <div class="annexe">
+        <div class="kicker">Finance / Commercial</div>
+        <div class="cat"><ul>
+          <li>Relance <b>factures impayées</b> (J+30, J+45, J+60) par email <span class="prio-badge p3">N°3</span></li>
+          <li>Alerte <b>commandes en retard</b> de livraison → email au commercial</li>
+          <li>Récap <b>CA hebdomadaire</b> envoyé à la direction</li>
+        </ul></div>
+      </div>
+      <div class="annexe">
+        <div class="kicker">Stock / Achats</div>
+        <div class="cat"><ul>
+          <li>Alerte <b>seuil de réappro</b> atteint → demande d'achat pré-remplie</li>
+          <li>Alerte <b>produits périssables</b> proches de la péremption</li>
+        </ul></div>
+      </div>
+      <div class="annexe">
+        <div class="kicker">Production / RH</div>
+        <div class="cat"><ul>
+          <li>Rappel <b>pointages non validés</b> en fin de semaine au responsable</li>
+          <li>Alerte <b>congés en attente</b> de validation</li>
+          <li>Export mensuel <b>heures → paie</b> (fichier prêt pour Silae)</li>
+        </ul></div>
+      </div>
+    </div>
+    <div class="pedago"><b>Ordre de branchement :</b> Sauvegarde quotidienne → Échéances sécurité → Factures impayées. Le reste suit selon la valeur métier.</div>
+  </section>
+
+  <!-- ============ ANNEXES B & C ============ -->
+  <section class="section">
+    <div class="section-head">
+      <span class="no">05</span>
+      <h2>Annexes B &amp; C — Garde-fous</h2>
+      <p>la checklist import et les clauses du contrat</p>
+    </div>
+    <div class="annexe-grid">
+      <div class="annexe">
+        <div class="kicker">Annexe B</div>
+        <h3>Checklist « import de données sans fuite »</h3>
+        <ul class="checklist">
+          <li>Le fichier CSV ne contient <b>que</b> les colonnes de la table cible</li>
+          <li>Aucune donnée réelle sensible collée dans un chat, une IA, un email</li>
+          <li>L'import se fait depuis <b>ton poste</b> vers <b>ta base</b>, sans intermédiaire</li>
+          <li>Le <b>PAT</b> et les clés secrètes jamais partagés ni écrits dans un fichier suivi par Git</li>
+          <li>Après import : vérifier le <b>nombre de lignes</b> + 2–3 lignes au hasard</li>
+          <li>Supprimer les <b>fichiers temporaires</b> (CSV, exports) après usage</li>
+          <li>En cas d'erreur : savoir <b>annuler</b> (supprimer les lignes importées par un critère commun)</li>
+        </ul>
+      </div>
+      <div class="annexe" style="border-color:#E5B7B3">
+        <div class="kicker" style="color:var(--red)">Annexe C</div>
+        <h3>Clauses non négociables du contrat de maintenance</h3>
+        <ol class="clauses">
+          <li><b>Propriété intellectuelle</b> — le code et les données appartiennent à l'entreprise à 100 %, y compris les développements du prestataire</li>
+          <li><b>Réversibilité</b> — à chaque fin de mission : remise du code, de la doc à jour et des accès ; changement de prestataire sans blocage</li>
+          <li><b>Comptes &amp; secrets</b> — hébergés par l'entreprise ; le prestataire a des accès <i>nominatifs révocables</i>, jamais la propriété</li>
+          <li><b>Confidentialité / RGPD</b> — protection des données (surtout RH) ; interdiction de copier les données hors de l'environnement</li>
+          <li><b>Délais d'intervention (SLA)</b> — temps de réponse en cas de panne bloquante</li>
+          <li><b>Traçabilité</b> — toute modification passe par le dépôt Git (pas de correctif « en direct » non tracé) et met à jour le CHANGELOG</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ANNEXE D + JALONS ============ -->
+  <section class="section">
+    <div class="section-head">
+      <span class="no">06</span>
+      <h2>Annexe D — Ce que TU maîtrises à la fin des 2 mois</h2>
+      <p>le test de sortie : 7 gestes d'autonomie</p>
+    </div>
+    <div class="skills">
+      <div>Cloner le dépôt et lancer l'app en local (Docker)</div>
+      <div>Révoquer l'accès d'un prestataire sur tous les comptes</div>
+      <div>Lire une alerte de sécurité Supabase et savoir si c'est grave</div>
+      <div>Écrire un <code>SELECT</code> simple et lire les logs Postgres</div>
+      <div>Importer un CSV dans la base et vérifier le résultat</div>
+      <div>Créer et mettre en pause un workflow N8N simple</div>
+      <div>Vérifier qu'une sauvegarde a tourné et savoir en restaurer une</div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <span class="no">07</span>
+      <h2>Jalons de contrôle</h2>
+      <p>4 points de passage à cocher — un toutes les 2 semaines</p>
+    </div>
+    <div class="jalons">
+      <div class="jalon"><span class="code">FIN S2 · 18 juil</span>
+        <ul><li>Sauvegardes automatiques + testées</li><li>Secrets sortis du code</li><li>Clé anon rotée</li></ul>
+      </div>
+      <div class="jalon"><span class="code">FIN S4 · 1 août</span>
+        <ul><li>App en production sur Docker</li><li>Serveur de l'entreprise</li><li>HTTPS OK</li></ul>
+      </div>
+      <div class="jalon"><span class="code">FIN S6 · 15 août</span>
+        <ul><li>Un jeu de données réel importé par toi, sans aide</li></ul>
+      </div>
+      <div class="jalon"><span class="code">FIN S8 · 29 août</span>
+        <ul><li>3+ workflows N8N en prod</li><li>Contrat de maintenance signé</li><li>Pentest planifié</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="final-note">
+    <b>Ce plan est un point de départ réaliste, pas une contrainte rigide.</b> On ajuste chaque fin de semaine selon ce qui a avancé. Si le temps manque, priorité absolue : <span class="red">les sauvegardes (transverse)</span> puis <span class="red">secrets / RLS (objectif 3)</span> — ce sont les deux qui protègent l'entreprise.
+  </div>
+
+</div>
+</body>
+</html>

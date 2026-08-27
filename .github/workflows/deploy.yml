@@ -1,0 +1,86 @@
+name: Deploy ERP -> Cloudflare Pages
+
+# Deploie automatiquement vers le projet Cloudflare Pages EXISTANT (Direct Upload)
+# a chaque push sur main. Garde ton projet actuel (meme URL / domaine), pas de migration.
+# Cloudflare interdit de convertir un projet Direct Upload en "Git integration" :
+# on passe donc par GitHub Actions + Wrangler (methode officielle recommandee).
+
+on:
+  push:
+    branches: [main]
+    # SEPARATION APP / INFRA : ne deploie sur Cloudflare QUE si un fichier qui
+    # influe reellement sur dist/ change. Les commits purement infra/outillage
+    # (docker/**, n8n, docs/**, cerveau application/**, *.md, ce workflow) ne
+    # declenchent PLUS de deploiement prod — ils ne concernent que le cote Docker
+    # auto-heberge. (Regle utilisateur : l'appli va sur Cloudflare d'un cote et sur
+    # Docker de l'autre ; l'infra ne doit jamais toucher la prod Cloudflare.)
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'vite.config.*'
+      - '.node-version'
+  workflow_dispatch: {}          # lancement manuel possible depuis l'onglet Actions (deploie quel que soit le diff)
+
+permissions:
+  contents: read
+
+concurrency:                     # un seul deploiement a la fois ; annule les builds en attente
+  group: deploy-cloudflare
+  cancel-in-progress: false
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    env:
+      # true seulement si les secrets Cloudflare sont configures dans le repo
+      CF_CONFIGURED: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      # PORTE BLOQUANTE : typecheck strict (tsc --noEmit). Les ~68 erreurs de types
+      # heritees ont ete resorbees (2026-08-07, 68 -> 0) ; plusieurs cachaient de VRAIS
+      # bugs runtime (import manquant `updateCommande`, helper `qualiteBloque`/`mapFournisseurSt`
+      # indefini -> ReferenceError, `.replace` sur undefined). On bloque desormais tout push
+      # qui reintroduit une erreur de type, en amont du build (echec rapide).
+      - name: Typecheck (bloquant)
+        run: npm run typecheck
+
+      - name: Build (produit dist/_worker.js)
+        run: npm run build
+
+      # PORTE BLOQUANTE : le harnais execute les <script> clients de CHAQUE page.
+      # L'echappement casse des scripts dans les templates TSX est la 1re cause de
+      # regression du depot, et `vite build` la laisse passer -> sans cette etape on
+      # deployait des pages mortes en production.
+      - name: Harnais toutes-pages (bloquant)
+        run: node scripts_doc/harness_all_pages.mjs
+
+      # Deploiement vers le projet Cloudflare EXISTANT. Ignore proprement (step "skipped",
+      # coche verte) tant que les 2 secrets ne sont pas ajoutes dans les settings du repo.
+      - name: Deploy to Cloudflare Pages
+        if: env.CF_CONFIGURED == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Projet Cloudflare Pages EXISTANT (confirme par l'utilisateur) = "seem-semrac-erp".
+          command: pages deploy dist --project-name=seem-semrac-erp --branch=main
+
+      - name: Rappel configuration
+        if: env.CF_CONFIGURED != 'true'
+        run: |
+          echo "::notice::Build OK. Deploiement ignore : ajoutez les secrets CLOUDFLARE_API_TOKEN et CLOUDFLARE_ACCOUNT_ID"
+          echo "::notice::Repo -> Settings -> Secrets and variables -> Actions -> New repository secret"

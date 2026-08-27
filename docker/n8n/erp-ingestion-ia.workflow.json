@@ -1,0 +1,153 @@
+{
+  "id": "erpIngestionIA01",
+  "name": "ERP — Ingestion IA (CSV/XLS → staging)",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Import de données assisté par IA",
+        "formDescription": "Déposez un CSV/XLS, indiquez la table cible et vos consignes de mapping. Le modèle local (Ollama) mappe chaque ligne vers le schéma de la table ; le résultat va d'abord en staging (validation avant insertion définitive).",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Fichier",
+              "fieldType": "file",
+              "acceptFileTypes": ".csv,.xls,.xlsx",
+              "multipleFiles": false,
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Table cible",
+              "fieldType": "text",
+              "placeholder": "ex : clients",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Instructions",
+              "fieldType": "textarea",
+              "placeholder": "ex : la colonne « Raison sociale » → nom ; « Tél » → tel ; ignorer la colonne « Notes ».",
+              "requiredField": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "form-trigger",
+      "name": "Formulaire",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [-400, 200],
+      "webhookId": "erp-ingestion-ia"
+    },
+    {
+      "parameters": {
+        "operation": "fromFile",
+        "fileFormat": "autodetect",
+        "binaryPropertyName": "Fichier",
+        "options": { "headerRow": true }
+      },
+      "id": "read-file",
+      "name": "Lire fichier",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [-160, 120]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT string_agg(column_name || ' ' || data_type, ', ' ORDER BY ordinal_position) AS cols\nFROM information_schema.columns\nWHERE table_schema = 'public' AND table_name = $1",
+        "options": {
+          "queryReplacement": "={{ $('Formulaire').item.json['Table cible'] }}"
+        }
+      },
+      "id": "schema",
+      "name": "Schéma cible",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [-160, 320],
+      "credentials": {
+        "postgres": { "name": "ERP Postgres" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge",
+      "name": "Ligne + Schéma",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [120, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OLLAMA_URL || 'http://erp-ollama:11434' }}/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"qwen2.5:7b-instruct\",\n  \"stream\": false,\n  \"format\": \"json\",\n  \"options\": { \"temperature\": 0 },\n  \"prompt\": {{ JSON.stringify(\n    \"Tu es un assistant d'import de données pour un ERP. Table cible : \" + $('Formulaire').item.json['Table cible'] +\n    \". Colonnes disponibles (nom type) : \" + $('Schéma cible').first().json.cols +\n    \". Consignes de l'utilisateur : \" + ($('Formulaire').item.json['Instructions'] || '(aucune)') +\n    \". Voici UNE ligne source au format JSON : \" + JSON.stringify($json) +\n    \". Rends UNIQUEMENT un objet JSON {\\\"colonne\\\": valeur} en n'utilisant QUE des noms de colonnes de la liste ci-dessus, en respectant les types. N'invente AUCUNE valeur qui ne figure pas dans la ligne source. Si une info n'est pas présente, OMETS la colonne. Ne mets pas de texte autour du JSON.\"\n  ) }}\n}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "ollama",
+      "name": "Ollama — mapping",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [360, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Récupère le mapping JSON produit par le LLM + prépare la ligne de staging.\nconst out = [];\nconst batchId = 'ING-' + $now.toFormat('yyyyLLdd-HHmmss');\nconst cible = $('Formulaire').first().json['Table cible'];\nconst fichier = ($('Formulaire').first().json['Fichier'] && $('Formulaire').first().json['Fichier'].filename) || 'upload';\nfor (let i = 0; i < items.length; i++) {\n  const resp = items[i].json.response ?? items[i].json.message?.content ?? '';\n  let mapped = {};\n  try {\n    const cleaned = String(resp).replace(/^```(json)?/i, '').replace(/```$/,'').trim();\n    mapped = JSON.parse(cleaned);\n  } catch (e) {\n    mapped = { _erreur_parse: String(resp).slice(0, 500) };\n  }\n  // La ligne source d'origine = l'entrée du Merge (sans le champ 'cols' du schéma).\n  const src = { ...items[i].json };\n  delete src.cols; delete src.response; delete src.message; delete src.model; delete src.created_at; delete src.done;\n  out.push({ json: {\n    batch_id: batchId,\n    source_file: fichier,\n    target_table: cible,\n    row_index: i + 1,\n    source_row: JSON.stringify(src),\n    mapped: JSON.stringify(mapped)\n  }});\n}\nreturn out;"
+      },
+      "id": "parse",
+      "name": "Préparer staging",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.import_staging (batch_id, source_file, target_table, row_index, source_row, mapped, status)\nVALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, 'pending')\nRETURNING id, batch_id",
+        "options": {
+          "queryReplacement": "={{ $json.batch_id }},{{ $json.source_file }},{{ $json.target_table }},{{ $json.row_index }},{{ $json.source_row }},{{ $json.mapped }}"
+        }
+      },
+      "id": "insert-staging",
+      "name": "→ import_staging",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [840, 200],
+      "credentials": {
+        "postgres": { "name": "ERP Postgres" }
+      }
+    }
+  ],
+  "connections": {
+    "Formulaire": {
+      "main": [
+        [
+          { "node": "Lire fichier", "type": "main", "index": 0 },
+          { "node": "Schéma cible", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Lire fichier": {
+      "main": [[{ "node": "Ligne + Schéma", "type": "main", "index": 0 }]]
+    },
+    "Schéma cible": {
+      "main": [[{ "node": "Ligne + Schéma", "type": "main", "index": 1 }]]
+    },
+    "Ligne + Schéma": {
+      "main": [[{ "node": "Ollama — mapping", "type": "main", "index": 0 }]]
+    },
+    "Ollama — mapping": {
+      "main": [[{ "node": "Préparer staging", "type": "main", "index": 0 }]]
+    },
+    "Préparer staging": {
+      "main": [[{ "node": "→ import_staging", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}
