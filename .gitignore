@@ -24,8 +24,14 @@ node_modules/
 docker/.env
 docker/supabase/volumes/db/data/
 docker/supabase/volumes/storage/
+# Les dumps de donnees restent hors du depot (_mirror.sql fait 2,6 Mo et se
+# regenere). Mais les quatre fichiers COPIES par db.Dockerfile en font partie
+# integrante : sans eux la construction de l'image db echoue.
 docker/db/seed/*.sql
 !docker/db/seed/schema.sql
+!docker/db/seed/storage_policies.sql
+!docker/db/seed/hygiene.sql
+!docker/db/seed/conformite.sql
 
 # logs
 logs/

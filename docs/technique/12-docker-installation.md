@@ -39,12 +39,44 @@ bronchent, l'application démarre quand même sur `http://localhost:3000`.
 
 C'est la procédure de référence. Elle remplace tout ce qui suit pour un déploiement serveur ; les sections 2 à 4 restent utiles pour un poste de développement Windows.
 
+Le dépôt de référence pour les déploiements est **`Seem-Semrac/ERP-seem-semrac`** (privé). Il ne contient qu'un commit par publication : le contenu y est identique à `main`, sans les 4,8 Go d'historique du dépôt de travail.
+
+**Préparer l'accès** — une fois, sur la VM. Une clé de déploiement est préférable à un jeton : lecture seule, limitée à ce dépôt, aucun identifiant de compte sur le serveur, et rien ne casse quand vous changez votre mot de passe GitHub.
+
 ```bash
-sudo install -d -o $USER -g $USER /opt/erp && git clone https://github.com/Krmaaaaaa/ERP.git /opt/erp
-sudo /opt/erp/docker/scripts/install.sh --seed
+ssh-keygen -t ed25519 -C "vm-erp" -f ~/.ssh/erp_deploy -N "" && cat ~/.ssh/erp_deploy.pub
 ```
 
-> `/opt` appartient à root : un `git clone` direct échoue sur *Permission denied*. `sudo install -d -o $USER` crée le dossier **à votre nom**, puis le clone se fait avec votre compte — vous pourrez ensuite faire `git pull` sans `sudo`. Cloner avec `sudo` donnerait le dépôt à root et imposerait `sudo` à chaque mise à jour.
+Collez la ligne affichée dans **GitHub → dépôt → Settings → Deploy keys → Add deploy key**, en laissant *Allow write access* décoché. Puis :
+
+```bash
+printf 'Host github-erp\n  HostName github.com\n  User git\n  IdentityFile ~/.ssh/erp_deploy\n  IdentitiesOnly yes\n' >> ~/.ssh/config
+```
+
+**Installer** :
+
+```bash
+git clone git@github-erp:Seem-Semrac/ERP-seem-semrac.git ~/erp
+~/erp/docker/scripts/install.sh --seed
+```
+
+> Installation dans `~/erp` et non `/opt` : aucun droit administrateur n'est requis si Docker est déjà utilisable par votre compte. Si Docker n'est pas installé, `install.sh` s'arrête et affiche les deux commandes à demander à l'administrateur — c'est le seul point qui exige root, et une seule fois.
+
+**Publier une mise à jour** — depuis le poste de développement, sur `main` :
+
+```bash
+# Windows (PowerShell) — `bash` y pointe souvent vers WSL, qui peut ne pas être installé
+.\scripts_doc\publier_pro.ps1 "ce que contient cette livraison"
+
+# Linux / macOS / Git Bash
+scripts_doc/publier_pro.sh "ce que contient cette livraison"
+```
+
+Puis sur la VM :
+
+```bash
+cd ~/erp && git pull && docker/scripts/erp-docker.sh up
+```
 
 ### Ce que fait `install.sh`
 
@@ -67,19 +99,19 @@ sudo ufw allow 3000/tcp
 ### Dupliquer une instance sur la même VM
 
 ```bash
-sudo /opt/erp/docker/scripts/install.sh --instance recette --port 3100
+~/erp/docker/scripts/install.sh --instance recette --port 3100
 ```
 
 Chaque instance a son propre `.env.<nom>`, son projet Compose `erp-<nom>` et ses propres volumes : les stacks ne se marchent pas dessus. Pour la piloter ensuite :
 
 ```bash
-ERP_INSTANCE=recette /opt/erp/docker/scripts/erp-docker.sh ps
+ERP_INSTANCE=recette ~/erp/docker/scripts/erp-docker.sh ps
 ```
 
 ### Exploitation courante — une seule commande à retenir
 
 ```bash
-/opt/erp/docker/scripts/erp-docker.sh ps
+~/erp/docker/scripts/erp-docker.sh ps
 ```
 
 `up` · `down` · `ps` · `logs [service]` · `psql` · `restore <dump.sql>` · `migrate` · `mirror` · `ged-bucket` · `reset` (⚠ efface les données).
@@ -87,7 +119,7 @@ ERP_INSTANCE=recette /opt/erp/docker/scripts/erp-docker.sh ps
 ### Mettre à jour après une modification du code
 
 ```bash
-cd /opt/erp && git pull && docker/scripts/erp-docker.sh up
+cd ~/erp && git pull && docker/scripts/erp-docker.sh up
 ```
 
 `up` reconstruit l'image de l'app (le code est **cuit dans l'image**, il n'y a pas de bind-mount) et laisse la base intacte.
@@ -424,9 +456,9 @@ Si vous préférez ne pas ouvrir la VM à GitHub : un `git pull` périodique par
 
 ```bash
 #!/usr/bin/env bash
-# /opt/erp/maj.sh — déploie uniquement si un nouveau tag deploy-* est apparu
+# ~/erp/maj.sh — déploie uniquement si un nouveau tag deploy-* est apparu
 set -euo pipefail
-cd /opt/erp
+cd ~/erp
 git fetch --tags --quiet
 CIBLE=$(git tag -l 'deploy-*' --sort=-creatordate | head -1)
 ACTUEL=$(cat .deploiement 2>/dev/null || echo "")
