@@ -2,6 +2,63 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-09 — Droits instantanés · nomenclature · OAS au prix · proforma en compta
+
+### 1. Les droits s'appliquent sans reconnexion
+
+Le jeton de session dure **12 h** et le middleware ne relisait jamais la base : les droits étaient gelés au login. Désormais le jeton ne prouve plus que l'**identité**, les **droits** sont relus dans `salaries` (cache d'isolate de 8 s, invalidé immédiatement après une modification RH). Un changement s'applique en quelques secondes, dans les deux sens. Désactiver un compte ou supprimer un salarié **éjecte la session**.
+
+> ⚠ **Piège majeur désamorcé.** Une première version concluait « salarié supprimé » dès que la lecture renvoyait `null` — or **supabase-js ne lève jamais d'exception** : il renvoie `{data:null, error}`. Le moindre hoquet réseau, 5xx ou auto-pause du projet Supabase aurait donc supprimé le cookie de **tous** les utilisateurs et renvoyé l'atelier entier au login, sans possibilité de se reconnecter (`/api/login` lit aussi `salaries`). `getDroitsSalaries()` distingue maintenant explicitement l'échec de l'absence ; en cas d'échec on garde les droits du jeton. Vérifié en pointant l'application sur une base injoignable.
+
+Le cache porte la **table entière** et non une ligne par personne : la latence domine, lire 36 lignes en projection légère coûte le même aller-retour qu'une seule ligne — une requête par isolate et par TTL, quel que soit le nombre de connectés.
+
+### 2. Nomenclature : un seul bouton d'enregistrement — et il fonctionne
+
+« Enregistrer brouillon » retiré. Restent **Enregistrer** (progression sauvegardée, on **reste** dans la nomenclature, elle demeure dans « à faire ») et **Enregistrer et valider** (elle rejoint les nomenclatures faites). Les deux jeux de boutons — en-tête et panneau latéral — sont alignés, et le sous-onglet « Brouillons à traiter » devient « **En cours — à valider** ».
+
+**Pourquoi le bouton ne fonctionnait pas — deux défauts cumulés :**
+1. Il **quittait le formulaire** une seconde après l'enregistrement pour retourner à la liste.
+2. L'identifiant renvoyé par le serveur n'était **jamais récupéré** : le deuxième enregistrement repartait en création et, le serveur n'écrasant que les *brouillons* de même réf+indice, un enregistrement « en cours » créait un **doublon**.
+
+### 3. Traitement OAS : un prix, jamais un temps
+
+Quand l'étape de gamme est un traitement de surface (détection calquée sur celle du planning : drapeau `est_oas`, activité OAS, poste OAS, ou intitulé évoquant oxydation / anodisation / Surtec / chromatation / passivation), les **quatre champs de temps sont grisés** et un champ **prix** apparaît. Les temps déjà saisis sont remis à zéro pour qu'aucun coût horaire résiduel ne s'ajoute au prix.
+
+C'est cohérent avec le reste de la chaîne : une étape OAS **ne produit aucun bon de travail** (la cascade la saute), elle est facturée au bain et non à l'heure. Le coût emprunte le chemin déjà éprouvé des étapes forfaitaires — `max(forfait ; qté × prix unitaire)` — donc il entre dans le CRU sans qu'aucun consommateur ait à changer. **9 cas** vérifiés, dont la non-régression des étapes internes, sous-traitées et en millièmes d'heure.
+
+### 4. Quantité à commander dans le bon de commande
+
+Nouveau champ à côté de la référence, pré-rempli depuis la demande et **modifiable** — on peut commander plus que le besoin (lot minimum, conditionnement). Sur une demande fusionnée, il affiche la **somme** et le détail ligne par ligne. Si la demande porte un texte non numérique (« 2x3 »), l'écran le dit et laisse saisir. La quantité saisie fait foi pour la réception totale.
+
+### 5. Comptabilité : liste Proforma (fournisseurs et sous-traitants)
+
+Cinquième sous-onglet de « Régler », en **quatre étapes** qui suivent le circuit réel :
+
+| | |
+|---|---|
+| **1. À payer** | Le bon de commande est bloqué tant que le règlement n'est pas fait |
+| **2. Payées — livraison attendue** | Le BC est libéré et part chez le fournisseur |
+| **3. Reçues — facture à joindre** | La marchandise est arrivée : bouton **Joindre la facture** (la facture définitive n'arrive qu'à la réception) |
+| **4. Complètes** | Payée, reçue, facture au dossier |
+
+**Aucune colonne dédiée** : l'état se déduit de trois faits déjà en base — la facture proforma existe sous l'identifiant déterministe `FF-<bcId>`, le BC porte `attente_paiement` tant qu'elle n'est pas réglée, et la facture définitive est une pièce jointe GED sous `BC:<bcId>`.
+
+### 6. Dates de réception modifiables depuis les listes de BC
+
+La date d'arrivée prévue devient cliquable dans « À réceptionner » et dans « En attente de validation fournisseur » (nouvelle colonne). Elle passe par **la même route que le planning**, donc par le même **gel de la première date prévue** (`date_livraison_initiale`) : la ponctualité (OTD) reste honnête quel que soit l'endroit où l'on a cliqué.
+
+### Bugs d'échappement corrigés au passage
+
+`RETOURS_JSON` faisait `.replace(/</g, '<')` — écrite en simple antislash, la séquence est résolue à la compilation et le remplacement devient un **no-op silencieux** ; `BC_JSON` n'échappait rien du tout. Un `<` dans un libellé aurait cassé le `<script>` de la page Expéditions.
+
+### Vérification
+
+`tsc` 0 erreur · build ✓ · harnais **61 PASS / 0 FAIL** · droits vivants prouvés **sans reconnexion** sur un salarié de test (ouverture, retrait, menu, compte désactivé) · **6 contrôles base injoignable** (personne n'est déconnecté) · **9 cas** sur le moteur de coût OAS · **11 + 5 contrôles** sur les états proforma · ligne de test supprimée à chaque fois.
+
+### Migration
+
+**Aucune.** Les six demandes passent sans DDL.
+
 ## 2026-09-09 — Préparation technique par lot · demandes d'achat modifiables et fusionnables à la main
 
 ### 1. Préparation technique : le site et le lot, enfin visibles

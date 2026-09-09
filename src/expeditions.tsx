@@ -932,7 +932,12 @@ function panelReceptions(bcs: any[], bcsAttendus: any[], receptions: any[], bds:
       TD(`<div style="font-weight:700;color:${AMB};">${escX(b.num_bc ?? b.id)}</div><div style="font-size:.65rem;color:#94a3b8;">${b.type === 'st' ? 'Sous-traitant' : 'Fournisseur'}</div>`),
       TD(escX(b.fournisseur ?? '—')),
       TD(`<span style="font-size:.75rem;color:#475569;">${escX(b.articles ?? '—')}</span>`),
-      TDC(d ? `<span style="font-weight:700;color:${enRetard(d) ? '#b91c1c' : '#334155'};">${_frDate(d)}</span>${enRetard(d) ? '<div style="font-size:.62rem;color:#b91c1c;font-weight:700;">en retard</div>' : ''}` : '<span style="color:#cbd5e1;">à planifier</span>'),
+      // Date d'arrivée MODIFIABLE ici comme au planning : même route, donc même gel de la
+      // 1ʳᵉ date prévue (`date_livraison_initiale`) — la ponctualité (OTD) reste honnête quel
+      // que soit l'endroit où l'utilisateur a cliqué.
+      TDC(`<button onclick="expOpenArrivee('${escX(b.id)}')" title="Modifier la date d'arrivée prévue" style="background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:6px;font:inherit;">`
+        + (d ? `<span style="font-weight:700;color:${enRetard(d) ? '#b91c1c' : '#334155'};">${_frDate(d)}</span>${enRetard(d) ? '<div style="font-size:.62rem;color:#b91c1c;font-weight:700;">en retard</div>' : ''}` : '<span style="color:#cbd5e1;">à planifier</span>')
+        + `<i class="fas fa-pen" style="margin-left:6px;font-size:.6rem;color:#cbd5e1;"></i></button>`),
       TDC(bcStatutBadge(b.statut)),
       TDC(`<button onclick="expOpenReception('${escX(b.id)}')" style="background:#0ea5e9;color:white;border:none;border-radius:7px;padding:5px 12px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-dolly"></i> Réceptionner</button>
            <button onclick="bcPdf('${escX(b.id)}')" style="margin-left:5px;background:#f5f3ff;color:#6d28d9;border:none;border-radius:7px;padding:5px 9px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-file-pdf"></i></button>`),
@@ -985,6 +990,9 @@ function panelReceptions(bcs: any[], bcsAttendus: any[], receptions: any[], bds:
     TD(escX(b.fournisseur ?? '—')),
     TD(`<span style="font-size:.75rem;color:#475569;">${escX(b.articles ?? '—')}</span>`),
     TDC(`<span style="font-size:.72rem;color:#64748b;">${_frDate(b.date_bc)}</span>`),
+    TDC(`<button onclick="expOpenArrivee('${escX(b.id)}')" title="Modifier la date d'arrivée prévue" style="background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:6px;font:inherit;">`
+      + (b.date_livraison_prevue ? `<span style="font-weight:700;color:${enRetard(b.date_livraison_prevue) ? '#b91c1c' : '#334155'};">${_frDate(b.date_livraison_prevue)}</span>` : '<span style="color:#cbd5e1;">à planifier</span>')
+      + `<i class="fas fa-pen" style="margin-left:6px;font-size:.6rem;color:#cbd5e1;"></i></button>`),
     TDC(`<button onclick="bcAccuse('${escX(b.id)}')" style="background:#dcfce7;color:#15803d;border:none;border-radius:7px;padding:5px 11px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-check"></i> Validé</button>
          <button onclick="bcRelancer('${escX(b.id)}')" style="margin-left:5px;background:#fef3c7;color:#92400e;border:none;border-radius:7px;padding:5px 11px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-rotate-right"></i> Relancer</button>`),
   ])).join('')
@@ -1007,7 +1015,7 @@ function panelReceptions(bcs: any[], bcsAttendus: any[], receptions: any[], bds:
       H(['N° NC', 'Client', 'Pièce', '#Commande', '#Retour prévu', '#Qté', '#Action']) + (rowsRet || vide(7, 'Aucun retour client annoncé — la Qualité déclare le retour sur la non-conformité')) + '</tbody></table>')}
 
     ${bcVal.length ? card('En attente de validation fournisseur', 'fa-hourglass-half', '#f59e0b', bcVal.length, 'commandes envoyées, pas encore confirmées',
-      H(['N° BC', 'Fournisseur', 'Articles', '#Émis le', '#Action']) + rowsVal + '</tbody></table>') : ''}
+      H(['N° BC', 'Fournisseur', 'Articles', '#Émis le', '#Arrivée prévue', '#Action']) + rowsVal + '</tbody></table>') : ''}
 
     ${card('Arrivées enregistrées', 'fa-clipboard-check', '#16a34a', recAll.length, 'historique des réceptions et retours reçus',
       H(['N° BL', 'Fournisseur / Client', 'Pièce / Articles', '#Reçu le', '#Qté', '#Contrôle']) + (rowsRec || vide(6, 'Aucune arrivée enregistrée')) + '</tbody></table>')}
@@ -1460,8 +1468,8 @@ export const pageServiceExpeditions = (
     .filter((n: any) => n.retour_attendu === true)
     .map((n: any) => ({ id: n.id, client: n.client_nom || '', piece: [n.ref_article, n.designation].filter(Boolean).join(' · ') || n.lot_ref || '',
       cmd: n.n_commande || '', qte: n.qte_retour_attendue ?? n.nb_pieces ?? null })))
-    .replace(/</g, '\u003c')
-  const BC_JSON = JSON.stringify((BCS as any[]).map((b: any) => ({ id:b.id, num_bc:b.num_bc||b.id, type:b.type, fournisseur:b.fournisseur||'', articles:b.articles||'', montant:b.montant||0, affaire_id:b.affaire_id||'', statut:b.statut, bl_id:b.bl_id||'', date_livraison_prevue:b.date_livraison_prevue||'' })))
+    .replace(/</g, '\\u003c')
+  const BC_JSON = JSON.stringify((BCS as any[]).map((b: any) => ({ id:b.id, num_bc:b.num_bc||b.id, type:b.type, fournisseur:b.fournisseur||'', articles:b.articles||'', montant:b.montant||0, affaire_id:b.affaire_id||'', statut:b.statut, bl_id:b.bl_id||'', date_livraison_prevue:b.date_livraison_prevue||'' }))).replace(/</g, '\\u003c')   // sinon un '<' dans un libelle casse le <script>
   // Données du planning des arrivées (côté client : détail au clic + changement de date)
   const PLAN_JSON = JSON.stringify((BCS as any[]).map((b: any) => ({
     id: b.id, num_bc: b.num_bc || b.id, type: (b.type === 'st' ? 'st' : 'fournisseur'), fournisseur: b.fournisseur || '—',

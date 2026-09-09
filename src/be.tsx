@@ -269,7 +269,7 @@ export const pageServiceBE = (
         </button>
         <button id="nom-subtab-btn-brouillons" onclick="switchNomSubtab('brouillons')"
           style="padding:8px 18px;border-radius:8px;border:none;cursor:pointer;font-weight:700;font-size:.8rem;display:flex;align-items:center;gap:7px;background:transparent;color:#64748b;box-shadow:none;">
-          <i class="fas fa-pen-ruler"></i>Brouillons à traiter
+          <i class="fas fa-pen-ruler"></i>En cours — à valider
           <span style="background:#fef3c7;color:#b45309;border-radius:999px;padding:1px 9px;font-size:.66rem;font-weight:800;">${NOMS_BROUILLONS.length}</span>
         </button>
         <button id="nom-subtab-btn-standards" onclick="switchNomSubtab('standards')"
@@ -293,7 +293,7 @@ export const pageServiceBE = (
       <div id="nom-subtab-brouillons" style="display:none;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
           <div style="font-size:1rem;font-weight:800;color:#111827;display:flex;align-items:center;gap:8px;">
-            <i class="fas fa-pen-ruler" style="color:#d97706;"></i>Brouillons à traiter <span style="font-size:.72rem;font-weight:600;color:#94a3b8;">— non validés (n'apparaissent pas dans Standards/Mères tant qu'ils ne sont pas validés)</span>
+            <i class="fas fa-pen-ruler" style="color:#d97706;"></i>Nomenclatures en cours <span style="font-size:.72rem;font-weight:600;color:#94a3b8;">— enregistrées mais pas encore validées : elles rejoindront Standards / Mères par « Enregistrer et valider »</span>
             <span style="background:#fef3c7;color:#b45309;border-radius:999px;padding:1px 10px;font-size:.72rem;font-weight:800;">${NOMS_BROUILLONS.length}</span>
           </div>
           <input type="text" placeholder="Rechercher…" oninput="beFilter('nom-brouillons-tbl',this.value)" style="border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-size:.8rem;background:#f8fafc;outline:none;width:160px;"/>
@@ -487,14 +487,11 @@ export const pageServiceBE = (
         <div style="font-size:1rem;font-weight:800;color:#111827;" id="nom-form-title">Nouvelle nomenclature</div>
         <div id="nom-form-statut-badge" style="margin-left:4px;"></div>
         <div style="margin-left:auto;display:flex;gap:8px;">
-          <button onclick="nomSave('brouillon')" style="padding:8px 18px;border:1.5px solid #e2e8f0;border-radius:8px;background:white;cursor:pointer;font-size:.8rem;font-weight:700;color:#374151;display:flex;align-items:center;gap:6px;">
-            <i class="fas fa-save" style="color:#6b7280;"></i>Enregistrer brouillon
+          <button onclick="nomSave('en_cours')" title="Enregistre la progression sans quitter la nomenclature — elle reste dans « à faire »" style="padding:8px 18px;border-radius:8px;background:#dbeafe;border:none;cursor:pointer;font-size:.8rem;font-weight:700;color:#1d4ed8;display:flex;align-items:center;gap:6px;">
+            <i class="fas fa-save"></i>Enregistrer
           </button>
-          <button onclick="nomSave('en_cours')" style="padding:8px 18px;border-radius:8px;background:#dbeafe;border:none;cursor:pointer;font-size:.8rem;font-weight:700;color:#1d4ed8;display:flex;align-items:center;gap:6px;">
-            <i class="fas fa-paper-plane"></i>Enregistrer & continuer
-          </button>
-          <button onclick="nomSave('valide')" style="padding:8px 20px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:white;border:none;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:700;display:flex;align-items:center;gap:6px;">
-            <i class="fas fa-check-circle"></i>Valider la nomenclature
+          <button onclick="nomSave('valide')" title="Enregistre ET valide : la nomenclature passe dans la liste des nomenclatures faites" style="padding:8px 20px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:white;border:none;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:700;display:flex;align-items:center;gap:6px;">
+            <i class="fas fa-check-circle"></i>Enregistrer et valider
           </button>
         </div>
       </div>
@@ -810,14 +807,11 @@ export const pageServiceBE = (
           <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);padding:20px;">
             <div style="font-size:.72rem;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;"><i class="fas fa-shield-alt" style="color:#8b5cf6;margin-right:6px;"></i>Validation</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button onclick="nomSave('brouillon')" style="flex:1;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;background:white;cursor:pointer;font-size:.78rem;font-weight:700;color:#6b7280;">
-                <i class="fas fa-save" style="display:block;font-size:1.2rem;margin-bottom:4px;"></i>Brouillon
+              <button onclick="nomSave('en_cours')" title="Enregistre la progression sans quitter la nomenclature" style="flex:1;padding:10px;border:1.5px solid #bfdbfe;border-radius:8px;background:#eff6ff;cursor:pointer;font-size:.78rem;font-weight:700;color:#1d4ed8;">
+                <i class="fas fa-save" style="display:block;font-size:1.2rem;margin-bottom:4px;"></i>Enregistrer
               </button>
-              <button onclick="nomSave('en_cours')" style="flex:1;padding:10px;border:1.5px solid #bfdbfe;border-radius:8px;background:#eff6ff;cursor:pointer;font-size:.78rem;font-weight:700;color:#1d4ed8;">
-                <i class="fas fa-edit" style="display:block;font-size:1.2rem;margin-bottom:4px;"></i>En cours
-              </button>
-              <button onclick="nomSave('valide')" style="flex:1;padding:10px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);border:none;border-radius:8px;cursor:pointer;font-size:.78rem;font-weight:700;color:white;">
-                <i class="fas fa-check-circle" style="display:block;font-size:1.2rem;margin-bottom:4px;"></i>Valider
+              <button onclick="nomSave('valide')" title="Fait passer la nomenclature dans la liste des nomenclatures faites" style="flex:1;padding:10px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);border:none;border-radius:8px;cursor:pointer;font-size:.78rem;font-weight:700;color:white;">
+                <i class="fas fa-check-circle" style="display:block;font-size:1.2rem;margin-bottom:4px;"></i>Enregistrer et valider
               </button>
             </div>
             <div id="nom-f-id" style="display:none;"></div>
@@ -2127,6 +2121,9 @@ export const pageServiceBE = (
       fournisseur_st_nom: '',
       forfait_st_ht: 0,
       prix_unitaire_st_ht: 0,
+      est_oas: false,
+      prix_oas_unitaire: 0,
+      forfait_oas_ht: 0,
       cout_st_unitaire: 0
     });
     nomRenderEtapes();
@@ -2210,7 +2207,31 @@ export const pageServiceBE = (
     nomEtapes[idx].machine_taux_h = m ? (Number(m.cout_h != null ? m.cout_h : m.taux_horaire) || 0) : 0;   // taux horaire machine du process = coût machine du CRU
     // Process manuel (sans machine) → pas de temps machine
     if (!m) nomEtapes[idx].temps_machine_min = 0;
+    // OAS : le traitement de surface se chiffre au PRIX, pas au temps. On bascule l'étape et on
+    // remet les temps à zéro pour qu'aucun coût horaire résiduel ne vienne s'ajouter au prix.
+    var oas = nomEstProcessOAS(p);
+    nomEtapes[idx].est_oas = oas;
+    if (oas) {
+      nomEtapes[idx].temps_reglage_min = 0;
+      nomEtapes[idx].temps_reglage_machine_min = 0;
+      nomEtapes[idx].temps_mo_min = 0;
+      nomEtapes[idx].temps_machine_min = 0;
+      nomEtapes[idx].machine_taux_h = 0;
+    }
     nomRenderEtapes();
+  }
+
+  // Détection OAS, calquée sur celle du planning de production (isOasProc) : drapeau explicite,
+  // activité OAS, poste nommé OAS, ou intitulé de process évoquant un traitement de surface.
+  function nomEstProcessOAS(p) {
+    if (!p) return false;
+    if (p.est_oas === true || p.activite === 'OAS') return true;
+    var po = (BE_REFS_JS.postes || []).find(function(x){ return String(x.id) === String(p.poste_id); });
+    if (po) {
+      var pn = String(po.nom || '').trim();
+      if (po.activite === 'OAS' || pn.toUpperCase() === 'OAS' || /oxyd|anodis|traitement.*surf|surtec/i.test(pn)) return true;
+    }
+    return /oxyd|anodis|surtec|d[ée]sox|chromat|passiv/i.test(String(p.nom || ''));
   }
 
   // Sous-traité (ORDRE : ST d'abord) : choix du SOUS-TRAITANT → réinitialise l'opération
@@ -2258,6 +2279,8 @@ export const pageServiceBE = (
     if (e.type === 'sous_traite') {
       return (e.prix_unitaire_st_ht != null ? e.prix_unitaire_st_ht : (e.cout_st_unitaire || 0)) || 0;
     }
+    // OAS : prix direct, aucun temps ne doit être valorisé (cf. etapeDecomp dans shared.ts).
+    if (e.est_oas === true) return Number(e.prix_oas_unitaire) || 0;
     return nomEtapeCoutMO(e) + nomEtapeCoutMachine(e);
   }
 
@@ -2355,12 +2378,20 @@ export const pageServiceBE = (
           + '<div style="font-size:.6rem;color:#9333ea;font-weight:700;" title="Machine = taux machine x temps machine / 60">Mach '+macE.toFixed(2)+' €</div>'
           + '<div style="font-size:.74rem;color:#374151;font-weight:800;border-top:1px solid #eef2f7;margin-top:1px;padding-top:1px;">'+cout+' €</div>'
           + '</div>';
+      } else if (e.est_oas === true) {
+        // OAS : saisie directe du prix. Le forfait éventuel est un plancher de facturation
+        // (coût du bain), exactement comme en sous-traitance : coût = max(forfait ; qté × prix).
+        var oasHint = e.forfait_oas_ht ? ('<div style="font-size:.56rem;color:#b45309;text-align:right;margin-top:1px;">forfait '+Number(e.forfait_oas_ht).toFixed(0)+' €</div>') : '';
+        coutCol = '<div><input class="nom-f-inp" type="number" step="0.01" placeholder="€/pc" title="Traitement de surface : prix par pièce (aucun temps n est saisi)" value="'+(e.prix_oas_unitaire||0)+'" oninput="nomEtapes['+i+'].prix_oas_unitaire=parseFloat(this.value)||0;nomCalcTotaux()" onchange="nomRenderEtapes()" style="text-align:right;border-color:#c7d2fe;"/>'
+          + '<div style="font-size:.54rem;color:#4338ca;text-align:right;margin-top:1px;font-weight:700;">OAS · prix</div>' + oasHint + '</div>';
       } else {
         var forfaitHint = e.forfait_st_ht ? ('<div style="font-size:.56rem;color:#b45309;text-align:right;margin-top:1px;">forfait '+e.forfait_st_ht.toFixed(0)+' €</div>') : '';
         coutCol = '<div><input class="nom-f-inp" type="number" step="0.01" placeholder="€/pc" value="'+(e.prix_unitaire_st_ht||0)+'" oninput="nomEtapes['+i+'].prix_unitaire_st_ht=parseFloat(this.value)||0;nomEtapes['+i+'].cout_st_unitaire=nomEtapes['+i+'].prix_unitaire_st_ht;nomCalcTotaux()" style="text-align:right;"/>'+forfaitHint+'</div>';
       }
       // Champs temps : réglage + MO + machine. Grisés en sous-traitance ; le temps machine est aussi grisé pour un process manuel (sans machine).
-      var greyTime = (e.type === 'sous_traite');
+      var estOas = (e.est_oas === true);
+      // OAS : tous les temps sont grisés — le traitement se chiffre au prix du bain, pas à l'heure.
+      var greyTime = (e.type === 'sous_traite') || estOas;
       var noMachine = (e.type === 'interne' && !e.machine_id && e.ressource !== 'machine');
       var greyStyle = 'text-align:right;background:#eef2f7;color:#cbd5e1;cursor:not-allowed;';
       // oninput : met à jour le modèle + les totaux SANS re-render (sinon la saisie multi-chiffres bug — ex. « 10 »).
@@ -2371,10 +2402,11 @@ export const pageServiceBE = (
       var greyInput = function(titleTxt){ return '<input class="nom-f-inp" type="number" placeholder="—" disabled title="'+titleTxt+'" style="'+greyStyle+'"/>'; };
       // ROP = reglage operateur (au taux MO) · RGM = reglage machine (au taux machine).
       // Les deux sont des couts FIXES par lot, jamais multiplies par la quantite.
-      var regInput = greyTime ? greyInput('Non applicable en sous-traitance') : mkTime('temps_reglage_min', e.temps_reglage_min);
-      var regMacInput = (greyTime || noMachine) ? greyInput(greyTime ? 'Non applicable en sous-traitance' : 'Process manuel — pas de machine a regler') : mkTime('temps_reglage_machine_min', e.temps_reglage_machine_min);
-      var moInput  = greyTime ? greyInput('Non applicable en sous-traitance') : mkTime('temps_mo_min', e.temps_mo_min);
-      var macInput = (greyTime || noMachine) ? greyInput(greyTime ? 'Non applicable en sous-traitance' : 'Process manuel — pas de machine') : mkTime('temps_machine_min', e.temps_machine_min);
+      var motifGris = estOas ? 'Traitement OAS : on saisit un prix, pas un temps' : 'Non applicable en sous-traitance';
+      var regInput = greyTime ? greyInput(motifGris) : mkTime('temps_reglage_min', e.temps_reglage_min);
+      var regMacInput = (greyTime || noMachine) ? greyInput(greyTime ? motifGris : 'Process manuel — pas de machine a regler') : mkTime('temps_reglage_machine_min', e.temps_reglage_machine_min);
+      var moInput  = greyTime ? greyInput(motifGris) : mkTime('temps_mo_min', e.temps_mo_min);
+      var macInput = (greyTime || noMachine) ? greyInput(greyTime ? motifGris : 'Process manuel — pas de machine') : mkTime('temps_machine_min', e.temps_machine_min);
       return '<div ondragover="nomEtapeDragOver(event)" ondrop="nomEtapeDrop(event,'+i+')" style="display:grid;grid-template-columns:34px 84px 1fr 1.2fr 58px 58px 58px 62px 88px 26px;gap:4px;margin-bottom:4px;align-items:start;">'
         + '<div draggable="true" ondragstart="nomEtapeDragStart(event,'+i+')" ondragend="nomEtapeDragEnd(event)" title="Glisser pour réordonner les procédés" style="text-align:center;cursor:grab;font-size:.74rem;font-weight:800;color:#94a3b8;font-family:monospace;padding-top:6px;user-select:none;"><i class="fas fa-grip-vertical" style="color:#cbd5e1;font-size:.66rem;"></i> '+(e.ordre || (i+1))+'</div>'
         + typeCol
@@ -2548,20 +2580,31 @@ export const pageServiceBE = (
       });
       var data = await res.json();
       if (data.ok) {
-        var labels = {brouillon:'Brouillon enregistre', en_cours:'En cours enregistre', valide:'Nomenclature validee'};
         var num = data.num_nom || (data.data && data.data.num_nom) || '';
+        // ⚠ POINT CRITIQUE : on récupère l'identifiant renvoyé par le serveur. Sans lui, le
+        // deuxième « Enregistrer » repartait en POST et créait un DOUBLON (le serveur n'écrase
+        // que les brouillons de même réf+indice, pas les « en cours »). C'est ce qui donnait
+        // l'impression que le bouton ne fonctionnait pas.
+        if (data.id) nomCurrentId = data.id;
+        if (data.indice) nomCurrentIndice = data.indice;
+        nomCurrentStatut = statut;
+        if (statut === 'valide') {
+          pushNotif('ok','fa-check-circle', (num ? num+' — ' : '') + 'Nomenclature validée — elle rejoint la liste des nomenclatures faites.', 4500);
+          setTimeout(function(){ window.location.replace('/be/service?' + Date.now() + '#noms'); }, 900);
+          return;
+        }
+        // Enregistrement simple : on RESTE dans la nomenclature, la progression est sauvegardée
+        // et la nomenclature demeure dans « à faire ».
         if (nouvelIndice && data.indice) pushNotif('ok','fa-code-branch', (num ? num+' — ' : '') + 'Nouvel indice '+data.indice+' créé (révision conservée).', 4500);
-        else pushNotif('ok','fa-check-circle', (num ? num+' — ' : '') + (labels[statut]||statut));
-        // window.location.href vers meme URL = juste changement hash = pas de reload SSR
-        // On utilise replace() avec timestamp pour forcer un vrai rechargement
-        setTimeout(function(){
-          window.location.replace('/be/service?' + Date.now() + '#noms');
-        }, 1000);
+        else pushNotif('ok','fa-save', (num ? num+' — ' : '') + 'Progression enregistrée. Vous restez sur la nomenclature.', 3500);
+        var _b = document.getElementById('nom-form-statut-badge');
+        if (_b) _b.innerHTML = '<span style="background:#dbeafe;color:#1d4ed8;border-radius:999px;padding:2px 10px;font-size:.68rem;font-weight:800;">Enregistrée · à valider</span>';
+        if (typeof gedRefreshUi === 'function') gedRefreshUi();   // les pièces jointes deviennent possibles dès qu'un id existe
       } else {
-        alert('Erreur sauvegarde: ' + (data.error || 'inconnu'));
+        pushNotif('err','fa-ban', data.error || 'Enregistrement refusé.', 8000);
       }
     } catch(e) {
-      alert('Erreur reseau: ' + e.message);
+      pushNotif('err','fa-exclamation-circle','Erreur réseau : ' + e.message, 6000);
     }
   }
 

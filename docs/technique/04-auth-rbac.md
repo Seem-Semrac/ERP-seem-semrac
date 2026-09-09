@@ -75,7 +75,17 @@ La fiche salarié (**RH › Employés**) porte un tableau des **15 services**, c
 
 ⚠ **Rôle Direction** : le jeton `all` court-circuite tout, en tête de `canAccess()`. Les cases sont bien enregistrées mais restent **sans effet** tant que le rôle principal est Direction — la fiche affiche désormais un avertissement quand ce rôle est choisi.
 
-⚠ **Prise d'effet différée** : `perms` est figé dans le cookie de session au moment de la **connexion** (`index.tsx`, construction du JWT). Un changement de droits ne s'applique donc qu'à la **prochaine connexion** de la personne concernée — jusqu'à 12 h. Vrai dans les deux sens : un accès retiré reste utilisable jusque-là. Corriger cela suppose une version de droits vérifiée à chaque requête ; ce n'est pas fait.
+✅ **Prise d'effet IMMÉDIATE (depuis le 09/09/2026).** Le jeton ne prouve plus que l'**identité** ; les **droits** sont relus dans `salaries` à chaque requête par `droitsAJour()` (`src/index.tsx`), avec un cache mémoire d'isolate de **8 s** (`PERMS_TTL_MS`) et une invalidation immédiate après le PATCH ou le DELETE de la fiche salarié. Un changement s'applique donc en quelques secondes, sans reconnexion, dans les deux sens. Désactiver un compte (`actif=false`) ou supprimer un salarié **éjecte la session** au lieu de la laisser vivre 12 h.
+
+Trois points de conception à ne pas défaire :
+
+1. **Le cache porte la TABLE entière, pas une ligne par personne.** La latence domine (~30-80 ms depuis un Worker) : lire 36 lignes en projection légère coûte le même aller-retour qu'une seule ligne en `select('*')`. Coût = **une requête par isolate et par TTL**, quel que soit le nombre de connectés — et les hash de PIN cessent de transiter.
+2. **⚠ RÈGLE DE SÛRETÉ — `null` veut dire « la requête a ÉCHOUÉ », jamais « salarié absent ».** `getDroitsSalaries()` (`src/queries.ts`) renvoie `null` uniquement sur erreur. C'est vital : **supabase-js ne lève jamais d'exception**, il renvoie `{data:null, error}`. Confondre les deux ferait basculer *tous* les utilisateurs sur la branche « compte fermé » au moindre hoquet réseau — cookie supprimé, atelier entier renvoyé au login, et impossible de se reconnecter puisque `/api/login` lit aussi `salaries`. En cas d'échec on **garde les droits du jeton**. Vérifié par un test qui pointe l'application sur une base injoignable.
+3. **Le cache est opportuniste** : les isolates Cloudflare sont éphémères et multiples, il peut être vide à tout instant — le code reste correct sans lui.
+
+⚠ **Le compte BOOTSTRAP échappe à ce mécanisme** (aucune ligne `salaries`) : ses droits restent figés dans le cookie 12 h. Raison de plus pour poser `BOOTSTRAP_MATRICULE`/`BOOTSTRAP_PIN` en production.
+
+⚠ **« Décocher toutes les cases » ne ferme pas l'accès** : sans aucun jeton `lire:`/`ecrire:`, la matrice des rôles reprend la main — c'est la règle écrite dans la fiche (« tout laisser vide = les droits du rôle »). Pour fermer réellement : décocher **partiellement** (garder au moins une case), changer le rôle, ou désactiver le compte.
 
 `ecrire:<svc>` implique `lire:<svc>` : inutile de cocher le service des deux côtés.
 

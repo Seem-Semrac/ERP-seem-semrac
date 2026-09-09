@@ -544,7 +544,35 @@ function ff_fld(label: string, type: string, id: string, opts: string): string {
   return `<div>${lab}<input id="${id}" type="${type}" placeholder="${opts || ''}"${onin} style="${base}"/></div>`
 }
 
-function buildARegler(ff: FactureFournisseur[], fc: FactureClient[], PJ: Record<string, { id: string; nom: string }> = {}): string {
+// ─── PROFORMA : circuit « payer d'abord, facture à la réception » ─────────────
+// Aucune colonne dédiée : l'état se DÉDUIT de trois faits déjà en base —
+//   1. la facture proforma existe sous l'identifiant déterministe `FF-<bcId>` ;
+//   2. le bon de commande porte `attente_paiement` tant qu'elle n'est pas réglée ;
+//   3. la facture définitive est une pièce jointe GED sous la référence `BC:<bcId>`.
+// La facture n'arrive qu'à la réception : c'est pourquoi une commande reçue sans pièce
+// jointe est signalée « facture à joindre ».
+type EtatProforma = 'a_payer' | 'payee_attente' | 'a_facturer' | 'complete'
+function proformaLignes(ff: FactureFournisseur[], bcs: any[], PJ: Record<string, { id: string; nom: string }>) {
+  const bcById: Record<string, any> = {}
+  for (const b of (bcs || [])) bcById[String((b as any).id)] = b
+  const recu = (s: any) => ['recu', 'recu_total', 'recu_partiel', 'controle', 'cloture'].includes(String(s || ''))
+  return (ff || [])
+    .filter((f: any) => String(f.id || '').startsWith('FF-') && /proforma/i.test(String(f.notes || '')))
+    .map((f: any) => {
+      const bcId = String(f.id).slice(3)
+      const bc = bcById[bcId]
+      const payee = String(f.statut) === 'payee' || !!f.date_paiement
+      const pj = PJ[String(f.id)] || null
+      let etat: EtatProforma = 'a_payer'
+      if (payee && pj) etat = 'complete'
+      else if (payee && bc && recu(bc.statut)) etat = 'a_facturer'
+      else if (payee) etat = 'payee_attente'
+      return { f, bc, bcId, etat, pj, payee }
+    })
+    .sort((a, b) => String(a.f.date_facture || '').localeCompare(String(b.f.date_facture || '')))
+}
+
+function buildARegler(ff: FactureFournisseur[], fc: FactureClient[], PJ: Record<string, { id: string; nom: string }> = {}, bcs: any[] = []): string {
   const fournisseurs = ff.filter(f => f.type === 'fournisseur')
   const sousTraitants = ff.filter(f => f.type === 'sous_traitant')
   const historique = [
@@ -559,6 +587,44 @@ function buildARegler(ff: FactureFournisseur[], fc: FactureClient[], PJ: Record<
   const edfTotal = edf.reduce((s,f)=>s+f.montant_ttc,0)
   const edfPaye = edf.filter(f=>f.statut==='payee').reduce((s,f)=>s+f.montant_ttc,0)
   const edfReste = edfTotal - edfPaye
+
+  const PROF = proformaLignes(ff, bcs, PJ)
+  const profSection = (titre: string, icone: string, coul: string, etat: EtatProforma, aide: string) => {
+    const l = PROF.filter(x => x.etat === etat)
+    const total = l.reduce((s, x) => s + (Number(x.f.montant_ttc) || 0), 0)
+    const lignes = l.map(x => `
+      <tr style="border-bottom:1px solid #f8fafc;">
+        <td style="padding:9px 12px;font-weight:700;color:#374151;font-size:.78rem;">${escX(x.f.num_facture || x.f.id)}
+          <div style="font-family:monospace;font-size:.64rem;color:#94a3b8;">${escX(x.bcId)}</div></td>
+        <td style="padding:9px 12px;font-size:.78rem;">${escX(x.f.fournisseur_nom || '—')}
+          <div style="font-size:.62rem;color:${x.f.type === 'sous_traitant' ? '#7c3aed' : '#0369a1'};font-weight:700;">${x.f.type === 'sous_traitant' ? 'Sous-traitant' : 'Fournisseur'}</div></td>
+        <td style="padding:9px 12px;font-size:.75rem;color:#64748b;">${escX(String(x.f.date_facture || '—').slice(0, 10))}</td>
+        <td style="padding:9px 12px;font-size:.75rem;color:#64748b;">${escX(x.bc ? String((x.bc as any).articles || '—').slice(0, 46) : '—')}</td>
+        <td style="padding:9px 12px;text-align:right;font-weight:800;color:#111827;">${fmt(Number(x.f.montant_ttc) || 0)}</td>
+        <td style="padding:9px 12px;text-align:center;font-size:.72rem;color:#64748b;">${x.bc ? escX(String((x.bc as any).statut || '—')) : '<span style="color:#cbd5e1;">BC introuvable</span>'}</td>
+        <td style="padding:9px 12px;text-align:center;">${
+          etat === 'a_facturer'
+            ? `<label style="display:inline-flex;align-items:center;gap:5px;padding:4px 11px;background:#fef3c7;color:#92400e;border-radius:7px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-paperclip"></i>Joindre la facture<input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" style="display:none;" onchange="cptProfJoindre('${escX(x.bcId)}',this)"/></label>`
+            : (x.pj ? `<a href="/api/ged/file/${escX(x.pj.id)}" target="_blank" style="color:#15803d;font-size:.72rem;font-weight:700;text-decoration:none;"><i class="fas fa-file-invoice" style="margin-right:4px;"></i>Facture</a>`
+                    : '<span style="color:#cbd5e1;font-size:.72rem;">—</span>')
+        }</td>
+      </tr>`).join('')
+    return `
+    <div class="card" style="overflow:hidden;margin-bottom:16px;border-top:3px solid ${coul};">
+      <div style="padding:11px 16px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-weight:800;color:#111827;font-size:.86rem;"><i class="fas ${icone}" style="color:${coul};margin-right:7px;"></i>${titre}</span>
+        <span style="background:${coul}1a;color:${coul};border-radius:999px;padding:1px 9px;font-size:.68rem;font-weight:800;">${l.length}</span>
+        <span style="font-size:.7rem;color:#94a3b8;">${aide}</span>
+        ${l.length ? `<span style="margin-left:auto;font-weight:900;color:${coul};">${fmt(total)}</span>` : ''}
+      </div>
+      ${l.length ? `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="background:#fafafa;">
+          <th ${TH}>Facture / BC</th><th ${TH}>Fournisseur</th><th ${TH}>Date</th><th ${TH}>Articles</th>
+          <th ${TH} style="text-align:right;">TTC</th><th ${TH} style="text-align:center;">Statut BC</th><th ${TH} style="text-align:center;">Facture définitive</th>
+        </tr></thead><tbody>${lignes}</tbody></table></div>`
+        : '<div style="padding:20px;text-align:center;color:#9ca3af;font-size:.8rem;">Aucune.</div>'}
+    </div>`
+  }
 
   const fournTable = (list: FactureFournisseur[]) => `
     <table style="width:100%;border-collapse:collapse;">
@@ -636,6 +702,7 @@ function buildARegler(ff: FactureFournisseur[], fc: FactureClient[], PJ: Record<
     <button class="cpt-sub-rg" onclick="cptSwitchSub('rg',1)" style="padding:8px 20px;font-size:.78rem;font-weight:700;border:none;background:none;cursor:pointer;color:#6b7280;border-bottom:2px solid transparent;margin-bottom:-2px;">Sous-traitants</button>
     <button class="cpt-sub-rg" onclick="cptSwitchSub('rg',2)" style="padding:8px 20px;font-size:.78rem;font-weight:700;border:none;background:none;cursor:pointer;color:#6b7280;border-bottom:2px solid transparent;margin-bottom:-2px;">Historique règlements</button>
     <button class="cpt-sub-rg" onclick="cptSwitchSub('rg',3)" style="padding:8px 20px;font-size:.78rem;font-weight:700;border:none;background:none;cursor:pointer;color:#6b7280;border-bottom:2px solid transparent;margin-bottom:-2px;"><i class="fas fa-bolt mr-1" style="color:#f59e0b;"></i>Énergie / EDF</button>
+    <button class="cpt-sub-rg" onclick="cptSwitchSub('rg',4)" style="padding:8px 20px;font-size:.78rem;font-weight:700;border:none;background:none;cursor:pointer;color:#6b7280;border-bottom:2px solid transparent;margin-bottom:-2px;"><i class="fas fa-file-invoice-dollar mr-1" style="color:#7c3aed;"></i>Proforma${PROF.length ? ` <span style="background:#ede9fe;color:#6d28d9;border-radius:999px;padding:0 8px;font-size:.66rem;font-weight:800;">${PROF.length}</span>` : ''}</button>
   </div>
 
   <!-- FOURNISSEURS -->
@@ -738,6 +805,30 @@ function buildARegler(ff: FactureFournisseur[], fc: FactureClient[], PJ: Record<
       ${edf.length ? fournTable(edf) : '<div style="padding:28px;text-align:center;color:#94a3b8;font-size:.85rem;"><i class="fas fa-bolt" style="display:block;font-size:1.6rem;margin-bottom:6px;color:#fde68a;"></i>Aucune facture EDF. Cliquez « Nouvelle échéance EDF » pour saisir les mensualités et la régularisation.</div>'}
     </div>
     <script>function cptOpenEdfModal(){ if(typeof cptOpenFournModal==='function')cptOpenFournModal(); var n=document.getElementById('ff_nom'); if(n)n.value='EDF'; var c=document.getElementById('ff_compte'); if(c)c.value='606300 – Énergie'; var t=document.getElementById('ff_type'); if(t)t.value='fournisseur'; var num=document.getElementById('ff_num'); if(num&&!num.value)num.value='EDF-'+(new Date().getFullYear()); }<\/script>
+  </div>
+
+  <!-- PROFORMA (fournisseurs & sous-traitants) -->
+  <div class="cpt-sub-panel-rg" style="display:none;">
+    <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:11px 16px;margin-bottom:16px;font-size:.8rem;color:#5b21b6;">
+      <i class="fas fa-circle-info" style="margin-right:7px;"></i><strong>Commandes payées d'avance.</strong>
+      Le fournisseur exige le règlement avant d'expédier : la proforma se paie d'abord, le bon de commande reste bloqué jusque-là,
+      et la <strong>facture définitive n'arrive qu'à la réception</strong> — c'est à ce moment qu'on la joint ici.
+    </div>
+    ${profSection('1. À payer', 'fa-hourglass-half', '#dc2626', 'a_payer', 'Le bon de commande est bloqué tant que ce règlement n\'est pas fait.')}
+    ${profSection('2. Payées — livraison attendue', 'fa-truck-fast', '#0ea5e9', 'payee_attente', 'Réglées : le bon de commande est libéré et part chez le fournisseur.')}
+    ${profSection('3. Reçues — facture à joindre', 'fa-paperclip', '#d97706', 'a_facturer', 'La marchandise est arrivée : la facture définitive doit maintenant être versée au dossier.')}
+    ${profSection('4. Complètes', 'fa-circle-check', '#16a34a', 'complete', 'Payées, reçues, facture au dossier — rien à faire.')}
+    <script>
+    function cptProfJoindre(bcId, input){
+      var f = input.files && input.files[0]; if(!f) return;
+      var fd = new FormData(); fd.append('file', f); fd.append('ref', 'BC:'+bcId); fd.append('categorie','facture_fournisseur');
+      fetch('/api/ged/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Le document n a pas pu etre joint.',7000); return; }
+        pushNotif('ok','fa-paperclip','Facture jointe au bon de commande '+bcId+'.',4500);
+        setTimeout(function(){ softReload(); }, 800);
+      }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
+    }
+    <\/script>
   </div>`
 }
 
@@ -1046,7 +1137,7 @@ function buildBalance(ec: EcritureComptable[], fc: any[] = [], ff: any[] = []): 
 
 // ─── MAIN EXPORT ──────────────────────────────────────────────
 // ─── TAB FACTURATION : regroupe Factures clients + Factures fournisseurs/ST ───
-function buildFacturation(fc: FactureClient[], ff: FactureFournisseur[], PJ: Record<string, { id: string; nom: string }> = {}): string {
+function buildFacturation(fc: FactureClient[], ff: FactureFournisseur[], PJ: Record<string, { id: string; nom: string }> = {}, bcs: any[] = []): string {
   const aRegler = ff.filter(f => ['a_payer', 'validee', 'a_valider'].includes(f.statut)).length
   return `
   <div style="display:flex;gap:4px;margin-bottom:18px;border-bottom:2px solid #e5e7eb;">
@@ -1058,7 +1149,7 @@ function buildFacturation(fc: FactureClient[], ff: FactureFournisseur[], PJ: Rec
     </button>
   </div>
   <div class="cpt-fact-section">${buildFacturesClients(fc)}</div>
-  <div class="cpt-fact-section" style="display:none;">${buildARegler(ff, fc, PJ)}</div>`
+  <div class="cpt-fact-section" style="display:none;">${buildARegler(ff, fc, PJ, bcs)}</div>`
 }
 
 export function pageServiceCompta(
@@ -1067,11 +1158,13 @@ export function pageServiceCompta(
   dbEcritures?: EcritureComptable[],
   dbValidations?: any[],
   dbPiecesJointes?: Record<string, { id: string; nom: string }>,
+  dbBcs?: any[],
 ): string {
   CPT_VD_MAP = buildValDirMap(dbValidations || [])   // décisions Direction (rebouclage badge) — posé avant les builders (rendu synchrone)
   const isDemo = false
   const fc = dbFactCli ?? []
   const ff = dbFactFourn ?? []
+  const bcs = dbBcs ?? []
   const ec = dbEcritures ?? []
   // Pieces jointes des factures fournisseurs, indexees par identifiant de facture.
   const PJ: Record<string, { id: string; nom: string }> = dbPiecesJointes ?? {}
@@ -1104,7 +1197,7 @@ export function pageServiceCompta(
   })
 
   const panels = [
-    buildFacturation(fc, ff, PJ),
+    buildFacturation(fc, ff, PJ, bcs),
     buildGrandLivre(ec),
     buildTVA(ec),
     buildBalance(ec, fc, ff),

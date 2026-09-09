@@ -76,7 +76,7 @@ import {
   createMachine, updateMachine, deleteMachine, getPresences, upsertPresence, getLot, updateLot, lotHasLibCols, updateStockArticle, createArticleStock,
   createMouvementStock, createFactureClient, updateFactureClient, genEcritureVente, genEcritureAchat, genEcritureReglement,
   getOperateursSalaries,
-  getSalaries, getSalarie, createSalarie, updateSalarie, deleteSalarie, getMachinesOpex, upsertMachineOpexAchat, claimBcOpexGreffe,
+  getSalaries, getSalarie, getDroitsSalaries, createSalarie, updateSalarie, deleteSalarie, getMachinesOpex, upsertMachineOpexAchat, claimBcOpexGreffe,
   getControlesCotes, createControleCote, deleteControleCote,
   getRefPrixHistorique, getRefPrixHistoriqueAll, createRefPrixHistorique,
   getProduitsFournisseursAll, getProduitsFournisseur, upsertProduitFournisseur, updateProduitFournisseur, deleteProduitFournisseur, getProduitsSansPrix,
@@ -140,6 +140,46 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 const app = new Hono()
 app.use('/static/*', serveStatic({ root: './' } as any))
 
+// ─── DROITS VIVANTS ────────────────────────────────────────────
+// Avant le 09/09/2026, `perms` était figé dans le cookie AU MOMENT DU LOGIN : un changement
+// de droits fait en RH n'avait d'effet qu'à la prochaine connexion de la personne — jusqu'à
+// 12 h plus tard, dans les deux sens (un accès retiré restait utilisable).
+//
+// Désormais le jeton ne prouve plus que l'IDENTITÉ ; les DROITS sont relus dans `salaries`.
+// Pour que ce ne soit pas une requête par requête, le résultat est mémorisé très brièvement
+// dans l'isolate. Conséquence : un changement s'applique en quelques secondes, partout.
+//
+// ⚠ Le cache est OPPORTUNISTE : les isolates Cloudflare sont éphémères et multiples, il peut
+// être vide à tout instant — le code doit donc rester correct sans lui, et c'est le cas.
+const PERMS_TTL_MS = 8000
+// Une SEULE entrée : la table des droits entière. Lire 36 lignes en projection légère coûte
+// exactement le même aller-retour qu'une seule ligne — la latence domine. Le coût est donc
+// d'une requête par isolate et par TTL, quel que soit le nombre de personnes connectées.
+let _droitsCache: { t: number; table: Record<string, { roles: string[]; perms: string[]; actif: boolean }> } | null = null
+/** À appeler dès qu'on modifie les droits d'une personne : l'effet est alors immédiat sur cet isolate. */
+export function invaliderDroits(_salarieId?: string) { _droitsCache = null }
+async function droitsAJour(user: any): Promise<any> {
+  const sub = String(user?.sub || '')
+  if (!sub || sub === 'BOOTSTRAP') return user            // compte de secours : aucune ligne salariés
+  const now = Date.now()
+  let table = (_droitsCache && (now - _droitsCache.t) < PERMS_TTL_MS) ? _droitsCache.table : null
+  if (!table) {
+    const frais = await getDroitsSalaries().catch(() => null)
+    // ⚠ RÈGLE DE SÛRETÉ : `null` = la REQUÊTE a échoué (réseau, 5xx, projet Supabase en pause).
+    //   Dans ce cas on garde les droits du jeton et on ne conclut RIEN. Confondre cet échec
+    //   avec « salarié supprimé » déconnecterait TOUT L'ATELIER sur un simple hoquet réseau.
+    if (!frais) return user
+    _droitsCache = { t: now, table: frais }
+    table = frais
+  }
+  const d = table[sub]
+  // La requête a réussi et la personne n'y figure plus : le salarié a réellement été supprimé.
+  if (!d) return { ...user, perms: [], roles: [], _compteFerme: true }
+  if (!d.actif) return { ...user, perms: [], roles: [], _compteFerme: true }
+  const perms = d.perms.length ? d.perms : autorisationsUnion(d.roles)
+  return { ...user, roles: d.roles, perms }
+}
+
 // ─── AUTH : middleware de session + contrôle d'accès (RBAC) ────
 // Drapeau AUTH_ENFORCE (env) : 'on' = mur actif ; sinon identifie sans bloquer
 // (déploiement progressif sans verrouiller personne dehors).
@@ -148,13 +188,22 @@ app.use('*', async (c, next) => {
   if (isPublicPath(path)) return next()
   const env = c.env as any
   const token = getCookie(c, 'erp_session')
-  const user = token ? await verifySession(token, env) : null
+  const brut = token ? await verifySession(token, env) : null
+  // Le jeton prouve QUI est la personne ; ses DROITS sont relus en base (voir droitsAJour).
+  const user = brut ? await droitsAJour(brut) : null
   if (user) (c as any).set('user', user)
   // Sécurité par défaut : authentification ACTIVE sauf opt-out explicite (AUTH_ENFORCE=off).
   const enforce = String(env?.AUTH_ENFORCE ?? 'on').toLowerCase() !== 'off'
   if (!enforce) return next()
   if (!user) {
     if (path.startsWith('/api/')) return c.json({ ok: false, error: 'Non authentifié' }, 401)
+    return c.redirect('/login?next=' + encodeURIComponent(path))
+  }
+  // Compte désactivé ou salarié supprimé depuis la connexion : la session ne vaut plus rien,
+  // sans attendre l'expiration du cookie (12 h).
+  if ((user as any)._compteFerme) {
+    deleteCookie(c, 'erp_session', { path: '/' })
+    if (path.startsWith('/api/')) return c.json({ ok: false, error: 'Compte désactivé' }, 401)
     return c.redirect('/login?next=' + encodeURIComponent(path))
   }
   if (!canAccess(user, path, c.req.method)) {
@@ -209,7 +258,13 @@ app.post('/api/login', async (c) => {
   return c.json({ ok: true, user: { nom: user.nom, role: user.role } })
 })
 app.get('/logout', (c) => { deleteCookie(c, 'erp_session', { path: '/' }); return c.redirect('/login') })
-app.get('/api/me', (c) => { const u = (c as any).get('user'); return c.json({ ok: !!u, user: u || null, nav: navServices(u || null) }) })
+app.get('/api/me', (c) => {
+  const u = (c as any).get('user')
+  // Jamais de cache : c'est cette réponse qui pilote l'affichage du menu, elle doit refléter
+  // les droits du moment (ils changent désormais sans reconnexion).
+  c.header('Cache-Control', 'no-store')
+  return c.json({ ok: !!u, user: u || null, nav: navServices(u || null) })
+})
 
 // ─── MANUELS D'UTILISATION (lecture filtrée par rôle) ─────────
 // Le contenu est embarqué dans le worker (src/manuels.tsx) : il passe donc par le
@@ -2205,9 +2260,12 @@ app.post('/api/achats/da/:id/soumettre', async (c) => {
     cmd_ref: (da as any).cmd_ref || null,
     montant_ht: montant,
     devise: 'EUR',
-    qte_commandee: (_srcFusion.length
+    // La quantité SAISIE dans le formulaire fait foi : l'acheteur peut commander plus que le
+    // besoin exprimé (lot minimum, conditionnement, réappro). À défaut, on retombe sur la
+    // demande — ou sur la somme des demandes réunies par une fusion.
+    qte_commandee: (Number(body.qte) || (_srcFusion.length
       ? _srcFusion.reduce((s: number, x: any) => s + (Number(x.qte) || 0), 0) || null
-      : Number((da as any).qte) || Number(body.qte) || null),   // base de la réception TOTALE (recu_total)
+      : Number((da as any).qte) || null)),   // base de la réception TOTALE (recu_total)
     date_bc: TODAY_ISO(),
     date_livraison: body.date_livraison || da.livraison || null,
     conditions_paiement: body.conditions_paiement || null,
@@ -7989,6 +8047,7 @@ app.patch('/api/rh/salarie/:id', async (c) => {
   if (!Object.keys(patch).length) return c.json({ ok: false, error: 'Aucun champ' }, 400)
   const { data, error } = await updateSalarie(id, patch)
   if (error) return c.json({ ok: false, error: error.message }, 400)
+  invaliderDroits(id)   // effet immédiat ici ; les autres isolates suivent sous quelques secondes
   return c.json({ ok: true, salarie: data })
 })
 
@@ -8005,6 +8064,7 @@ app.delete('/api/rh/salarie/:id', async (c) => {
   }
   const { error } = await deleteSalarie(id)
   if (error) return c.json({ ok: false, error: error.message }, 400)
+  invaliderDroits(id)   // la session de la personne supprimee tombe des cette requete
   return c.json({ ok: true })
 })
 
@@ -8206,7 +8266,7 @@ app.post('/api/rh/pointage', async (c) => {
 // COMPTABILITÉ
 // ══════════════════════════════════════════════════════════════
 app.get('/compta/service', async (c) => {
-  const [factCli, factFourn, ecritures, validations] = await Promise.all([getFacturesClient(), getFacturesFournisseur(), getEcrituresComptables(), getValidations().catch(() => [])])
+  const [factCli, factFourn, ecritures, validations, bcsCpt] = await Promise.all([getFacturesClient(), getFacturesFournisseur(), getEcrituresComptables(), getValidations().catch(() => []), getBonsDeCommande().catch(() => [] as any[])])
   // Pièces jointes des factures fournisseurs : la facture scannée est rangée en GED sous
   // « BC:<id du bon de commande> », et l'identifiant de la facture est « FF-<id du BC> ».
   // On remonte donc du numéro de facture au document sans avoir besoin d'une colonne de lien.
@@ -8219,7 +8279,7 @@ app.get('/compta/service', async (c) => {
       const doc = (docs as any[]).find((d: any) => String(d.categorie) === 'facture_fournisseur' && d.actif !== false)
       if (doc) pjFourn[String(f.id)] = { id: String(doc.id), nom: String(doc.fichier_nom || 'facture') }
     }))
-  return c.html(pageServiceCompta(factCli, factFourn, ecritures, validations as any[], pjFourn))
+  return c.html(pageServiceCompta(factCli, factFourn, ecritures, validations as any[], pjFourn, bcsCpt as any[]))
 })
 
 app.get('/qualite/anomalie', (c) => {

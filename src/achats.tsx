@@ -701,6 +701,13 @@ export const pageServiceAchats = (
               </div>
               <div><label style="${LBL}">Désignation</label><input id="bc_articles" type="text" placeholder="Désignation des articles commandés" style="${INP}"/></div>
             </div>
+            <div style="display:grid;grid-template-columns:minmax(0,.82fr) minmax(0,1.18fr);gap:12px;margin-top:10px;">
+              <div><label style="${LBL}">Quantité à commander</label>
+                <input id="bc_qte" type="number" step="any" min="0" style="${INP}font-weight:700;"/>
+                <div id="bc_qte_note" style="font-size:.66rem;color:#94a3b8;margin-top:3px;"></div>
+              </div>
+              <div id="bc_qte_lignes" style="display:none;"></div>
+            </div>
             <div id="bc_ref_hint" style="font-size:.68rem;color:#94a3b8;margin-top:8px;line-height:1.5;"></div>
           </div>
           <div><label style="${LBL}">Montant HT (€)</label><input id="bc_montant" type="number" step="0.01" placeholder="0.00" style="${INP}"/></div>
@@ -1177,6 +1184,33 @@ export const pageServiceAchats = (
     // La DA porte la reference du produit demande : on ne propose que les fournisseurs
     // qui la referencent au catalogue, les autres restant accessibles en second groupe.
     document.getElementById('bc_articles').value=dr.articles||da.article||'';
+    // Quantité : reprise de la demande, MODIFIABLE — l'acheteur peut commander plus (lot mini,
+    // conditionnement, réappro). Une DA fusionnée additionne les quantités de ses sources.
+    (function(){
+      var q=document.getElementById('bc_qte'), note=document.getElementById('bc_qte_note');
+      var det=document.getElementById('bc_qte_lignes');
+      var src=(da.bc_draft&&da.bc_draft._fusion)?da.bc_draft._fusion:null;
+      var brut = dr.qte!=null&&dr.qte!=='' ? dr.qte : (src? null : da.qte);
+      if(src){
+        var somme=0, lignes='';
+        src.forEach(function(s){
+          var n=parseFloat(String(s.qte||'').replace(',','.'));
+          somme += isNaN(n)?0:n;
+          lignes+='<div style="display:flex;justify-content:space-between;gap:8px;"><span style="color:#64748b;">'+achEsc((s.article||'—').slice(0,42))+'</span><strong>'+achEsc(s.qte||'—')+'</strong></div>';
+        });
+        q.value = (dr.qte!=null&&dr.qte!=='') ? dr.qte : (somme||'');
+        det.style.display='block';
+        det.innerHTML='<label style="${LBL}">Détail de la fusion</label><div style="font-size:.7rem;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;background:#f8fafc;display:flex;flex-direction:column;gap:3px;">'+lignes+'</div>';
+        note.textContent='Somme des demandes réunies. Modifiable.';
+      } else {
+        det.style.display='none'; det.innerHTML='';
+        var n2=parseFloat(String(brut||'').replace(',','.'));
+        q.value = isNaN(n2) ? '' : n2;
+        note.textContent = (brut && isNaN(n2))
+          ? 'La demande indique « '+String(brut)+' » : saisissez la quantité à commander.'
+          : 'Reprise de la demande. Vous pouvez la modifier avant de commander.';
+      }
+    })();
     // Reference : brouillon, sinon retrouvee au catalogue, sinon vide. achRefChange remplit
     // ensuite le select des fournisseurs — porteurs de la reference d'abord.
     document.getElementById('bc_reference').value=achRefDepuisDA(da, dr);
@@ -1220,6 +1254,7 @@ export const pageServiceAchats = (
       type_bc:document.getElementById('bc_type').value,
       fournisseur:document.getElementById('bc_fourn').value.trim(),
       reference:document.getElementById('bc_reference').value.trim()||null,
+      qte:(function(){ var v=(document.getElementById('bc_qte')||{}).value; v=String(v==null?'':v).trim(); return v===''?null:v; })(),
       articles:document.getElementById('bc_articles').value.trim(),
       montant_ht:parseFloat(document.getElementById('bc_montant').value)||0,
       date_livraison:document.getElementById('bc_livraison').value||null,

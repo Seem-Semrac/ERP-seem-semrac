@@ -383,7 +383,8 @@ export async function getBeRefs() {
     // Process internes (lien machine direct ou manuel) — poste_id = poste de rattachement (filtre du choix de process)
     process_atelier: (procs ?? []).map((p: any) => ({
       id: p.id, nom: p.nom, code: p.code, activite: p.activite, categorie: p.categorie,
-      requiert_machine: p.requiert_machine !== false, machine_id: p.machine_id ?? null, poste_id: p.poste_id ?? null, statut: p.statut
+      requiert_machine: p.requiert_machine !== false, machine_id: p.machine_id ?? null, poste_id: p.poste_id ?? null, statut: p.statut,
+      est_oas: p.est_oas === true,   // traitement de surface : facturé au prix, jamais au temps
     })),
     // Postes d'atelier (conteneurs de machines/process) → alimentent le select « Poste » de la gamme
     postes: (postesRaw ?? []).filter((p: any) => p.statut !== 'inactif').map((p: any) => ({
@@ -2158,6 +2159,27 @@ export async function getOperateursSalaries(): Promise<any[]> {
 export async function getSalaries(): Promise<any[]> {
   const { data } = await supabase.from('salaries').select('*').order('nom')
   return data ?? []
+}
+
+// Droits de TOUS les salariés, en projection légère, pour le rafraîchissement des sessions.
+// ⚠ Renvoie `null` UNIQUEMENT si la requête a ÉCHOUÉ — c'est toute la subtilité : supabase-js
+// ne lève jamais d'exception, il renvoie { data: null, error }. Sans cette distinction, une
+// panne réseau serait indiscernable d'un « salarié supprimé » et déconnecterait tout le monde.
+// Une seule requête pour tout le monde : la latence domine, lire 36 lignes en projection coûte
+// le même aller-retour qu'une seule ligne en select('*') — et les hash de PIN ne transitent pas.
+export async function getDroitsSalaries(): Promise<Record<string, { roles: string[]; perms: string[]; actif: boolean }> | null> {
+  const { data, error } = await supabase.from('salaries').select('id,actif,role,roles,autorisations')
+  if (error || !Array.isArray(data)) return null
+  const out: Record<string, { roles: string[]; perms: string[]; actif: boolean }> = {}
+  for (const s of data as any[]) {
+    const roles = Array.isArray(s.roles) && s.roles.length ? s.roles : [s.role || 'operateur']
+    out[String(s.id)] = {
+      roles,
+      perms: (Array.isArray(s.autorisations) && s.autorisations.length) ? s.autorisations : [],
+      actif: s.actif !== false,
+    }
+  }
+  return out
 }
 
 export async function getSalarie(id: string): Promise<any | null> {

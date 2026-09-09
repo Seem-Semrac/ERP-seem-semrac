@@ -85,6 +85,17 @@ export function etapeDecomp(
   if (e.type === 'sous_traite') {
     return { ...z, st: true, forfait: Math.max(0, Number(e.forfait_st_ht ?? 0) || 0), unit: Number(e.prix_unitaire_st_ht ?? e.cout_st_unitaire ?? 0) || 0 }
   }
+  // OAS (traitement de surface) — CAS PARTICULIER ASSUMÉ : on saisit un PRIX, jamais un temps.
+  // C'est cohérent avec le reste de la chaîne : une étape OAS ne produit AUCUN bon de travail
+  // (la cascade d'acceptation la saute), elle est facturée au bain et non à l'heure. Le coût
+  // emprunte le même chemin que la sous-traitance — max(forfait ; qté × prix unitaire) — donc
+  // il entre dans le CRU sans qu'aucun consommateur ait à être modifié. Le drapeau `oas` permet
+  // aux affichages de la nommer correctement : chez Seem le traitement est fait EN INTERNE.
+  if (e.est_oas === true || e.type === 'oas') {
+    return { ...z, st: true, oas: true,
+      forfait: Math.max(0, Number(e.forfait_oas_ht ?? 0) || 0),
+      unit: Number(e.prix_oas_unitaire ?? e.prix_unitaire_oas_ht ?? 0) || 0 }
+  }
   if (e.temps_variable_mille != null || e.temps_reglage_mille != null || e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null) {
     // Étape importée : temps en MILLIÈMES d'heure → heures = millième / 1000
     const isMach = e.ressource === 'machine'
