@@ -183,7 +183,9 @@ const NEUTRAL_API = (clean: string): boolean =>
   clean === '/api/validations' || (clean.startsWith('/api/validations/') && !clean.endsWith('/decision'))
 
 // Routes publiques (pas de session requise).
-const PUBLIC_PREFIXES = ['/login', '/api/login', '/logout', '/static', '/api/contact', '/favicon.ico']
+// `/api/version` doit repondre meme sans session : c'est l'outil de diagnostic
+// « ma VM tourne-t-elle le dernier code ? ». Il ne divulgue qu'un numero de commit.
+const PUBLIC_PREFIXES = ['/login', '/api/login', '/logout', '/static', '/api/contact', '/favicon.ico', '/api/version']
 export function isPublicPath(path: string): boolean {
   return PUBLIC_PREFIXES.some(p => path === p || path.startsWith(p + '/'))
 }

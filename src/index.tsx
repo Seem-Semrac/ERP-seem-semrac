@@ -258,6 +258,23 @@ app.post('/api/login', async (c) => {
   return c.json({ ok: true, user: { nom: user.nom, role: user.role } })
 })
 app.get('/logout', (c) => { deleteCookie(c, 'erp_session', { path: '/' }); return c.redirect('/login') })
+// ─── Quelle version est REELLEMENT servie ? ───────────────────────────────────
+// Repond a une question qu'on ne devrait jamais avoir a deviner : « ma VM tourne-t-elle
+// le dernier code ? ». Le commit est injecte dans l'image au build (docker/app.Dockerfile,
+// argument GIT_COMMIT pose par erp-docker.sh) ; sur Cloudflare, CF_PAGES_COMMIT_SHA.
+// Route NEUTRE : accessible sans authentification, elle ne divulgue rien de sensible.
+app.get('/api/version', (c) => {
+  const env = c.env as any
+  const commit = String(env?.GIT_COMMIT || env?.CF_PAGES_COMMIT_SHA || '').trim()
+  return c.json({
+    ok: true,
+    version: APP_VERSION,
+    commit: commit || 'inconnu',
+    commit_court: commit ? commit.slice(0, 10) : 'inconnu',
+    construit_le: String(env?.BUILD_DATE || '').trim() || null,
+  })
+})
+
 app.get('/api/me', (c) => {
   const u = (c as any).get('user')
   // Jamais de cache : c'est cette réponse qui pilote l'affichage du menu, elle doit refléter

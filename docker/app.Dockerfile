@@ -17,8 +17,14 @@ COPY tsconfig.json ./
 COPY src ./src
 COPY public ./public
 
+# Commit reellement embarque dans cette image : c'est ce que renvoie /api/version.
+# Pose par erp-docker.sh au moment du build ; vide si l'image est construite a la main.
+ARG GIT_COMMIT=""
+ARG BUILD_DATE=""
 ENV NODE_ENV=development \
-    PORT=3000
+    PORT=3000 \
+    GIT_COMMIT=${GIT_COMMIT} \
+    BUILD_DATE=${BUILD_DATE}
 
 EXPOSE 3000
 

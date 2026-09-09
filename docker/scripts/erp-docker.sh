@@ -42,7 +42,11 @@ case "$cmd" in
     # seule l'image de l'application est reconstruite.
     echo "→ Recuperation de la derniere version…"
     git -C "$REPO_ROOT" pull --ff-only || { echo "✗ git pull a echoue — resolvez le conflit puis relancez."; exit 1; }
-    echo "→ Reconstruction et redemarrage…"
+    # Grave le commit dans l'image : /api/version dira ensuite quel code tourne vraiment.
+    GIT_COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo '')"
+    BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    export GIT_COMMIT BUILD_DATE
+    echo "→ Reconstruction et redemarrage… (code ${GIT_COMMIT:0:10})"
     # ⚠ `set -e` en tete de ce script : sans ce garde, un service qui sort en erreur
     #   (ex. une migration en echec) faisait AVORTER la commande ici — l'utilisateur ne
     #   voyait alors ni les logs de migration, ni l'etat des conteneurs.
@@ -62,7 +66,17 @@ case "$cmd" in
     fi
     _port="$(sed -n 's/^APP_PORT=//p' "$ENV_FILE" | head -1)"; _port="${_port:-3000}"
     _ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
-    echo "✓ Mise a jour terminee. App : http://${_ip:-localhost}:${_port}" ;;
+    echo "✓ Mise a jour terminee. App : http://${_ip:-localhost}:${_port}"
+    # Verification finale : le code SERVI est-il bien celui du depot ?
+    _srv="$(curl -s --max-time 5 "http://localhost:${_port}/api/version" 2>/dev/null | sed -n 's/.*"commit":"\([^"]*\)".*//p')"
+    if [ -n "$_srv" ] && [ -n "$GIT_COMMIT" ]; then
+      if [ "$_srv" = "$GIT_COMMIT" ]; then
+        echo "  ✓ code servi = code du depot (${_srv:0:10})"
+      else
+        echo "  ! ATTENTION : l'application sert ${_srv:0:10} alors que le depot est a ${GIT_COMMIT:0:10}."
+        echo "    Le conteneur n'a pas redemarre sur la nouvelle image : docker start erp-app"
+      fi
+    fi ;;
   reset)
     echo "Supprime les données locales (base + storage) dans 3s (Ctrl+C pour annuler)…"; sleep 3
     compose down -v; echo "Base réinitialisée." ;;   # -v = supprime les volumes nommés
