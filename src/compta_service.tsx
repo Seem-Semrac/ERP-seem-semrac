@@ -651,8 +651,8 @@ function buildARegler(ff: FactureFournisseur[], fc: FactureClient[], PJ: Record<
           <td ${TD}><div style="display:flex;flex-direction:column;gap:3px;">${statutFournBadge(f.statut)}${valDirBadge(CPT_VD_MAP,'factures_fournisseur',f.id)}</div></td>
           <td ${TD}>
             <div style="display:flex;gap:4px;">
-              ${f.statut === 'a_valider' ? `<button onclick="cptValiderFourn('${f.id}')" style="padding:3px 10px;border-radius:6px;font-size:.68rem;font-weight:700;border:none;background:#eff6ff;color:#2563eb;cursor:pointer;"><i class="fas fa-check mr-1"></i>Valider</button>` : ''}
-              ${['a_payer','validee'].includes(f.statut) ? `<button onclick="cptPayerFourn('${f.id}')" style="padding:3px 10px;border-radius:6px;font-size:.68rem;font-weight:700;border:none;background:#f0fdf4;color:#16a34a;cursor:pointer;"><i class="fas fa-money-bill mr-1"></i>Payer</button>` : ''}
+              ${f.statut === 'a_valider' ? `<button onclick="cptValiderFourn('${escX(f.id)}','${escX(f.num_facture||f.id)}','${escX(f.fournisseur_nom||'')}',${Number(f.montant_ttc)||0})" style="padding:3px 10px;border-radius:6px;font-size:.68rem;font-weight:700;border:none;background:#eff6ff;color:#2563eb;cursor:pointer;"><i class="fas fa-check mr-1"></i>Valider</button>` : ''}
+              ${['a_payer','validee'].includes(f.statut) ? `<button onclick="cptPayerFourn('${escX(f.id)}','${escX(f.num_facture||f.id)}','${escX(f.fournisseur_nom||'')}',${Number(f.montant_ttc)||0})" style="padding:3px 10px;border-radius:6px;font-size:.68rem;font-weight:700;border:none;background:#f0fdf4;color:#16a34a;cursor:pointer;"><i class="fas fa-money-bill mr-1"></i>Payer</button>` : ''}
               ${PJ[f.id] ? `<a href="/api/ged/file/${escX(PJ[f.id].id)}" target="_blank" rel="noopener" title="Ouvrir la facture jointe : ${escX(PJ[f.id].nom)}" style="padding:3px 10px;border-radius:6px;font-size:.68rem;font-weight:700;text-decoration:none;background:#f5f3ff;color:#6d28d9;display:inline-flex;align-items:center;gap:4px;"><i class="fas fa-paperclip"></i>Facture</a>` : ''}
               ${f.notes ? `<span title="${escX(f.notes)}" style="color:#d97706;cursor:help;"><i class="fas fa-exclamation-triangle"></i></span>` : ''}
             </div>
@@ -749,8 +749,8 @@ function buildARegler(ff: FactureFournisseur[], fc: FactureClient[], PJ: Record<
             <td ${TD}><div style="display:flex;flex-direction:column;gap:3px;">${statutFournBadge(f.statut)}${valDirBadge(CPT_VD_MAP,'factures_fournisseur',f.id)}</div></td>
             <td ${TD}>
               <div style="display:flex;gap:4px;">
-                ${f.statut === 'a_valider' ? `<button onclick="cptValiderFourn('${f.id}')" style="padding:3px 10px;border-radius:6px;font-size:.68rem;font-weight:700;border:none;background:#eff6ff;color:#2563eb;cursor:pointer;"><i class="fas fa-check mr-1"></i>Valider</button>` : ''}
-                ${['a_payer','validee'].includes(f.statut) ? `<button onclick="cptPayerFourn('${f.id}')" style="padding:3px 10px;border-radius:6px;font-size:.68rem;font-weight:700;border:none;background:#f0fdf4;color:#16a34a;cursor:pointer;"><i class="fas fa-money-bill mr-1"></i>Payer</button>` : ''}
+                ${f.statut === 'a_valider' ? `<button onclick="cptValiderFourn('${escX(f.id)}','${escX(f.num_facture||f.id)}','${escX(f.fournisseur_nom||'')}',${Number(f.montant_ttc)||0})" style="padding:3px 10px;border-radius:6px;font-size:.68rem;font-weight:700;border:none;background:#eff6ff;color:#2563eb;cursor:pointer;"><i class="fas fa-check mr-1"></i>Valider</button>` : ''}
+                ${['a_payer','validee'].includes(f.statut) ? `<button onclick="cptPayerFourn('${escX(f.id)}','${escX(f.num_facture||f.id)}','${escX(f.fournisseur_nom||'')}',${Number(f.montant_ttc)||0})" style="padding:3px 10px;border-radius:6px;font-size:.68rem;font-weight:700;border:none;background:#f0fdf4;color:#16a34a;cursor:pointer;"><i class="fas fa-money-bill mr-1"></i>Payer</button>` : ''}
                 ${f.notes ? `<span title="${escX(f.notes)}" style="color:#d97706;cursor:help;"><i class="fas fa-exclamation-triangle"></i></span>` : ''}
               </div>
             </td>
@@ -1327,19 +1327,34 @@ export function pageServiceCompta(
       w.document.open(); w.document.write(html); w.document.close();
       pushNotif('ok','fa-file-pdf','Facture '+(f.num_facture||id)+' — fenêtre d\\'impression PDF ouverte.',4000);
     }
-    function cptValiderFourn(id) {
-      fetch('/api/factures-fournisseur/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({statut:'a_payer'})})
-        .then(function(r){return r.json();}).then(function(j){
-          if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Validation échouée.'); return; }
-          pushNotif('ok','fa-check','Facture validée. Prête au règlement.',3500); setTimeout(function(){softReload();},700);
-        }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
+    // Valider et Payer engagent de l'argent : on NOMME la facture concernee et on
+    // demande confirmation. Le serveur renvoie ensuite l'identifiant reellement
+    // modifie — s'il ne correspond pas a celui demande, on le signale au lieu de
+    // laisser croire que tout s'est bien passe.
+    function _cptEuro(m){ try{ return (Number(m)||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' \u20ac'; }catch(e){ return (Number(m)||0).toFixed(2)+' \u20ac'; } }
+    function _cptApres(j, id, msgOk, icone){
+      if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Operation refusee.',7000); return; }
+      var touche = (j.facture && j.facture.id) ? String(j.facture.id) : '';
+      if(touche && touche !== String(id)){
+        pushNotif('warn','fa-triangle-exclamation','Attention : le serveur a modifie '+touche+' alors que '+id+' etait demandee. Verifiez la liste.',12000);
+      } else {
+        pushNotif('ok',icone,msgOk,3500);
+      }
+      setTimeout(function(){softReload();},900);
     }
-    function cptPayerFourn(id) {
+    async function cptValiderFourn(id, num, fourn, ttc) {
+      if(!await appConfirm('Valider la facture '+(num||id)+' ?\\n\\n'+(fourn||'')+(ttc?'  \u00b7  '+_cptEuro(ttc):'')+'\\n\\nElle passera « a payer » et sera proposee au reglement. Cette facture UNIQUEMENT.')) return;
+      fetch('/api/factures-fournisseur/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({statut:'a_payer',attendu:'a_valider'})})
+        .then(function(r){return r.json();})
+        .then(function(j){ _cptApres(j, id, 'Facture '+(num||id)+' validee. Prete au reglement.', 'fa-check'); })
+        .catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur reseau.'); });
+    }
+    async function cptPayerFourn(id, num, fourn, ttc) {
+      if(!await appConfirm('Marquer la facture '+(num||id)+' comme PAYEE ?\\n\\n'+(fourn||'')+(ttc?'  \u00b7  '+_cptEuro(ttc):'')+'\\n\\nSi elle est proforma, le bon de commande sera libere et partira chez le fournisseur. Cette facture UNIQUEMENT.')) return;
       fetch('/api/factures-fournisseur/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({statut:'payee',date_paiement:new Date().toISOString().slice(0,10),mode_paiement:'Virement'})})
-        .then(function(r){return r.json();}).then(function(j){
-          if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Paiement échoué.'); return; }
-          pushNotif('ok','fa-money-bill','Facture marquée payée. Dashboard mis à jour.',3500); setTimeout(function(){softReload();},700);
-        }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
+        .then(function(r){return r.json();})
+        .then(function(j){ _cptApres(j, id, 'Facture '+(num||id)+' marquee payee.'+(j&&j.bc_libere?' Bon de commande '+j.bc_libere+' libere.':''), 'fa-money-bill'); })
+        .catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur reseau.'); });
     }
     function cptOpenFournModal(){ var m=document.getElementById('cptFournModal'); if(m){m.style.display='flex'; var d=document.getElementById('ff_date'); if(d&&!d.value)d.value=new Date().toISOString().slice(0,10);} }
     function cptCloseFournModal(){ var m=document.getElementById('cptFournModal'); if(m)m.style.display='none'; }

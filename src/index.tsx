@@ -47,7 +47,7 @@ import {
   getPiecesRechange, createPieceRechange, updatePieceRechange, deletePieceRechange,
   getEmployes, getCertifications, getCompetences, upsertCompetence, getPointages, createPointage, updatePointage,
   getFacturesClient, getFacturesFournisseur, getEcrituresComptables,
-  createFactureFournisseur, updateFactureFournisseur,
+  createFactureFournisseur, updateFactureFournisseur, getFactureFournisseur,
   getNomenclatures, createNomenclature, updateNomenclature, deleteNomenclature, upsertFournitures, getFournitures,
   getReferencesClients, upsertReferenceClient, deleteReferenceClient, getClientProduits, getClientsProduitsAll,
   getEditLock, upsertEditLock, deleteEditLock, getActiveEditLocks,
@@ -2841,6 +2841,16 @@ app.patch('/api/factures-fournisseur/:id', async (c) => {
   }
   if (b.statut === 'payee' && !patch.date_paiement) patch.date_paiement = new Date().toISOString().slice(0, 10)
   patch.updated_at = new Date().toISOString()
+  // Garde d'état : le client peut annoncer le statut qu'il croyait voir. S'il ne
+  // correspond plus, on refuse — la page était périmée (double-clic, deux onglets,
+  // ou action déjà faite par quelqu'un d'autre). Évite une validation en double.
+  if (b.attendu) {
+    const avant = await getFactureFournisseur(id).catch(() => null)
+    if (!avant) return c.json({ ok: false, error: 'Facture introuvable : ' + id }, 404)
+    if (String((avant as any).statut || '') !== String(b.attendu)) {
+      return c.json({ ok: false, error: 'La facture ' + ((avant as any).num_facture || id) + ' est deja « ' + String((avant as any).statut) + ' » : la page affichait un etat perime. Rechargez avant de recommencer.' }, 409)
+    }
+  }
   const { data, error } = await updateFactureFournisseur(id, patch)
   if (error) return c.json({ ok: false, error: error.message }, 400)
   // PROFORMA : le règlement libère le bon de commande, qui rejoint alors les réceptions à venir.

@@ -2278,6 +2278,13 @@ export async function createFactureFournisseur(payload: Partial<FactureFournisse
   return { data, error }
 }
 
+// Lecture d'UNE facture fournisseur — sert a verifier son etat AVANT de le changer
+// (garde anti double validation dans PATCH /api/factures-fournisseur/:id).
+export async function getFactureFournisseur(id: string): Promise<any | null> {
+  const { data } = await supabase.from('factures_fournisseur').select('*').eq('id', id).maybeSingle()
+  return data ?? null
+}
+
 export async function updateFactureFournisseur(id: string, payload: Partial<FactureFournisseur>) {
   const { data, error } = await supabase.from('factures_fournisseur').update(payload).eq('id', id).select().single()
   return { data, error }
