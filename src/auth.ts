@@ -109,6 +109,24 @@ const ROLE_MATRIX: Record<string, Record<string, Lvl>> = {
 }
 // Services affichés dans le menu (pour le filtrage par rôle).
 const MENU_SERVICES = ['commercial', 'be', 'achats', 'production', 'oas', 'qualite', 'securite', 'environnement', 'expeditions', 'stock', 'maintenance', 'plans', 'rh', 'compta', 'direction']
+// Exposé pour la fiche salarié (validation des services choisis côté serveur).
+export const MENU_SERVICES_PUBLIC = MENU_SERVICES
+
+// ─── Accès par service définis SUR LA PERSONNE (fiche salarié) ────────────────
+// Jetons « lire:<service> » et « ecrire:<service> » rangés dans salaries.autorisations.
+// Règle : dès qu'un utilisateur en possède AU MOINS UN, ces listes deviennent la
+// référence pour l'accès aux services — elles remplacent la matrice des rôles, ce qui
+// permet aussi bien d'ouvrir un service que d'en fermer un. Sans aucun jeton, rien ne
+// change : la matrice des rôles s'applique comme avant.
+function accesExplicites(perms: string[]): { lire: Set<string>; ecrire: Set<string>; actif: boolean } {
+  const lire = new Set<string>(), ecrire = new Set<string>()
+  for (const p of perms) {
+    const t = String(p || '')
+    if (t.startsWith('ecrire:')) { ecrire.add(t.slice(7)); lire.add(t.slice(7)) }  // écrire implique lire
+    else if (t.startsWith('lire:')) lire.add(t.slice(5))
+  }
+  return { lire, ecrire, actif: lire.size > 0 || ecrire.size > 0 }
+}
 
 // Actions "self-service" atelier : l'identité réelle est le matricule+PIN dans le
 // corps de la requête (borne partagée). Accessibles à tout compte connecté
@@ -233,6 +251,12 @@ export function canAccess(user: SessionUser | null, path: string, method: string
     const canW = rolesOf(user).some(r => r === 'direction' || r === 'maintenance' || r === 'qualite' || r === 'bei' || r === 'production')
     return isW ? canW : true
   }
+  // Accès définis sur la personne : ils font foi dès qu'il en existe au moins un.
+  const ex = accesExplicites(perms)
+  if (ex.actif) {
+    const isW = !['GET', 'HEAD', 'OPTIONS'].includes(String(method).toUpperCase())
+    return isW ? ex.ecrire.has(svc) : ex.lire.has(svc)
+  }
   // Multi-rôles : on prend le MEILLEUR niveau (rw > r) parmi tous les rôles de l'utilisateur.
   let level: Lvl | undefined
   for (const r of rolesOf(user)) { const l = (ROLE_MATRIX[r] || {})[svc]; if (l === 'rw') { level = 'rw'; break } if (l === 'r') level = 'r' }
@@ -246,6 +270,8 @@ export function navServices(user: SessionUser | null): string[] {
   if (!user) return []
   const perms = Array.isArray(user.perms) ? user.perms : []
   if (perms.includes('all')) return MENU_SERVICES.slice()
+  const ex = accesExplicites(perms)
+  if (ex.actif) return MENU_SERVICES.filter(s => s === 'plans' || ex.lire.has(s))   // 'plans' visible par tous (lecture)
   const roles = rolesOf(user)
   return MENU_SERVICES.filter(s => s === 'plans' || roles.some(r => !!(ROLE_MATRIX[r] || {})[s]))  // 'plans' visible par tous (lecture)
 }

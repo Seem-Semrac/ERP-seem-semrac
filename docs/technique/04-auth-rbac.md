@@ -51,3 +51,22 @@ Le middleware appelle `canAccess(user, path, method)` sur **chaque** requête (h
 
 ## Filtrage du menu
 `navServices(user)` retourne les services **lisibles** → la sidebar n'affiche que ce à quoi l'utilisateur a droit (`plans` visible par tous).
+
+---
+
+## Accès par service définis sur la personne (depuis le 09/09/2026)
+
+La fiche salarié (**RH › Employés**) porte deux listes à sélection multiple : **Peut LIRE** et **Peut ÉCRIRE**, listant les 15 services. Elles se rangent dans `salaries.autorisations` sous forme de jetons `lire:<service>` et `ecrire:<service>` — aucune colonne nouvelle, la colonne est déjà `jsonb`.
+
+**Règle appliquée par `canAccess()`** — dans cet ordre :
+
+1. `perms` contient `all` (Direction) → accès total, jamais restreint ;
+2. route self-service atelier → autorisée ;
+3. **au moins un jeton `lire:` ou `ecrire:` → ces listes font foi** et remplacent la matrice des rôles pour l'accès aux services : elles peuvent aussi bien **ouvrir** un service que **fermer** un service que le rôle accordait ;
+4. aucun jeton → la matrice `ROLE_MATRIX` s'applique, comme avant.
+
+`ecrire:<svc>` implique `lire:<svc>` : inutile de cocher le service des deux côtés.
+
+`navServices()` suit la même règle, donc le menu latéral reflète exactement les droits réels.
+
+**Vérifié par 10 cas** : comportement historique préservé sans jeton (3 cas), ouverture en lecture puis en écriture, écriture impliquant la lecture, fermeture d'un service que le rôle ouvrait, Direction jamais restreinte, et filtrage du menu.

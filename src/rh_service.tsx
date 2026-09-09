@@ -163,6 +163,14 @@ function panelDashboard(emps: Employe[], certs: Certification[], pts: Pointage[]
 
 // ─── PANEL: EMPLOYÉS ──────────────────────────────────────────
 
+// Services de l'ERP — même liste que MENU_SERVICES dans auth.ts.
+const RH_SERVICES: Record<string,string> = {
+  commercial: 'Commercial', be: "Bureau d'Études", achats: 'Achats', production: 'Production',
+  oas: 'OAS', qualite: 'Qualité', securite: 'Sécurité', environnement: 'Environnement',
+  expeditions: 'Expéditions', stock: 'Stock', maintenance: 'Maintenance', plans: 'Plan / Bâtiment',
+  rh: 'RH', compta: 'Comptabilité', direction: 'Direction',
+}
+
 const RH_ROLE_LABELS: Record<string,string> = { operateur:'Opérateur', oas:'OAS (opérateur)', qualite:'Qualité', commercial:'Commercial', bei:'Bureau d\'Études', achats:'Achats', logistique:'Logistique', production:'Production', comptable:'Comptable', maintenance:'Maintenance', rh:'RH', direction:'Direction' }
 function roleBadge(role: string, entite?: string) {
   const r = role || 'operateur'
@@ -822,6 +830,25 @@ export function pageRHEmployes(dbEmps?: Employe[], dbOrphans?: any[], canWriteRH
             <div style="font-size:.66rem;color:#94a3b8;margin-top:4px;"><i class="fas fa-circle-info" style="margin-right:4px;"></i>Le rôle principal fixe le métier et l'entité ; les rôles cochés <strong>ajoutent</strong> leurs droits d'accès (permissions cumulées).</div>
           </div>
         </div>
+        <div style="margin-top:14px;border:1.5px solid #e2e8f0;border-radius:10px;padding:12px;background:#f8fafc;">
+          <div style="font-size:.72rem;font-weight:800;color:#334155;margin-bottom:4px;"><i class="fas fa-user-shield" style="margin-right:6px;color:#6366f1;"></i>Accès par service — au-delà des rôles</div>
+          <div style="font-size:.66rem;color:#94a3b8;margin-bottom:10px;">Maintenez <strong>Ctrl</strong> (ou <strong>Cmd</strong>) pour sélectionner plusieurs services. Laissez les deux listes vides pour vous en tenir aux droits du rôle.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <label style="${FLBL}"><i class="fas fa-eye" style="margin-right:5px;color:#0891b2;"></i>Peut LIRE</label>
+              <select id="f_lire" multiple size="8" style="${FINP}height:auto;padding:6px;">
+                ${Object.entries(RH_SERVICES).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label style="${FLBL}"><i class="fas fa-pen" style="margin-right:5px;color:#c2410c;"></i>Peut ÉCRIRE</label>
+              <select id="f_ecrire" multiple size="8" style="${FINP}height:auto;padding:6px;">
+                ${Object.entries(RH_SERVICES).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div style="font-size:.66rem;color:#94a3b8;margin-top:8px;"><i class="fas fa-circle-info" style="margin-right:4px;"></i>Un service en <strong>écriture</strong> donne aussi la lecture. Dès qu'au moins un service est choisi, ces deux listes <strong>remplacent</strong> les droits du rôle : elles définissent seules ce que la personne voit et modifie.</div>
+        </div>
         <div style="margin-top:14px;border:1.5px dashed #c7d2fe;border-radius:10px;padding:12px;background:#eef2ff;">
           <div style="font-size:.72rem;font-weight:800;color:#4338ca;margin-bottom:8px;"><i class="fas fa-key" style="margin-right:5px;"></i>Identifiants ERP (pointage · soldage des bons · habilitations)</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -879,6 +906,15 @@ function rhOpenFiche(id){
   document.getElementById('f_role').value=e.role||'operateur';
   var _rs=Array.isArray(e.roles)?e.roles:[]; var _prim=e.role||'operateur';
   document.querySelectorAll('.f-role-extra').forEach(function(cb){ cb.checked = _rs.indexOf(cb.value)>=0 && cb.value!==_prim; });
+  // Accès par service : jetons « lire:<service> » / « ecrire:<service> » dans autorisations.
+  var _au=Array.isArray(e.autorisations)?e.autorisations:[];
+  var _sel=function(selectId, prefixe){
+    var el=document.getElementById(selectId); if(!el) return;
+    var choisis={};
+    _au.forEach(function(t){ t=String(t||''); if(t.indexOf(prefixe)===0) choisis[t.slice(prefixe.length)]=1; });
+    for(var i=0;i<el.options.length;i++){ el.options[i].selected = !!choisis[el.options[i].value]; }
+  };
+  _sel('f_lire','lire:'); _sel('f_ecrire','ecrire:');
   document.getElementById('f_entite').value=e.activite==='Semrac'?'Semrac':'Seem';
   document.getElementById('f_poste').value=e.poste||'';
   document.getElementById('f_contrat').value=e.type_contrat||'CDI';
@@ -911,8 +947,12 @@ function rhSaveFiche(){
   var nom=document.getElementById('f_nom').value.trim(); if(!nom){ pushNotif('err','fa-exclamation-circle','Nom requis.'); return; }
   var _prim=document.getElementById('f_role').value;
   var _extras=[].slice.call(document.querySelectorAll('.f-role-extra:checked')).map(function(x){return x.value;});
+  var _vals=function(selectId){ var el=document.getElementById(selectId); if(!el) return []; return [].slice.call(el.selectedOptions||[]).map(function(o){return o.value;}); };
+  var _lire=_vals('f_lire'), _ecrire=_vals('f_ecrire');
+  // L'écriture implique la lecture : inutile de cocher les deux côtés pour un même service.
+  var _jetons=_ecrire.map(function(v){return 'ecrire:'+v;}).concat(_lire.filter(function(v){return _ecrire.indexOf(v)<0;}).map(function(v){return 'lire:'+v;}));
   var _roles=[_prim].concat(_extras.filter(function(r){return r!==_prim;}));
-  var payload={ nom:nom, prenom:document.getElementById('f_prenom').value.trim(), role:_prim, roles:_roles, entite:document.getElementById('f_entite').value, poste:document.getElementById('f_poste').value.trim(), contrat:document.getElementById('f_contrat').value, shift_id:document.getElementById('f_shift').value, date_entree:document.getElementById('f_date').value||null, taux_horaire_charge:parseFloat(document.getElementById('f_taux').value)||null, email:document.getElementById('f_email').value.trim(), telephone:document.getElementById('f_tel').value.trim(), adresse:document.getElementById('f_adresse').value.trim(), actif:document.getElementById('f_actif').value==='true', matricule:document.getElementById('f_matricule').value.trim()||null, solde_conges:parseFloat(document.getElementById('f_solde').value), solde_rtt:parseFloat(document.getElementById('f_solde_rtt').value)||0, sexe:(document.getElementById('f_sexe')||{}).value||null, oeth:((document.getElementById('f_oeth')||{}).value==='true'), date_sortie:(document.getElementById('f_sortie')||{}).value||null };
+  var payload={ nom:nom, prenom:document.getElementById('f_prenom').value.trim(), role:_prim, roles:_roles, acces_services:_jetons, entite:document.getElementById('f_entite').value, poste:document.getElementById('f_poste').value.trim(), contrat:document.getElementById('f_contrat').value, shift_id:document.getElementById('f_shift').value, date_entree:document.getElementById('f_date').value||null, taux_horaire_charge:parseFloat(document.getElementById('f_taux').value)||null, email:document.getElementById('f_email').value.trim(), telephone:document.getElementById('f_tel').value.trim(), adresse:document.getElementById('f_adresse').value.trim(), actif:document.getElementById('f_actif').value==='true', matricule:document.getElementById('f_matricule').value.trim()||null, solde_conges:parseFloat(document.getElementById('f_solde').value), solde_rtt:parseFloat(document.getElementById('f_solde_rtt').value)||0, sexe:(document.getElementById('f_sexe')||{}).value||null, oeth:((document.getElementById('f_oeth')||{}).value==='true'), date_sortie:(document.getElementById('f_sortie')||{}).value||null };
   if(!RH_CAN_WRITE) delete payload.taux_horaire_charge;   // jamais de taux depuis un compte sans droit d'écriture RH
   var pin=document.getElementById('f_pin').value.trim(); if(pin) payload.pin=pin;
   var url, method;

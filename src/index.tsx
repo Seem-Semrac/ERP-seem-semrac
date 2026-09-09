@@ -133,7 +133,7 @@ import { pageServiceCompta } from './compta_service'
 import { pageServiceDirection, computeDataHealth } from './direction_service'
 import { pageRapport8D } from './rapport8d'
 import { pageLogin, pageAccesRefuse } from './login'
-import { signSession, verifySession, canAccess, isPublicPath, hashPin, navServices } from './auth'
+import { signSession, verifySession, canAccess, isPublicPath, hashPin, navServices, MENU_SERVICES_PUBLIC } from './auth'
 import { MANUELS, manuelsFor, manuelBySlug, pageManuelsHub, pageManuel } from './manuels'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 
@@ -4508,6 +4508,7 @@ app.get('/be/preparation', async (c) => {
     <div id="prep-steps" style="margin-bottom:16px;"></div>
     <div style="display:flex;justify-content:flex-end;gap:10px;">
       <button type="button" id="prep-save" onclick="prepSave()" style="display:none;background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:white;padding:11px 30px;border-radius:12px;font-weight:700;font-size:.88rem;border:none;cursor:pointer;box-shadow:0 2px 12px #8b5cf644;"><i class="fas fa-save" style="margin-right:8px;"></i>Enregistrer la prépa (plan + codes)</button>
+      <button type="button" id="prep-valider" onclick="prepValider()" style="display:none;margin-left:10px;background:linear-gradient(135deg,#059669,#047857);color:white;padding:11px 30px;border-radius:12px;font-weight:700;font-size:.88rem;border:none;cursor:pointer;box-shadow:0 2px 12px #05966944;" title="Enregistre puis marque la préparation FAITE — l'une des deux conditions d'entrée en production"><i class="fas fa-check-double" style="margin-right:8px;"></i>Valider la prépa</button>
     </div>
   </div>
   <script>
@@ -4516,9 +4517,10 @@ app.get('/be/preparation', async (c) => {
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function prepRender(){
     var sel=document.getElementById('prep-nom'); var id=sel?sel.value:'';
-    var host=document.getElementById('prep-steps'); var save=document.getElementById('prep-save'); if(!host) return;
+    var host=document.getElementById('prep-steps'); var save=document.getElementById('prep-save');
+    var valider=document.getElementById('prep-valider'); if(!host) return;
     var nom=(PREP||[]).find(function(x){return String(x.id)===String(id);});
-    if(!nom){ host.innerHTML=''; if(save) save.style.display='none'; return; }
+    if(!nom){ host.innerHTML=''; if(save) save.style.display='none'; if(valider) valider.style.display='none'; return; }
     host.innerHTML='<div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);padding:20px;margin-bottom:16px;">'
       +'<div style="font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;margin-bottom:12px;"><i class="fas fa-drafting-compass" style="color:#8b5cf6;margin-right:6px;"></i>Plan de la pièce — '+esc(nom.num_nom||nom.code)+'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
@@ -4554,6 +4556,7 @@ app.get('/be/preparation', async (c) => {
       +'<div style="font-size:.7rem;color:#94a3b8;margin-top:4px;"><i class="fas fa-print" style="margin-right:4px;"></i>Ces codes sont imprimés sur l\\'OF du lot (colonne « N° Programme »).</div>'
       +'</div>';
     if(save) save.style.display='';
+    if(valider) valider.style.display='';
   }
   window.prepRender=prepRender;
   // Nom de fichier sans son extension : sert a pre-remplir le N° de plan / de programme.
@@ -4604,8 +4607,31 @@ app.get('/be/preparation', async (c) => {
     prepEnvoyer(f, 'programme_fao', ordre, 'prep-prog-etat-'+ordre);
   }
 
-  function prepSave(){
+  // Enregistre la prepa PUIS la marque « faite ». Le serveur refuse la validation si le plan
+  // ou un code CNC manque : on ne veut pas ouvrir la porte de production sur une prepa vide.
+  function prepValider(){
     var sel=document.getElementById('prep-nom'); var id=sel?sel.value:''; if(!id) return;
+    var b=document.getElementById('prep-valider');
+    if(b){ b.disabled=true; b.style.opacity='.6'; }
+    var relacher=function(){ if(b){ b.disabled=false; b.style.opacity=''; } };
+    prepSave(function(ok){
+      if(!ok){ relacher(); return; }
+      fetch('/api/nomenclature/'+encodeURIComponent(id)+'/prepa-validee',{method:'POST'})
+        .then(function(r){return r.json();})
+        .then(function(j){
+          relacher();
+          if(!j||!j.ok){ if(window.pushNotif) pushNotif('err','fa-ban',(j&&j.error)||'Validation refusee.',7000); return; }
+          var msg='Prepa <strong>'+(j.reference||'')+'</strong> validee.';
+          msg += j.validees ? ' '+j.validees+' ligne(s) passee(s) en « faite »' + (j.affaires.length? ' — affaire(s) '+j.affaires.join(', ') : '') + '.' : ' Aucune ligne en attente pour cette piece.';
+          msg += ' Reste la reception matiere pour lancer la production.';
+          if(window.pushNotif) pushNotif('ok','fa-check-double', msg, 8000);
+        })
+        .catch(function(){ relacher(); if(window.pushNotif) pushNotif('err','fa-times','Erreur reseau.',4000); });
+    });
+  }
+
+  function prepSave(apres){
+    var sel=document.getElementById('prep-nom'); var id=sel?sel.value:''; if(!id){ if(apres) apres(false); return; }
     var progs={};
     document.querySelectorAll('#prep-steps [data-ord]').forEach(function(inp){ var o=inp.getAttribute('data-ord'); var f=inp.getAttribute('data-f'); (progs[o]=progs[o]||{ordre:o})[f]=inp.value; });
     var arr=Object.keys(progs).map(function(o){return progs[o];});
@@ -4613,12 +4639,12 @@ app.get('/be/preparation', async (c) => {
     var planFic=(document.getElementById('prep-plan_fichier')||{}).value||'';
     fetch('/api/nomenclature/'+encodeURIComponent(id)+'/programmes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({programmes:arr, num_plan:numPlan, plan_fichier:planFic})})
       .then(function(r){return r.json();}).then(function(j){
-        if(j&&j.ok){ if(window.pushNotif) pushNotif('ok','fa-save','Prépa enregistrée — plan + '+j.count+' code(s) programme, imprimés sur l\\'OF.',4500);
+        if(j&&j.ok){ if(apres) apres(true); if(window.pushNotif) pushNotif('ok','fa-save','Prépa enregistrée — plan + '+j.count+' code(s) programme, imprimés sur l\\'OF.',4500);
           var nom=(PREP||[]).find(function(x){return String(x.id)===String(id);}); if(nom){ nom.num_plan=numPlan; nom.plan_fichier=planFic; nom.steps.forEach(function(s){ var p=progs[String(s.ordre)]; if(p){ s.programme=p.programme||''; s.programme_fichier=p.programme_fichier||''; } }); }
-        } else if(window.pushNotif) pushNotif('err','fa-ban',(j&&j.error)||'Enregistrement échoué.',4500);
-      }).catch(function(){ if(window.pushNotif) pushNotif('err','fa-times','Erreur réseau.',4000); });
+        } else { if(apres) apres(false); if(window.pushNotif) pushNotif('err','fa-ban',(j&&j.error)||'Enregistrement échoué.',4500); }
+      }).catch(function(){ if(apres) apres(false); if(window.pushNotif) pushNotif('err','fa-times','Erreur réseau.',4000); });
   }
-  window.prepSave=prepSave;
+  window.prepSave=prepSave; window.prepValider=prepValider;
   })();
   </script>`
   return c.html(layout('Préparation Technique', content, 'be-prep'))
@@ -7682,6 +7708,16 @@ app.patch('/api/rh/salarie/:id', async (c) => {
     patch.role = roles[0]                       // rôle primaire
     patch.metier = roleToMetier(roles[0])
     patch.autorisations = autorisationsUnion(roles)   // union des permissions sur tous les rôles
+    // Accès par service choisis dans la fiche salarié (« lire:<svc> » / « ecrire:<svc> »).
+    // Ils s'ajoutent aux jetons du rôle et, dès qu'il y en a au moins un, deviennent
+    // la référence pour l'accès aux services (voir canAccess dans auth.ts).
+    if (Array.isArray(b.acces_services)) {
+      const svc = new Set(MENU_SERVICES_PUBLIC)
+      const jetons = (b.acces_services as any[])
+        .map((x: any) => String(x || '').trim())
+        .filter((t: string) => /^(lire|ecrire):/.test(t) && svc.has(t.split(':')[1]))
+      patch.autorisations = [...new Set([...patch.autorisations, ...jetons])]
+    }
     const isOp = roles.includes('operateur') || roles.includes('oas')
     patch.entite = isOp ? (b.entite === 'Semrac' ? 'Semrac' : 'Seem') : 'Support'
   } else if ('entite' in b) {
@@ -8886,6 +8922,39 @@ app.get('/commercial/preparations-tech', async (c) => c.html(pagePreparationsTec
 app.get('/be/references-pieces',         (c) => c.html(pageReferencesPiecesACreer()))
 app.get('/be/preparations-tech',         async (c) => c.html(pagePreparationsTechniques(await getPreparationsTechniques().catch(() => []))))
 // Marquer une préparation technique comme faite/en cours (depuis la liste)
+// Valide la préparation technique d'une NOMENCLATURE : marque « faite » toutes les lignes
+// de preparations_techniques portant la même référence produit. C'est l'une des deux portes
+// d'entrée en production — l'autre étant la réception matière (matiere_ok).
+app.post('/api/nomenclature/:id/prepa-validee', async (c) => {
+  const id = c.req.param('id')
+  const noms = await getNomenclatures().catch(() => [] as any[])
+  const nom = (noms as any[]).find((n: any) => String(n.id) === String(id))
+  if (!nom) return c.json({ ok: false, error: 'Nomenclature introuvable' }, 404)
+
+  // Une prépa ne se valide pas à vide : sans plan ni programme, la production n'a rien à exécuter.
+  const aPlan = !!String(nom.num_plan || nom.plan_fichier || '').trim()
+  const etapes = Array.isArray(nom.etapes_production) ? nom.etapes_production : []
+  const machines = await getMachines().catch(() => [] as any[])
+  const cnc = new Set((machines as any[]).filter((m: any) => m.cnc).map((m: any) => String(m.id)))
+  const etapesCnc = etapes.filter((e: any) => e && e.machine_id && cnc.has(String(e.machine_id)))
+  const cncSansCode = etapesCnc.filter((e: any) => !String(e.programme || e.programme_fichier || '').trim())
+  if (!aPlan) return c.json({ ok: false, error: 'Plan manquant : renseignez le n° de plan ou joignez le fichier avant de valider.' }, 409)
+  if (cncSansCode.length) return c.json({ ok: false, error: cncSansCode.length + ' étape(s) CNC sans code programme : complétez-les avant de valider.' }, 409)
+
+  const ref = String(nom.code_ref_produit || nom.num_nom || '').toLowerCase().trim()
+  const preps = await getPreparationsTechniques().catch(() => [] as any[])
+  const cibles = (preps as any[]).filter((p: any) =>
+    String(p.statut || '') !== 'faite' &&
+    [String(p.code_ref_produit || '').toLowerCase().trim(), String(p.piece || '').toLowerCase().trim()].includes(ref))
+  let n = 0
+  const affaires: string[] = []
+  for (const pr of cibles) {
+    const { error } = await updatePreparationTechnique(String(pr.id), { statut: 'faite', updated_at: new Date().toISOString() } as any)
+    if (!error) { n++; if (pr.num_affaire) affaires.push(String(pr.num_affaire)) }
+  }
+  return c.json({ ok: true, validees: n, affaires: [...new Set(affaires)], reference: nom.code_ref_produit || nom.num_nom })
+})
+
 app.post('/api/prepa-technique/:id/statut', async (c) => {
   const b = await c.req.json().catch(() => ({} as any))
   const st = ['a_faire', 'en_cours', 'faite'].includes(b.statut) ? b.statut : 'faite'

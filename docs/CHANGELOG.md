@@ -2,6 +2,29 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-09 — Droits par service sur la fiche salarié · validation de la préparation technique
+
+### 1. Deux listes déroulantes de droits, par employé
+- **Demande** : « deux listes déroulantes, une pour lecture et une pour écriture, pour choisir ce qu'une personne peut lire ou écrire dans l'ERP ; dans cette liste il y a tous les services et on peut choisir plusieurs cases ».
+- **RH › Employés** porte désormais **Peut LIRE** et **Peut ÉCRIRE**, deux listes à sélection multiple couvrant les **15 services**. Rangées dans `salaries.autorisations` (déjà `jsonb`) sous forme de jetons `lire:<service>` / `ecrire:<service>` — **aucune migration**.
+- `ecrire:<svc>` implique `lire:<svc>` : inutile de cocher un service des deux côtés.
+- **Règle appliquée par `canAccess()`** : Direction (`all`) garde l'accès total ; puis, **dès qu'un jeton existe, ces listes font foi** et remplacent la matrice des rôles — elles peuvent donc **ouvrir** un service comme en **fermer** un que le rôle accordait. Sans aucun jeton, la matrice s'applique exactement comme avant. `navServices()` suit la même règle : le menu latéral reflète les droits réels.
+- **Vérifié par 10 cas** : comportement historique préservé sans jeton (3 cas), ouverture en lecture puis en écriture, écriture impliquant la lecture, fermeture d'un service ouvert par le rôle, Direction jamais restreinte, filtrage du menu. Les 10 passent.
+
+### 2. Validation de la préparation technique
+- **Demande** : « on veut pouvoir valider cette prépa technique et qu'elle aille dans la liste des prépa techniques faites, et que les infos arrivent dans la nomenclature de la pièce associée. Une fois validée c'est l'une des deux conditions pour envoyer en production, avec les bons de commande associés à un lot rentrés en stock. »
+- Bouton **« Valider la prépa »** sur `/be/preparation` : il enregistre d'abord (plan + codes programme → nomenclature), puis appelle `POST /api/nomenclature/:id/prepa-validee`, qui passe à **`faite`** toutes les lignes de `preparations_techniques` portant la même référence produit, et renvoie les affaires débloquées.
+- **Refus 409** si le plan manque ou si une étape CNC est sans code programme : on n'ouvre pas la porte de production sur une prépa vide.
+- **La porte de production existait déjà** et consommait exactement ces deux conditions — la validation était le maillon manquant :
+```
+bdtsPrets = bdts.filter(b => b.matiere_ok !== false && !affPrepaOpen.has(b.num_affaire))
+                              ^ BC du lot réceptionnés     ^ aucune prépa au statut ≠ 'faite'
+```
+- La **remontée vers la nomenclature était déjà en place** (`POST /api/nomenclature/:id/programmes`) : n° de plan, fichier et codes programme par étape sont déversés dans `etapes_production` et imprimés sur l'OF.
+
+### Vérification
+`tsc` 0 erreur · build OK · harnais **61 PASS / 0 FAIL** · pages servies depuis Docker : `/rh/employes` (les deux listes, 15 services, **5 scripts valides**) et `/be/preparation` (bouton et fonction de validation). 10 cas d'autorisation exécutés contre le moteur réel.
+
 ## 2026-09-09 — Nomenclatures : deux temps de réglage, ROP (homme) et RGM (machine)
 
 - **Demande** : « dans les nomenclatures, il faut mettre deux temps de réglages, le temps réglage homme (ROP) et le temps réglage machine (RGM), en millièmes d'heures ».
