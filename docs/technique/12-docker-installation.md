@@ -12,7 +12,9 @@
 
 **Le piège que ce mécanisme corrige** : les scripts de `/docker-entrypoint-initdb.d/` (dont `db/seed/schema.sql`) ne sont joués par Postgres **que si le répertoire de données est vide**, c'est-à-dire à la toute première création de la base. Sur une VM déjà en service, une nouvelle colonne n'arrivait donc **jamais** : `erp-docker.sh maj` mettait le code à jour, et le schéma restait figé.
 
-**Le mécanisme** : un conteneur éphémère `erp-migrate` (`docker/migrate.Dockerfile`) démarre à chaque `up`, après que la base est saine, applique les fichiers de `docker/db/migrations/` **jamais encore joués**, puis s'arrête. Son journal est la table `_erp_migrations`. Le service `app` **dépend de sa réussite** (`service_completed_successfully`) : jamais de code neuf sur un schéma ancien.
+**Le mécanisme** : un conteneur éphémère `erp-migrate` (`docker/migrate.Dockerfile`) démarre à chaque `up`, après que la base est saine, applique les fichiers de `docker/db/migrations/` **jamais encore joués**, puis s'arrête. Son journal est la table `_erp_migrations`.
+
+> ⚠️ **Correction du 09/09/2026** : `app` ne dépend **plus** de la réussite de `erp-migrate` (`service_completed_successfully` retiré). Une migration en échec mettait toute l'application à terre — un schéma en retard est un désagrément, un ERP arrêté est un arrêt de travail. Un échec est signalé bruyamment, n'est pas journalisé, et la migration est **retentée au démarrage suivant**.
 
 **Les données ne sont jamais touchées.** Le runner inspecte **tous** les fichiers *avant* d'en appliquer un seul et **refuse le lot entier** si l'un contient :
 
@@ -32,6 +34,25 @@ Les commentaires SQL sont retirés avant l'analyse (pas de faux positif sur un `
 docker logs erp-migrate
 docker exec erp-db psql -U postgres -d postgres -c "table _erp_migrations"
 ```
+
+### Voir ce qu'une migration changerait, AVANT de l'appliquer
+
+`docker/db/apercu-renumerotation.sql` est un aperçu **en lecture seule** (que des `SELECT`) de l'effet des migrations 002 et 003 : pour chaque bon de commande, bon de livraison et facture proforma, il affiche le numéro actuel, le numéro d'après, et un verdict `INCHANGE` / `RENUMEROTE` / `SAISIE MANUELLE - JAMAIS TOUCHEE`. Une dernière section compte les lignes des tables concernées — ces comptages doivent être **identiques** avant et après.
+
+```bash
+docker exec -i erp-db psql -U postgres -d postgres -f - < ~/erp/docker/db/apercu-renumerotation.sql
+```
+
+### Sauvegarde automatique avant chaque mise à jour
+
+`erp-docker.sh maj` produit un `pg_dump` complet **avant** de lancer les migrations, dans `docker/sauvegardes/erp-AAAAMMJJ-HHMMSS.sql` (les 10 plus récentes sont conservées, le dossier est hors versionnement). À la demande :
+
+```bash
+~/erp/docker/scripts/erp-docker.sh sauvegarde
+~/erp/docker/scripts/erp-docker.sh restore docker/sauvegardes/erp-20260909-224910.sql
+```
+
+Si la base est arrêtée, la sauvegarde est signalée impossible et la mise à jour **continue quand même** : elle ne doit jamais bloquer un déploiement.
 
 
 ## 1. Ce que ça installe
@@ -145,7 +166,7 @@ ERP_INSTANCE=recette ~/erp/docker/scripts/erp-docker.sh ps
 ~/erp/docker/scripts/erp-docker.sh ps
 ```
 
-`maj` · `up` · `stop` · `start` · `restart` · `down` · `ps` · `logs [service]` · `psql` · `restore <dump.sql>` · `migrate` · `mirror` · `ged-bucket` · `reset` (⚠ efface les données).
+`maj` · `up` · `stop` · `start` · `restart` · `down` · `ps` · `logs [service]` · `psql` · **`sauvegarde`** · `restore <dump.sql>` · `migrate` · `mirror` · `ged-bucket` · `reset` (⚠ efface les données).
 
 ### Mettre à jour après une modification du code
 

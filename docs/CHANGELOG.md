@@ -42,6 +42,15 @@ Les deux sont idempotentes : relancées, elles ne réécrivent que ce qui diffè
 
 ⚠ **Supabase cloud** : les migrations ne s'y appliquent pas toutes seules (pas de conteneur `erp-migrate` en face). Le contenu des deux fichiers est à jouer une fois dans le SQL Editor de Supabase Studio. Tant que ce n'est pas fait, l'affichage retombe sur `id` — correct, simplement à l'ancien format.
 
+### Filet de sécurité ajouté dans la foulée
+
+Question légitime de l'exploitant : « ça va rien effacer si j'ai fait des choses supplémentaires dans la base de la VM ? »
+
+- **`erp-docker.sh maj` sauvegarde la base AVANT de lancer les migrations** — `pg_dump` complet dans `docker/sauvegardes/erp-AAAAMMJJ-HHMMSS.sql`, 10 fichiers conservés en rotation, dossier hors versionnement. Une base arrêtée n'empêche pas la mise à jour : la sauvegarde est signalée impossible et le déploiement continue. Commande manuelle : `erp-docker.sh sauvegarde`, restauration : `erp-docker.sh restore <fichier>`.
+- **`docker/db/apercu-renumerotation.sql`** — aperçu **en lecture seule** de ce que les migrations changeraient : numéro actuel, numéro d'après, verdict `INCHANGE` / `RENUMEROTE` / `SAISIE MANUELLE - JAMAIS TOUCHEE`, plus un comptage des lignes à comparer avant/après.
+
+Vérifié en conditions réelles : sauvegarde produite (1,3 Mo, 238 tables et blocs `COPY`, lignes de `bons_de_commande` présentes) ; aperçu exécuté dans une transaction **annulée** où les anciens numéros avaient été remis — il a bien annoncé `RENUMEROTE` sur les cinq BC, et laissé le numéro fournisseur saisi à la main (`F-FOURNISSEUR-XYZ-42`) en `JAMAIS TOUCHEE`. Base identique après le `rollback`.
+
 ## 2026-09-09 — Le schéma de la base se met à jour sur la VM, sans toucher aux données
 
 **Le trou** : les scripts d'initialisation ne sont joués par Postgres **que sur une base vide**. Sur une VM déjà en service, `erp-docker.sh maj` mettait le **code** à jour mais **jamais le schéma** — une nouvelle colonne n'arrivait pas, et rien ne le signalait.

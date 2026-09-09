@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Aide-mémoire de pilotage de la stack Docker ERP (Linux/macOS/Git-Bash).
-# Usage : docker/scripts/erp-docker.sh <up|down|reset|logs|ps|psql|restore <f>|ged-bucket|migrate|urls>
+# Usage : docker/scripts/erp-docker.sh <up|down|reset|logs|ps|psql|sauvegarde|restore <f>|ged-bucket|migrate|urls>
 set -euo pipefail
 DOCKER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$DOCKER_DIR/.." && pwd)"
@@ -23,7 +23,8 @@ else
   # simple `docker compose up`). Se tromper de nom ne provoque aucune erreur visible :
   # Compose demarre simplement une SECONDE stack, vide, a cote de la vraie.
   if [ -z "${COMPOSE_PROJECT_NAME:-}" ]; then
-    _proj="$(docker inspect erp-db --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null | head -1 | tr -d '')"
+    _proj="$(docker inspect erp-db --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null | head -1 | tr -d '
+')"
     export COMPOSE_PROJECT_NAME="${_proj:-erp}"
     [ -n "$_proj" ] && echo "· stack detectee : projet « $_proj »"
   fi
@@ -32,6 +33,26 @@ fi
 # Toutes les commandes compose passent par ce fichier d'environnement.
 
 compose() { command docker compose --env-file "$ENV_FILE" "$@"; }
+
+# Sauvegarde COMPLETE de la base (schema + donnees) dans docker/sauvegardes/.
+# Appelee automatiquement par `maj`, AVANT que les migrations de schema ne tournent :
+# meme si quelque chose tournait mal, on revient a l'etat d'il y a trente secondes.
+#   Restauration : erp-docker.sh restore docker/sauvegardes/erp-AAAAMMJJ-HHMMSS.sql
+# Ne bloque JAMAIS l'appelant : base arretee ou pg_dump indisponible => message et on continue.
+# Rotation : les 10 plus recentes sont conservees, les autres supprimees.
+_sauvegarde() {
+  local dossier="$DOCKER_DIR/sauvegardes"
+  mkdir -p "$dossier"
+  local fichier="$dossier/erp-$(date +%Y%m%d-%H%M%S).sql"
+  if compose exec -T db pg_dump -U postgres -d postgres > "$fichier" 2>/dev/null && [ -s "$fichier" ]; then
+    echo "  ✓ sauvegarde : $fichier ($(du -h "$fichier" 2>/dev/null | cut -f1))"
+    ls -1t "$dossier"/erp-*.sql 2>/dev/null | tail -n +11 | while read -r vieux; do rm -f "$vieux"; done
+    return 0
+  fi
+  rm -f "$fichier"
+  echo "  ! sauvegarde impossible (base arretee ?) — on continue quand meme." >&2
+  return 1
+}
 
 cmd="${1:-urls}"; arg="${2:-}"
 case "$cmd" in
@@ -55,6 +76,10 @@ case "$cmd" in
     GIT_COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo '')"
     BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     export GIT_COMMIT BUILD_DATE
+    # Filet de securite AVANT les migrations de schema : elles ne suppriment rien, mais
+    # une sauvegarde datee de trente secondes coute quelques secondes et leve le doute.
+    echo "→ Sauvegarde de la base…"
+    _sauvegarde || true
     echo "→ Reconstruction et redemarrage… (code ${GIT_COMMIT:0:10})"
     # ⚠ `set -e` en tete de ce script : sans ce garde, un service qui sort en erreur
     #   (ex. une migration en echec) faisait AVORTER la commande ici — l'utilisateur ne
@@ -92,6 +117,9 @@ case "$cmd" in
   logs)  [ -n "$arg" ] && compose logs -f "$arg" || compose logs -f ;;
   ps)    compose ps ;;
   psql)  compose exec db psql -U postgres -d postgres ;;
+  sauvegarde)
+    echo "→ Sauvegarde de la base…"
+    _sauvegarde ;;
   restore)
     [ -n "$arg" ] || { echo "Usage: restore <dump.sql>"; exit 1; }
     compose exec -T db psql -U postgres -d postgres -v ON_ERROR_STOP=0 < "$arg"
