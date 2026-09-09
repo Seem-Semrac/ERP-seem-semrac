@@ -2,6 +2,47 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-09 — Référence du matériel dans le BC issu d'une demande d'achat
+
+**Demandé** : « en plus de la désignation il faut surtout mettre la réf du matériel à commander, avec les fournisseurs qui ont cette réf dans le catalogue. »
+
+### Ce que faisait la version précédente
+
+La fenêtre « Traiter la DA → Bon de Commande » n'avait qu'un champ *Articles / Prestation* en texte libre. Un filtrage des fournisseurs existait déjà, mais il travaillait sur ce texte, par **inclusion dans les deux sens** sur la référence **ou** la désignation — une référence courte comme `A2` « correspondait » à `A2024`.
+
+Sondé sur les données réelles : sur les **3 demandes d'achat en base, ce filtre ne renvoyait aucun fournisseur** (0, 0, 0). Il ne servait donc à rien.
+
+### Décision de conception — aucune colonne ajoutée
+
+`demandes_achat` n'a pas de colonne `reference`, et il n'en a **pas été créé**. La référence n'est pas une donnée que la demande transporte : sur les 7 générateurs de demandes du dépôt, 4 ne produisent que du texte libre — la colonne serait restée vide partout. C'est une donnée que **l'acheteur arrête au moment de commander**, au catalogue. Elle est saisie dans le formulaire et voyage dans `bons_de_commande.lignes` (jsonb, déjà présente). **Lot sans migration.**
+
+### Ce qui a été fait
+
+| | |
+|---|---|
+| **Deux champs** au lieu d'un | *Référence du matériel* + *Désignation*, avec une liste de choix des 143 références du catalogue (libellées par leur désignation) |
+| **Fournisseurs qui portent la référence** | Égalité **stricte** sur `produits_fournisseurs.reference`, groupés en tête avec **leur désignation catalogue** ; porteur unique présélectionné |
+| **Pré-remplissage honnête** | Brouillon → référence exacte → désignation exacte → **vide**. Jamais de référence inventée hors catalogue ; quand elle est déduite, l'écran l'annonce « déduite — à vérifier », mention qui disparaît dès que l'acheteur saisit lui-même |
+| **Repli conservé** | Sans référence, l'ancien rapprochement approximatif s'applique — mais son libellé ne ment plus : « Proches de … (rapprochement approximatif) » au lieu de « Référencés pour … » |
+| **PDF du BC** | Nouvelle colonne *Référence* : le fournisseur reçoit enfin le code du produit (tiret si absente) |
+| **Réception → stock** | L'entrée en stock s'apparie d'abord sur `lignes[0].reference`, avant de retomber sur le libellé libre. Le code lisait jusqu'ici `bc.ref_stock`, **colonne qui n'existe pas** en base |
+
+### Trois bugs adjacents corrigés au passage
+
+- `#bc_affaire` était affecté **deux fois** dans `achOpenBC`, la seconde écrasant le repli « demande libre » (`LIBRE-XXX`) par une chaîne vide.
+- `da.num_affaire` était lu alors qu'il ne figurait pas dans la projection `DA_JSON` → toujours `undefined`. Ajouté (cf. la règle de projection ci-dessous).
+- `DA_JSON` utilisait `JSON.stringify` brut là où tout le fichier passe par `sjX()` ; aligné.
+
+### Ce que le catalogue permet réellement — à savoir avant d'utiliser la fonction
+
+Sonde du 09/09/2026 sur `produits_fournisseurs` : **144 lignes, 143 références distinctes, 31 fournisseurs**. Une **seule** référence est portée par deux fournisseurs (`510056`), et c'est une **anomalie de données** — deux produits différents sous le même code (TTA « EXAFLUID AL 100 » / QUAKER « QUAKERCOOL 7200 HBFF ») — pas du multi-sourcing. Prix renseignés : **2/144**. Délais : **0/144**.
+
+Conséquence assumée : la liste « fournisseurs qui portent cette référence » renverra presque toujours **un seul** nom. La fonction est correcte ; c'est le catalogue qui est mince. Le montant n'est volontairement **pas** pré-rempli depuis le catalogue — ce serait un chiffre faux 99 fois sur 100.
+
+### Vérification
+
+`tsc` 0 erreur · build ✓ · harnais **61 PASS / 0 FAIL** · 9 cas d'interface rejoués **dans le navigateur sur les données réelles** (pré-remplissage, porteur unique, deux porteurs, référence inconnue, BC sous-traitant, saisie manuelle, espaces parasites, repli sans référence, payload envoyé) · **7 contrôles serveur** sur le PDF, dont la **non-régression de 6 bons de commande existants** (colonne présente, tiret quand la référence manque, aucun « undefined »).
+
 ## 2026-09-09 — Les droits d'accès par service ne tenaient pas (et s'effaçaient tout seuls)
 
 **Signalé** : « je coche des cases, je valide, je reviens : plus rien n'est coché. »

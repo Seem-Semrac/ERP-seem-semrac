@@ -10,7 +10,8 @@
 |---|---|---|---|---|
 | Type de commande | liste déroulante (BC Fournisseur, BC Sous-Traitant) | Non | Indique si l'on commande une fourniture (fournisseur) ou une prestation à façon (sous-traitant). | BC Fournisseur |
 | Fournisseur / ST | texte | Oui | Le nom de l'entreprise à qui vous passez la commande. | Aluminium de France |
-| Articles / Prestation | texte | Non | La désignation de ce qui est commandé. Se pré-remplit avec l'article de la DA. | Tôle alu 2017 ép. 5 mm |
+| Référence du matériel | texte avec liste de choix (catalogue fournisseur) | Non | **La référence du produit à commander.** Choisissez-la dans la liste : le champ *Fournisseur / ST* ne proposera alors en tête que les fournisseurs qui portent cette référence au catalogue. Si l'ERP a pu la retrouver depuis la désignation de la demande, elle est pré-remplie et signalée « déduite — à vérifier ». | 125237 |
+| Articles / Prestation | texte | Non | La désignation de ce qui est commandé. Se pré-remplit avec l'article de la DA, ou avec la désignation du catalogue si vous choisissez une référence et que le champ est vide. | Tôle alu 2017 ép. 5 mm |
 | Montant HT (€) | nombre | Non | Le montant total hors taxes de la commande. | 1250.00 |
 | Livraison prévue | date | Non | La date à laquelle vous attendez la marchandise. | 2026-07-20 |
 | N° d'affaire (optionnel) | texte | Non | Le numéro de l'affaire / du chantier à rattacher, si la commande concerne une commande client précise. | AFF-2026-018 |

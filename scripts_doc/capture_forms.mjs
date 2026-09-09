@@ -34,6 +34,8 @@ const M = [
   { file: 'form-be-nomenclature',      path: '/be/service', fn: "nomNewStandard()", inline: true, wait: 900 },
   // Achats
   { file: 'form-achats-bc',            path: '/achats/service', fn: "achNewBC()" },
+  // Fenetre « Traiter la DA -> BC » : celle qui porte la reference du materiel. Necessite une DA a traiter.
+  { file: 'form-achats-da-bc',         path: '/achats/service', fn: "achOpenBC((ACH_DA[0]||{}).id)", wait: 900 },
   // Production
   { file: 'form-production-bdt',       path: '/production/planning', fn: "openBdtModal()", wait: 900 },
   { file: 'form-production-st',        path: '/production/service', fn: "openSTModal()" },
@@ -145,6 +147,16 @@ for (const m of jobs) {
   const page = await ctx.newPage()
   try {
     await page.goto(BASE + m.path, { waitUntil: 'networkidle', timeout: 30000 })
+    // Les pages lourdes portent plusieurs blocs <script> : declencher `fn` avant qu'ils
+    // soient tous parses donnait des KO « fn/click sans effet » purement aleatoires.
+    // On attend donc que le DOM soit complet ET, si `fn` appelle une fonction nommee,
+    // que cette fonction existe reellement.
+    await page.waitForLoadState('load').catch(() => {})
+    const nomFn = m.fn && /^\s*([A-Za-z_$][\w$]*)\s*\(/.exec(m.fn)
+    if (nomFn) {
+      await page.waitForFunction((n) => typeof window[n] === 'function', nomFn[1], { timeout: 8000 })
+        .catch(() => console.warn('  ⚠ ' + nomFn[1] + ' toujours absente apres 8 s (' + m.file + ')'))
+    }
     await page.waitForTimeout(700)
     // Onglet à ouvrir avant de déclencher la modale (certaines modales vivent dans un panneau masqué)
     if (m.tabClick) {

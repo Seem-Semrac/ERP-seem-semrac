@@ -1962,6 +1962,9 @@ app.post('/api/achats/da/:id/soumettre', async (c) => {
   const isST = (body.type_bc || da.type_bc || 'fournisseur') === 'st'
   const typeBc = isST ? 'sous_traitant' : 'fournisseur'  // valeurs contraintes en DB
   const articles = body.articles || da.article || '—'
+  // Référence catalogue choisie par l'acheteur dans le formulaire. La DA n'en porte pas :
+  // c'est au moment de commander qu'elle est arrêtée.
+  const refArticle = String(body.reference || '').trim() || null
   const montant = Number(body.montant_ht ?? body.montant ?? 0) || 0
   const fournisseurNom = body.fournisseur || da.fournisseur || null
   const bcPayload: any = {
@@ -1986,7 +1989,10 @@ app.post('/api/achats/da/:id/soumettre', async (c) => {
     // liste « receptions a venir » (statut absent de _bcEmise) jusqu'a l'encaissement.
     statut: estProforma(body.conditions_paiement) ? 'attente_paiement' : 'envoye',
     notes: body.notes || null,
-    lignes: [{ article: articles, qte: da.qte || body.qte || null, fournisseur: fournisseurNom }],
+    // `article` est CONSERVÉ : d'autres lecteurs de `lignes` (bcsView, BC de sous-traitance)
+    // ne connaissent que cette clé. La référence s'ajoute, elle ne remplace rien — et c'est elle
+    // qui part sur le PDF du fournisseur et sert de clé d'entrée en stock à la réception.
+    lignes: [{ article: articles, reference: refArticle, designation: articles, qte: da.qte || body.qte || null, fournisseur: fournisseurNom }],
     // Hérité de la DA → route le prix à la réception (BC 'machine' → OPEX de la machine)
     categorie: (da as any).categorie || null,
     machine_id: (da as any).machine_id || null,
@@ -2132,7 +2138,12 @@ app.post('/api/expeditions/bc/:id/receptionner', async (c) => {
       const qteBl = Number(body.qte ?? (bc as any).qte_commandee ?? 0) || 0
       if (qteBl > 0) {
         const [stockRows, mvtsRows] = await Promise.all([getStockReel().catch(() => [] as any[]), getMouvementsStock().catch(() => [] as any[])])
-        const refBc = String((bc as any).ref_stock || (bc as any).articles || '').toLowerCase().trim()
+        // La référence portée par la ligne du BC prime sur le libellé libre : sans elle,
+        // l'appariement au stock retombait sur `articles` et ratait dès que le libellé différait.
+        // (`ref_stock` n'existe pas en base — lecture conservée par prudence, elle vaut undefined.)
+        const _lgBc = Array.isArray((bc as any).lignes) ? (bc as any).lignes : []
+        const _refLigne = _lgBc.length ? String((_lgBc[0] as any).reference || '').trim() : ''
+        const refBc = String((bc as any).ref_stock || _refLigne || (bc as any).articles || '').toLowerCase().trim()
         const art = (stockRows as any[]).find(s => refBc && String((s as any).reference || '').toLowerCase().trim() === refBc)
           || (stockRows as any[]).find(s => refBc && String((s as any).designation || '').toLowerCase().trim() === refBc)
           || (stockRows as any[]).find(s => refBc && String((s as any).designation || '').toLowerCase().includes(refBc))
@@ -2860,11 +2871,11 @@ app.get('/api/bc/:id/pdf', async (c) => {
     + (bc.date_livraison ? '<div>Livraison : ' + _pdfEsc(String(bc.date_livraison).slice(0, 10)) + '</div>' : '')
   const bcLignes = Array.isArray(bc.lignes) ? bc.lignes : []
   const rows = bcLignes.length
-    ? bcLignes.map((l: any, i: number) => '<tr><td>' + (i + 1) + '</td><td>' + _pdfEsc(l.article || l.designation || '') + '</td><td style="text-align:right;">' + _pdfEsc(l.qte != null ? l.qte : '') + '</td><td style="text-align:right;">' + (l.prix_unitaire != null ? _pdfEsc(l.prix_unitaire) + ' €' : '') + '</td></tr>').join('')
-    : '<tr><td>1</td><td>' + _pdfEsc(bc.articles || '—') + '</td><td style="text-align:right;"></td><td style="text-align:right;"></td></tr>'
+    ? bcLignes.map((l: any, i: number) => '<tr><td>' + (i + 1) + '</td><td style="font-family:monospace;font-weight:700;">' + _pdfEsc(l.reference || '—') + '</td><td>' + _pdfEsc(l.article || l.designation || '') + '</td><td style="text-align:right;">' + _pdfEsc(l.qte != null ? l.qte : '') + '</td><td style="text-align:right;">' + (l.prix_unitaire != null ? _pdfEsc(l.prix_unitaire) + ' €' : '') + '</td></tr>').join('')
+    : '<tr><td>1</td><td style="font-family:monospace;font-weight:700;">—</td><td>' + _pdfEsc(bc.articles || '—') + '</td><td style="text-align:right;"></td><td style="text-align:right;"></td></tr>'
   const dest = '<div style="margin-bottom:14px;"><span class="muted">' + (bc.type_bc === 'sous_traitant' ? 'Sous-traitant' : 'Fournisseur') + ' :</span> <strong>' + _pdfEsc(bc.fournisseur_nom || '—') + '</strong></div>'
   const body = dest
-    + '<table><thead><tr><th>#</th><th>Article / prestation</th><th style="text-align:right;">Qte</th><th style="text-align:right;">Prix unit. HT</th></tr></thead><tbody>' + rows + '</tbody></table>'
+    + '<table><thead><tr><th>#</th><th>Référence</th><th>Article / prestation</th><th style="text-align:right;">Qte</th><th style="text-align:right;">Prix unit. HT</th></tr></thead><tbody>' + rows + '</tbody></table>'
     + '<div style="display:flex;justify-content:flex-end;margin-top:14px;"><table style="width:auto;"><tr><td class="muted" style="text-align:right;padding-right:16px;border:none;">Total HT</td><td class="tot" style="text-align:right;border:none;">' + _pdfEsc((Number(bc.montant_ht) || 0).toFixed(2)) + ' ' + _pdfEsc(bc.devise || 'EUR') + '</td></tr></table></div>'
     + (bc.conditions_paiement ? '<div class="muted" style="margin-top:14px;">Conditions de paiement : ' + _pdfEsc(bc.conditions_paiement) + '</div>' : '')
     + (bc.notes ? '<div class="muted" style="margin-top:6px;">' + _pdfEsc(bc.notes) + '</div>' : '')

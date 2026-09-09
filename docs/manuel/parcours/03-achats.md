@@ -57,7 +57,8 @@ Sur cet écran, vous renseignez :
 Sur cet écran, vous renseignez :
 - **Type de commande** — BC Fournisseur (une fourniture) ou BC Sous-Traitant (une prestation à façon).
 - **Fournisseur / ST** — l'entreprise destinataire ; obligatoire, la validation refuse un destinataire vide.
-- **Articles / Prestation** — la désignation de ce qui est commandé, pré-remplie depuis la DA.
+- **Référence du matériel** — la référence du produit à commander, à prendre dans la liste (le catalogue fournisseur). C'est elle qui commande le champ précédent : les fournisseurs qui portent cette référence passent en tête de la liste, sous « Référencés pour … », avec leur désignation ; s'il n'y en a qu'un, il est choisi pour vous. Un message indique ce qui a été trouvé. Si l'ERP a retrouvé la référence depuis la désignation de la demande, il l'écrit « déduite — à vérifier ».
+- **Articles / Prestation** — la désignation de ce qui est commandé, pré-remplie depuis la DA (ou depuis le catalogue si vous choisissez une référence et que le champ est vide).
 - **Montant HT / Livraison prévue** — le total à engager et la date attendue de la marchandise.
 - **N° d'affaire (optionnel)** — le rattachement à une commande client précise, si concerné.
 

@@ -94,6 +94,13 @@ export const pageServiceAchats = (
   const SANS_PRIX: number = dbSansPrixCount ?? 0
   const SCORE: any[] = dbScorecard ?? []
   const CATALOGUE: any[] = dbCatalogue ?? []
+  // Références du catalogue fournisseur, dédupliquées : alimentent la liste de choix du
+  // champ « Référence du matériel » de la modale BC. Le libellé montre la désignation, pour
+  // qu'une référence opaque reste identifiable.
+  const CAT_REFS: Array<[string, string]> = [...new Map((CATALOGUE as any[])
+    .filter((p: any) => String(p.reference || '').trim())
+    .map((p: any) => [String(p.reference).trim(), String(p.designation || '').trim()] as [string, string])
+  ).entries()].sort((a, b) => a[0].localeCompare(b[0]))
   const PROCHAIN_LIBRE: string = dbProchainLibre ?? 'LIBRE-001'
   const AFFAIRES_CONNUES: string[] = dbAffaires ?? []
   // Cibles RFQ (fournisseurs + sous-traitants) exposees au client pour la creation de demande de prix.
@@ -222,7 +229,9 @@ export const pageServiceAchats = (
   </div>`
 
   // BC modal data (DA en cours de traitement)
-  const DA_JSON = JSON.stringify(DA_TRAITER.map(d => ({ id:d.id, article:d.article, fournisseur:d.fournisseur||'', qte:d.qte||'', type_da:d.type_da||'', type_bc:(d as any).type_bc||'fournisseur', livraison:d.livraison||'', affaire_id:(d as any).affaire_id||'', bc_draft:(d as any).bc_draft||null })))
+  // ⚠ Tout champ lu par achOpenBC DOIT figurer ici : une projection incomplète n'est pas
+  //   seulement « pas réaffichée », le formulaire la réécrit vide à l'enregistrement suivant.
+  const DA_JSON = sjX(DA_TRAITER.map(d => ({ id:d.id, article:d.article, fournisseur:d.fournisseur||'', qte:d.qte||'', type_da:d.type_da||'', type_bc:(d as any).type_bc||'fournisseur', livraison:d.livraison||'', affaire_id:(d as any).affaire_id||'', num_affaire:(d as any).num_affaire||'', bc_draft:(d as any).bc_draft||null })))
 
   // ── ONGLET DASHBOARD ──────────────────────────────────────────
   const totDA    = DAS.length
@@ -612,10 +621,19 @@ export const pageServiceAchats = (
         <div id="bc_da_info" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:.8rem;color:#065f46;"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <div><label style="${LBL}">Type de commande</label>
-            <select id="bc_type" style="${INP}"><option value="fournisseur">BC Fournisseur</option><option value="st">BC Sous-Traitant</option></select>
+            <select id="bc_type" onchange="achRefChange()" style="${INP}"><option value="fournisseur">BC Fournisseur</option><option value="st">BC Sous-Traitant</option></select>
           </div>
           <div><label style="${LBL}">Fournisseur / ST</label><select id="bc_fourn" style="${INP}"><option value="">— Choisir un fournisseur —</option></select></div>
-          <div style="grid-column:1/-1;"><label style="${LBL}">Articles / Prestation</label><input id="bc_articles" type="text" placeholder="Désignation des articles commandés" style="${INP}"/></div>
+          <div style="grid-column:1/-1;border:1.5px solid #e0e7ff;border-radius:10px;padding:11px 13px;background:#f8faff;">
+            <div style="display:grid;grid-template-columns:minmax(0,.82fr) minmax(0,1.18fr);gap:12px;">
+              <div><label style="${LBL}">Référence du matériel</label>
+                <input id="bc_reference" type="text" list="dl_bc_ref" oninput="achRefSaisie()" autocomplete="off" placeholder="Réf. catalogue" style="${INP}font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;letter-spacing:.02em;"/>
+                <datalist id="dl_bc_ref">${CAT_REFS.map(([r, d]) => `<option value="${escX(r)}">${escX(d)}</option>`).join('')}</datalist>
+              </div>
+              <div><label style="${LBL}">Désignation</label><input id="bc_articles" type="text" placeholder="Désignation des articles commandés" style="${INP}"/></div>
+            </div>
+            <div id="bc_ref_hint" style="font-size:.68rem;color:#94a3b8;margin-top:8px;line-height:1.5;"></div>
+          </div>
           <div><label style="${LBL}">Montant HT (€)</label><input id="bc_montant" type="number" step="0.01" placeholder="0.00" style="${INP}"/></div>
           <div><label style="${LBL}">Livraison prévue</label><input id="bc_livraison" type="date" style="${INP}"/></div>
           <div><label style="${LBL}">Mode de règlement</label>
@@ -845,7 +863,117 @@ export const pageServiceAchats = (
     ...(STRAIT as any[]).map((s: any) => String(s.nom || '').trim()),
   ].filter(Boolean))].sort())};
 
+  function achEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function achAttr(s){ return achEsc(s).replace(/"/g,'&quot;'); }
+  function achNorm(s){ return String(s==null?'':s).toUpperCase().replace(/\s+/g,' ').trim(); }
+
+  // Fournisseurs portant EXACTEMENT cette reference au catalogue. Egalite stricte : c'est la
+  // seule facon que « les fournisseurs qui ont cette ref » soit vrai. Le rapprochement souple
+  // ci-dessous reste le repli quand aucune reference n'est saisie.
+  function achFournStricte(ref){
+    var a=achNorm(ref); if(!a) return [];
+    var vus={}, out=[];
+    ACH_CATALOGUE.forEach(function(p){
+      if(achNorm(p.r)!==a) return;
+      var k=p.n+'\u0000'+p.d; if(vus[k]) return; vus[k]=1;
+      out.push({ n:p.n, d:p.d });
+    });
+    return out.sort(function(x,y){ return x.n.localeCompare(y.n); });
+  }
+
+  // Remplit le select a partir d'une reference : porteurs du catalogue d'abord, tous les autres ensuite.
+  function achRemplirFournRef(selectId, ref, valeurCourante){
+    var sel=document.getElementById(selectId); if(!sel) return [];
+    var lies=achFournStricte(ref);
+    var noms=lies.map(function(x){ return x.n; });
+    var propre=String(ref==null?'':ref).trim();
+    var html='<option value="">— Choisir un fournisseur —</option>';
+    if(lies.length){
+      html+='<optgroup label="'+achAttr('Référencés pour '+propre)+'">';
+      lies.forEach(function(x){ html+='<option value="'+achAttr(x.n)+'">'+achEsc(x.n+(x.d?' — '+x.d:''))+'</option>'; });
+      html+='</optgroup>';
+    }
+    var autres=ACH_TOUS_FOURN.filter(function(n){ return noms.indexOf(n)<0; });
+    if(autres.length){
+      html+='<optgroup label="'+achAttr(lies.length?'Autres fournisseurs':'Autres fournisseurs (aucun ne référence cette réf.)')+'">';
+      autres.forEach(function(n){ html+='<option value="'+achAttr(n)+'">'+achEsc(n)+'</option>'; });
+      html+='</optgroup>';
+    }
+    sel.innerHTML=html;
+    var v=String(valeurCourante||'');
+    if(v){
+      var trouve=false;
+      for(var i=0;i<sel.options.length;i++){ if(sel.options[i].value===v){ trouve=true; break; } }
+      if(!trouve){ var o=document.createElement('option'); o.value=v; o.textContent=v+' (hors catalogue)'; sel.appendChild(o); }
+      sel.value=v;
+    }
+    return lies;
+  }
+
+  // Provenance de la reference pre-remplie : sert a le DIRE a l'acheteur plutot qu'a faire
+  // passer une deduction pour une donnee saisie.
+  var ACH_REF_SRC='aucune';
+
+  // Reaction a la saisie d'une reference : filtre les fournisseurs, complete la designation
+  // et explique ce qui a ete trouve. Sans reference, on retombe sur le comportement d'avant.
+  // Saisie manuelle : la reference cesse d'etre « deduite », c'est un choix de l'acheteur.
+  function achRefSaisie(){ ACH_REF_SRC='saisie'; achRefChange(); }
+
+  function achRefChange(){
+    var champ=document.getElementById('bc_reference');
+    var ref=champ?champ.value:'';
+    var hint=document.getElementById('bc_ref_hint');
+    var selF=document.getElementById('bc_fourn');
+    var courant=selF?selF.value:'';
+    var estST=((document.getElementById('bc_type')||{}).value)==='st';
+    if(!achNorm(ref)){
+      achRemplirFourn('bc_fourn', (document.getElementById('bc_articles')||{}).value||'', courant);
+      if(hint){
+        hint.style.color='#94a3b8';
+        hint.innerHTML='Cette demande ne porte pas de référence. Choisissez-la dans la liste : seuls les fournisseurs qui la portent au catalogue seront alors proposés.';
+      }
+      return;
+    }
+    var lies=achRemplirFournRef('bc_fourn', ref, courant);
+    if(lies.length===1 && !courant && selF) selF.value=lies[0].n;   // un seul porteur : on le pose, modifiable
+    var des=document.getElementById('bc_articles');
+    if(des && !des.value.trim() && lies.length && lies[0].d) des.value=lies[0].d;
+    if(!hint) return;
+    var prefixe='';
+    if(ACH_REF_SRC==='designation') prefixe='<span style="color:#b45309;"><i class="fas fa-wand-magic-sparkles" style="margin-right:4px;"></i>Référence <strong>déduite</strong> de la désignation de la demande — à vérifier.</span><br/>';
+    else if(ACH_REF_SRC==='brouillon') prefixe='<span style="color:#64748b;">Référence reprise du brouillon.</span><br/>';
+    if(!lies.length){
+      hint.style.color='#b45309';
+      hint.innerHTML=prefixe+'<i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>Cette référence est <strong>inconnue du catalogue</strong>'+(estST?' (le catalogue ne couvre pas les sous-traitants)':'')+' : aucun fournisseur ne la porte. Choisissez-en un dans « Autres fournisseurs ».';
+    } else if(lies.length===1){
+      hint.style.color='#047857';
+      hint.innerHTML=prefixe+'<i class="fas fa-check" style="margin-right:4px;"></i><strong>'+achEsc(lies[0].n)+'</strong> porte cette référence au catalogue'+(lies[0].d?' — '+achEsc(lies[0].d):'')+'.';
+    } else {
+      hint.style.color='#047857';
+      hint.innerHTML=prefixe+'<i class="fas fa-check" style="margin-right:4px;"></i><strong>'+lies.length+' fournisseurs</strong> portent cette référence : '+achEsc(lies.map(function(x){ return x.n+(x.d?' ('+x.d+')':''); }).join(' · '))+'. Vérifiez la désignation : un même code peut désigner deux produits différents.';
+    }
+  }
+
+  // La DA ne porte AUCUNE reference en base : on la retrouve au catalogue par egalite stricte,
+  // d'abord sur la reference puis sur la designation. Aucune deduction hors catalogue.
+  function achRefDepuisDA(da, dr){
+    if(dr && dr.reference){ ACH_REF_SRC='brouillon'; return String(dr.reference); }
+    var a=achNorm(da&&da.article);
+    if(a){
+      var parRef='', parDes='';
+      ACH_CATALOGUE.forEach(function(p){
+        if(!parRef && achNorm(p.r)===a) parRef=p.r;
+        if(!parDes && p.d && achNorm(p.d)===a) parDes=p.r;
+      });
+      if(parRef){ ACH_REF_SRC='reference'; return parRef; }
+      if(parDes){ ACH_REF_SRC='designation'; return parDes; }
+    }
+    ACH_REF_SRC='aucune';
+    return '';
+  }
+
   // Fournisseurs portant une reference donnee (comparaison souple : reference OU designation).
+  // Conserve comme REPLI : utilise uniquement quand aucune reference n'est saisie.
   function achFournPourRef(article){
     var a=String(article||'').toLowerCase().trim();
     if(!a) return [];
@@ -865,13 +993,13 @@ export const pageServiceAchats = (
     var lies=achFournPourRef(article);
     var html='<option value="">— Choisir un fournisseur —</option>';
     if(lies.length){
-      html+='<optgroup label="Referencés pour '+String(article||'').replace(/[<>&"]/g,'')+'">';
+      html+='<optgroup label="'+achAttr('Proches de « '+String(article||'').trim()+' » (rapprochement approximatif)')+'">';
       lies.forEach(function(n){ html+='<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>'; });
       html+='</optgroup>';
     }
     var autres=ACH_TOUS_FOURN.filter(function(n){ return lies.indexOf(n)<0; });
     if(autres.length){
-      html+='<optgroup label="'+(lies.length?'Autres fournisseurs':'Aucun fournisseur referencé pour cette référence')+'">';
+      html+='<optgroup label="'+(lies.length?'Autres fournisseurs':'Tous les fournisseurs')+'">';
       autres.forEach(function(n){ html+='<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>'; });
       html+='</optgroup>';
     }
@@ -910,21 +1038,31 @@ export const pageServiceAchats = (
   // ── Traiter une DA → BC ──
   function achOpenBC(id){
     var da=ACH_DA.find(function(d){return d.id===id;}); if(!da) return;
-    var dr=da.bc_draft||{};
+    // Le brouillon peut revenir en objet OU en chaine JSON selon le type de la colonne : on encaisse les deux.
+    var dr=da.bc_draft;
+    if(typeof dr==='string'){ try{ dr=JSON.parse(dr); }catch(e){ dr=null; } }
+    dr=dr||{};
     document.getElementById('bc_da_id').value=id;
     document.getElementById('bc_da_info').innerHTML='<strong>'+id+'</strong> · '+da.article+(da.affaire_id?' · Affaire '+da.affaire_id:'');
     document.getElementById('bc_type').value=dr.type_bc||da.type_bc||'fournisseur';
     // La DA porte la reference du produit demande : on ne propose que les fournisseurs
     // qui la referencent au catalogue, les autres restant accessibles en second groupe.
-    achRemplirFourn('bc_fourn', dr.articles||da.article||'', dr.fournisseur||da.fournisseur||'');
     document.getElementById('bc_articles').value=dr.articles||da.article||'';
+    // Reference : brouillon, sinon retrouvee au catalogue, sinon vide. achRefChange remplit
+    // ensuite le select des fournisseurs — porteurs de la reference d'abord.
+    document.getElementById('bc_reference').value=achRefDepuisDA(da, dr);
+    document.getElementById('bc_fourn').value=dr.fournisseur||da.fournisseur||'';
+    achRefChange();
+    if(dr.fournisseur||da.fournisseur){
+      achRemplirFournRef('bc_fourn', document.getElementById('bc_reference').value, dr.fournisseur||da.fournisseur||'');
+    }
     // Affaire reprise de la DA, jamais ressaisie. Hors affaire -> reference libre attribuee par le serveur.
     document.getElementById('bc_affaire').value = da.num_affaire || da.affaire_id || dr.affaire_id || ACH_PROCHAIN_LIBRE;
     var _rg=document.getElementById('bc_reglement'); if(_rg){ _rg.value = dr.conditions_paiement || ''; }
     bcReglementChange();
     document.getElementById('bc_montant').value=dr.montant_ht||'';
     document.getElementById('bc_livraison').value=dr.date_livraison||da.livraison||'';
-    document.getElementById('bc_affaire').value=dr.affaire_id||da.affaire_id||'';
+    // (l'affaire est deja posee plus haut : la reaffecter ici ecrasait le repli « demande libre »)
     document.getElementById('bc_notes').value=dr.notes||'';
     document.getElementById('ach-bc-overlay').style.display='flex';
   }
@@ -952,6 +1090,7 @@ export const pageServiceAchats = (
     return {
       type_bc:document.getElementById('bc_type').value,
       fournisseur:document.getElementById('bc_fourn').value.trim(),
+      reference:document.getElementById('bc_reference').value.trim()||null,
       articles:document.getElementById('bc_articles').value.trim(),
       montant_ht:parseFloat(document.getElementById('bc_montant').value)||0,
       date_livraison:document.getElementById('bc_livraison').value||null,
