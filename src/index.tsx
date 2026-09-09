@@ -4513,7 +4513,14 @@ app.get('/be/preparation', async (c) => {
       +'<div style="font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;margin-bottom:12px;"><i class="fas fa-drafting-compass" style="color:#8b5cf6;margin-right:6px;"></i>Plan de la pièce — '+esc(nom.num_nom||nom.code)+'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
       +'<div><label style="display:block;font-size:.62rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px;">N° de plan (+ indice)</label><input id="prep-num_plan" value="'+esc(nom.num_plan)+'" placeholder="ex : PL-138001 ind. A" style="width:100%;border:1.5px solid #e2e8f0;border-radius:7px;padding:6px 9px;font-size:.8rem;background:white;box-sizing:border-box;"/></div>'
-      +'<div><label style="display:block;font-size:.62rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px;">Fichier plan / CAO</label><input id="prep-plan_fichier" value="'+esc(nom.plan_fichier)+'" placeholder="ex : PL-138001_A.pdf" style="width:100%;border:1.5px solid #e2e8f0;border-radius:7px;padding:6px 9px;font-size:.8rem;background:white;box-sizing:border-box;"/></div>'
+      +'<div><label style="display:block;font-size:.62rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px;">Fichier plan / CAO</label>'
+        +'<div style="display:flex;gap:6px;align-items:center;">'
+        +'<input id="prep-plan_fichier" value="'+esc(nom.plan_fichier)+'" placeholder="choisissez un fichier ->" style="flex:1;min-width:0;border:1.5px solid #e2e8f0;border-radius:7px;padding:6px 9px;font-size:.8rem;background:white;box-sizing:border-box;"/>'
+        +'<input type="file" id="prep-plan-file" accept=".pdf,.dxf,.dwg,.step,.stp,.igs,.iges,.png,.jpg,.jpeg" style="display:none;" onchange="prepChoisirPlan(this)"/>'
+        +'<button type="button" onclick="this.previousElementSibling.click()" title="Charger le plan depuis vos fichiers" style="flex:none;border:1.5px solid #c4b5fd;background:#f5f3ff;color:#6d28d9;border-radius:7px;padding:6px 11px;font-size:.75rem;font-weight:700;cursor:pointer;white-space:nowrap;"><i class="fas fa-folder-open" style="margin-right:5px;"></i>Parcourir</button>'
+        +'</div>'
+        +'<div id="prep-plan-etat" style="font-size:.63rem;color:#94a3b8;margin-top:3px;"></div>'
+      +'</div>'
       +'</div>'
       +'<div style="font-size:.7rem;color:#94a3b8;margin-top:8px;"><i class="fas fa-paperclip" style="margin-right:4px;"></i>Le plan (n° + fichier) accompagne les codes programme sur la fiche OF. Rattachez le fichier lui-même en GED depuis la nomenclature.</div>'
       +'</div>'
@@ -4524,7 +4531,14 @@ app.get('/be/preparation', async (c) => {
           +'<div style="font-size:.78rem;font-weight:700;color:#5b21b6;margin-bottom:8px;"><i class="fas fa-lock" style="color:#c4b5fd;font-size:.6rem;margin-right:5px;"></i>Étape '+esc(s.ordre)+' · '+esc(s.nom)+(s.machine_nom?(' <span style="color:#94a3b8;font-weight:600;">· '+esc(s.machine_nom)+'</span>'):'')+'</div>'
           +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
           +'<div><label style="display:block;font-size:.62rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px;">N° programme CN</label><input data-ord="'+esc(s.ordre)+'" data-f="programme" value="'+esc(s.programme)+'" placeholder="Ex : O1234, PRG-KIA2-A" style="width:100%;border:1.5px solid #e2e8f0;border-radius:7px;padding:6px 9px;font-size:.8rem;background:white;box-sizing:border-box;"/></div>'
-          +'<div><label style="display:block;font-size:.62rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px;">Fichier programme</label><input data-ord="'+esc(s.ordre)+'" data-f="programme_fichier" value="'+esc(s.programme_fichier)+'" placeholder="Ex : piece.nc, prog.mpf" style="width:100%;border:1.5px solid #e2e8f0;border-radius:7px;padding:6px 9px;font-size:.8rem;background:white;box-sizing:border-box;"/></div>'
+          +'<div><label style="display:block;font-size:.62rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px;">Fichier programme</label>'
+            +'<div style="display:flex;gap:6px;align-items:center;">'
+            +'<input data-ord="'+esc(s.ordre)+'" data-f="programme_fichier" value="'+esc(s.programme_fichier)+'" placeholder="choisissez un fichier ->" style="flex:1;min-width:0;border:1.5px solid #e2e8f0;border-radius:7px;padding:6px 9px;font-size:.8rem;background:white;box-sizing:border-box;"/>'
+            +'<input type="file" id="prep-prog-file-'+esc(s.ordre)+'" accept=".nc,.mpf,.tap,.cnc,.iso,.eia,.txt,.h,.ptp" style="display:none;" onchange="prepChoisirProgramme(this,'+esc(s.ordre)+')"/>'
+            +'<button type="button" onclick="this.previousElementSibling.click()" title="Charger le programme depuis vos fichiers" style="flex:none;border:1.5px solid #c4b5fd;background:#f5f3ff;color:#6d28d9;border-radius:7px;padding:6px 11px;font-size:.75rem;font-weight:700;cursor:pointer;white-space:nowrap;"><i class="fas fa-folder-open" style="margin-right:5px;"></i>Parcourir</button>'
+            +'</div>'
+            +'<div id="prep-prog-etat-'+esc(s.ordre)+'" style="font-size:.63rem;color:#94a3b8;margin-top:3px;"></div>'
+          +'</div>'
           +'</div></div>';
       }).join('')
       +'<div style="font-size:.7rem;color:#94a3b8;margin-top:4px;"><i class="fas fa-print" style="margin-right:4px;"></i>Ces codes sont imprimés sur l\\'OF du lot (colonne « N° Programme »).</div>'
@@ -4532,6 +4546,54 @@ app.get('/be/preparation', async (c) => {
     if(save) save.style.display='';
   }
   window.prepRender=prepRender;
+  // Nom de fichier sans son extension : sert a pre-remplir le N° de plan / de programme.
+  function prepSansExt(n){ return String(n||'').replace(/\.[^.]+$/, ''); }
+
+  // Envoie le fichier en GED puis renseigne les champs texte a partir de son nom.
+  // Le document est rattache a la NOMENCLATURE : c'est ce qui leve « plan manquant »
+  // et « code CN manquant » sur la preparation technique.
+  function prepEnvoyer(fichier, categorie, ordre, etatId){
+    var nomencId=(document.getElementById('prep-nom')||{}).value||'';
+    var etat=document.getElementById(etatId);
+    if(!nomencId){ if(etat){ etat.textContent='Choisissez d abord une piece.'; etat.style.color='#dc2626'; } return Promise.resolve(false); }
+    if(etat){ etat.textContent='Envoi en cours...'; etat.style.color='#94a3b8'; }
+    var fd=new FormData();
+    fd.append('file', fichier);
+    fd.append('nomenclature_id', nomencId);
+    fd.append('categorie', categorie);
+    if(ordre!=null && ordre!=='') fd.append('etape_ordre', String(ordre));
+    return fetch('/api/ged/upload',{method:'POST',body:fd})
+      .then(function(r){return r.json();})
+      .then(function(j){
+        if(!j||!j.ok){ if(etat){ etat.textContent='Echec : '+((j&&j.error)||'envoi impossible'); etat.style.color='#dc2626'; } return false; }
+        if(etat){ etat.innerHTML='<i class="fas fa-check" style="margin-right:4px;"></i>Fichier joint — <a href="/api/ged/file/'+j.document.id+'" target="_blank" rel="noopener" style="color:#6d28d9;font-weight:700;">ouvrir</a>'; etat.style.color='#16a34a'; }
+        return true;
+      })
+      .catch(function(){ if(etat){ etat.textContent='Echec reseau.'; etat.style.color='#dc2626'; } return false; });
+  }
+
+  // Plan : renseigne le fichier, et le N° de plan s il est encore vide.
+  function prepChoisirPlan(inp){
+    if(!inp.files||!inp.files.length) return;
+    var f=inp.files[0];
+    var champFic=document.getElementById('prep-plan_fichier');
+    var champNum=document.getElementById('prep-num_plan');
+    if(champFic) champFic.value=f.name;
+    if(champNum && !String(champNum.value||'').trim()) champNum.value=prepSansExt(f.name);
+    prepEnvoyer(f, 'plan_cao', null, 'prep-plan-etat');
+  }
+
+  // Programme CN d une etape : meme principe, rattache a l ordre de l etape.
+  function prepChoisirProgramme(inp, ordre){
+    if(!inp.files||!inp.files.length) return;
+    var f=inp.files[0];
+    var champFic=document.querySelector('#prep-steps [data-ord="'+ordre+'"][data-f="programme_fichier"]');
+    var champNum=document.querySelector('#prep-steps [data-ord="'+ordre+'"][data-f="programme"]');
+    if(champFic) champFic.value=f.name;
+    if(champNum && !String(champNum.value||'').trim()) champNum.value=prepSansExt(f.name);
+    prepEnvoyer(f, 'programme_fao', ordre, 'prep-prog-etat-'+ordre);
+  }
+
   function prepSave(){
     var sel=document.getElementById('prep-nom'); var id=sel?sel.value:''; if(!id) return;
     var progs={};

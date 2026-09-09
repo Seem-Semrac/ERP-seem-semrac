@@ -2,6 +2,22 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-09 — Préparation technique : plan et programme CN chargés par un sélecteur de fichier
+
+- **Demande** : « le plan et le fichier du code doivent se charger avec le bouton qui permet d'aller chercher dans les fichiers, tout simplement. Le nom doit se remplir en fonction du nom du plan. »
+- Les champs *Fichier plan / CAO* et *Fichier programme* étaient des **zones de texte à saisir à la main** : on tapait un nom de fichier qui n'était rattaché à rien.
+- Chacun reçoit désormais un bouton **« Parcourir »** ouvrant le sélecteur de fichiers. Le fichier part en GED, rattaché à la **nomenclature** (`plan_cao` pour le plan, `programme_fao` + `etape_ordre` pour un programme CN) — ce qui lève `manque_plan` / `manque_code_cnc` sur la préparation technique.
+- **Remplissage automatique** : le nom du fichier alimente le champ *Fichier* ; le nom **sans extension** pré-remplit le *N° de plan* / *N° programme* **uniquement s'il est vide** — une valeur saisie volontairement n'est jamais écrasée. Un lien « ouvrir » s'affiche sous le champ dès l'envoi réussi.
+- Aucun développement serveur : la route `/api/ged/upload` acceptait déjà `nomenclature_id`, `categorie` et `etape_ordre`.
+
+### Un bug d'échappement attrapé avant livraison
+La première version écrivait `onclick="document.getElementById('prep-plan-file').click()"`. Dans un `onclick` construit à l'intérieur d'une chaîne JS elle-même contenue dans un template literal, la séquence `'` est **consommée** et ne laisse qu'une apostrophe nue, qui referme la chaîne : **tout le script client de la page devenait invalide**. Ni `tsc` ni le build ne le voient, et le harnais ne couvre pas cette page (elle est en ligne dans le routeur, pas exportée comme `page*`).
+Détecté en servant la page et en passant chaque `<script>` par `new Function()` — 1 script invalide sur 4. Corrigé en supprimant la cause : les boutons utilisent **`this.previousElementSibling.click()`**, sans aucune apostrophe imbriquée.
+
+### Vérification
+Page servie depuis la stack Docker : **4 scripts sur 4 valides**. Envoi réel d'un `PL-138001_A.pdf` → document créé en `plan_cao`, champ *Fichier* = `PL-138001_A.pdf`, *N° de plan* dérivé = `PL-138001_A`, fichier réellement servi (`HTTP 200`, `application/pdf`, `inline`). Document de test supprimé, contrôle à 0.
+`tsc` 0 erreur · build OK · harnais **61 PASS / 0 FAIL**.
+
 ## 2026-09-09 — Seem-Semrac devient le dépôt principal
 
 - **Demande** : « je veux commiter juste la dernière version de l'ERP avec tout sur Seem Semrac, et que chaque nouvelle mise à jour Seem Semrac devienne le nouveau commitement principal, à partir de maintenant et pour toujours ».
