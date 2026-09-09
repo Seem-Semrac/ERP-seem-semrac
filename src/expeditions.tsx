@@ -110,6 +110,12 @@ function subTabBar(tabs: [string,string,string][], activeFirst: string, fn: stri
 // PANEL 1 – BONS DE LIVRAISON
 // ══════════════════════════════════════════════════════════════
 
+// Numéro AFFICHÉ d'un bon de livraison. La renumérotation par affaire écrit `num_bl`
+// (migration 002) sans toucher à l'identifiant technique, qui porte les rattachements.
+// Fail-soft : sans cette colonne, on retombe sur l'identifiant — qui EST déjà le bon
+// numéro pour tout BL créé depuis la nouvelle numérotation.
+const numBL = (b: any) => String(b?.num_bl || b?.id || '')
+
 function panelBL(bls: BonDeLivraison[], bsts: BonDeLivraison[], receptions: any[] = [], bcAttendus: any[] = []) {
   const aEnvoyer = bls.filter(b => b.statut === 'a_envoyer' || b.statut === 'prepare')
   const historique = bls.filter(b => b.statut === 'expedie' || b.statut === 'livre')
@@ -975,7 +981,7 @@ function panelReceptions(bcs: any[], bcsAttendus: any[], receptions: any[], bds:
   const recAll = [...(receptions || []).map((b: any) => ({ ...b, _t: 'Réception fournisseur/ST' })), ...(blsRetour || []).map((b: any) => ({ ...b, _t: 'Retour client' }))]
     .sort((a, b) => String(b.date_bl || '').localeCompare(String(a.date_bl || '')))
   const rowsRec = recAll.map((b: any) => tr([
-    TD(`<div style="font-weight:700;color:#0369a1;">${escX(b.id)}</div><div style="font-size:.65rem;color:#94a3b8;">${escX(b._t)}</div>`),
+    TD(`<div style="font-weight:700;color:#0369a1;">${escX(numBL(b))}</div><div style="font-size:.65rem;color:#94a3b8;">${escX(b._t)}</div>`),
     TD(escX(b.client_nom ?? '—')),
     TD(`<span style="font-size:.75rem;color:#475569;">${escX(b.piece ?? '—')}</span>`),
     TDC(`<span style="font-weight:700;">${_frDate(b.date_bl)}</span>`),
@@ -1075,7 +1081,7 @@ function panelEnvois(bds: any[], blsClient: any[], cmds: any[], qualiteBloque: (
   // 2. BL clients à expédier
   const blOut = (blsClient || []).filter((b: any) => ['a_envoyer', 'prepare'].includes(String(b.statut)))
   const rowsBl = blOut.map((b: any) => tr([
-    TD(`<div style="font-weight:700;color:#15803d;">${escX(b.id)}</div><div style="font-size:.65rem;color:#94a3b8;">${escX(b.cmd_id ?? '')}</div>`),
+    TD(`<div style="font-weight:700;color:#15803d;">${escX(numBL(b))}</div><div style="font-size:.65rem;color:#94a3b8;">${escX(b.cmd_id ?? '')}</div>`),
     TD(escX(b.client_nom ?? '—')),
     TD(`<span style="font-size:.75rem;color:#475569;">${escX(b.piece ?? '—')}</span>`),
     TDC(`<span style="font-weight:700;">${b.qte ?? '—'}</span>`),
@@ -1273,7 +1279,7 @@ function panelFournisseurs(FOURNS: any[], BCS: any[], BLS_ALL: any[]) {
         transporteur: b.transporteur || '',
       })).sort((x: any, y: any) => String(y.date).localeCompare(String(x.date))),
       bls: bls.map((l: any) => ({
-        id: l.id, num: l.id, date: l.date_bl ? String(l.date_bl).slice(0, 10) : '',
+        id: l.id, num: numBL(l), date: l.date_bl ? String(l.date_bl).slice(0, 10) : '',
         transporteur: l.transport || l.transporteur_ref || '', bc: l._bc, affaire: l._affaire,
       })).sort((x: any, y: any) => String(y.date).localeCompare(String(x.date))),
     }

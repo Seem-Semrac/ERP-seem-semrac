@@ -1645,20 +1645,21 @@ app.get('/commercial/commande', (c) => {
 // Facture fournisseur emise a la creation d'un BC proforma : elle arrive dans
 // Comptabilite > Factures fournisseurs, a regler. Le rattachement au BC passe par les
 // notes (la table n'a pas de colonne bc_id).
-async function creerFactureFournisseurProforma(bcId: string, fournisseurNom: any, montantHt: number, isST: boolean) {
+async function creerFactureFournisseurProforma(bcId: string, fournisseurNom: any, montantHt: number, isST: boolean, numBc?: string) {
   const ht = +(Number(montantHt) || 0).toFixed(2)
   const tvaPct = 20
   const tvaM = +(ht * tvaPct / 100).toFixed(2)
-  const existing = await getFacturesFournisseur().catch(() => [] as any[])
-  let max = 0
-  for (const r of existing as any[]) {
-    const m = String(r.num_facture || '').match(/-(\d+)\s*$/)
-    if (m) { const v = parseInt(m[1], 10); if (v > max) max = v }
-  }
   const type = isST ? 'sous_traitant' : 'fournisseur'
+  // Le numero de la proforma SUIT CELUI DU BON DE COMMANDE, qui porte lui-meme l'affaire :
+  //   affaire 0001 -> BC-2026-0001-01 -> proforma PRO-2026-0001-01.
+  // Tout le flux d'une affaire se lit donc avec le meme numero, du BC au reglement.
+  // Ce numero est un PLACEHOLDER : a la reception, le comptable saisit le vrai numero
+  // de facture du fournisseur (c'est lui qui l'emet), ce qui l'ecrase sans rien casser
+  // — le rattachement passe par l'identifiant technique `id`, jamais par ce libelle.
+  const numProforma = 'PRO-' + String(numBc || bcId).replace(/^BC-/, '')
   const { data, error } = await createFactureFournisseur({
     id: 'FF-' + bcId,                                   // deterministe : une seule proforma par BC
-    num_facture: (isST ? 'ST' : 'FOURN') + '-' + new Date().getFullYear() + '-' + String(max + 1).padStart(4, '0'),
+    num_facture: numProforma,
     type,
     fournisseur_nom: String(fournisseurNom || '').trim() || '—',
     date_facture: TODAY_ISO(),
@@ -2365,7 +2366,7 @@ app.post('/api/achats/da/:id/soumettre', async (c) => {
   // Proforma : la facture a regler part immediatement en Comptabilite.
   let factureProforma: any = null
   if (estProforma(body.conditions_paiement)) {
-    factureProforma = await creerFactureFournisseurProforma(bcId, fournisseurNom, montant, isST).catch(() => null)
+    factureProforma = await creerFactureFournisseurProforma(bcId, fournisseurNom, montant, isST, String((bc as any)?.num_bc || bcId)).catch(() => null)
   }
   await updateDemandeAchat(id, { statut: 'traitee', type_bc: isST ? 'st' : 'fournisseur', bc_draft: null }).catch(() => {})
   return c.json({ ok: true, facture_proforma: factureProforma ? factureProforma.num_facture : null, bc, bc_id: bcId, type_bc: isST ? 'st' : 'fournisseur' })
