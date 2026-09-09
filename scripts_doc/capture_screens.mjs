@@ -39,6 +39,7 @@ const MANIFEST = [
   // Achats
   { file: 'achats-rfq',            path: '/achats/service', clicks: ['#ach-tab-rfq'], wait: 500 },
   { file: 'achats-da',             path: '/achats/service', clicks: ['#ach-tab-da'] },
+  { file: 'achats-bc',             path: '/achats/service', clicks: ['#ach-tab-bc'], wait: 500 },
   { file: 'achats-fournisseurs',   path: '/achats/service', clicks: ['#ach-tab-fourn'] },
   // Production + planning
   { file: 'production-service',    path: '/production/service' },

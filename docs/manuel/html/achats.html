@@ -23,7 +23,7 @@
     <div class="metachips">
       <span class="chip">👤 Pour qui : <b>Acheteur(se)</b> (écriture : Achats, Stocks — lecture : Commercial, BE, Production, Expéditions, Maintenance)</span>
       <span class="chip">🧭 Dans l'ERP : <b>Sidebar → Achats</b></span>
-      <span class="chip">🗂 <b>5 onglets</b></span>
+      <span class="chip">🗂 <b>6 onglets</b></span>
     </div>
   </header>
 
@@ -32,6 +32,7 @@
     <ol>
       <li><a href="#tab-rfq">Demandes de prix (RFQ)</a></li>
       <li><a href="#tab-da">Demandes d'achat</a></li>
+      <li><a href="#tab-bc">Bons de commande</a></li>
       <li><a href="#tab-fourn">Fournisseurs / ST</a></li>
       <li><a href="#tab-scorecard">Scorecard</a></li>
       <li><a href="#tab-dashboard">Dashboard achats</a></li>
@@ -104,10 +105,10 @@
 
   <section class="tab" id="tab-da">
     <div class="tab-head"><span class="tab-num">2</span><h2>Demandes d'achat</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> Les demandes d'achat (DA) sont les besoins exprimés par l'atelier et les autres services : matière, outillage, consommables, produits chimiques. Votre travail d'acheteur consiste à les transformer en <b>bons de commande</b> (BC) fournisseur ou sous-traitant. Une fois le BC créé, son suivi (arrivée, réception) se fait dans le service <b>Expéditions</b>.</p>
+    <p class="tab-but"><b>À quoi ça sert.</b> Les demandes d'achat (DA) sont les besoins exprimés par l'atelier et les autres services : matière, outillage, consommables, produits chimiques. Votre travail d'acheteur consiste à les transformer en <b>bons de commande</b> (BC) fournisseur ou sous-traitant. Une fois le BC créé, vous le retrouvez dans l'onglet <a href="#tab-bc">Bons de commande</a> (onglet 3), où vous suivez son arrivée et pouvez en changer la date ; la réception physique de la marchandise, elle, se fait dans le service <b>Expéditions</b>.</p>
 
     <h3>Ce que vous voyez</h3>
-    <p>Deux listes superposées. En haut, <b>« Demandes d'achat à traiter »</b> avec son compteur vert : colonnes <b>N° DA</b>, <b>Article</b>, <b>Fournisseur</b>, <b>Qté</b>, <b>Type</b> (Matière, Outillage, Consommable, Chimique), <b>Priorité</b> (<span class="b b-crit">critique</span> / <span class="b b-warn">urgent</span> / <span class="b b-ok">normal</span>), <b>Date DA</b>, <b>Livraison souhaitée</b>, <b>Statut</b> et le bouton d'action <b>« Traiter → BC »</b>. Une pastille <span class="b b-info">AUTO</span> à côté du numéro signale une DA générée automatiquement par l'ERP (et non saisie à la main) ; le numéro d'affaire lié s'affiche sous l'article. En bas, <b>« Demandes d'achat traitées »</b> (compteur bleu) : un BC a été généré, avec les colonnes <b>Type BC</b> (Fournisseur ou Sous-traitant), <b>Statut</b> (<span class="b b-ok">Commandé ✓</span>, <span class="b b-info">En cours</span>, <span class="b b-ok">Reçu ✓</span>, <span class="b b-crit">Annulé</span>…) et un lien <b>« Voir BC »</b> qui mène aux bons de commande du service Expéditions. Au-dessus des listes : une <b>barre de recherche</b> (par article, fournisseur, demandeur, type ou priorité), le bouton <b>« Fusionner les DA cochées »</b> et le bouton <b>« Créer un BC »</b>. Chaque ligne « à traiter » porte une <b>case à cocher</b> (pour la fusion) et, à droite, deux petits boutons : <b>crayon</b> pour modifier la demande, <b>corbeille</b> pour la retirer de la liste — la corbeille n'apparaît pas sur les demandes <span class="b b-info">AUTO</span>, qui traduisent un besoin réel issu d'une commande et ne peuvent être que modifiées.</p>
+    <p>Deux listes superposées. En haut, <b>« Demandes d'achat à traiter »</b> avec son compteur vert : colonnes <b>N° DA</b>, <b>Article</b>, <b>Fournisseur</b>, <b>Qté</b>, <b>Type</b> (Matière, Outillage, Consommable, Chimique), <b>Priorité</b> (<span class="b b-crit">critique</span> / <span class="b b-warn">urgent</span> / <span class="b b-ok">normal</span>), <b>Date DA</b>, <b>Livraison souhaitée</b>, <b>Statut</b> et le bouton d'action <b>« Traiter → BC »</b>. Une pastille <span class="b b-info">AUTO</span> à côté du numéro signale une DA générée automatiquement par l'ERP (et non saisie à la main) ; le numéro d'affaire lié s'affiche sous l'article. En bas, <b>« Demandes d'achat traitées »</b> (compteur bleu) : un BC a été généré, avec les colonnes <b>Type BC</b> (Fournisseur ou Sous-traitant), <b>Statut</b> (<span class="b b-ok">Commandé ✓</span>, <span class="b b-info">En cours</span>, <span class="b b-ok">Reçu ✓</span>, <span class="b b-crit">Annulé</span>…) et un lien <b>« Voir BC »</b> qui bascule sur l'onglet <a href="#tab-bc">Bons de commande</a>, dans cette même page. Au-dessus des listes : une <b>barre de recherche</b> (par article, fournisseur, demandeur, type ou priorité), le bouton <b>« Fusionner les DA cochées »</b> et le bouton <b>« Créer un BC »</b>. Chaque ligne « à traiter » porte une <b>case à cocher</b> (pour la fusion) et, à droite, deux petits boutons : <b>crayon</b> pour modifier la demande, <b>corbeille</b> pour la retirer de la liste — la corbeille n'apparaît pas sur les demandes <span class="b b-info">AUTO</span>, qui traduisent un besoin réel issu d'une commande et ne peuvent être que modifiées.</p>
     <figure class="shot">
       <img src="../../assets/achats-da.png" alt="Capture de l'onglet Demandes d'achat" loading="lazy">
       <figcaption><b>Demandes d'achat</b> — la liste « à traiter » en haut avec priorités et bouton « Traiter → BC », les DA déjà transformées en BC en dessous.</figcaption>
@@ -119,7 +120,7 @@
       <li>Renseignez la <b>Référence du matériel</b>. C'est le point important : tant qu'elle est vide, l'ERP ne peut que deviner le fournisseur à partir du libellé. Dès que vous choisissez une référence du catalogue, la liste « Fournisseur / ST » place en tête, sous « Référencés pour … », <b>les seuls fournisseurs qui portent vraiment cette référence</b>, chacun avec sa désignation catalogue — et s'il n'y en a qu'un, il est sélectionné automatiquement. Un message sous les deux champs dit ce qui a été trouvé : un fournisseur, plusieurs (vérifiez alors la désignation, un même code peut couvrir deux produits différents), ou aucun. Les autres fournisseurs restent toujours accessibles dans le second groupe : rien ne vous bloque si le produit n'est pas encore au catalogue.</li>
       <li>Choisissez le <b>type de commande</b> (BC Fournisseur ou BC Sous-Traitant), vérifiez le <b>fournisseur / ST</b>, les <b>articles</b>, saisissez le <b>montant HT</b> et la <b>livraison prévue</b> ; le <b>n° d'affaire</b> et les <b>notes</b> sont optionnels.</li>
       <li>Deux issues possibles : <b>« Enregistrer (brouillon) »</b> garde la DA dans la liste « à traiter » avec la pastille <span class="b b-mut">Brouillon</span> — le bouton devient « Reprendre » pour continuer plus tard. <b>« Soumettre → créer BC »</b> crée le bon de commande (le fournisseur est alors obligatoire).</li>
-      <li>Après soumission, l'ERP confirme le numéro du BC créé : la DA bascule dans « traitées » et le BC apparaît côté <b>Expéditions</b>, en attente de réception.</li>
+      <li>Après soumission, l'ERP confirme le numéro du BC créé : la DA bascule dans « traitées » et le BC apparaît dans l'onglet <a href="#tab-bc">Bons de commande</a>, en attente de réception.</li>
     </ol>
 
     <div class="tbl">
@@ -144,7 +145,7 @@
       <li>Choisissez le <b>destinataire</b> (Fournisseur ou Sous-traitant), saisissez son <b>nom</b> (obligatoire) et les <b>articles / désignation</b> (obligatoire), puis quantité, montant HT, livraison prévue, n° d'affaire et notes.</li>
       <li>Détaillez la commande dans <b>« Lignes commandées »</b> : pour chaque ligne, référence, désignation, catégorie (Matière, Accessoires, Outils, Chimique, Consommable, Autres), quantité et prix unitaire. Le <b>montant HT se calcule tout seul</b> à partir des lignes.</li>
       <li>Pour un achat stratégique ou d'un montant élevé, cochez <b>« Soumettre ce BC à la validation de la Direction »</b> : le BC sera présenté dans l'onglet « À valider » du service Direction.</li>
-      <li>Cliquez <b>« Créer le BC »</b> : il apparaît aussitôt dans la liste des BC du service <b>Expéditions</b>, en attente de réception.</li>
+      <li>Cliquez <b>« Créer le BC »</b> : il apparaît aussitôt dans l'onglet <a href="#tab-bc">Bons de commande</a>, en attente de réception.</li>
     </ol>
     <figure class="shot">
       <img src="../../assets/form-achats-bc.png" alt="Formulaire de création d'un bon de commande" loading="lazy">
@@ -171,7 +172,7 @@
 
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
-      <li>Une DA est considérée <b>traitée</b> dès qu'un BC a été créé pour elle ; son avancement (commandé, en cours, reçu) se suit ensuite dans Expéditions via le lien « Voir BC ».</li>
+      <li>Une DA est considérée <b>traitée</b> dès qu'un BC a été créé pour elle ; son avancement (commandé, en cours, reçu) se suit ensuite dans l'onglet <a href="#tab-bc">Bons de commande</a>, où le lien « Voir BC » vous emmène directement.</li>
       <li>Les DA <span class="b b-crit">critique</span> sont à traiter en priorité — elles remontent aussi en alerte sur le Dashboard achats.</li>
       <li>Le prix saisi sur un BC (montant, prix unitaires des lignes) ne met <b>pas</b> à jour le prix officiel du fournisseur : pour cela, passez par une <b>demande de prix</b> (onglet 1).</li>
       <li>Le champ <b>Fournisseur / ST</b> de la fenêtre de traitement est une <b>liste déroulante</b>, plus une saisie libre. Elle propose d'abord, sous « Référencés pour &lt;article&gt; », les seuls fournisseurs qui portent cette référence au catalogue ; les autres restent disponibles dans le groupe suivant. Si la référence n'est encore au catalogue de personne, le premier groupe est vide et le second est intitulé « Aucun fournisseur référencé pour cette référence » — vous choisissez alors librement, et c'est le signal qu'une demande de prix serait utile.</li>
@@ -179,8 +180,39 @@
     <div class="astuce"><b>Astuce :</b> utilisez « Enregistrer (brouillon) » quand il vous manque une information (prix, délai) : la DA reste visible dans « à traiter » avec la pastille Brouillon, et le bouton « Reprendre » restaure toute votre saisie.</div>
   </section>
 
+  <section class="tab" id="tab-bc">
+    <div class="tab-head"><span class="tab-num">3</span><h2>Bons de commande</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Cet onglet réunit <b>tous les bons de commande</b> émis par l'ERP — fournisseurs et sous-traitants confondus, qu'ils viennent d'une demande d'achat ou d'une création directe. Vous y voyez d'un seul écran ce qui est commandé, pour quelle affaire, à quel montant et surtout <b>pour quand</b>. C'est aussi ici que vous <b>changez la date d'arrivée</b> d'une commande dès que le fournisseur vous annonce un décalage, sans quitter votre service. Seules les commandes <b>annulées</b> n'apparaissent pas dans la liste.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>En haut, le titre avec le nombre de bons de commande, une <b>barre de recherche</b> (elle filtre sur le n° de BC, le fournisseur, les articles, l'affaire et le statut) et un <b>compteur ambre</b> qui annonce le nombre de commandes <b>sans date d'arrivée</b> — celles pour lesquelles personne ne sait encore quand la marchandise doit tomber. Le tableau liste ensuite chaque commande : <b>N° BC</b> (avec, dessous, le type — Fournisseur ou Sous-traitant — et la demande d'achat dont elle est issue s'il y en a une), <b>Fournisseur / ST</b>, <b>Articles</b>, <b>Affaire</b>, <b>Montant HT</b>, <b>Émis le</b>, <b>Arrivée prévue</b>, <b>Reçu le</b>, <b>Statut</b>, et au bout de la ligne le bouton bleu <b>« Date d'arrivée »</b> (icône calendrier). Quand une date a déjà été repoussée, la <b>première date promise</b> reste affichée en petit sous la nouvelle, en ambre, avec la mention <b>« 1re »</b> : vous gardez sous les yeux ce que le fournisseur avait annoncé au départ.</p>
+    <figure class="shot">
+      <img src="../../assets/achats-bc.png" alt="Capture de l'onglet Bons de commande" loading="lazy">
+      <figcaption><b>Bons de commande</b> — la recherche et le compteur ambre « sans date d'arrivée » au-dessus du tableau ; sur chaque ligne, l'arrivée prévue (avec la 1re date en ambre si elle a été repoussée) et le bouton « Date d'arrivée ».</figcaption>
+    </figure>
+
+    <h3>Pas à pas — changer la date d'arrivée d'un bon de commande</h3>
+    <ol class="steps">
+      <li>Retrouvez la commande dans la liste : tapez son <b>n° de BC</b>, le nom du <b>fournisseur</b>, un <b>article</b>, le <b>n° d'affaire</b> ou un <b>statut</b> dans la barre de recherche.</li>
+      <li>Cliquez le bouton bleu <b>« Date d'arrivée »</b> (icône calendrier) au bout de la ligne. Une petite fenêtre s'ouvre : elle rappelle le <b>numéro du BC</b>, le <b>fournisseur</b> et les <b>articles</b>, et ne contient qu'<b>un seul champ, la date</b>. Rien à télécharger, aucun document à ouvrir.</li>
+      <li>Selon le cas, un rappel s'affiche dans la fenêtre : si la date a <b>déjà été repoussée</b>, l'ERP vous redit que la <b>1re date prévue</b> (elle est citée) reste gardée pour le calcul de l'<b>OTD</b> ; si la commande est <b>déjà reçue</b>, il vous confirme que corriger la date prévue reste possible et que cela remet le suivi des délais d'aplomb.</li>
+      <li>Saisissez la <b>nouvelle date annoncée</b> par le fournisseur, puis cliquez <b>« Enregistrer la date »</b> — ou <b>« Annuler »</b> pour ressortir sans rien changer.</li>
+      <li>La liste se remet à jour : la nouvelle date s'affiche dans la colonne <b>Arrivée prévue</b>, la date promise à l'origine passe juste en dessous en ambre avec la mention <b>« 1re »</b>, et la commande disparaît du compteur « sans date d'arrivée » si elle n'en avait pas.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li>La date d'arrivée reste modifiable <b>à tout moment</b> : même sur une commande <b>déjà validée par le fournisseur</b>, même sur une commande <b>déjà reçue</b>. Rien ne se verrouille — un fournisseur peut annoncer un décalage après coup, et une date prévue erronée peut toujours être corrigée pour remettre le suivi des délais d'aplomb.</li>
+      <li>L'ERP <b>gèle la première date promise</b>. C'est elle, et non la date repoussée, qui sert à calculer l'<b>OTD</b> (ponctualité) du fournisseur affiché dans l'onglet <a href="#tab-scorecard">Scorecard</a> : un fournisseur ne peut pas « racheter » sa ponctualité en décalant ses dates. C'est aussi pour cela que la 1re date reste visible en ambre.</li>
+      <li>La liste ne filtre rien : elle couvre les BC fournisseurs <b>et</b> sous-traitants, en attente comme déjà reçus, y compris les proformas en attente de paiement. Seules les commandes <b>annulées</b> en sont exclues.</li>
+      <li>Une commande <b>sans date d'arrivée</b> n'est attendue par personne : elle ne peut être ni relancée à temps, ni comptée dans la ponctualité du fournisseur. Le compteur ambre est là pour vous les faire renseigner.</li>
+    </ul>
+    <div class="note"><b>Bon à savoir :</b> le réceptionnaire dispose du même geste de son côté — dans <b>Expéditions → Réceptions</b>, un crayon sur les files « À réceptionner » et « En attente de validation fournisseur » permet de corriger la date quand le fournisseur annonce un retard au moment de la réception. Les deux chemins écrivent la même date : peu importe qui la saisit.</div>
+    <div class="astuce"><b>Astuce :</b> commencez votre semaine par le compteur ambre « sans date d'arrivée ». Une fois toutes les commandes datées, la colonne <b>Arrivée prévue</b> vous dit d'un coup d'œil ce qui doit tomber dans les jours qui viennent, et donc qui relancer.</div>
+  </section>
+
   <section class="tab" id="tab-fourn">
-    <div class="tab-head"><span class="tab-num">3</span><h2>Fournisseurs / ST</h2></div>
+    <div class="tab-head"><span class="tab-num">4</span><h2>Fournisseurs / ST</h2></div>
     <p class="tab-but"><b>À quoi ça sert.</b> C'est le référentiel de votre panel : d'un côté les <b>fournisseurs</b> (matière, visserie, consommables…), de l'autre les <b>sous-traitants</b> (traitements de surface, découpe, rectification…). Chaque fiche porte les contacts, le catalogue de références avec prix, les familles de fourniture ou prestations, et sert de base aux demandes de prix et aux bons de commande.</p>
 
     <h3>Ce que vous voyez</h3>
@@ -242,7 +274,7 @@
   </section>
 
   <section class="tab" id="tab-scorecard">
-    <div class="tab-head"><span class="tab-num">4</span><h2>Scorecard</h2></div>
+    <div class="tab-head"><span class="tab-num">5</span><h2>Scorecard</h2></div>
     <p class="tab-but"><b>À quoi ça sert.</b> La scorecard évalue objectivement vos fournisseurs et sous-traitants à partir de leur historique réel dans l'ERP : ponctualité de livraison, qualité à réception et régularité de paiement. Elle vous aide à choisir qui consulter, qui surveiller et qui écarter — une exigence classique des audits EN 9100.</p>
 
     <h3>Ce que vous voyez</h3>
@@ -269,7 +301,7 @@
   </section>
 
   <section class="tab" id="tab-dashboard">
-    <div class="tab-head"><span class="tab-num">5</span><h2>Dashboard achats</h2></div>
+    <div class="tab-head"><span class="tab-num">6</span><h2>Dashboard achats</h2></div>
     <p class="tab-but"><b>À quoi ça sert.</b> C'est la vue d'ensemble du service : votre charge du moment (DA en attente), les urgences à ne pas rater et la répartition des achats par type. C'est l'écran à consulter en début de journée pour organiser votre travail.</p>
 
     <h3>Ce que vous voyez</h3>
@@ -289,7 +321,7 @@
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
       <li>Les compteurs se recalculent à chaque affichage de la page à partir des demandes d'achat réelles — aucun chiffre saisi à la main.</li>
-      <li>« Commandes en cours » compte les DA déjà transformées en BC dont la réception n'est pas terminée ; leur détail se suit côté Expéditions.</li>
+      <li>« Commandes en cours » compte les DA déjà transformées en BC dont la réception n'est pas terminée ; leur détail se consulte dans l'onglet <a href="#tab-bc">Bons de commande</a>.</li>
     </ul>
     <div class="note"><b>Bon à savoir :</b> des analyses achats plus poussées (tendances, montants, filtres par période) existent dans <b>Tableaux de bord → Dashboard Achats</b>, commun à toute l'entreprise.</div>
   </section>

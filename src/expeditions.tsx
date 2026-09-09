@@ -1005,23 +1005,13 @@ function panelReceptions(bcs: any[], bcsAttendus: any[], receptions: any[], bds:
 
   const H = (cols: string[]) => `<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#fafafa;">${cols.map(c => c.startsWith('#') ? THC(c.slice(1)) : TH(c)).join('')}</tr></thead><tbody>`
 
-  // ── 6. Toutes les AUTRES commandes ────────────────────────────────────────
-  // Les deux files ci-dessus ne montrent que les commandes ÉMISES en attente du colis.
-  // Une commande déjà REÇUE, ou une proforma en ATTENTE DE PAIEMENT, n'apparaissait donc
-  // nulle part ici — et sa date d'arrivée n'était modifiable depuis aucun écran.
-  const _vus = new Set([...(bcsAttendus || []).map((b: any) => String(b.id)), ...bcVal.map((b: any) => String(b.id))])
-  const autresBc = (bcs || []).filter((b: any) => !_vus.has(String(b.id)))
-  const rowsAutres = autresBc.map((b: any) => tr([
-    TD(`<div style="font-weight:700;color:#475569;">${escX(b.num_bc ?? b.id)}</div><div style="font-size:.65rem;color:#94a3b8;">${b.type === 'st' ? 'Sous-traitant' : 'Fournisseur'}</div>`),
-    TD(escX(b.fournisseur ?? '—')),
-    TD(`<span style="font-size:.75rem;color:#475569;">${escX(b.articles ?? '—')}</span>`),
-    TDC(`<button onclick="expOpenArrivee('${escX(b.id)}')" title="Modifier la date d'arrivée prévue" style="background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:6px;font:inherit;">`
-      + (b.date_livraison_prevue ? `<span style="font-weight:700;color:#334155;">${_frDate(b.date_livraison_prevue)}</span>` : '<span style="color:#cbd5e1;">à planifier</span>')
-      + `<i class="fas fa-pen" style="margin-left:6px;font-size:.6rem;color:#cbd5e1;"></i></button>`),
-    TDC(b.date_reception_reelle ? `<span style="font-weight:700;color:#15803d;">${_frDate(b.date_reception_reelle)}</span>` : '<span style="color:#cbd5e1;">—</span>'),
-    TDC(bcStatutBadge(b.statut)),
-    TDC(`<button onclick="bcPdf('${escX(b.id)}')" style="background:#f5f3ff;color:#6d28d9;border:none;border-radius:7px;padding:5px 9px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-file-pdf"></i></button>`),
-  ])).join('')
+  // ⚠ Il y avait ici une carte « Autres commandes — date modifiable » (commandes déjà reçues
+  //   ou proforma en attente de paiement). Elle a été RETIRÉE : sa seule action visible était
+  //   un bouton qui téléchargeait le PDF du bon de commande — on croyait corriger une date,
+  //   on récupérait un document. Le crayon, lui, se perdait dans la cellule.
+  //   Le changement de date d'arrivée vit désormais dans **Achats › Bons de commande**, sur
+  //   un bouton explicite, et cette liste-là ne filtre rien : les commandes reçues et les
+  //   proforma y sont, ce qui referme le trou que cette carte bouchait maladroitement.
 
   return `
   <div id="exp-panel-receptions" style="display:none;">
@@ -1040,9 +1030,6 @@ function panelReceptions(bcs: any[], bcsAttendus: any[], receptions: any[], bds:
 
     ${bcVal.length ? card('En attente de validation fournisseur', 'fa-hourglass-half', '#f59e0b', bcVal.length, 'commandes envoyées, pas encore confirmées',
       H(['N° BC', 'Fournisseur', 'Articles', '#Émis le', '#Arrivée prévue', '#Action']) + rowsVal + '</tbody></table>') : ''}
-
-    ${autresBc.length ? card('Autres commandes — date modifiable', 'fa-calendar-pen', '#64748b', autresBc.length, 'commandes deja recues, en attente de paiement, ou hors file : leur date reste corrigeable ici',
-      H(['N° BC', 'Fournisseur / ST', 'Articles', '#Arrivée prévue', '#Reçu le', '#Statut', '#BC']) + rowsAutres + '</tbody></table>') : ''}
 
     ${card('Arrivées enregistrées', 'fa-clipboard-check', '#16a34a', recAll.length, 'historique des réceptions et retours reçus',
       H(['N° BL', 'Fournisseur / Client', 'Pièce / Articles', '#Reçu le', '#Qté', '#Contrôle']) + (rowsRec || vide(6, 'Aucune arrivée enregistrée')) + '</tbody></table>')}
@@ -2004,8 +1991,9 @@ export const pageServiceExpeditions = (
     h+='</div>';
     if(slip) h+='<div style="font-size:.7rem;color:#b45309;margin-top:8px;"><i class="fas fa-clock-rotate-left"></i> Date repoussee \\u2014 1re date prevue <b>'+b.initiale+'</b> gardee pour l\\'OTD.</div>';
     h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;align-items:center;">';
-    h+='<button onclick="bcPdf(_arrCur.id)" style="padding:8px 13px;background:#f5f3ff;color:#6d28d9;border:none;border-radius:8px;font-weight:700;font-size:.8rem;cursor:pointer;"><i class="fas fa-file-pdf"></i> BC PDF</button>';
-    if(b.bl_id) h+='<button onclick="expVoirBL(_arrCur.bl_id)" style="padding:8px 13px;background:#ecfeff;color:#0e7490;border:none;border-radius:8px;font-weight:700;font-size:.8rem;cursor:pointer;"><i class="fas fa-receipt"></i> BL '+b.bl_id+'</button>';
+    // Ni PDF ni navigation ici : on est venu changer une date, rien d'autre.
+    // (Le bouton « BL » qui ouvrait un onglet supprime vidait la page — il est devenu un simple rappel.)
+    if(b.bl_id) h+='<div style="font-size:.72rem;color:#0e7490;font-weight:700;"><i class="fas fa-receipt"></i> Recu \u2014 BL '+b.bl_id+'</div>';
     h+='<button onclick="expSaveArriveeDate()" style="margin-left:auto;padding:8px 13px;background:linear-gradient(135deg,${AMB},${AMB_D});color:#fff;border:none;border-radius:8px;font-weight:700;font-size:.8rem;cursor:pointer;"><i class="fas fa-calendar-check"></i> Enregistrer la date</button>';
     h+='</div>';
     document.getElementById('arr_modal_content').innerHTML=h;
@@ -2021,7 +2009,7 @@ export const pageServiceExpeditions = (
         if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Echec.'); return; }
         expCloseArrivee();
         pushNotif('ok','fa-calendar-check','Date d\\'arrivee mise a jour'+(j.date_livraison_initiale?' \\u00b7 1re date gardee pour l\\'OTD':'')+'.',5000);
-        setTimeout(function(){ location.hash='calendrier'; softReload(); },700);
+        setTimeout(function(){ softReload(); },700);   // on reste sur l'onglet en cours
       }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur reseau.'); });
   }
   function expVoirBL(blId){

@@ -2,6 +2,35 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-09 (soir, 2) — La date d'arrivée d'un BC se change depuis les Achats
+
+**Le reproche** : « je vois pas pourquoi on télécharge un doc ». Dans la carte que j'avais ajoutée aux Expéditions pour rendre les dates corrigeables, la **seule action visible** était un bouton PDF ; le crayon, lui, se perdait dans la cellule de la date. On croyait corriger une date, on récupérait un document.
+
+### Ce qui a été retiré
+
+- La carte **« Autres commandes — date modifiable »** (Expéditions › Réceptions), et son bouton de téléchargement.
+- Le bouton **« BC PDF »** dans la fenêtre de changement de date : hors sujet, on est venu changer une date.
+- Le bouton **« BL &lt;n°&gt; »** de cette même fenêtre — il appelait `expShowTab('bl')`, un onglet supprimé lors d'une refonte antérieure : il masquait les cinq panneaux et laissait un **écran blanc**. Devenu un simple rappel textuel.
+- Le saut forcé vers l'onglet « Calendrier » après enregistrement : on reste où l'on était.
+
+### Ce qui le remplace
+
+Un **6ᵉ onglet « Bons de commande »** dans le service Achats. Il liste **tous** les BC sauf les annulés — y compris ceux déjà validés par le fournisseur, déjà reçus, ou en attente de paiement — avec un bouton explicite **« Date d'arrivée »** par ligne. La fenêtre ne contient qu'un champ date et un bouton d'enregistrement.
+
+Deux rappels s'y affichent quand ils s'appliquent : la 1ʳᵉ date promise gardée pour l'OTD, et le fait qu'une commande déjà reçue reste corrigeable.
+
+Le lien « Voir BC » des demandes d'achat traitées pointait vers `/expeditions/service#bc`, un onglet supprimé — il bascule maintenant sur ce nouvel onglet.
+
+### Le piège de droits, évité de justesse
+
+`serviceFor()` déduit le service du premier segment après `/api/`. La route `/api/expeditions/bc/:id/date-arrivee` est donc gatée sur **expeditions**, où le rôle `achats` n'a que la lecture : l'acheteur aurait pris un `403 Accès refusé` sur son propre bouton. Le même handler est désormais enregistré aussi sous `/api/bc/:id/date-arrivee`, famille déjà rattachée au service `achats`.
+
+L'onglet ne coûte **aucun appel Supabase supplémentaire** : la route chargeait déjà les bons de commande, elle ne les passait simplement pas à la page.
+
+### Vérification
+
+`tsc --noEmit` propre · harnais toutes-pages **61 PASS / 0 FAIL** · `npm run build` · **essayé pour de vrai dans le navigateur** contre la base : l'onglet s'affiche, le bouton ouvre la fenêtre, `POST /api/bc/<id>/date-arrivee` répond 200, la date est réécrite et l'onglet est conservé après rechargement. Testé sur un BC **déjà reçu** (`statut: recu`) → accepté, ce qui était la demande d'origine ; et sur un second report → `date_livraison_initiale` figée sur la date précédente, l'OTD reste calculé sur la promesse d'origine. Côté Expéditions, vérifié dans la page rendue : plus de carte, plus de `bcPdf` ni de `expVoirBL` dans la fenêtre de date, un seul bouton « Enregistrer la date ».
+
 ## 2026-09-09 (soir) — Tout le flux d'une affaire porte le même numéro
 
 **Le symptôme** : une affaire `0001` produisait bien `CMD-2026-0001`, `LOT-2026-0001-01`, `DA-0001-…` — puis, à partir des achats, la chaîne repartait sur des compteurs **globaux** : `BC-2026-003`, `BL-2026-002`, `FOURN-2026-0002`. Le flux se lisait `0001` à moitié.

@@ -69,6 +69,27 @@ Ce numéro est un **placeholder** : à la réception, le comptable saisit le vra
 
 ⚠ **Limite assumée** : supprimer la dernière commande d'une affaire libère son numéro, qui sera réattribué. Éliminer complètement ce cas demanderait une table de séquences (donc une migration) ; l'ancien compteur global avait le même défaut, mais à l'échelle de TOUTES les commandes.
 
+## Onglet « Bons de commande » — la date d'arrivée se change ici (09/09/2026)
+
+6ᵉ onglet du service (`ach-panel-bc`, `/achats/service#bc`), entre « Demandes d'achat » et « Fournisseurs / ST ». Il liste **tous** les BC sauf les annulés — y compris ceux déjà validés par le fournisseur, déjà reçus, ou en `attente_paiement` (proforma). Chaque ligne porte un bouton **« Date d'arrivée »** qui ouvre une fenêtre dépouillée : un champ date, « Annuler », « Enregistrer la date ».
+
+**Pourquoi cet onglet existe** : le changement de date vivait dans Expéditions, dans une carte « Autres commandes — date modifiable » dont la seule action visible était… un bouton qui téléchargeait le PDF du bon de commande. On croyait corriger une date, on récupérait un document. Cette carte a été supprimée, et avec elle le bouton « BC PDF » de la fenêtre de date — ainsi qu'un bouton « BL &lt;n°&gt; » qui appelait `expShowTab('bl')`, onglet supprimé lors d'une refonte antérieure : il masquait les cinq panneaux et laissait un **écran blanc**.
+
+⚠ **Le piège de droits, à ne pas reproduire.** `serviceFor()` (`src/auth.ts`) déduit le service du **premier segment après `/api/`**. La route existante `/api/expeditions/bc/:id/date-arrivee` est donc gatée sur `expeditions`, où le rôle `achats` n'a que la **lecture** (`ROLE_MATRIX`) : l'acheteur aurait pris un `403 Accès refusé` sur son propre bouton. Le même handler (`majDateArriveeBc`) est donc enregistré **deux fois** :
+
+```ts
+app.post('/api/expeditions/bc/:id/date-arrivee', majDateArriveeBc)   // réception  → service expeditions
+app.post('/api/bc/:id/date-arrivee',             majDateArriveeBc)   // achats     → service achats
+```
+
+La famille `bc` était déjà mappée sur `achats` dans `API_FAM_SERVICE`. Règle générale : **avant d'ajouter un bouton dans un service, vérifier que la route qu'il appelle tombe dans CE service.**
+
+**Coût en base : zéro appel supplémentaire.** La route `/achats/service` chargeait déjà les BC (`_bcsPourLibre`, pour calculer la prochaine référence `LIBRE-XXX`) sans les passer à la page. On ajoute un 11ᵉ paramètre positionnel à `pageServiceAchats` et on lui donne cette liste, projetée.
+
+**Ce qui reste dans Expéditions** : les crayons sur la date, dans les deux files « À réceptionner » et « En attente de validation fournisseur ». C'est le geste du réceptionnaire quand le fournisseur annonce un retard, il n'a rien à faire dans les Achats.
+
+**Gel de la première date** inchangé : `date_livraison_initiale` reçoit l'**ancienne** date au premier report et n'est plus jamais réécrite — l'OTD reste calculé sur la promesse d'origine.
+
 ## Demandes d'achat : modifier, retirer, fusionner (09/09/2026)
 
 **Modifier** — `POST /api/achats/da/:id/editer`. Route **distincte** du `PATCH /api/achats/da/:id`, qui sert au brouillon de BC et force `statut='brouillon'`. L'édition ne touche ni au statut, ni à `genere_par_adt`, ni au `bc_draft`. Elle s'applique aux demandes **libres comme automatiques**, mais le **rattachement d'une demande automatique est verrouillé** : `num_affaire` et `cmd_ref` portent la porte « matière reçue » et le coût de l'affaire — les déplacer changerait silencieusement l'imputation de la dépense. La modale l'affiche en lecture seule et l'explique.

@@ -1713,7 +1713,28 @@ app.get('/achats/service', async (c) => {
     ...(_cmdsAff as any[]).map((x: any) => String(x.num_affaire || '').trim()),
     ...(_bcsPourLibre as any[]).map((x: any) => String(x.num_affaire || '').trim()),
   ].filter(Boolean).filter((x) => !/^LIBRE-/i.test(x)))].sort()
-  return c.html(pageServiceAchats(das, fournisseurs, sousTraitants, refCount, dpEnrichies as any[], sansPrix, scorecard as any[], produits as any[], prochaineRefLibre(_bcsPourLibre as any[]), _affaires))
+  // Onglet « Bons de commande » : les BC etaient deja charges ci-dessus (ils servaient a
+  // calculer la prochaine reference LIBRE), ils n'etaient simplement pas donnes a la page.
+  // Cette vue ne sert qu'a AFFICHER et a changer la date : le formulaire ne renvoie que la
+  // date, aucun champ absent d'ici ne peut donc etre reecrit vide.
+  const _bcsAchats = (_bcsPourLibre as any[]).map((b: any) => ({
+    id: b.id,
+    num_bc: b.num_bc || b.id,
+    type: (b.type_bc === 'st' || b.type_bc === 'sous_traitant') ? 'st' : 'fournisseur',
+    fournisseur: b.fournisseur_nom || '—',
+    articles: b.articles || (Array.isArray(b.lignes) ? b.lignes.map((l: any) => l.article).filter(Boolean).join(', ') : '') || '—',
+    num_affaire: b.num_affaire || b.affaire_id || '',
+    montant: Number(b.montant_ht ?? 0) || 0,
+    statut: b.statut || 'en_attente',
+    da_id: b.demande_achat_id || '',
+    date_bc: b.date_bc ? String(b.date_bc).slice(0, 10) : '',
+    // `date_livraison` est la VRAIE colonne ; `date_livraison_prevue` n'existe pas en base.
+    prevue: b.date_livraison ? String(b.date_livraison).slice(0, 10) : '',
+    initiale: b.date_livraison_initiale ? String(b.date_livraison_initiale).slice(0, 10) : '',
+    reception: b.date_reception_reelle ? String(b.date_reception_reelle).slice(0, 10) : '',
+    accuse: b.accuse_fournisseur_le ? String(b.accuse_fournisseur_le).slice(0, 10) : '',
+  }))
+  return c.html(pageServiceAchats(das, fournisseurs, sousTraitants, refCount, dpEnrichies as any[], sansPrix, scorecard as any[], produits as any[], prochaineRefLibre(_bcsPourLibre as any[]), _affaires, _bcsAchats))
 })
 
 // ─── Fiches détaillées Fournisseur / Sous-traitant ───────────
@@ -2623,7 +2644,13 @@ app.post('/api/expeditions/retour-client/:ncId/receptionner', async (c) => {
 })
 
 // ─── Changer la date d'arrivée PRÉVUE d'un BC (planning) en GARDANT la 1ʳᵉ date pour l'OTD ───
-app.post('/api/expeditions/bc/:id/date-arrivee', async (c) => {
+// DEUX portes d'entree, volontairement, parce que ce sont DEUX METIERS :
+//   · /api/expeditions/... : la reception corrige la date quand le colis glisse ;
+//   · /api/bc/...          : l'ACHETEUR la corrige depuis sa liste de bons de commande.
+// Ce n'est pas cosmetique : `serviceFor()` deduit le service du 1er segment apres /api/.
+// Le role « achats » n'a que la LECTURE sur `expeditions` (ROLE_MATRIX, src/auth.ts) — il
+// aurait pris un 403 sec sur la premiere route. La famille `bc` est deja mappee sur `achats`.
+const majDateArriveeBc = async (c: any) => {
   const id = c.req.param('id')
   const body = await c.req.json().catch(() => ({} as any))
   const nouvelle = body.date ? String(body.date).slice(0, 10) : null
@@ -2640,7 +2667,9 @@ app.post('/api/expeditions/bc/:id/date-arrivee', async (c) => {
   if (error && patch.date_livraison_initiale) { ({ error } = await updateBonDeCommande(id, { date_livraison: nouvelle })) }
   if (error) return c.json({ ok: false, error: error.message }, 400)
   return c.json({ ok: true, date_livraison: nouvelle, date_livraison_initiale: patch.date_livraison_initiale || (bc as any).date_livraison_initiale || null })
-})
+}
+app.post('/api/expeditions/bc/:id/date-arrivee', majDateArriveeBc)   // reception
+app.post('/api/bc/:id/date-arrivee', majDateArriveeBc)               // achats
 
 // ─── PV de contrôle réception : OK → Qualité (libéré) ; anomalie → NC (+ quarantaine) ───
 app.post('/api/expeditions/bc/:id/pv', async (c) => {

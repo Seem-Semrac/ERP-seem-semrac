@@ -58,6 +58,35 @@ const daStatutBadge = (s: string) => {
   return `<span style="padding:2px 10px;border-radius:999px;font-size:.68rem;font-weight:700;background:${bg};color:${col};">${lbl}</span>`
 }
 
+// Date ISO -> jj/mm/aaaa, sans dependre du fuseau (pas de new Date sur une chaine date).
+const frD = (d: any) => {
+  const s = String(d ?? '').slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : (s || '\u2014')
+}
+
+// Statuts reellement rencontres sur bons_de_commande (le CHECK en base est plus etroit que
+// ce que le code ecrit : on affiche donc tout, avec un repli lisible plutot qu'une case vide).
+const bcStatutBadge = (s: string) => {
+  const T: Record<string, [string, string, string]> = {
+    brouillon:        ['Brouillon',            '#f1f5f9', '#475569'],
+    a_envoyer:        ['\u00c0 envoyer',       '#fef3c7', '#92400e'],
+    envoye:           ['Envoy\u00e9',          '#dbeafe', '#1d4ed8'],
+    en_attente:       ['En attente',           '#dbeafe', '#1d4ed8'],
+    accuse:           ['Valid\u00e9 fourn.',   '#e0e7ff', '#3730a3'],
+    confirme:         ['Confirm\u00e9',        '#e0e7ff', '#3730a3'],
+    attente_paiement: ['Attente paiement',     '#fce7f3', '#9d174d'],
+    recu_partiel:     ['Re\u00e7u partiel',    '#fef9c3', '#854d0e'],
+    receptionne:      ['R\u00e9ceptionn\u00e9', '#dcfce7', '#166534'],
+    recu:             ['Re\u00e7u',            '#dcfce7', '#166534'],
+    recu_total:       ['Re\u00e7u',            '#dcfce7', '#166534'],
+    controle:         ['Contr\u00f4l\u00e9',   '#dcfce7', '#166534'],
+    cloture:          ['Cl\u00f4tur\u00e9',    '#f1f5f9', '#475569'],
+    annule:           ['Annul\u00e9',          '#fee2e2', '#b91c1c'],
+  }
+  const [lbl, bg, fg] = T[String(s || '')] || [String(s || '\u2014'), '#f1f5f9', '#475569']
+  return `<span style="background:${bg};color:${fg};border-radius:999px;padding:2px 10px;font-size:.65rem;font-weight:800;white-space:nowrap;">${escX(lbl)}</span>`
+}
+
 const fournStatutBadge = (s: string) => {
   const m: Record<string,[string,string,string]> = {
     actif:          ['#d1fae5','#065f46','Actif'],
@@ -85,6 +114,7 @@ export const pageServiceAchats = (
   dbCatalogue?: any[],
   dbProchainLibre?: string,
   dbAffaires?: string[],
+  dbBcs?:       any[],
 ) => {
   const DAS   = dbDas          ?? []
   const FOURN = dbFournisseurs ?? []
@@ -165,7 +195,7 @@ export const pageServiceAchats = (
       <td style="${TD}color:#374151;font-size:.78rem;">${escX(d.qte)||'—'}</td>
       <td style="${TD}text-align:center;font-size:.75rem;color:#374151;">${(d as any).type_bc==='st'?'<span style="color:#8b5cf6;font-weight:700;">Sous-traitant</span>':'Fournisseur'}</td>
       <td style="${TD}text-align:center;">${daStatutBadge(d.statut)}</td>
-      <td style="${TD}text-align:center;font-size:.72rem;color:#3b82f6;font-weight:700;"><a href="/expeditions/service#bc" style="color:#3b82f6;text-decoration:none;"><i class="fas fa-arrow-right" style="margin-right:4px;"></i>Voir BC</a></td>
+      <td style="${TD}text-align:center;font-size:.72rem;color:#3b82f6;font-weight:700;"><a href="#bc" onclick="switchAchTab('bc');" style="color:#3b82f6;text-decoration:none;"><i class="fas fa-arrow-right" style="margin-right:4px;"></i>Voir BC</a></td>
     </tr>`
 
   const tabDA = `
@@ -526,9 +556,73 @@ export const pageServiceAchats = (
   </div>`
 
   // ── ASSEMBLAGE ───────────────────────────────────────────────
+  // ── ONGLET BONS DE COMMANDE ───────────────────────────────────────
+  // L'acheteur doit pouvoir corriger la date d'arrivee d'une commande DEJA VALIDEE, voire
+  // deja recue : c'est le cas courant (le fournisseur annonce un retard apres coup, ou la
+  // date a ete saisie de travers). Cette liste ne filtre donc RIEN, hormis les annulees.
+  const BCS: any[] = (dbBcs ?? []).filter((b: any) => String(b.statut || '') !== 'annule')
+  const BC_A_DATER = BCS.filter((b: any) => !b.prevue).length
+
+  const rowBC = (b: any) => `
+    <tr data-num="${escX(b.num_bc)}" data-fournisseur="${escX(b.fournisseur)}" data-articles="${escX(b.articles)}" data-affaire="${escX(b.num_affaire)}" data-statut="${escX(b.statut)}"
+        style="border-bottom:1px solid #f9fafb;" onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">
+      <td style="${TD}"><div style="font-weight:700;color:#0369a1;">${escX(b.num_bc)}</div><div style="font-size:.63rem;color:#94a3b8;">${b.type === 'st' ? 'Sous-traitant' : 'Fournisseur'}${b.da_id ? ' \u00b7 ' + escX(b.da_id) : ''}</div></td>
+      <td style="${TD}font-weight:600;color:#374151;">${escX(b.fournisseur)}</td>
+      <td style="${TD}color:#6b7280;font-size:.75rem;max-width:230px;">${escX(b.articles)}</td>
+      <td style="${TD}text-align:center;font-size:.73rem;color:#6366f1;font-weight:700;">${escX(b.num_affaire) || '\u2014'}</td>
+      <td style="${TD}text-align:right;font-weight:700;color:#374151;white-space:nowrap;">${b.montant ? b.montant.toLocaleString('fr-FR') + ' \u20ac' : '\u2014'}</td>
+      <td style="${TD}text-align:center;font-size:.73rem;color:#6b7280;">${frD(b.date_bc)}</td>
+      <td style="${TD}text-align:center;">${b.prevue
+          ? `<span style="font-weight:700;color:#334155;">${frD(b.prevue)}</span>${b.initiale && b.initiale !== b.prevue ? `<div style="font-size:.58rem;color:#b45309;font-weight:700;" title="Date d&#39;origine gard\u00e9e pour le calcul de l&#39;OTD">1\u02b3\u1d49 : ${frD(b.initiale)}</div>` : ''}`
+          : '<span style="color:#cbd5e1;">\u00e0 planifier</span>'}</td>
+      <td style="${TD}text-align:center;">${b.reception ? `<span style="font-weight:700;color:#15803d;">${frD(b.reception)}</span>` : '<span style="color:#cbd5e1;">\u2014</span>'}</td>
+      <td style="${TD}text-align:center;">${bcStatutBadge(b.statut)}</td>
+      <td style="${TD}text-align:center;"><button onclick="achOpenBcDate('${escX(b.id)}')" title="Changer la date d&#39;arriv\u00e9e pr\u00e9vue de ce bon de commande" style="padding:6px 12px;background:#e0f2fe;color:#0369a1;border:none;border-radius:8px;font-size:.71rem;font-weight:700;cursor:pointer;white-space:nowrap;"><i class="fas fa-calendar-day" style="margin-right:5px;"></i>Date d&#39;arriv\u00e9e</button></td>
+    </tr>`
+
+  const tabBC = `
+  <div id="ach-panel-bc" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+      <div style="font-size:1rem;font-weight:800;color:#111827;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <i class="fas fa-file-contract" style="color:#0ea5e9;"></i>Bons de commande
+        <span style="background:#e0f2fe;color:#0369a1;border-radius:999px;padding:1px 10px;font-size:.72rem;font-weight:800;">${BCS.length}</span>
+        <span style="font-size:.72rem;color:#9ca3af;font-weight:600;">\u00b7 la date d&#39;arriv\u00e9e reste modifiable, m\u00eame une fois la commande valid\u00e9e ou re\u00e7ue</span>
+        ${BC_A_DATER ? `<span style="background:#fef3c7;color:#92400e;border-radius:999px;padding:1px 10px;font-size:.68rem;font-weight:800;">${BC_A_DATER} sans date d&#39;arriv\u00e9e</span>` : ''}
+      </div>
+      ${searchBar('ach-bc', [['num', 'N\u00b0 BC'], ['fournisseur', 'Fournisseur'], ['articles', 'Articles'], ['affaire', 'Affaire'], ['statut', 'Statut']])}
+    </div>
+    <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;">
+      <div style="overflow-x:auto;">
+        <table id="ach-bc" style="width:100%;border-collapse:collapse;font-size:.8rem;">
+          <thead><tr style="background:#f8fafc;border-bottom:2px solid #f1f5f9;">
+            <th style="text-align:left;${TH}">N\u00b0 BC</th>
+            <th style="text-align:left;${TH}">Fournisseur / ST</th>
+            <th style="text-align:left;${TH}">Articles</th>
+            <th style="text-align:center;${TH}">Affaire</th>
+            <th style="text-align:right;${TH}">Montant HT</th>
+            <th style="text-align:center;${TH}">\u00c9mis le</th>
+            <th style="text-align:center;${TH}">Arriv\u00e9e pr\u00e9vue</th>
+            <th style="text-align:center;${TH}">Re\u00e7u le</th>
+            <th style="text-align:center;${TH}">Statut</th>
+            <th style="text-align:center;${TH}">Date d&#39;arriv\u00e9e</th>
+          </tr></thead>
+          <tbody>${BCS.length === 0 ? emptyRow(10, 'Aucun bon de commande') : BCS.map(rowBC).join('')}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`
+
+  // Donnees de la modale : uniquement ce qui s'affiche. Le formulaire ne renvoie QUE la date,
+  // aucun champ absent d'ici ne risque donc d'etre reecrit vide.
+  const BC_MODAL_JSON = sjX(BCS.map((b: any) => ({
+    id: b.id, num_bc: b.num_bc, type: b.type, fournisseur: b.fournisseur, articles: b.articles,
+    prevue: b.prevue || '', initiale: b.initiale || '', reception: b.reception || '', statut: b.statut,
+  })))
+
   const ACH_TABS = [
     ['rfq',       'Demandes de prix',           'fa-file-invoice-dollar', '#0ea5e9', DPRIX.length.toString()],
     ['da',        'Demandes d\'achat',          'fa-inbox',        '#10b981', DA_TRAITER.length.toString()],
+    ['bc',        'Bons de commande',           'fa-file-contract', '#0ea5e9', BCS.length.toString()],
     ['fourn',     'Fournisseurs / ST',          'fa-industry',     '#8b5cf6', (FOURN.length + STRAIT.length).toString()],
     ['scorecard', 'Scorecard',                  'fa-ranking-star', '#ec4899', SCORE.length ? String(SCORE.length) : ''],
     ['dashboard', 'Dashboard achats',           'fa-chart-bar',    '#f59e0b', ''],
@@ -550,10 +644,36 @@ export const pageServiceAchats = (
 
     ${tabDA}
     ${tabRFQ}
+    ${tabBC}
     ${tabDashboard}
     ${tabFourn}
     ${tabScorecard}
 
+  </div>
+
+  <!-- MODAL : changer la date d'arrivee d'un bon de commande -->
+  <!-- Volontairement DEPOUILLEE : un rappel de la commande, un champ date, un bouton.
+       Aucun telechargement, aucun lien de navigation. On est venu changer une date. -->
+  <div id="ach-bcdate-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1100;align-items:center;justify-content:center;" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:white;border-radius:16px;max-width:520px;width:94%;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+      <div style="padding:16px 22px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#0ea5e9,#0369a1);border-radius:16px 16px 0 0;">
+        <div style="font-weight:800;font-size:1rem;color:white;display:flex;align-items:center;gap:8px;"><i class="fas fa-calendar-day"></i>Date d&#39;arriv\u00e9e pr\u00e9vue</div>
+        <button onclick="achFermerBcDate()" style="color:rgba(255,255,255,.85);background:none;border:none;font-size:1.2rem;cursor:pointer;"><i class="fas fa-times"></i></button>
+      </div>
+      <div style="padding:20px 22px;">
+        <div id="ach_bcdate_titre" style="font-weight:800;font-size:1.05rem;color:#111827;"></div>
+        <div id="ach_bcdate_sous" style="font-size:.82rem;color:#475569;margin-bottom:12px;"></div>
+        <div id="ach_bcdate_art" style="background:#f8fafc;border:1px solid #f1f5f9;border-radius:10px;padding:10px 12px;font-size:.8rem;color:#334155;margin-bottom:14px;"></div>
+        <label style="${LBL}">Nouvelle date d&#39;arriv\u00e9e pr\u00e9vue</label>
+        <input id="ach_bcdate_input" type="date" style="${INP}"/>
+        <div id="ach_bcdate_gel" style="font-size:.7rem;color:#b45309;margin-top:8px;display:none;"></div>
+        <div id="ach_bcdate_recu" style="font-size:.7rem;color:#15803d;margin-top:8px;display:none;"></div>
+      </div>
+      <div style="padding:14px 22px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;">
+        <button onclick="achFermerBcDate()" style="padding:9px 18px;background:#f1f5f9;color:#374151;border:none;border-radius:8px;font-weight:600;cursor:pointer;">Annuler</button>
+        <button id="ach_bcdate_ok" onclick="achSaveBcDate()" style="padding:9px 18px;background:linear-gradient(135deg,#0ea5e9,#0369a1);color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;"><i class="fas fa-calendar-check" style="margin-right:6px;"></i>Enregistrer la date</button>
+      </div>
+    </div>
   </div>
 
   <!-- MODAL : RFQ — traiter une demande de prix -->
@@ -922,7 +1042,50 @@ export const pageServiceAchats = (
   </script>
 
   <script>
-  var ACH_TABS=['da','rfq','dashboard','fourn','scorecard'];
+  var ACH_TABS=['da','rfq','bc','dashboard','fourn','scorecard'];
+  var ACH_BCS=${BC_MODAL_JSON};
+  var _achBcCur=null;
+
+  // Changer la date d'arrivee prevue d'un bon de commande, depuis les Achats.
+  // On appelle /api/bc/... et NON /api/expeditions/... : le service est deduit du chemin,
+  // et le role achats n'a que la lecture sur expeditions (il prendrait un 403).
+  function achOpenBcDate(id){
+    var b=null; for(var i=0;i<ACH_BCS.length;i++){ if(ACH_BCS[i].id===id){ b=ACH_BCS[i]; break; } }
+    if(!b){ pushNotif('err','fa-ban','Bon de commande introuvable : '+id); return; }
+    _achBcCur=b;
+    document.getElementById('ach_bcdate_titre').textContent=b.num_bc;
+    document.getElementById('ach_bcdate_sous').textContent=b.fournisseur+' \u00b7 '+(b.type==='st'?'Sous-traitant':'Fournisseur');
+    document.getElementById('ach_bcdate_art').textContent=b.articles;
+    document.getElementById('ach_bcdate_input').value=b.prevue||'';
+    var g=document.getElementById('ach_bcdate_gel');
+    if(b.initiale&&b.initiale!==b.prevue){ g.textContent='Date deja repoussee une fois. La 1re date prevue ('+b.initiale+') reste gardee pour le calcul de l OTD.'; g.style.display='block'; }
+    else { g.style.display='none'; }
+    var r=document.getElementById('ach_bcdate_recu');
+    var dejaRecu=!!b.reception||['recu','recu_total','recu_partiel','receptionne','controle','cloture'].indexOf(String(b.statut||''))>=0;
+    if(dejaRecu){ r.textContent='Commande deja recue'+(b.reception?' le '+b.reception:'')+'. Corriger la date prevue reste possible : cela remet le suivi des delais d aplomb.'; r.style.display='block'; }
+    else { r.style.display='none'; }
+    document.getElementById('ach-bcdate-overlay').style.display='flex';
+  }
+  function achFermerBcDate(){ var o=document.getElementById('ach-bcdate-overlay'); if(o) o.style.display='none'; }
+  function achSaveBcDate(){
+    if(!_achBcCur) return;
+    var d=document.getElementById('ach_bcdate_input').value;
+    if(!d){ pushNotif('err','fa-exclamation-circle','Choisissez une date.'); return; }
+    var btn=document.getElementById('ach_bcdate_ok'); if(btn) btn.disabled=true;
+    fetch('/api/bc/'+encodeURIComponent(_achBcCur.id)+'/date-arrivee',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:d})})
+      .then(function(r){return r.json();})
+      .then(function(j){
+        if(btn) btn.disabled=false;
+        if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Echec de l enregistrement.',7000); return; }
+        var num=_achBcCur.num_bc;
+        achFermerBcDate();
+        pushNotif('ok','fa-calendar-check','Arrivee du '+num+' fixee au '+d+'.'+(j.date_livraison_initiale?' 1re date gardee pour l OTD.':''),5000);
+        // On reste sur CET onglet apres rechargement (l IIFE de fin de script relit le hash).
+        location.hash='bc';
+        setTimeout(function(){softReload();},800);
+      })
+      .catch(function(){ if(btn) btn.disabled=false; pushNotif('err','fa-exclamation-circle','Erreur reseau.'); });
+  }
   var ACH_DA=${DA_JSON};
   var RFQ_FOURN=${sjX((FOURN as any[]).map((f: any) => ({ id: f.id, nom: f.nom })))};
   // Catalogue fournisseur : sert a proposer, pour la reference demandee dans la DA,

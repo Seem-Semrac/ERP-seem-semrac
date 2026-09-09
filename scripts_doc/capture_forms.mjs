@@ -36,6 +36,8 @@ const M = [
   { file: 'form-achats-bc',            path: '/achats/service', fn: "achNewBC()" },
   // Fenetre « Traiter la DA -> BC » : celle qui porte la reference du materiel. Necessite une DA a traiter.
   { file: 'form-achats-da-bc',         path: '/achats/service', fn: "achOpenBC((ACH_DA[0]||{}).id)", wait: 900 },
+  // Fenetre « Date d'arrivee » d'un bon de commande (onglet Bons de commande). Necessite un BC en base.
+  { file: 'form-achats-bc-date',       path: '/achats/service', tabClick: '#ach-tab-bc', fn: "achOpenBcDate((ACH_BCS[0]||{}).id)", wait: 700 },
   // Production
   { file: 'form-production-bdt',       path: '/production/planning', fn: "openBdtModal()", wait: 900 },
   { file: 'form-production-st',        path: '/production/service', fn: "openSTModal()" },
