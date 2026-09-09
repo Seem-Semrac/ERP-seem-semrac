@@ -17,7 +17,14 @@
 
 Un **6ᵉ onglet « Bons de commande »** dans le service Achats. Il liste **tous** les BC sauf les annulés — y compris ceux déjà validés par le fournisseur, déjà reçus, ou en attente de paiement — avec un bouton explicite **« Date d'arrivée »** par ligne. La fenêtre ne contient qu'un champ date et un bouton d'enregistrement.
 
-Deux rappels s'y affichent quand ils s'appliquent : la 1ʳᵉ date promise gardée pour l'OTD, et le fait qu'une commande déjà reçue reste corrigeable.
+### La date se fige à la réception
+
+Premier jet corrigé le jour même, sur décision de l'exploitant : *« il ne faut pas pouvoir changer la date d'arrivée prévue après la réception. »* Il a raison — cette date est la **promesse** du fournisseur ; une fois la marchandise arrivée on connaît déjà le résultat, et la rouvrir reviendrait à effacer un retard après coup, donc à fausser l'OTD.
+
+- **Modifiable** tant que la marchandise n'est pas arrivée, y compris sur une commande **déjà validée** par le fournisseur (c'était la demande d'origine, elle tient).
+- **Figée** dès qu'elle est arrivée — **réception partielle comprise**. Trois signaux, un seul suffit : date de réception réelle, bon de livraison rattaché, ou statut de la famille reçue.
+- Dans l'onglet Achats, la ligne concernée porte une pastille grise **« Figée »** à la place du bouton. Dans la fenêtre des Expéditions, le champ est grisé et le bouton cède la place à « Date figée depuis la réception ».
+- **Le refus vit côté serveur** (`409`, message nommant la commande), sur les deux routes : ce n'est pas un bouton grisé qu'on contourne en rechargeant la page.
 
 Le lien « Voir BC » des demandes d'achat traitées pointait vers `/expeditions/service#bc`, un onglet supprimé — il bascule maintenant sur ce nouvel onglet.
 
@@ -29,7 +36,7 @@ L'onglet ne coûte **aucun appel Supabase supplémentaire** : la route chargeait
 
 ### Vérification
 
-`tsc --noEmit` propre · harnais toutes-pages **61 PASS / 0 FAIL** · `npm run build` · **essayé pour de vrai dans le navigateur** contre la base : l'onglet s'affiche, le bouton ouvre la fenêtre, `POST /api/bc/<id>/date-arrivee` répond 200, la date est réécrite et l'onglet est conservé après rechargement. Testé sur un BC **déjà reçu** (`statut: recu`) → accepté, ce qui était la demande d'origine ; et sur un second report → `date_livraison_initiale` figée sur la date précédente, l'OTD reste calculé sur la promesse d'origine. Côté Expéditions, vérifié dans la page rendue : plus de carte, plus de `bcPdf` ni de `expVoirBL` dans la fenêtre de date, un seul bouton « Enregistrer la date ».
+`tsc --noEmit` propre · harnais toutes-pages **61 PASS / 0 FAIL** · `npm run build` · **essayé pour de vrai dans le navigateur** contre la base : l'onglet s'affiche, le bouton ouvre la fenêtre, `POST /api/bc/<id>/date-arrivee` répond 200, la date est réécrite et l'onglet est conservé après rechargement. Un second report gèle bien `date_livraison_initiale` sur la date précédente — l'OTD reste calculé sur la promesse d'origine. **Verrou de réception vérifié sur les deux routes** : `recu` → 409, `recu_partiel` → 409, `brouillon` → 200 ; et à l'écran, 3 lignes sur 6 portent la pastille « Figée », les autres gardent leur bouton. Côté Expéditions, vérifié dans la page rendue : plus de carte, plus de `bcPdf` ni de `expVoirBL` dans la fenêtre de date, un seul bouton « Enregistrer la date ».
 
 ## 2026-09-09 (soir) — Tout le flux d'une affaire porte le même numéro
 

@@ -73,6 +73,14 @@ Ce numéro est un **placeholder** : à la réception, le comptable saisit le vra
 
 6ᵉ onglet du service (`ach-panel-bc`, `/achats/service#bc`), entre « Demandes d'achat » et « Fournisseurs / ST ». Il liste **tous** les BC sauf les annulés — y compris ceux déjà validés par le fournisseur, déjà reçus, ou en `attente_paiement` (proforma). Chaque ligne porte un bouton **« Date d'arrivée »** qui ouvre une fenêtre dépouillée : un champ date, « Annuler », « Enregistrer la date ».
 
+### ⚠ La date se fige à la réception
+
+Une commande **déjà validée** par le fournisseur reste modifiable — c'était la demande d'origine. Une commande **déjà arrivée**, non : la date prévue est la **promesse** du fournisseur, et une fois la marchandise là, on connaît déjà le résultat. La rouvrir permettrait d'effacer un retard après coup, c'est-à-dire de fausser l'OTD.
+
+Le prédicat est `bcDejaRecu(bc)` (`src/index.tsx`) — **trois signaux, un seul suffit**, volontairement large : `date_reception_reelle`, `bl_id`, ou un statut de la famille reçue (`recu`, `recu_total`, **`recu_partiel`**, `receptionne`, `controle`, `cloture`). Une **réception partielle fige aussi** la date.
+
+**Le verrou vit dans le handler**, pas dans l'écran (`409` avec un message nommant la commande et sa date d'arrivée) : les deux routes le portent, donc ni un bouton contourné ni un appel direct ne passe. L'écran ne fait qu'éviter un clic voué au refus — pastille grise « Figée » à la place du bouton dans l'onglet Achats, champ grisé et mention « Date figée depuis la réception » dans la fenêtre des Expéditions. La page recalcule le drapeau à l'identique (`_RECU` dans `src/achats.tsx`, `recu` dans `expOpenArrivee`) parce qu'elle ne voit que la projection, pas la ligne complète.
+
 **Pourquoi cet onglet existe** : le changement de date vivait dans Expéditions, dans une carte « Autres commandes — date modifiable » dont la seule action visible était… un bouton qui téléchargeait le PDF du bon de commande. On croyait corriger une date, on récupérait un document. Cette carte a été supprimée, et avec elle le bouton « BC PDF » de la fenêtre de date — ainsi qu'un bouton « BL &lt;n°&gt; » qui appelait `expShowTab('bl')`, onglet supprimé lors d'une refonte antérieure : il masquait les cinq panneaux et laissait un **écran blanc**.
 
 ⚠ **Le piège de droits, à ne pas reproduire.** `serviceFor()` (`src/auth.ts`) déduit le service du **premier segment après `/api/`**. La route existante `/api/expeditions/bc/:id/date-arrivee` est donc gatée sur `expeditions`, où le rôle `achats` n'a que la **lecture** (`ROLE_MATRIX`) : l'acheteur aurait pris un `403 Accès refusé` sur son propre bouton. Le même handler (`majDateArriveeBc`) est donc enregistré **deux fois** :

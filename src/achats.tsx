@@ -560,8 +560,14 @@ export const pageServiceAchats = (
   // L'acheteur doit pouvoir corriger la date d'arrivee d'une commande DEJA VALIDEE, voire
   // deja recue : c'est le cas courant (le fournisseur annonce un retard apres coup, ou la
   // date a ete saisie de travers). Cette liste ne filtre donc RIEN, hormis les annulees.
-  const BCS: any[] = (dbBcs ?? []).filter((b: any) => String(b.statut || '') !== 'annule')
-  const BC_A_DATER = BCS.filter((b: any) => !b.prevue).length
+  // Meme regle que le verrou serveur (`bcDejaRecu`, src/index.tsx) : trois signaux, un seul
+  // suffit. Duplique ici parce que la page ne voit que la projection, pas la ligne complete ;
+  // le serveur reste l'autorite, l'ecran ne fait qu'eviter un clic voue au refus.
+  const _RECU = ['recu', 'recu_total', 'recu_partiel', 'receptionne', 'controle', 'cloture']
+  const BCS: any[] = (dbBcs ?? [])
+    .filter((b: any) => String(b.statut || '') !== 'annule')
+    .map((b: any) => ({ ...b, recu: !!b.reception || !!b.bl_id || _RECU.includes(String(b.statut || '')) }))
+  const BC_A_DATER = BCS.filter((b: any) => !b.prevue && !b.recu).length
 
   const rowBC = (b: any) => `
     <tr data-num="${escX(b.num_bc)}" data-fournisseur="${escX(b.fournisseur)}" data-articles="${escX(b.articles)}" data-affaire="${escX(b.num_affaire)}" data-statut="${escX(b.statut)}"
@@ -577,7 +583,9 @@ export const pageServiceAchats = (
           : '<span style="color:#cbd5e1;">\u00e0 planifier</span>'}</td>
       <td style="${TD}text-align:center;">${b.reception ? `<span style="font-weight:700;color:#15803d;">${frD(b.reception)}</span>` : '<span style="color:#cbd5e1;">\u2014</span>'}</td>
       <td style="${TD}text-align:center;">${bcStatutBadge(b.statut)}</td>
-      <td style="${TD}text-align:center;"><button onclick="achOpenBcDate('${escX(b.id)}')" title="Changer la date d&#39;arriv\u00e9e pr\u00e9vue de ce bon de commande" style="padding:6px 12px;background:#e0f2fe;color:#0369a1;border:none;border-radius:8px;font-size:.71rem;font-weight:700;cursor:pointer;white-space:nowrap;"><i class="fas fa-calendar-day" style="margin-right:5px;"></i>Date d&#39;arriv\u00e9e</button></td>
+      <td style="${TD}text-align:center;">${b.recu
+          ? `<span title="La marchandise est arriv\u00e9e : la date pr\u00e9vue est fig\u00e9e, c&#39;est elle qui mesure la ponctualit\u00e9 du fournisseur" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#f1f5f9;color:#94a3b8;border-radius:8px;font-size:.71rem;font-weight:700;white-space:nowrap;"><i class="fas fa-lock"></i>Fig\u00e9e</span>`
+          : `<button onclick="achOpenBcDate('${escX(b.id)}')" title="Changer la date d&#39;arriv\u00e9e pr\u00e9vue de ce bon de commande" style="padding:6px 12px;background:#e0f2fe;color:#0369a1;border:none;border-radius:8px;font-size:.71rem;font-weight:700;cursor:pointer;white-space:nowrap;"><i class="fas fa-calendar-day" style="margin-right:5px;"></i>Date d&#39;arriv\u00e9e</button>`}</td>
     </tr>`
 
   const tabBC = `
@@ -586,7 +594,7 @@ export const pageServiceAchats = (
       <div style="font-size:1rem;font-weight:800;color:#111827;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <i class="fas fa-file-contract" style="color:#0ea5e9;"></i>Bons de commande
         <span style="background:#e0f2fe;color:#0369a1;border-radius:999px;padding:1px 10px;font-size:.72rem;font-weight:800;">${BCS.length}</span>
-        <span style="font-size:.72rem;color:#9ca3af;font-weight:600;">\u00b7 la date d&#39;arriv\u00e9e reste modifiable, m\u00eame une fois la commande valid\u00e9e ou re\u00e7ue</span>
+        <span style="font-size:.72rem;color:#9ca3af;font-weight:600;">\u00b7 la date d&#39;arriv\u00e9e reste modifiable tant que la marchandise n&#39;est pas arriv\u00e9e \u2014 apr\u00e8s r\u00e9ception elle est fig\u00e9e</span>
         ${BC_A_DATER ? `<span style="background:#fef3c7;color:#92400e;border-radius:999px;padding:1px 10px;font-size:.68rem;font-weight:800;">${BC_A_DATER} sans date d&#39;arriv\u00e9e</span>` : ''}
       </div>
       ${searchBar('ach-bc', [['num', 'N\u00b0 BC'], ['fournisseur', 'Fournisseur'], ['articles', 'Articles'], ['affaire', 'Affaire'], ['statut', 'Statut']])}
@@ -616,7 +624,7 @@ export const pageServiceAchats = (
   // aucun champ absent d'ici ne risque donc d'etre reecrit vide.
   const BC_MODAL_JSON = sjX(BCS.map((b: any) => ({
     id: b.id, num_bc: b.num_bc, type: b.type, fournisseur: b.fournisseur, articles: b.articles,
-    prevue: b.prevue || '', initiale: b.initiale || '', reception: b.reception || '', statut: b.statut,
+    prevue: b.prevue || '', initiale: b.initiale || '', reception: b.reception || '', statut: b.statut, recu: !!b.recu,
   })))
 
   const ACH_TABS = [
@@ -1052,6 +1060,7 @@ export const pageServiceAchats = (
   function achOpenBcDate(id){
     var b=null; for(var i=0;i<ACH_BCS.length;i++){ if(ACH_BCS[i].id===id){ b=ACH_BCS[i]; break; } }
     if(!b){ pushNotif('err','fa-ban','Bon de commande introuvable : '+id); return; }
+    if(b.recu){ pushNotif('err','fa-lock','La commande '+b.num_bc+' est deja receptionnee : la date d arrivee prevue est figee. Elle sert a mesurer la ponctualite du fournisseur.',8000); return; }
     _achBcCur=b;
     document.getElementById('ach_bcdate_titre').textContent=b.num_bc;
     document.getElementById('ach_bcdate_sous').textContent=b.fournisseur+' \u00b7 '+(b.type==='st'?'Sous-traitant':'Fournisseur');
@@ -1060,10 +1069,9 @@ export const pageServiceAchats = (
     var g=document.getElementById('ach_bcdate_gel');
     if(b.initiale&&b.initiale!==b.prevue){ g.textContent='Date deja repoussee une fois. La 1re date prevue ('+b.initiale+') reste gardee pour le calcul de l OTD.'; g.style.display='block'; }
     else { g.style.display='none'; }
-    var r=document.getElementById('ach_bcdate_recu');
-    var dejaRecu=!!b.reception||['recu','recu_total','recu_partiel','receptionne','controle','cloture'].indexOf(String(b.statut||''))>=0;
-    if(dejaRecu){ r.textContent='Commande deja recue'+(b.reception?' le '+b.reception:'')+'. Corriger la date prevue reste possible : cela remet le suivi des delais d aplomb.'; r.style.display='block'; }
-    else { r.style.display='none'; }
+    // (Plus de rappel « deja recue » : ce cas n'atteint plus cette ligne, la modale a refuse
+    //  de s'ouvrir. On garde l'element pour ne pas casser le gabarit.)
+    var r=document.getElementById('ach_bcdate_recu'); r.style.display='none';
     document.getElementById('ach-bcdate-overlay').style.display='flex';
   }
   function achFermerBcDate(){ var o=document.getElementById('ach-bcdate-overlay'); if(o) o.style.display='none'; }

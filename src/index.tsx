@@ -2650,6 +2650,14 @@ app.post('/api/expeditions/retour-client/:ncId/receptionner', async (c) => {
 // Ce n'est pas cosmetique : `serviceFor()` deduit le service du 1er segment apres /api/.
 // Le role « achats » n'a que la LECTURE sur `expeditions` (ROLE_MATRIX, src/auth.ts) — il
 // aurait pris un 403 sec sur la premiere route. La famille `bc` est deja mappee sur `achats`.
+// La marchandise est-elle arrivee ? Trois signaux, dont un seul suffit : la date de
+// reception reelle, un bon de livraison rattache, ou un statut de la famille « recu ».
+// On est volontairement LARGE : rater un signal rouvrirait le verrou ci-dessous.
+export const bcDejaRecu = (bc: any): boolean =>
+  !!bc?.date_reception_reelle ||
+  !!bc?.bl_id ||
+  ['recu', 'recu_total', 'recu_partiel', 'receptionne', 'controle', 'cloture'].includes(String(bc?.statut || ''))
+
 const majDateArriveeBc = async (c: any) => {
   const id = c.req.param('id')
   const body = await c.req.json().catch(() => ({} as any))
@@ -2657,6 +2665,18 @@ const majDateArriveeBc = async (c: any) => {
   if (!nouvelle) return c.json({ ok: false, error: 'Date manquante' }, 400)
   const bc = await getBonDeCommande(id)
   if (!bc) return c.json({ ok: false, error: 'BC introuvable' }, 404)
+  // ⚠ VERROU APRES RECEPTION. Une fois la marchandise arrivee, la date PREVUE n'est plus
+  //   une prevision : c'est une promesse dont on connait deja le resultat. La reecrire
+  //   permettrait de rattraper apres coup un retard fournisseur — precisement ce que l'OTD
+  //   mesure. Le verrou vit ICI, pas seulement dans l'ecran : les boutons se contournent.
+  if (bcDejaRecu(bc)) {
+    return c.json({
+      ok: false,
+      error: 'La commande ' + ((bc as any).num_bc || id) + ' est deja receptionnee'
+        + ((bc as any).date_reception_reelle ? ' (arrivee le ' + String((bc as any).date_reception_reelle).slice(0, 10) + ')' : '')
+        + ' : la date d\'arrivee prevue est figee. Elle sert a mesurer la ponctualite du fournisseur et ne se corrige plus une fois la marchandise arrivee.',
+    }, 409)
+  }
   const ancienne = (bc as any).date_livraison ? String((bc as any).date_livraison).slice(0, 10) : null
   // GEL de la 1ʳᵉ date prévue : si date_livraison_initiale est vide, on y fige l'ANCIENNE date
   //   (celle d'avant ce changement) → l'OTD reste calculé sur la promesse d'origine, jamais repoussée.

@@ -1977,7 +1977,9 @@ export const pageServiceExpeditions = (
   function expOpenArrivee(id){
     var b=null; for(var i=0;i<EXP_PLAN.length;i++){ if(EXP_PLAN[i].id===id){ b=EXP_PLAN[i]; break; } }
     if(!b) return; _arrCur=b;
-    var recu=(b.statut==='recu_partiel'||b.statut==='recu_total'||b.statut==='recu'||b.statut==='controle'||b.statut==='cloture'||!!b.bl_id);
+    // Memes signaux que le verrou serveur bcDejaRecu (src/index.tsx) : il manquait ici
+    // le statut 'receptionne' et la date de reception reelle.
+    var recu=(!!b.reception||!!b.bl_id||['recu','recu_total','recu_partiel','receptionne','controle','cloture'].indexOf(String(b.statut||''))>=0);
     var slip=b.initiale&&b.prevue&&b.initiale!==b.prevue;
     var lbl='display:block;font-size:.66rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;';
     var inp='width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 10px;font-size:.85rem;background:#f8fafc;box-sizing:border-box;color:#374151;';
@@ -1986,7 +1988,7 @@ export const pageServiceExpeditions = (
     h+='<div style="font-size:.82rem;color:#475569;margin-bottom:12px;">'+b.fournisseur+' \\u00b7 '+(b.type==='st'?'Sous-traitant':'Fournisseur')+'</div>';
     h+='<div style="background:#f8fafc;border:1px solid #f1f5f9;border-radius:10px;padding:10px 12px;font-size:.8rem;color:#334155;margin-bottom:14px;">'+b.articles+(b.montant?' \\u00b7 <b>'+b.montant.toLocaleString('fr-FR')+' \\u20ac</b>':'')+(b.qte_commandee!=null?' \\u00b7 '+(b.qte_recue!=null?b.qte_recue:0)+'/'+b.qte_commandee+' recu':'')+'</div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
-    h+='<div><label style="'+lbl+'">Date d\\'arrivee prevue</label><input id="arr_date" type="date" value="'+(b.prevue||'')+'" style="'+inp+'"/></div>';
+    h+='<div><label style="'+lbl+'">Date d\\'arrivee prevue</label><input id="arr_date" type="date" value="'+(b.prevue||'')+'"'+(recu?' disabled':'')+' style="'+inp+(recu?'background:#f1f5f9;color:#94a3b8;':'')+'"/></div>';
     h+='<div><label style="'+lbl+'">'+(recu?'Arrivee reelle':'Statut')+'</label><div style="'+inp+'background:#fff;">'+(recu?(b.reception||'recu'):b.statut)+'</div></div>';
     h+='</div>';
     if(slip) h+='<div style="font-size:.7rem;color:#b45309;margin-top:8px;"><i class="fas fa-clock-rotate-left"></i> Date repoussee \\u2014 1re date prevue <b>'+b.initiale+'</b> gardee pour l\\'OTD.</div>';
@@ -1994,7 +1996,11 @@ export const pageServiceExpeditions = (
     // Ni PDF ni navigation ici : on est venu changer une date, rien d'autre.
     // (Le bouton « BL » qui ouvrait un onglet supprime vidait la page — il est devenu un simple rappel.)
     if(b.bl_id) h+='<div style="font-size:.72rem;color:#0e7490;font-weight:700;"><i class="fas fa-receipt"></i> Recu \u2014 BL '+b.bl_id+'</div>';
-    h+='<button onclick="expSaveArriveeDate()" style="margin-left:auto;padding:8px 13px;background:linear-gradient(135deg,${AMB},${AMB_D});color:#fff;border:none;border-radius:8px;font-weight:700;font-size:.8rem;cursor:pointer;"><i class="fas fa-calendar-check"></i> Enregistrer la date</button>';
+    // Marchandise arrivee => la date prevue est figee : c'est elle qui mesure la ponctualite
+    // du fournisseur. Le serveur refuse de toute facon (409) ; ici on explique plutot que
+    // de laisser cliquer un bouton voue au refus.
+    if(recu) h+='<div style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:.72rem;color:#94a3b8;font-weight:700;"><i class="fas fa-lock"></i> Date figee depuis la reception</div>';
+    else h+='<button onclick="expSaveArriveeDate()" style="margin-left:auto;padding:8px 13px;background:linear-gradient(135deg,${AMB},${AMB_D});color:#fff;border:none;border-radius:8px;font-weight:700;font-size:.8rem;cursor:pointer;"><i class="fas fa-calendar-check"></i> Enregistrer la date</button>';
     h+='</div>';
     document.getElementById('arr_modal_content').innerHTML=h;
     document.getElementById('exp-arrivee-overlay').style.display='flex';
