@@ -4,6 +4,7 @@
 // ══════════════════════════════════════════════════════════════
 import { escX, layout, pageHeader, serviceHeader, validationCheckbox, bulkToolbar, bulkSelectAssets } from './shared'
 import type { DemandeAchat, FournisseurSt } from './types'
+import { MODES_FACTURATION } from './commercial'
 
 const sjX = (v: any) => JSON.stringify(v).replace(/</g, '\\u003c')
 
@@ -81,6 +82,9 @@ export const pageServiceAchats = (
   dbDemandesPrix?: any[],
   dbSansPrixCount?: number,
   dbScorecard?: any[],
+  dbCatalogue?: any[],
+  dbProchainLibre?: string,
+  dbAffaires?: string[],
 ) => {
   const DAS   = dbDas          ?? []
   const FOURN = dbFournisseurs ?? []
@@ -89,6 +93,9 @@ export const pageServiceAchats = (
   const DPRIX: any[] = dbDemandesPrix ?? []
   const SANS_PRIX: number = dbSansPrixCount ?? 0
   const SCORE: any[] = dbScorecard ?? []
+  const CATALOGUE: any[] = dbCatalogue ?? []
+  const PROCHAIN_LIBRE: string = dbProchainLibre ?? 'LIBRE-001'
+  const AFFAIRES_CONNUES: string[] = dbAffaires ?? []
   // Cibles RFQ (fournisseurs + sous-traitants) exposees au client pour la creation de demande de prix.
   const RFQ_CIBLES_DATA = [
     ...FOURN.map((f: any) => ({ id: f.id, nom: f.nom })),
@@ -607,11 +614,28 @@ export const pageServiceAchats = (
           <div><label style="${LBL}">Type de commande</label>
             <select id="bc_type" style="${INP}"><option value="fournisseur">BC Fournisseur</option><option value="st">BC Sous-Traitant</option></select>
           </div>
-          <div><label style="${LBL}">Fournisseur / ST</label><input id="bc_fourn" type="text" placeholder="Raison sociale" style="${INP}"/></div>
+          <div><label style="${LBL}">Fournisseur / ST</label><select id="bc_fourn" style="${INP}"><option value="">— Choisir un fournisseur —</option></select></div>
           <div style="grid-column:1/-1;"><label style="${LBL}">Articles / Prestation</label><input id="bc_articles" type="text" placeholder="Désignation des articles commandés" style="${INP}"/></div>
           <div><label style="${LBL}">Montant HT (€)</label><input id="bc_montant" type="number" step="0.01" placeholder="0.00" style="${INP}"/></div>
           <div><label style="${LBL}">Livraison prévue</label><input id="bc_livraison" type="date" style="${INP}"/></div>
-          <div style="grid-column:1/-1;"><label style="${LBL}">N° d'affaire (optionnel)</label><input id="bc_affaire" type="text" placeholder="AFF-2026-XXX" style="${INP}"/></div>
+          <div><label style="${LBL}">Mode de règlement</label>
+            <select id="bc_reglement" onchange="bcReglementChange()" style="${INP}">
+              <option value="">— Choisir —</option>
+              ${MODES_FACTURATION.map(m => `<option value="${escX(m)}">${escX(m)}</option>`).join('')}
+            </select>
+          </div>
+          <div><label style="${LBL}">N° d'affaire</label>
+            <input id="bc_affaire" type="text" list="dl_bc_affaires" title="Repris de la demande d'achat. Modifiable : rattachez une demande libre à une affaire en la choisissant ici." style="${INP}font-weight:700;"/>
+            <datalist id="dl_bc_affaires">${AFFAIRES_CONNUES.map((a: string) => `<option value="${escX(a)}"></option>`).join('')}</datalist>
+            <div style="font-size:.66rem;color:#94a3b8;margin-top:3px;">Repris de la demande. Une demande libre peut être rattachée à une affaire.</div>
+          </div>
+          <div style="grid-column:1/-1;"><label style="${LBL}">Facture du fournisseur (PDF, image)</label>
+            <input id="bc_facture" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" style="${INP}padding:7px;"/>
+            <div style="font-size:.66rem;color:#94a3b8;margin-top:3px;">Jointe au bon de commande et consultable depuis la facture fournisseur en Comptabilité.</div>
+          </div>
+          <div id="bc_proforma_note" style="grid-column:1/-1;display:none;background:#fef3c7;border:1px solid #fde68a;border-radius:10px;padding:10px 14px;font-size:.78rem;color:#92400e;">
+            <b>Proforma :</b> une facture fournisseur sera créée immédiatement en Comptabilité. Le bon de commande restera <b>en attente de paiement</b> et n'apparaîtra dans les réceptions à venir qu'une fois cette facture réglée.
+          </div>
           <div style="grid-column:1/-1;"><label style="${LBL}">Notes</label><textarea id="bc_notes" rows="2" placeholder="Conditions, remarques…" style="${INP}resize:vertical;"></textarea></div>
         </div>
       </div>
@@ -807,6 +831,59 @@ export const pageServiceAchats = (
   var ACH_TABS=['da','rfq','dashboard','fourn','scorecard'];
   var ACH_DA=${DA_JSON};
   var RFQ_FOURN=${sjX((FOURN as any[]).map((f: any) => ({ id: f.id, nom: f.nom })))};
+  // Catalogue fournisseur : sert a proposer, pour la reference demandee dans la DA,
+  // les seuls fournisseurs qui la portent reellement.
+  var ACH_CATALOGUE=${sjX((CATALOGUE as any[]).map((p: any) => ({
+    r: String(p.reference || '').trim(),
+    d: String(p.designation || '').trim(),
+    n: String(p.fournisseur_nom || '').trim(),
+  })).filter((p: any) => p.n && (p.r || p.d)))};
+  // Reference d'affaire attribuee aux achats qui ne proviennent d'aucune affaire.
+  var ACH_PROCHAIN_LIBRE=${sjX(PROCHAIN_LIBRE)};
+  var ACH_TOUS_FOURN=${sjX([...new Set([
+    ...(FOURN as any[]).map((f: any) => String(f.nom || '').trim()),
+    ...(STRAIT as any[]).map((s: any) => String(s.nom || '').trim()),
+  ].filter(Boolean))].sort())};
+
+  // Fournisseurs portant une reference donnee (comparaison souple : reference OU designation).
+  function achFournPourRef(article){
+    var a=String(article||'').toLowerCase().trim();
+    if(!a) return [];
+    var vus={}, out=[];
+    ACH_CATALOGUE.forEach(function(p){
+      var r=p.r.toLowerCase(), d=p.d.toLowerCase();
+      var match = (r && (r===a || a.indexOf(r)>=0 || r.indexOf(a)>=0))
+               || (d && (d===a || a.indexOf(d)>=0 || d.indexOf(a)>=0));
+      if(match && !vus[p.n]){ vus[p.n]=1; out.push(p.n); }
+    });
+    return out.sort();
+  }
+
+  // Remplit un <select> de fournisseurs : ceux du catalogue d'abord, puis tous les autres.
+  function achRemplirFourn(selectId, article, valeurCourante){
+    var sel=document.getElementById(selectId); if(!sel) return;
+    var lies=achFournPourRef(article);
+    var html='<option value="">— Choisir un fournisseur —</option>';
+    if(lies.length){
+      html+='<optgroup label="Referencés pour '+String(article||'').replace(/[<>&"]/g,'')+'">';
+      lies.forEach(function(n){ html+='<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>'; });
+      html+='</optgroup>';
+    }
+    var autres=ACH_TOUS_FOURN.filter(function(n){ return lies.indexOf(n)<0; });
+    if(autres.length){
+      html+='<optgroup label="'+(lies.length?'Autres fournisseurs':'Aucun fournisseur referencé pour cette référence')+'">';
+      autres.forEach(function(n){ html+='<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>'; });
+      html+='</optgroup>';
+    }
+    sel.innerHTML=html;
+    var v=String(valeurCourante||'');
+    if(v){
+      var trouve=false;
+      for(var i=0;i<sel.options.length;i++){ if(sel.options[i].value===v){ trouve=true; break; } }
+      if(!trouve){ var o=document.createElement('option'); o.value=v; o.textContent=v+' (hors catalogue)'; sel.appendChild(o); }
+      sel.value=v;
+    }
+  }
 
   function switchAchTab(id){
     ACH_TABS.forEach(function(t){
@@ -837,8 +914,14 @@ export const pageServiceAchats = (
     document.getElementById('bc_da_id').value=id;
     document.getElementById('bc_da_info').innerHTML='<strong>'+id+'</strong> · '+da.article+(da.affaire_id?' · Affaire '+da.affaire_id:'');
     document.getElementById('bc_type').value=dr.type_bc||da.type_bc||'fournisseur';
-    document.getElementById('bc_fourn').value=dr.fournisseur||da.fournisseur||'';
+    // La DA porte la reference du produit demande : on ne propose que les fournisseurs
+    // qui la referencent au catalogue, les autres restant accessibles en second groupe.
+    achRemplirFourn('bc_fourn', dr.articles||da.article||'', dr.fournisseur||da.fournisseur||'');
     document.getElementById('bc_articles').value=dr.articles||da.article||'';
+    // Affaire reprise de la DA, jamais ressaisie. Hors affaire -> reference libre attribuee par le serveur.
+    document.getElementById('bc_affaire').value = da.num_affaire || da.affaire_id || dr.affaire_id || ACH_PROCHAIN_LIBRE;
+    var _rg=document.getElementById('bc_reglement'); if(_rg){ _rg.value = dr.conditions_paiement || ''; }
+    bcReglementChange();
     document.getElementById('bc_montant').value=dr.montant_ht||'';
     document.getElementById('bc_livraison').value=dr.date_livraison||da.livraison||'';
     document.getElementById('bc_affaire').value=dr.affaire_id||da.affaire_id||'';
@@ -846,6 +929,25 @@ export const pageServiceAchats = (
     document.getElementById('ach-bc-overlay').style.display='flex';
   }
   function achCloseBC(){ document.getElementById('ach-bc-overlay').style.display='none'; }
+  // Affiche l'avertissement quand le reglement choisi est une proforma.
+  // Joint la facture du fournisseur au bon de commande (GED). Sans fichier : ne fait rien.
+  function bcEnvoyerFacture(bcId){
+    var inp=document.getElementById('bc_facture');
+    if(!inp || !inp.files || !inp.files.length || !bcId) return Promise.resolve(false);
+    var fd=new FormData();
+    fd.append('file', inp.files[0]);
+    fd.append('ref', 'BC:'+bcId);
+    fd.append('categorie', 'facture_fournisseur');
+    return fetch('/api/ged/upload',{method:'POST',body:fd})
+      .then(function(r){return r.json();})
+      .then(function(j){ if(!j||!j.ok){ pushNotif('warn','fa-paperclip','BC créé, mais la facture n a pas pu être jointe : '+((j&&j.error)||'erreur'),7000); return false; } return true; })
+      .catch(function(){ pushNotif('warn','fa-paperclip','BC créé, mais la facture n a pas pu être jointe (réseau).',7000); return false; });
+  }
+  function bcReglementChange(){
+    var v=((document.getElementById('bc_reglement')||{}).value||'').toLowerCase();
+    var n=document.getElementById('bc_proforma_note');
+    if(n) n.style.display = (v==='proforma') ? 'block' : 'none';
+  }
   function achCollectBC(){
     return {
       type_bc:document.getElementById('bc_type').value,
@@ -854,6 +956,7 @@ export const pageServiceAchats = (
       montant_ht:parseFloat(document.getElementById('bc_montant').value)||0,
       date_livraison:document.getElementById('bc_livraison').value||null,
       affaire_id:document.getElementById('bc_affaire').value.trim()||null,
+      conditions_paiement:(document.getElementById('bc_reglement')||{}).value||null,
       notes:document.getElementById('bc_notes').value.trim()||null
     };
   }
@@ -871,7 +974,14 @@ export const pageServiceAchats = (
     fetch('/api/achats/da/'+encodeURIComponent(id)+'/soumettre',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
       .then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Création BC échouée.'); return; }
-        achCloseBC(); pushNotif('ok','fa-paper-plane','BC <strong>'+j.bc_id+'</strong> créé ('+(j.type_bc==='st'?'sous-traitant':'fournisseur')+'). Visible dans Expéditions.',6000); setTimeout(function(){softReload();},900);
+        var _msg='BC <strong>'+j.bc_id+'</strong> créé ('+(j.type_bc==='st'?'sous-traitant':'fournisseur')+').';
+        if(j.facture_proforma){ _msg+=' Facture <strong>'+j.facture_proforma+'</strong> à régler en Comptabilité — le BC attend le paiement.'; }
+        else { _msg+=' Visible dans Expéditions.'; }
+        achCloseBC();
+        bcEnvoyerFacture(j.bc_id).then(function(joint){
+          pushNotif('ok','fa-paper-plane', _msg + (joint ? ' Facture jointe.' : ''), 7000);
+          setTimeout(function(){softReload();},900);
+        });
       }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
   }
 

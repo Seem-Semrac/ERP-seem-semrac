@@ -42,7 +42,7 @@ const CLIENTS_DATA_DEFAULT: any[] = []
 // Elle alimente les 4 sélecteurs qui écrivent ce même champ : les 2 formulaires « nouveau
 // client » (liste clients + DT), la modale d'édition client, et l'offre de prix (qui
 // synchronise sa valeur vers la fiche client) — avant, 2 vocabulaires divergents cohabitaient.
-const MODES_FACTURATION = [
+export const MODES_FACTURATION = [
   'Proforma',
   'Virement 30j', 'Virement 45j', 'Virement 60j',
   '30j net', '30j fin de mois', '45j net', '45j fin de mois', '60j net', '60j fin de mois',

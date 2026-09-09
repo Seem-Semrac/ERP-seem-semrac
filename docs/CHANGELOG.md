@@ -2,6 +2,113 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-08 — BC : rattachement à une affaire, facture en pièce jointe — et la GED réparée
+
+### Deux bugs bloquants découverts en implémentant — le dépôt de fichier ne fonctionnait pas
+`createDocument()` n'alimentait **ni `id` ni `actif`**, alors que ces colonnes n'ont **aucune valeur par défaut** :
+1. `null value in column "id" of relation "documents" violates not-null constraint` — **tout envoi de fichier échouait** ;
+2. une fois le premier point corrigé, le document s'insérait avec `actif` à NULL, or `getDocumentsForNom()` filtre sur `actif = true` : **le fichier existait en base mais restait introuvable**, sans le moindre message d'erreur. C'est le pire des deux — un échec silencieux.
+
+Corrigé côté application (identifiant, `actif`, `uploaded_at` posés à l'insertion) plutôt qu'en s'appuyant sur un défaut de base : la correction vaut pour le cloud comme pour Docker, sans migration.
+
+### 1. Rattacher une demande libre à une affaire
+Le N° d'affaire redevient **modifiable**, avec une liste de suggestions des affaires connues (hors références `LIBRE-`). La valeur saisie prime sur celle héritée de la DA, ce qui permet de rattacher a posteriori un achat libre à une affaire réelle.
+
+### 2. Facture du fournisseur en pièce jointe
+Champ fichier (PDF ou image) dans le formulaire de traitement. Le document part en GED **après** création du BC, sous `BC:<bcId>` / catégorie `facture_fournisseur`. Si l'envoi échoue, le BC reste créé et l'utilisateur est averti — l'échec du fichier ne fait pas perdre la saisie.
+
+### 3. Ouvrable depuis les factures fournisseurs
+Comptabilité › Factures fournisseurs affiche un bouton **Facture** sur les lignes qui en ont une, pointant sur `/api/ged/file/:id`. Le rapprochement se fait sans colonne de liaison : la facture proforma porte l'identifiant `FF-<bcId>`, le document la référence `BC:<bcId>`.
+
+### GED générique
+`POST /api/ged/upload` accepte un champ **`ref`** (ex. `BC:BC-2026-002`) en remplacement de `nomenclature_id`, et `GET /api/ged/ref/:ref` liste les documents d'un objet quelconque. Le préfixe évite toute collision avec un identifiant de nomenclature ; le chemin de stockage assainit les caractères interdits.
+
+### Vérification — circuit complet en conditions réelles
+Sur la stack Docker : DA `-TEST-` **sans affaire** → traitée en Proforma avec rattachement à l'affaire **2026-081** (repris correctement sur le BC) → BC en `attente_paiement` + facture `FOURN-2026-0001` → PDF joint → **document retrouvé par la route `ref`** → **bouton *Facture* présent en Comptabilité** → fichier réellement servi : `HTTP 200`, `content-type: application/pdf`, `content-disposition: inline`, contenu intact. Données de test intégralement supprimées (document, DA, BC, facture, 3 écritures) — contrôle à 0 sur cinq tables.
+`tsc` 0 erreur · build OK · harnais **61 PASS / 0 FAIL**.
+
+## 2026-09-08 — Bon de commande : mode de règlement, Proforma fournisseur, affaire auto-renseignée
+
+### Bug préexistant corrigé — la saisie de facture fournisseur ne fonctionnait plus du tout
+`POST /api/factures-fournisseur` envoyait une colonne **`bc_id` qui n'existe pas** sur `factures_fournisseur` : **toute** création échouait sur `PGRST204`. Prouvé par un appel réel avant correction : *« Could not find the 'bc_id' column of 'factures_fournisseur' in the schema cache »*. Le rattachement au bon de commande passe désormais par les **notes** et l'identifiant `FF-<bcId>` — aucune migration requise, la correction vaut aussitôt pour la base cloud comme pour Docker.
+
+### 1. Mode de règlement sur le bon de commande
+`MODES_FACTURATION` est exportée depuis `src/commercial.tsx` et partagée avec les Achats : le BC propose **exactement la même liste que les offres**, Proforma comprise. Stocké dans `bons_de_commande.conditions_paiement`.
+
+### 2. Proforma sur un BC — payer avant expédition
+Symétrique du proforma client, dans l'autre sens :
+1. à la création du BC, une **facture fournisseur** est émise (`FF-<bcId>`, statut `a_valider`, écriture d'achat générée) et arrive dans Comptabilité ;
+2. le BC prend le statut **`attente_paiement`** — absent de `_bcEmise`, il **ne figure pas** dans les réceptions à venir ;
+3. au règlement de la facture, `libererBcProforma()` repasse le BC en `envoye`, qui rejoint les réceptions.
+
+Aucune modification de `_bcEmise` n'a été nécessaire : le nouveau statut en est naturellement exclu. Un bandeau explique la conséquence dans le formulaire dès que Proforma est choisi.
+
+### 3. N° d'affaire auto-renseigné
+Repris de la DA (`num_affaire`, sinon `affaire_id`) et rendu **non modifiable** — plus de ressaisie.
+
+### 4. Référence « LIBRE » hors affaire
+`prochaineRefLibre()` attribue `LIBRE-001`, `LIBRE-002`… en se calant sur les BC existants, et la valeur est pré-remplie dans le formulaire.
+
+### Vérification — circuit complet joué en conditions réelles
+Sur la stack Docker, avec une DA `-TEST-` : traitement en Proforma → BC créé en `attente_paiement` + facture `FOURN-2026-0001` à 1 440 € TTC ; **BC absent du panneau Réceptions**, visible seulement dans Fournisseurs et Dashboard avec son statut ; facture réglée → **BC repassé en `envoye`** et **présent dans Réceptions**. Toutes les données de test supprimées ensuite (DA, BC, facture, 2 écritures comptables) — contrôle à 0 sur les quatre tables.
+`tsc` 0 erreur · build OK · harnais **61 PASS / 0 FAIL**.
+
+## 2026-09-08 — `erp-docker.ps1 livrer` : la chaîne de livraison complète, avec garde
+
+- **Demande** : « le chemin doit être conteneurs à jour sur Docker, push sur GitHub, et une commande pour mettre à jour les conteneurs sur la VM ».
+- La chaîne tient désormais en **deux commandes**, une par machine :
+
+| Ordre | Où | Commande |
+|---|---|---|
+| 1 | Poste | `.\docker\scripts\erp-docker.ps1 livrer "message"` |
+| 2 | VM | `~/erp/docker/scripts/erp-docker.sh maj` |
+
+- **`livrer`** enchaîne les trois étapes du poste et s'interrompt si l'une échoue : reconstruction locale (`up -d --build`), attente que les **8 services soient sains**, puis publication via `publier_pro.ps1`.
+- **La garde est le cœur de la commande** : si un conteneur ne démarre pas, **rien n'est publié**. Publier du code qui ne se lance pas localement revient à casser la VM à distance — et à devoir s'y connecter pour la réparer. Le contrôle de santé tourne jusqu'à 3 minutes, puis affiche le tableau des conteneurs et renvoie vers `logs`.
+- `erp-docker.ps1` gagne au passage `stop`, `start` et `restart`, jusque-là présents seulement côté Linux : les deux scripts offrent maintenant le même jeu de commandes.
+- Vérifié : parsing PowerShell sans erreur, `urls` exécuté et sortie conforme.
+
+## 2026-09-08 — `erp-docker.sh maj` : la mise à jour de la VM en une commande
+
+- **Demande** : « je peux envoyer la maj en une seule commande sur ma machine linux ? »
+- Une seule commande par machine, c'est le minimum atteignable : le code transite par GitHub, il n'existe aucun chemin direct du poste de développement vers la VM. En revanche le côté VM, qui demandait `cd ~/erp && git pull && docker/scripts/erp-docker.sh up`, tient désormais en une ligne.
+
+| Où | Commande |
+|---|---|
+| Poste de développement | `.\scripts_doc\publier_pro.ps1 "…"` |
+| VM | `~/erp/docker/scripts/erp-docker.sh maj` |
+
+- `maj` enchaîne `git pull --ff-only`, `up -d --build`, puis affiche l'état des 8 conteneurs et l'URL réelle de l'application. Le `--ff-only` est délibéré : en cas de divergence, la commande s'arrête avec un message clair plutôt que de fabriquer un commit de fusion sur un serveur.
+- Le port affiché est lu dans le fichier `.env` de l'instance, et non dans l'environnement du shell — sans quoi l'URL aurait été fausse dès qu'`APP_PORT` diffère de 3000.
+- Documentation `12-docker-installation.md` consolidée : les trois passages qui décrivaient la mise à jour de trois façons différentes sont ramenés à un seul.
+
+## 2026-09-08 — Achats : fournisseur filtré par la référence de la DA · Commercial : règlement « Proforma »
+
+### 1. Traitement d'une DA — le fournisseur devient une liste filtrée
+- **Demande** : « sur la case fournisseur on doit pouvoir choisir dans une liste déroulante et selon les fournisseurs disponibles pour la réf de produit sous-jacente, parce que la DA est initiée en demandant une réf de produit à avoir ».
+- Le champ *Fournisseur / ST* de la fenêtre de traitement d'une DA était une **saisie libre** (`<input type="text">`). Il devient un **`<select>` alimenté depuis le catalogue `produits_fournisseurs`**, déjà chargé par la route — aucune requête supplémentaire.
+- Deux groupes : **« Référencés pour \<article\> »** en tête (les fournisseurs qui portent réellement la référence), puis **tous les autres**. Si la référence n'est au catalogue de personne, le second groupe est titré « Aucun fournisseur référencé pour cette référence » — aucune DA ne se retrouve bloquée. Une valeur déjà enregistrée hors catalogue est conservée et signalée « hors catalogue ».
+- Rapprochement souple sur la **référence OU la désignation**, insensible à la casse et aux inclusions partielles.
+- `pageServiceAchats` gagne un paramètre `dbCatalogue` ; nouvelles fonctions client `achFournPourRef()` et `achRemplirFourn()`.
+- **Vérifié sur les données réelles** (144 entrées catalogue, 174 fournisseurs) : « Tôle ALU 3000x1500x1 peint RAL 7035 » → ARCELOR ; « Écrou CLS M3-1 » → BOSSARD ; un article de test hors catalogue retombe correctement sur la liste complète.
+
+### 2. Mode de règlement « Proforma » — le paiement conditionne l'engagement de dépense
+- **Demande** : « quand la demande est acceptée, l'offre de prix part directement en facturation client et la facture doit être au statut réglée avant d'envoyer les demandes d'achats et préparations techniques automatiques associées ».
+- L'option **Proforma** existait déjà dans `MODES_FACTURATION` (`src/commercial.tsx:46`) mais n'avait **aucun effet**. Elle en a désormais un.
+- `cascadeAcceptationOffre` se dédouble : si `mode_reglement` vaut *Proforma*, elle **émet une facture proforma** (rattachée à la commande, sans BL, `mode_paiement = 'Proforma'`, statut `envoyee`) et **n'appelle ni `cascadePrepaTechnique` ni `cascadeDAManques`**.
+- `PATCH /api/factures/:id` avec `statut: 'payee'` déclenche `debloquerProforma()`, qui rejoue la cascade retenue. Réponse enrichie de `proforma_debloque`.
+- **Lots et BDT restent créés** dans les deux cas : ils naissent en `matiere_ok = false` et demeurent donc hors planning tant que la matière n'est pas réceptionnée — ce qui suppose les demandes d'achat, donc le paiement. La porte matière existante suffit, sans logique supplémentaire.
+- **Idempotence** : `creerFactureProforma` ne crée qu'une facture par commande ; `_cascadeDejaFaite()` empêche un rejeu si la facture repasse « payée » après un aller-retour de statut.
+
+### Vérification
+`tsc` 0 erreur sur les fichiers touchés · `npm run build` OK (4,12 Mo) · **harnais toutes-pages 61 PASS / 0 FAIL** · page Achats servie et inspectée : le `<select>` est rendu, le catalogue et les deux fonctions client sont injectés, le filtrage renvoie les bons fournisseurs sur les données de production.
+
+### Documentation
+Fiches modules `achats.md` et `commercial.md` complétées ; manuels utilisateur `achats.html` (règle du champ fournisseur) et `commercial.html` (encadré Proforma dans le chapitre Offre) mis à jour.
+
+### Relevé au passage
+Une DA de test subsiste en base : `DA-TESTCASC3-MATTESTXZ99-M` (« Tole test »). Elle ne respecte pas la convention de préfixe `-TEST-` et n'a pas été purgée.
+
 ## 2026-08-26 — Couverture GPAO vérifiée fonction par fonction (dossier de reprise CSE)
 
 - **Demande** : le prestataire **CSE** reprend l'ERP sous Laravel + Nova. Le dossier doit lui dire quoi faire et dans quel ordre pour la beta (circuit client, fournisseur/ST, stock, RH), lui permettre de **budgéter**, et **prouver à la direction** que les fonctions de la GPAO Pick sont déjà dans l'ERP — en identifiant celles qui manquent. Point de départ : `SEEM-SEMRAC - Fonctionnalités.xlsx` (185 fonctions GPAO, à plat).

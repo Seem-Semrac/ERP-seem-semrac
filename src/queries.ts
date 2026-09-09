@@ -194,7 +194,20 @@ export async function removeGedFile(path: string) {
   return { error }
 }
 export async function createDocument(payload: Record<string, any>) {
-  const { data, error } = await supabase.from('documents').insert(payload).select().single()
+  // `documents.id` est NOT NULL sans valeur par défaut : sans identifiant généré ici,
+  // TOUT dépôt de fichier échoue (« null value in column "id" … violates not-null »).
+  // On le fabrique côté application plutôt que de dépendre d'un défaut de base, ce qui
+  // vaut aussi bien pour l'instance cloud que pour la stack Docker.
+  // `actif` et `uploaded_at` n'ont pas non plus de valeur par défaut. Or getDocumentsForNom
+  // filtre sur `actif = true` : un document inséré sans ce drapeau existe en base mais reste
+  // introuvable — il disparaît de l'écran sans erreur, ce qui est pire qu'un échec franc.
+  const row = {
+    id: payload.id || crypto.randomUUID(),
+    actif: true,
+    uploaded_at: new Date().toISOString(),
+    ...payload,
+  }
+  const { data, error } = await supabase.from('documents').insert(row).select().single()
   return { data, error }
 }
 export async function getDocument(id: string): Promise<any | null> {

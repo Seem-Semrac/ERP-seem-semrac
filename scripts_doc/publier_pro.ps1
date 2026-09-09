@@ -13,7 +13,10 @@
 param(
     [string]$Message = ""
 )
-$ErrorActionPreference = "Stop"
+# PowerShell 5.1 transforme la moindre ligne de stderr d'un exe natif en erreur fatale
+# quand ErrorActionPreference vaut Stop. git ecrit des avertissements benins sur stderr
+# (commit-graph, detached HEAD...) : on ne s'arrete donc PAS dessus, on teste $? nous-memes.
+$ErrorActionPreference = "Continue"
 
 $racine = git rev-parse --show-toplevel
 if (-not $?) { Write-Host "X Pas dans un depot git." -ForegroundColor Red; exit 1 }
@@ -31,7 +34,7 @@ if (-not $?) {
 }
 
 # Arbre de travail propre ?
-$sale = git status --porcelain
+$sale = git status --porcelain 2>$null
 if ($sale) {
     Write-Host "X Arbre de travail non propre - committez ou remisez d'abord." -ForegroundColor Red
     git status --short

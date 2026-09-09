@@ -25,6 +25,26 @@ case "$cmd" in
     compose up -d --build
     echo "App: http://localhost:3000   Dashboard: http://localhost:8000" ;;
   down)  compose down ;;
+  stop)
+    # Arret SANS supprimer les conteneurs : redemarrage bien plus rapide que down/up,
+    # et aucune reconstruction d'image. Les donnees ne bougent pas.
+    compose stop; echo "Stack arretee. Relancer avec : erp-docker.sh start" ;;
+  start)
+    compose start; echo "Stack relancee. App: http://localhost:3000" ;;
+  restart) compose restart; echo "Stack redemarree." ;;
+  maj)
+    # Recupere la derniere version publiee et l'applique. Les donnees ne bougent pas :
+    # seule l'image de l'application est reconstruite.
+    echo "→ Recuperation de la derniere version…"
+    git -C "$REPO_ROOT" pull --ff-only || { echo "✗ git pull a echoue — resolvez le conflit puis relancez."; exit 1; }
+    echo "→ Reconstruction et redemarrage…"
+    compose up -d --build
+    echo
+    compose ps --format 'table {{.Name}}\t{{.Status}}'
+    echo
+    _port="$(sed -n 's/^APP_PORT=//p' "$ENV_FILE" | head -1)"; _port="${_port:-3000}"
+    _ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    echo "✓ Mise a jour terminee. App : http://${_ip:-localhost}:${_port}" ;;
   reset)
     echo "Supprime les données locales (base + storage) dans 3s (Ctrl+C pour annuler)…"; sleep 3
     compose down -v; echo "Base réinitialisée." ;;   # -v = supprime les volumes nommés
@@ -68,5 +88,6 @@ case "$cmd" in
     echo "App ERP   : http://localhost:3000"
     echo "Dashboard : http://localhost:8000 (Supabase Studio)"
     echo "Postgres  : localhost:54322 (postgres / POSTGRES_PASSWORD du .env)"
-    echo "Commandes : up | down | reset | logs [svc] | ps | psql | restore <f> | ged-bucket | migrate | mirror [limite]" ;;
+    echo "Commandes : maj | up | stop | start | restart | down | reset | logs [svc] | ps | psql"
+    echo "             restore <f> | ged-bucket | migrate | mirror [limite]" ;;
 esac

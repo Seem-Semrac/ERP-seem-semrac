@@ -544,7 +544,7 @@ function ff_fld(label: string, type: string, id: string, opts: string): string {
   return `<div>${lab}<input id="${id}" type="${type}" placeholder="${opts || ''}"${onin} style="${base}"/></div>`
 }
 
-function buildARegler(ff: FactureFournisseur[], fc: FactureClient[]): string {
+function buildARegler(ff: FactureFournisseur[], fc: FactureClient[], PJ: Record<string, { id: string; nom: string }> = {}): string {
   const fournisseurs = ff.filter(f => f.type === 'fournisseur')
   const sousTraitants = ff.filter(f => f.type === 'sous_traitant')
   const historique = [
@@ -587,6 +587,7 @@ function buildARegler(ff: FactureFournisseur[], fc: FactureClient[]): string {
             <div style="display:flex;gap:4px;">
               ${f.statut === 'a_valider' ? `<button onclick="cptValiderFourn('${f.id}')" style="padding:3px 10px;border-radius:6px;font-size:.68rem;font-weight:700;border:none;background:#eff6ff;color:#2563eb;cursor:pointer;"><i class="fas fa-check mr-1"></i>Valider</button>` : ''}
               ${['a_payer','validee'].includes(f.statut) ? `<button onclick="cptPayerFourn('${f.id}')" style="padding:3px 10px;border-radius:6px;font-size:.68rem;font-weight:700;border:none;background:#f0fdf4;color:#16a34a;cursor:pointer;"><i class="fas fa-money-bill mr-1"></i>Payer</button>` : ''}
+              ${PJ[f.id] ? `<a href="/api/ged/file/${escX(PJ[f.id].id)}" target="_blank" rel="noopener" title="Ouvrir la facture jointe : ${escX(PJ[f.id].nom)}" style="padding:3px 10px;border-radius:6px;font-size:.68rem;font-weight:700;text-decoration:none;background:#f5f3ff;color:#6d28d9;display:inline-flex;align-items:center;gap:4px;"><i class="fas fa-paperclip"></i>Facture</a>` : ''}
               ${f.notes ? `<span title="${escX(f.notes)}" style="color:#d97706;cursor:help;"><i class="fas fa-exclamation-triangle"></i></span>` : ''}
             </div>
           </td>
@@ -1045,7 +1046,7 @@ function buildBalance(ec: EcritureComptable[], fc: any[] = [], ff: any[] = []): 
 
 // ─── MAIN EXPORT ──────────────────────────────────────────────
 // ─── TAB FACTURATION : regroupe Factures clients + Factures fournisseurs/ST ───
-function buildFacturation(fc: FactureClient[], ff: FactureFournisseur[]): string {
+function buildFacturation(fc: FactureClient[], ff: FactureFournisseur[], PJ: Record<string, { id: string; nom: string }> = {}): string {
   const aRegler = ff.filter(f => ['a_payer', 'validee', 'a_valider'].includes(f.statut)).length
   return `
   <div style="display:flex;gap:4px;margin-bottom:18px;border-bottom:2px solid #e5e7eb;">
@@ -1057,7 +1058,7 @@ function buildFacturation(fc: FactureClient[], ff: FactureFournisseur[]): string
     </button>
   </div>
   <div class="cpt-fact-section">${buildFacturesClients(fc)}</div>
-  <div class="cpt-fact-section" style="display:none;">${buildARegler(ff, fc)}</div>`
+  <div class="cpt-fact-section" style="display:none;">${buildARegler(ff, fc, PJ)}</div>`
 }
 
 export function pageServiceCompta(
@@ -1065,12 +1066,15 @@ export function pageServiceCompta(
   dbFactFourn?: FactureFournisseur[],
   dbEcritures?: EcritureComptable[],
   dbValidations?: any[],
+  dbPiecesJointes?: Record<string, { id: string; nom: string }>,
 ): string {
   CPT_VD_MAP = buildValDirMap(dbValidations || [])   // décisions Direction (rebouclage badge) — posé avant les builders (rendu synchrone)
   const isDemo = false
   const fc = dbFactCli ?? []
   const ff = dbFactFourn ?? []
   const ec = dbEcritures ?? []
+  // Pieces jointes des factures fournisseurs, indexees par identifiant de facture.
+  const PJ: Record<string, { id: string; nom: string }> = dbPiecesJointes ?? {}
 
   const demoBanner = isDemo ? `
   <div style="margin:16px 24px 0;background:linear-gradient(135deg,#ecfdf5,#d1fae5);border:1.5px solid #6ee7b7;border-radius:12px;padding:10px 18px;display:flex;align-items:center;gap:12px;">
@@ -1100,7 +1104,7 @@ export function pageServiceCompta(
   })
 
   const panels = [
-    buildFacturation(fc, ff),
+    buildFacturation(fc, ff, PJ),
     buildGrandLivre(ec),
     buildTVA(ec),
     buildBalance(ec, fc, ff),

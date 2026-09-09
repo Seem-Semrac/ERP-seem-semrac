@@ -20,7 +20,9 @@ param(
   [Parameter(Position=1)][string]$Arg
 )
 
-$ErrorActionPreference = "Stop"
+# git ecrit des avertissements benins sur stderr ; en PowerShell 5.1 avec Stop, cela
+# suffit a interrompre le script. On teste $? explicitement la ou c'est necessaire.
+$ErrorActionPreference = "Continue"
 $dockerDir = Split-Path -Parent $PSScriptRoot          # ...\docker
 $repoRoot  = Split-Path -Parent $dockerDir             # racine du dépôt
 Push-Location $dockerDir
@@ -36,6 +38,49 @@ try {
       Write-Host "`nStack lancée. Voir l'état :  .\docker\scripts\erp-docker.ps1 ps" -ForegroundColor Green
       Write-Host "App        : http://localhost:3000"
       Write-Host "Dashboard  : http://localhost:8000  (user 'supabase' / mdp dans .env)"
+    }
+    "stop" {
+      # Arrêt SANS supprimer les conteneurs : redémarrage bien plus rapide qu'un down/up,
+      # et aucune reconstruction d'image. Les données ne bougent pas.
+      docker compose stop
+      Write-Host "Stack arretee. Relancer avec : .\docker\scripts\erp-docker.ps1 start" -ForegroundColor Green
+    }
+    "start"   { docker compose start; Write-Host "Stack relancee. App : http://localhost:3000" -ForegroundColor Green }
+    "restart" { docker compose restart; Write-Host "Stack redemarree." -ForegroundColor Green }
+    "livrer" {
+      # Chaine complete de livraison, avec une garde : on ne publie QUE si la stack
+      # locale demarre reellement. Publier du code qui ne se lance pas chez soi
+      # revient a casser la VM a distance.
+      Write-Host "[1/3] Reconstruction des conteneurs locaux..." -ForegroundColor Cyan
+      docker compose up -d --build
+      if (-not $?) {
+        Write-Host "X La construction locale a echoue - RIEN n'est publie." -ForegroundColor Red
+        exit 1
+      }
+
+      Write-Host "[2/3] Attente des services..." -ForegroundColor Cyan
+      $sain = $false
+      for ($i = 0; $i -lt 36; $i++) {
+        $lignes = docker compose ps --format "{{.Name}} {{.Status}}"
+        $total = @($lignes).Count
+        $ok = @($lignes | Where-Object { $_ -match "healthy|Up " }).Count
+        if ($total -gt 0 -and $ok -ge $total) { $sain = $true; break }
+        Start-Sleep -Seconds 5
+      }
+      docker compose ps --format "table {{.Name}}`t{{.Status}}"
+      if (-not $sain) {
+        Write-Host "`nX Tous les conteneurs ne sont pas sains - RIEN n'est publie." -ForegroundColor Red
+        Write-Host "  Diagnostic :  .\docker\scripts\erp-docker.ps1 logs" -ForegroundColor Yellow
+        exit 1
+      }
+
+      Write-Host "`n[3/3] Publication vers le depot de deploiement..." -ForegroundColor Cyan
+      $msg = $Arg
+      if (-not $msg) { $msg = "Mise a jour " + (Get-Date -Format "yyyy-MM-dd") }
+      & (Join-Path $repoRoot "scripts_doc\publier_pro.ps1") $msg
+      if (-not $?) { Write-Host "X La publication a echoue." -ForegroundColor Red; exit 1 }
+
+      Write-Host "`nOK Livre. Sur la VM :  ~/erp/docker/scripts/erp-docker.sh maj" -ForegroundColor Green
     }
     "down"    { docker compose down }
     "reset"   {
@@ -84,7 +129,10 @@ try {
       Write-Host "App ERP    : http://localhost:3000"
       Write-Host "Dashboard  : http://localhost:8000   (Supabase Studio)"
       Write-Host "Postgres   : localhost:54322  (user postgres, mdp = POSTGRES_PASSWORD du .env)"
-      Write-Host "`nCommandes : up | down | reset | logs [svc] | ps | psql | restore <f> | ged-bucket | migrate | mirror [n]"
+      Write-Host "`nCommandes : livrer [message] | up | stop | start | restart | down | reset"
+      Write-Host "            logs [svc] | ps | psql | restore <f> | ged-bucket | migrate | mirror [n]"
+      Write-Host "`nlivrer = reconstruit en local, verifie que tout demarre, PUIS publie sur GitHub." -ForegroundColor Cyan
+      Write-Host "         Ensuite, sur la VM :  ~/erp/docker/scripts/erp-docker.sh maj" -ForegroundColor Cyan
     }
     default { Write-Host "Commande inconnue : $Cmd. Voir l'en-tête du script." -ForegroundColor Red }
   }

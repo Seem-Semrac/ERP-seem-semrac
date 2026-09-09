@@ -1,0 +1,280 @@
+<title>Réinstaller l'ERP</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+
+<style>
+  :root{
+    --paper:#FAF9F7; --card:#FFFFFF; --sunk:#F0EEEA;
+    --ink:#1A1917; --ink-2:#57534E; --ink-3:#8A857E;
+    --rule:#E0DCD5; --rule-2:#CBC5BC;
+    --pc:#4C3FA8; --pc-soft:#EDEAF9;
+    --vm:#0F766E; --vm-soft:#E2F1EF;
+    --stop:#B42318; --stop-soft:#FBE9E7;
+    --f-disp:"Archivo","Segoe UI",system-ui,sans-serif;
+    --f-body:"Atkinson Hyperlegible","Segoe UI",system-ui,sans-serif;
+    --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --paper:#15161A; --card:#1D1F24; --sunk:#25272E;
+      --ink:#ECEAE6; --ink-2:#ADA9A2; --ink-3:#7C7770;
+      --rule:#2E3138; --rule-2:#3E424B;
+      --pc:#A99BF0; --pc-soft:#22203A;
+      --vm:#5EC4B8; --vm-soft:#122A29;
+      --stop:#E58279; --stop-soft:#2E1917;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#15161A; --card:#1D1F24; --sunk:#25272E;
+    --ink:#ECEAE6; --ink-2:#ADA9A2; --ink-3:#7C7770;
+    --rule:#2E3138; --rule-2:#3E424B;
+    --pc:#A99BF0; --pc-soft:#22203A;
+    --vm:#5EC4B8; --vm-soft:#122A29;
+    --stop:#E58279; --stop-soft:#2E1917;
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--f-body);
+    font-size:16.5px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:840px;margin:0 auto;padding:clamp(20px,4vw,48px) clamp(15px,4vw,36px);
+    display:flex;flex-direction:column;gap:40px}
+  h1,h2{font-family:var(--f-disp);margin:0;line-height:1.15;text-wrap:balance;letter-spacing:-.01em}
+  h1{font-size:clamp(1.7rem,4.5vw,2.4rem);font-weight:700}
+  h2{font-size:clamp(1.1rem,2.8vw,1.35rem);font-weight:600}
+  p{margin:0}
+  code{font-family:var(--f-mono);font-size:.9em;background:var(--sunk);padding:1px 5px;border-radius:4px}
+
+  header{border-bottom:3px solid var(--rule-2);padding-bottom:22px;display:flex;flex-direction:column;gap:12px}
+  .lede{color:var(--ink-2);max-width:60ch}
+
+  /* les deux machines — le repère central du document */
+  .machines{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+  .m{border-radius:12px;padding:15px 17px;display:flex;flex-direction:column;gap:6px;border:2px solid}
+  .m.pc{border-color:var(--pc);background:var(--pc-soft)}
+  .m.vm{border-color:var(--vm);background:var(--vm-soft)}
+  .m .who{font-family:var(--f-disp);font-weight:700;font-size:1rem;display:flex;align-items:center;gap:8px}
+  .m.pc .who{color:var(--pc)} .m.vm .who{color:var(--vm)}
+  .m .how{font-size:.85rem;color:var(--ink-2)}
+  .m .how b{font-family:var(--f-mono);font-size:.86em;color:var(--ink)}
+
+  section{display:flex;flex-direction:column;gap:18px}
+  .sechead{border-bottom:2px solid var(--rule);padding-bottom:8px}
+
+  /* étapes numérotées — la numérotation est la séquence réelle */
+  .step{display:grid;grid-template-columns:42px 1fr;gap:14px;align-items:start}
+  .num{font-family:var(--f-mono);font-weight:600;font-size:.95rem;color:var(--card);
+    width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    margin-top:2px}
+  .step.pc .num{background:var(--pc)} .step.vm .num{background:var(--vm)}
+  .step .body{display:flex;flex-direction:column;gap:9px;min-width:0}
+  .step .titre{font-family:var(--f-disp);font-weight:600;font-size:1.02rem;display:flex;
+    align-items:center;gap:9px;flex-wrap:wrap}
+  .tag{font-family:var(--f-mono);font-size:.62rem;font-weight:600;padding:2px 8px;border-radius:20px;
+    letter-spacing:.04em;white-space:nowrap;color:var(--card)}
+  .step.pc .tag{background:var(--pc)} .step.vm .tag{background:var(--vm)}
+  .step .quoi{font-size:.92rem;color:var(--ink-2)}
+
+  pre{margin:0;background:var(--card);border:1px solid var(--rule);border-left:4px solid var(--rule-2);
+    border-radius:8px;padding:12px 14px;overflow-x:auto;font-family:var(--f-mono);
+    font-size:.88rem;line-height:1.55}
+  .step.pc pre{border-left-color:var(--pc)} .step.vm pre{border-left-color:var(--vm)}
+
+  .note{background:var(--card);border:1px solid var(--rule);border-radius:9px;padding:12px 15px;font-size:.89rem;color:var(--ink-2)}
+  .attention{background:var(--stop-soft);border:1px solid var(--stop);border-radius:9px;
+    padding:12px 15px;font-size:.89rem}
+  .attention b{color:var(--stop)}
+
+  table{width:100%;border-collapse:collapse;font-size:.89rem}
+  th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-family:var(--f-mono);font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--ink-3);font-weight:600}
+  tbody tr:last-child td{border-bottom:none}
+  .tw{overflow-x:auto;background:var(--card);border:1px solid var(--rule);border-radius:10px}
+
+  footer{border-top:1px solid var(--rule);padding-top:18px;color:var(--ink-3);font-size:.8rem}
+  @media (max-width:560px){ .step{grid-template-columns:34px 1fr;gap:10px} .num{width:30px;height:30px;font-size:.85rem} }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <h1>Réinstaller l'ERP</h1>
+    <p class="lede">Tout remonter depuis zéro sur la machine de l'entreprise, puis l'arrêter et le relancer au quotidien. Chaque commande est à recopier telle quelle, une par une.</p>
+  </header>
+
+  <!-- LES DEUX MACHINES -->
+  <section>
+    <div class="machines">
+      <div class="m pc">
+        <span class="who">💻 Votre PC Windows</span>
+        <span class="how">Vous y écrivez le code et vous <strong>publiez</strong>. La fenêtre s'appelle <strong>PowerShell</strong>, et sa ligne commence par <b>PS C:\…&gt;</b></span>
+      </div>
+      <div class="m vm">
+        <span class="who">🖥️ La VM Linux</span>
+        <span class="how">Elle <strong>fait tourner</strong> l'application jour et nuit. On y accède depuis le PC, et sa ligne finit par <b>$</b></span>
+      </div>
+    </div>
+    <div class="note">Dans tout ce document, la <strong style="color:var(--pc)">pastille violette</strong> veut dire « à taper sur le PC » et la <strong style="color:var(--vm)">pastille verte</strong> « à taper sur la VM ». Si vous hésitez, regardez la fin de votre ligne : <code>&gt;</code> c'est le PC, <code>$</code> c'est la VM.</div>
+  </section>
+
+  <!-- AVANT -->
+  <section>
+    <div class="sechead"><h2>Ce qu'il faut avoir sous la main</h2></div>
+    <div class="tw"><table>
+      <tbody>
+        <tr><td><strong>L'adresse de la VM</strong></td><td>Un nombre du type <code>192.168.1.50</code>, donné par le service informatique.</td></tr>
+        <tr><td><strong>Un compte sur la VM</strong></td><td>Un nom d'utilisateur et son mot de passe.</td></tr>
+        <tr><td><strong>L'accès à GitHub</strong></td><td>Être connecté au compte <strong>Seem-Semrac</strong> dans un navigateur.</td></tr>
+        <tr><td><strong>Docker installé sur la VM</strong></td><td>Si ce n'est pas le cas, l'installation s'arrêtera en affichant les deux commandes à demander au service informatique. C'est le seul moment qui exige un administrateur, et il n'arrive qu'une fois.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- INSTALLATION -->
+  <section>
+    <div class="sechead"><h2>Installer, de zéro</h2></div>
+
+    <div class="step pc">
+      <div class="num">1</div>
+      <div class="body">
+        <div class="titre">Se connecter à la VM <span class="tag">PC · PowerShell</span></div>
+        <p class="quoi">Remplacez par votre nom d'utilisateur et l'adresse de la VM. Le mot de passe ne s'affiche pas pendant que vous le tapez — c'est normal.</p>
+        <pre>ssh utilisateur@192.168.1.50</pre>
+        <p class="quoi">À partir d'ici, tout se passe sur la VM : votre ligne finit maintenant par <code>$</code>.</p>
+      </div>
+    </div>
+
+    <div class="step vm">
+      <div class="num">2</div>
+      <div class="body">
+        <div class="titre">Créer la clé d'accès à GitHub <span class="tag">VM</span></div>
+        <p class="quoi">Elle permettra à la VM de télécharger le code, en lecture seule. Copiez toute la ligne qui s'affiche, de <code>ssh-ed25519</code> jusqu'à <code>vm-erp</code>.</p>
+        <pre>ssh-keygen -t ed25519 -C "vm-erp" -f ~/.ssh/erp_deploy -N "" &amp;&amp; cat ~/.ssh/erp_deploy.pub</pre>
+      </div>
+    </div>
+
+    <div class="step pc">
+      <div class="num">3</div>
+      <div class="body">
+        <div class="titre">Déclarer la clé sur GitHub <span class="tag">PC · navigateur</span></div>
+        <p class="quoi">Ouvrez cette page, cliquez <strong>Add deploy key</strong>, collez la ligne copiée, donnez-lui un titre comme « VM entreprise », et <strong>ne cochez pas</strong> <em>Allow write access</em>.</p>
+        <pre>https://github.com/Seem-Semrac/ERP-seem-semrac/settings/keys</pre>
+      </div>
+    </div>
+
+    <div class="step vm">
+      <div class="num">4</div>
+      <div class="body">
+        <div class="titre">Enregistrer l'adresse de GitHub <span class="tag">VM</span></div>
+        <p class="quoi">Une seule ligne, à recopier entièrement.</p>
+        <pre>printf 'Host github-erp\n  HostName github.com\n  User git\n  IdentityFile ~/.ssh/erp_deploy\n  IdentitiesOnly yes\n' &gt;&gt; ~/.ssh/config</pre>
+      </div>
+    </div>
+
+    <div class="step vm">
+      <div class="num">5</div>
+      <div class="body">
+        <div class="titre">Télécharger le code <span class="tag">VM</span></div>
+        <pre>git clone git@github-erp:Seem-Semrac/ERP-seem-semrac.git ~/erp</pre>
+        <div class="attention">
+          <b>Une question va apparaître la première fois.</b> GitHub se présente et demande si vous le reconnaissez :
+          <pre style="margin-top:8px">ED25519 key fingerprint is SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU</pre>
+          <p style="margin-top:8px">Comparez avec la ligne ci-dessus, <strong>caractère par caractère</strong>. Si c'est identique, tapez <code>yes</code> puis Entrée. <strong>Si c'est différent, arrêtez tout</strong> et prévenez le service informatique : quelqu'un s'interpose. Cette question n'est posée qu'une fois.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step vm">
+      <div class="num">6</div>
+      <div class="body">
+        <div class="titre">Installer et démarrer <span class="tag">VM</span></div>
+        <p class="quoi">Comptez 2 à 5 minutes. L'ordinateur télécharge, construit, démarre les 8 briques du système, puis recopie les données. Laissez-le finir sans rien taper.</p>
+        <pre>~/erp/docker/scripts/install.sh --seed</pre>
+      </div>
+    </div>
+
+    <div class="step vm">
+      <div class="num">7</div>
+      <div class="body">
+        <div class="titre">Relever l'adresse et le code d'accès <span class="tag">VM</span></div>
+        <pre>hostname -I</pre>
+        <p class="quoi">Notez le premier nombre. Puis :</p>
+        <pre>grep -E "^(BOOTSTRAP_MATRICULE|BOOTSTRAP_PIN)=" ~/erp/docker/.env</pre>
+        <p class="quoi">Notez le matricule et le code à 6 chiffres. <strong>Ils ne se retrouvent nulle part ailleurs</strong> : rangez-les en lieu sûr.</p>
+      </div>
+    </div>
+
+    <div class="step pc">
+      <div class="num">8</div>
+      <div class="body">
+        <div class="titre">Ouvrir l'application <span class="tag">PC · navigateur</span></div>
+        <p class="quoi">Dans la barre d'adresse, en remplaçant par le nombre de l'étape 7 :</p>
+        <pre>http://192.168.1.50:3000</pre>
+        <p class="quoi">L'écran de connexion demande le matricule et le code. C'est fini.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- QUOTIDIEN -->
+  <section>
+    <div class="sechead"><h2>Arrêter, relancer, surveiller</h2></div>
+    <p style="color:var(--ink-2);font-size:.93rem">Toutes ces commandes se tapent <strong style="color:var(--vm)">sur la VM</strong>, après s'y être connecté avec <code>ssh</code> (étape 1).</p>
+    <div class="tw"><table>
+      <thead><tr><th>Ce que vous voulez</th><th>La commande</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Arrêter</strong> l'application</td><td><code>~/erp/docker/scripts/erp-docker.sh stop</code></td></tr>
+        <tr><td><strong>La relancer</strong></td><td><code>~/erp/docker/scripts/erp-docker.sh start</code></td></tr>
+        <tr><td>Voir si tout va bien</td><td><code>~/erp/docker/scripts/erp-docker.sh ps</code><br><span style="color:var(--ink-3)">les 8 lignes doivent afficher <em>Up</em> ou <em>healthy</em></span></td></tr>
+        <tr><td>Comprendre un problème</td><td><code>~/erp/docker/scripts/erp-docker.sh logs</code><br><span style="color:var(--ink-3)">quitter l'affichage avec Ctrl + C</span></td></tr>
+      </tbody>
+    </table></div>
+    <div class="note"><strong>Si la VM redémarre ou subit une coupure de courant</strong>, l'application repart toute seule — rien à faire. Une seule exception : si vous l'aviez arrêtée vous-même avec <code>stop</code>, elle reste arrêtée, et il faut <code>start</code>. C'est voulu : un arrêt volontaire est respecté.</div>
+  </section>
+
+  <!-- MISES À JOUR -->
+  <section>
+    <div class="sechead"><h2>Installer une mise à jour</h2></div>
+    <p style="color:var(--ink-2);font-size:.93rem">Le code voyage du PC vers GitHub, puis de GitHub vers la VM. Jamais directement de l'un à l'autre.</p>
+
+    <div class="step pc">
+      <div class="num">1</div>
+      <div class="body">
+        <div class="titre">Publier <span class="tag">PC · PowerShell</span></div>
+        <pre>cd "E:\ERP derniere version"
+.\scripts_doc\publier_pro.ps1 "ce que contient cette mise a jour"</pre>
+        <p class="quoi">Attendez de voir <code>OK Publie</code> avant de continuer.</p>
+      </div>
+    </div>
+
+    <div class="step vm">
+      <div class="num">2</div>
+      <div class="body">
+        <div class="titre">Récupérer et appliquer <span class="tag">VM</span></div>
+        <pre>cd ~/erp
+git pull
+docker/scripts/erp-docker.sh up</pre>
+        <p class="quoi">Les données ne sont jamais touchées : seule l'application est remplacée.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROBLÈMES -->
+  <section>
+    <div class="sechead"><h2>Si ça coince</h2></div>
+    <div class="tw"><table>
+      <thead><tr><th>Le message</th><th>Ce que ça veut dire, quoi faire</th></tr></thead>
+      <tbody>
+        <tr><td><code>command cd not found</code></td><td>Vous n'êtes pas dans le bon endroit — vous êtes resté dans un programme. Faites <strong>Ctrl + C</strong>, puis <code>exit</code>, puis reconnectez-vous avec <code>ssh</code>.</td></tr>
+        <tr><td><code>Permission denied</code><br>sur un dossier</td><td>Vous essayez d'écrire où vous n'avez pas le droit. Installez dans <code>~/erp</code> (votre dossier personnel), jamais dans <code>/opt</code>.</td></tr>
+        <tr><td><code>Permission denied (publickey)</code></td><td>La clé de l'étape 2 n'a pas été enregistrée sur GitHub, ou pas en entier. Refaites l'étape 3 en collant la ligne complète.</td></tr>
+        <tr><td>La page ne s'affiche pas</td><td>Vérifiez d'abord que tout tourne (<code>erp-docker.sh ps</code>). Si oui, c'est le pare-feu de la VM : <code>sudo ufw allow 3000/tcp</code>.</td></tr>
+        <tr><td><code>wsl: Failed to translate</code></td><td>Vous avez tapé une commande Linux dans PowerShell. Les commandes vertes vont sur la VM, pas sur le PC.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="attention"><b>Une règle qui évite de tout casser :</b> si une commande renvoie une erreur, <strong>arrêtez-vous et demandez</strong>. N'enchaînez pas sur la suivante — c'est ainsi qu'on se perd. Notez la commande tapée et le message reçu, les deux ensemble.</div>
+  </section>
+
+  <footer>
+    ERP Seem Semrac — procédure vérifiée de bout en bout sur une VM Ubuntu. Les données de l'application vivent dans des volumes Docker : elles survivent aux arrêts, aux redémarrages et aux mises à jour. Seule la commande <code>reset</code>, qui n'apparaît pas dans ce document, les efface.
+  </footer>
+
+</div>

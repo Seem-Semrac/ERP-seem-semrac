@@ -935,19 +935,79 @@ async function cascadeDAManques(dt: any, cmdId: string, byCode: Record<string, a
 }
 
 // Orchestrateur — ne jette jamais (la commande existe déjà).
+// Mode de règlement « Proforma » : le client paie AVANT qu'on engage la moindre dépense.
+// On facture donc à l'acceptation, et on diffère prépa technique + demandes d'achat
+// jusqu'à l'encaissement (PATCH /api/factures/:id avec statut 'payee').
+export const estProforma = (v: any) => String(v || '').trim().toLowerCase() === 'proforma'
+
+// Garde d'idempotence : la cascade différée ne doit pas rejouer si elle a déjà tourné
+// (facture repassée « payée » après un aller-retour de statut, par exemple).
+async function _cascadeDejaFaite(aff: string): Promise<boolean> {
+  const a = String(aff || '')
+  if (!a) return true
+  const [preps, das] = await Promise.all([
+    getPreparationsTechniques().catch(() => [] as any[]),
+    getDemandesAchat().catch(() => [] as any[]),
+  ])
+  return (preps as any[]).some((p: any) => String(p.num_affaire || '') === a)
+      || (das as any[]).some((d: any) => String(d.num_affaire || '') === a && d.genere_par_adt === true)
+}
+
+// Prépa technique + demandes d'achat. Extrait pour pouvoir être rejoué à l'encaissement.
+async function cascadeEngagementDepense(dt: any, cmdId: string, byCode: Record<string, any>) {
+  const prepa = await cascadePrepaTechnique(dt, cmdId, byCode).catch(() => 0)
+  const da = await cascadeDAManques(dt, cmdId, byCode).catch(() => 0)
+  return { prepa, da }
+}
+
 async function cascadeAcceptationOffre(off: any, cmdId: string) {
-  const out = { dt: null as any, prepa: 0, da: 0, lots: 0, bdt: 0, bds: 0 }
+  const out = { dt: null as any, prepa: 0, da: 0, lots: 0, bdt: 0, bds: 0, proforma: false, facture: null as any }
   try {
     const dt = off.dt_ref ? await getDemandeTravaux(String(off.dt_ref)).catch(() => null) : null
     if (!dt) return out
     out.dt = dt.id
     const byCode = _nomByCode(await getNomenclatures().catch(() => [] as any[]))
-    out.prepa = await cascadePrepaTechnique(dt, cmdId, byCode).catch(() => 0)
-    out.da = await cascadeDAManques(dt, cmdId, byCode).catch(() => 0)
+    const proforma = estProforma(off.mode_reglement)
+    out.proforma = proforma
+
+    if (proforma) {
+      // On facture tout de suite, et on N'ENGAGE RIEN : ni prépa technique, ni demande d'achat.
+      out.facture = await creerFactureProforma(off, cmdId).catch(() => null)
+    } else {
+      const eng = await cascadeEngagementDepense(dt, cmdId, byCode)
+      out.prepa = eng.prepa; out.da = eng.da
+    }
+
+    // Les lots et bons sont créés dans les deux cas : ils naissent avec matiere_ok = false,
+    // donc ils restent hors du planning tant que la matière n'est pas réceptionnée — ce qui,
+    // en proforma, suppose que les demandes d'achat aient été débloquées par le paiement.
     const cc = await cascadeLotsBdtBst(dt, cmdId, byCode).catch(() => ({ lots: 0, bdt: 0, bds: 0 }))
     out.lots = cc.lots; out.bdt = cc.bdt; out.bds = cc.bds
   } catch {}
   return out
+}
+
+// Facture proforma émise à l'acceptation, rattachée à la commande et non à un BL
+// (il n'y a encore aucune livraison). Elle apparaît dans Comptabilité › Facturation.
+async function creerFactureProforma(off: any, cmdId: string) {
+  const factures = await getFacturesClient().catch(() => [] as any[])
+  const deja = (factures as any[]).find((f: any) => String(f.cmd_id || '') === String(cmdId) && String(f.statut || '') !== 'annulee')
+  if (deja) return deja                                   // idempotent : une seule proforma par commande
+  const id = nextSeqId('FAC', (factures as any[]).map((x: any) => x.id))
+  const ht = +(Number(off.montant) || 0).toFixed(2)
+  const tvaPct = 20
+  const tva = +(ht * tvaPct / 100).toFixed(2)
+  const { data, error } = await createFactureClient({
+    id, num_facture: id,
+    client_nom: off.client_nom || null, num_affaire: off.num_affaire || null,
+    cmd_id: cmdId as any, bl_id: null as any,
+    date_facture: new Date().toISOString().slice(0, 10),
+    montant_ht: ht, tva_pct: tvaPct, montant_tva: tva, montant_ttc: +(ht + tva).toFixed(2),
+    partielle: false, statut: 'envoyee', mode_paiement: 'Proforma',
+    notes: 'Facture proforma — production engagée à l’encaissement (offre ' + String(off.id || '') + ').',
+  } as any)
+  if (error) return null
+  return data
 }
 
 // Acceptation d'offre → CRÉE la commande en base (rentrée de commande) + passe l'offre en 'acceptee'.
@@ -1473,6 +1533,46 @@ app.get('/commercial/commande', (c) => {
 // ══════════════════════════════════════════════════════════════
 // ACHATS
 // ══════════════════════════════════════════════════════════════
+// Reference d'affaire attribuee a un achat qui ne provient d'aucune affaire : LIBRE-001, -002...
+// Facture fournisseur emise a la creation d'un BC proforma : elle arrive dans
+// Comptabilite > Factures fournisseurs, a regler. Le rattachement au BC passe par les
+// notes (la table n'a pas de colonne bc_id).
+async function creerFactureFournisseurProforma(bcId: string, fournisseurNom: any, montantHt: number, isST: boolean) {
+  const ht = +(Number(montantHt) || 0).toFixed(2)
+  const tvaPct = 20
+  const tvaM = +(ht * tvaPct / 100).toFixed(2)
+  const existing = await getFacturesFournisseur().catch(() => [] as any[])
+  let max = 0
+  for (const r of existing as any[]) {
+    const m = String(r.num_facture || '').match(/-(\d+)\s*$/)
+    if (m) { const v = parseInt(m[1], 10); if (v > max) max = v }
+  }
+  const type = isST ? 'sous_traitant' : 'fournisseur'
+  const { data, error } = await createFactureFournisseur({
+    id: 'FF-' + bcId,                                   // deterministe : une seule proforma par BC
+    num_facture: (isST ? 'ST' : 'FOURN') + '-' + new Date().getFullYear() + '-' + String(max + 1).padStart(4, '0'),
+    type,
+    fournisseur_nom: String(fournisseurNom || '').trim() || '—',
+    date_facture: TODAY_ISO(),
+    montant_ht: ht, tva_pct: tvaPct, montant_tva: tvaM, montant_ttc: +(ht + tvaM).toFixed(2),
+    statut: 'a_valider',
+    compte_charge: isST ? '604100 – Sous-traitance' : null,
+    notes: 'BC ' + bcId + ' — proforma : le bon de commande reste en attente de paiement jusqu au reglement de cette facture.',
+  } as any)
+  if (error) return null
+  await genEcritureAchat(data).catch(() => {})
+  return data
+}
+
+export function prochaineRefLibre(bcs: any[]): string {
+  let max = 0
+  for (const b of (bcs || [])) {
+    const m = String((b as any).num_affaire || '').match(/^LIBRE-(\d+)$/i)
+    if (m) { const v = parseInt(m[1], 10); if (v > max) max = v }
+  }
+  return 'LIBRE-' + String(max + 1).padStart(3, '0')
+}
+
 app.get('/achats/service', async (c) => {
   const [das, fournisseurs, sousTraitants, produits, demandesPrix, rfqReponses, scorecard] = await Promise.all([
     getDemandesAchat(), getFournisseurs(), getSousTraitantsAll(),
@@ -1497,7 +1597,14 @@ app.get('/achats/service', async (c) => {
     const relance = d.statut === 'envoyee' && envMs > 0 && !aDesPrix && (nowMs - envMs) >= 7 * 86400000
     return { ...d, fournisseur_nom: fnoms[0] || null, nb_fournisseurs: fnoms.length, a_des_prix: aDesPrix, a_relancer: relance }
   })
-  return c.html(pageServiceAchats(das, fournisseurs, sousTraitants, refCount, dpEnrichies as any[], sansPrix, scorecard as any[]))
+  const _bcsPourLibre = await getBonsDeCommande().catch(() => [] as any[])
+  // Affaires proposées pour rattacher une demande libre : celles des commandes et des BC.
+  const _cmdsAff = await getCommandes().catch(() => [] as any[])
+  const _affaires = [...new Set([
+    ...(_cmdsAff as any[]).map((x: any) => String(x.num_affaire || '').trim()),
+    ...(_bcsPourLibre as any[]).map((x: any) => String(x.num_affaire || '').trim()),
+  ].filter(Boolean).filter((x) => !/^LIBRE-/i.test(x)))].sort()
+  return c.html(pageServiceAchats(das, fournisseurs, sousTraitants, refCount, dpEnrichies as any[], sansPrix, scorecard as any[], produits as any[], prochaineRefLibre(_bcsPourLibre as any[]), _affaires))
 })
 
 // ─── Fiches détaillées Fournisseur / Sous-traitant ───────────
@@ -1865,14 +1972,19 @@ app.post('/api/achats/da/:id/soumettre', async (c) => {
     articles,
     demande_achat_id: id,
     affaire_id: await resolveAffaireId(da.affaire_id || body.affaire_id),
-    num_affaire: (da as any).num_affaire || null,   // hérité de la DA → porte de "matière reçue"
+    // Le formulaire peut rattacher une demande LIBRE à une vraie affaire : la valeur saisie
+    // prime sur celle héritée de la DA. Porte de « matière reçue » côté production.
+    num_affaire: String(body.affaire_id || '').trim() || (da as any).num_affaire || null,
     cmd_ref: (da as any).cmd_ref || null,
     montant_ht: montant,
     devise: 'EUR',
     qte_commandee: Number((da as any).qte) || Number(body.qte) || null,   // base de la réception TOTALE (recu_total)
     date_bc: TODAY_ISO(),
     date_livraison: body.date_livraison || da.livraison || null,
-    statut: 'envoye',  // « en attente de réception »
+    conditions_paiement: body.conditions_paiement || null,
+    // Proforma : on paie AVANT que le fournisseur expedie. Le BC reste donc hors de la
+    // liste « receptions a venir » (statut absent de _bcEmise) jusqu'a l'encaissement.
+    statut: estProforma(body.conditions_paiement) ? 'attente_paiement' : 'envoye',
     notes: body.notes || null,
     lignes: [{ article: articles, qte: da.qte || body.qte || null, fournisseur: fournisseurNom }],
     // Hérité de la DA → route le prix à la réception (BC 'machine' → OPEX de la machine)
@@ -1882,8 +1994,13 @@ app.post('/api/achats/da/:id/soumettre', async (c) => {
   }
   const { data: bc, error } = await createBonDeCommande(bcPayload)
   if (error) return c.json({ ok: false, error: error.message }, 400)
+  // Proforma : la facture a regler part immediatement en Comptabilite.
+  let factureProforma: any = null
+  if (estProforma(body.conditions_paiement)) {
+    factureProforma = await creerFactureFournisseurProforma(bcId, fournisseurNom, montant, isST).catch(() => null)
+  }
   await updateDemandeAchat(id, { statut: 'traitee', type_bc: isST ? 'st' : 'fournisseur', bc_draft: null }).catch(() => {})
-  return c.json({ ok: true, bc, bc_id: bcId, type_bc: isST ? 'st' : 'fournisseur' })
+  return c.json({ ok: true, facture_proforma: factureProforma ? factureProforma.num_facture : null, bc, bc_id: bcId, type_bc: isST ? 'st' : 'fournisseur' })
 })
 
 // ─── Réception d'un BC : crée le BL interne (num d'affaire, transporteur, réf) ───
@@ -2317,8 +2434,34 @@ app.patch('/api/factures/:id', async (c) => {
   if (error) return c.json({ ok: false, error: error.message }, 400)
   // Écriture de RÈGLEMENT (BQ) à l'encaissement → solde le 411 client au FEC. Idempotent (_ecrituresPour par pièce/journal).
   if (String(patch.statut || '') === 'payee' && data) { try { await genEcritureReglement(data) } catch {} }
-  return c.json({ ok: true, facture: data })
+  // PROFORMA : l'encaissement débloque ce qu'on avait volontairement retenu à l'acceptation
+  // de l'offre — préparation technique et demandes d'achat. Tant que la facture n'est pas
+  // réglée, aucune dépense n'est engagée sur l'affaire.
+  let debloque: any = null
+  if (String(patch.statut || '') === 'payee' && data) {
+    try { debloque = await debloquerProforma(data) } catch {}
+  }
+  return c.json({ ok: true, facture: data, ...(debloque ? { proforma_debloque: debloque } : {}) })
 })
+
+// Rejoue la cascade d'engagement de dépense pour une facture proforma qui vient d'être réglée.
+// Sans effet sur une facture ordinaire, ou si la cascade a déjà tourné pour cette affaire.
+async function debloquerProforma(facture: any) {
+  const cmdId = String(facture?.cmd_id || '')
+  if (!cmdId) return null
+  const cmds = await getCommandes().catch(() => [] as any[])
+  const cmd = (cmds as any[]).find((x: any) => String(x.id) === cmdId)
+  if (!cmd) return null
+  const offres = await getOffres().catch(() => [] as any[])
+  const off = (offres as any[]).find((o: any) => String(o.num_affaire || '') === String(cmd.num_affaire || '') && String(o.statut || '') === 'acceptee')
+  if (!off || !estProforma(off.mode_reglement)) return null          // pas une affaire proforma
+  if (await _cascadeDejaFaite(String(cmd.num_affaire || ''))) return null
+  const dt = off.dt_ref ? await getDemandeTravaux(String(off.dt_ref)).catch(() => null) : null
+  if (!dt) return null
+  const byCode = _nomByCode(await getNomenclatures().catch(() => [] as any[]))
+  const eng = await cascadeEngagementDepense(dt, cmdId, byCode)
+  return { num_affaire: cmd.num_affaire || null, prepa: eng.prepa, da: eng.da }
+}
 
 // ─── API : validation hiérarchique du paiement d'une facture (Direction) ───
 app.post('/api/factures/:id/valider-paiement', async (c) => {
@@ -2365,8 +2508,10 @@ app.post('/api/factures-fournisseur', async (c) => {
     montant_ttc: ttc,
     statut: b.statut || 'a_valider',
     compte_charge: b.compte_charge || (type === 'sous_traitant' ? '604100 – Sous-traitance' : null),
-    bc_id: b.bc_id || null,
-    notes: b.notes || null,
+    // La table n'a PAS de colonne bc_id : l'envoyer faisait echouer TOUTE creation de facture
+    // fournisseur (PGRST204). Le rattachement au bon de commande passe donc par les notes,
+    // ce qui fonctionne aussi bien sur la base cloud que sur la stack Docker, sans migration.
+    notes: [b.bc_id ? 'BC ' + String(b.bc_id) : '', b.notes || ''].filter(Boolean).join(' — ') || null,
   }
   const { data, error } = await createFactureFournisseur(payload)
   if (error) return c.json({ ok: false, error: error.message }, 400)
@@ -2385,8 +2530,27 @@ app.patch('/api/factures-fournisseur/:id', async (c) => {
   patch.updated_at = new Date().toISOString()
   const { data, error } = await updateFactureFournisseur(id, patch)
   if (error) return c.json({ ok: false, error: error.message }, 400)
-  return c.json({ ok: true, facture: data })
+  // PROFORMA : le règlement libère le bon de commande, qui rejoint alors les réceptions à venir.
+  let bcLibere: string | null = null
+  if (String(patch.statut || '') === 'payee' && data) {
+    try { bcLibere = await libererBcProforma(data) } catch {}
+  }
+  return c.json({ ok: true, facture: data, ...(bcLibere ? { bc_libere: bcLibere } : {}) })
 })
+
+// Passe un BC « attente_paiement » en « envoye » quand sa facture proforma est réglée.
+// Le rattachement se lit dans les notes (« BC <id> … ») ou dans l'identifiant FF-<id>.
+async function libererBcProforma(facture: any): Promise<string | null> {
+  const parId = String(facture?.id || '').startsWith('FF-') ? String(facture.id).slice(3) : ''
+  const m = String(facture?.notes || '').match(/\bBC[ -]([A-Z0-9-]+)/i)
+  const bcId = parId || (m ? m[1] : '')
+  if (!bcId) return null
+  const bcs = await getBonsDeCommande().catch(() => [] as any[])
+  const bc = (bcs as any[]).find((x: any) => String(x.id) === bcId)
+  if (!bc || String(bc.statut || '') !== 'attente_paiement') return null   // rien à libérer
+  await updateBonDeCommande(bcId, { statut: 'envoye', updated_at: new Date().toISOString() } as any).catch(() => {})
+  return bcId
+}
 
 // ─── Génération des DA depuis une commande validée (stock insuffisant) ───
 //  besoins : [{ article, qte, unite?, fournisseur?, type_bc?, reference? }]
@@ -3172,9 +3336,14 @@ app.post('/api/ged/upload', async (c) => {
   if (!form) return c.json({ ok: false, error: 'Formulaire invalide' }, 400)
   const file: any = form.get('file')
   if (!file || typeof file === 'string' || typeof file.arrayBuffer !== 'function') return c.json({ ok: false, error: 'Aucun fichier reçu' }, 400)
-  const nomenclatureId = String(form.get('nomenclature_id') || '').trim()
-  if (!nomenclatureId) return c.json({ ok: false, error: 'Enregistrez la nomenclature avant de joindre des fichiers.' }, 400)
-  const CATS = ['plan_client', 'plan_cao', 'programme_fao', 'analyse_dt', 'autre']
+  // « ref » permet de rattacher un document a autre chose qu'une nomenclature — par
+  // exemple « BC:BC-2026-002 » pour la facture jointe a un bon de commande. La colonne
+  // nomenclature_id sert de proprietaire generique : elle ne porte aucune contrainte,
+  // et le prefixe evite toute collision avec un identifiant de nomenclature.
+  const refGenerique = String(form.get('ref') || '').trim()
+  const nomenclatureId = refGenerique || String(form.get('nomenclature_id') || '').trim()
+  if (!nomenclatureId) return c.json({ ok: false, error: 'Enregistrez la fiche avant de joindre des fichiers.' }, 400)
+  const CATS = ['plan_client', 'plan_cao', 'programme_fao', 'analyse_dt', 'facture_fournisseur', 'autre']
   const categorie = CATS.includes(String(form.get('categorie'))) ? String(form.get('categorie')) : 'autre'
   const eoRaw = form.get('etape_ordre')
   const etape_ordre = (eoRaw != null && eoRaw !== '') ? Number(eoRaw) : null
@@ -3184,7 +3353,8 @@ app.post('/api/ged/upload', async (c) => {
   if (bytes.byteLength > 52428800) return c.json({ ok: false, error: 'Fichier trop volumineux (max 50 Mo).' }, 400)
   const user = (c as any).get('user')
   const safe = fichierNom.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const path = `${nomenclatureId}/${categorie}/${crypto.randomUUID()}_${safe}`
+  const dossier = nomenclatureId.replace(/[^a-zA-Z0-9._-]/g, '_')   // « BC:BC-2026-002 » → « BC_BC-2026-002 »
+  const path = `${dossier}/${categorie}/${crypto.randomUUID()}_${safe}`
   const { error: upErr } = await uploadGedFile(path, bytes, mime)
   if (upErr) return c.json({ ok: false, error: 'Stockage : ' + (upErr.message || String(upErr)) }, 400)
   const { data, error } = await createDocument({
@@ -3197,6 +3367,10 @@ app.post('/api/ged/upload', async (c) => {
 })
 app.get('/api/ged/nomenclature/:id', async (c) => {
   return c.json({ ok: true, documents: await getDocumentsForNom(c.req.param('id')) })
+})
+// Documents rattaches a un objet non-nomenclature (ex. /api/ged/ref/BC:BC-2026-002).
+app.get('/api/ged/ref/:ref', async (c) => {
+  return c.json({ ok: true, documents: await getDocumentsForNom(decodeURIComponent(c.req.param('ref'))) })
 })
 // Sert le fichier GED. ⚠ On ne REDIRIGE PAS vers l'URL signée : celle-ci est bâtie sur
 // SUPABASE_URL, qui vaut « http://kong:8000 » dans la stack Docker — un nom résolu
@@ -7658,7 +7832,19 @@ app.post('/api/rh/pointage', async (c) => {
 // ══════════════════════════════════════════════════════════════
 app.get('/compta/service', async (c) => {
   const [factCli, factFourn, ecritures, validations] = await Promise.all([getFacturesClient(), getFacturesFournisseur(), getEcrituresComptables(), getValidations().catch(() => [])])
-  return c.html(pageServiceCompta(factCli, factFourn, ecritures, validations as any[]))
+  // Pièces jointes des factures fournisseurs : la facture scannée est rangée en GED sous
+  // « BC:<id du bon de commande> », et l'identifiant de la facture est « FF-<id du BC> ».
+  // On remonte donc du numéro de facture au document sans avoir besoin d'une colonne de lien.
+  const pjFourn: Record<string, { id: string; nom: string }> = {}
+  await Promise.all((factFourn as any[])
+    .filter((f: any) => String(f.id || '').startsWith('FF-'))
+    .map(async (f: any) => {
+      const bcId = String(f.id).slice(3)
+      const docs = await getDocumentsForNom('BC:' + bcId).catch(() => [] as any[])
+      const doc = (docs as any[]).find((d: any) => String(d.categorie) === 'facture_fournisseur' && d.actif !== false)
+      if (doc) pjFourn[String(f.id)] = { id: String(doc.id), nom: String(doc.fichier_nom || 'facture') }
+    }))
+  return c.html(pageServiceCompta(factCli, factFourn, ecritures, validations as any[], pjFourn))
 })
 
 app.get('/qualite/anomalie', (c) => {

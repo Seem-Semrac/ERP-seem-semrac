@@ -62,21 +62,24 @@ git clone git@github-erp:Seem-Semrac/ERP-seem-semrac.git ~/erp
 
 > Installation dans `~/erp` et non `/opt` : aucun droit administrateur n'est requis si Docker est déjà utilisable par votre compte. Si Docker n'est pas installé, `install.sh` s'arrête et affiche les deux commandes à demander à l'administrateur — c'est le seul point qui exige root, et une seule fois.
 
-**Publier une mise à jour** — depuis le poste de développement, sur `main` :
+**Mettre à jour — deux commandes, une par machine.** Le code transite par GitHub : il n'existe pas de chemin direct du poste vers la VM.
 
-```bash
-# Windows (PowerShell) — `bash` y pointe souvent vers WSL, qui peut ne pas être installé
-.\scripts_doc\publier_pro.ps1 "ce que contient cette livraison"
+| Ordre | Où | Commande |
+|---|---|---|
+| 1 | **Poste de développement** (PowerShell) | `.\docker\scripts\erp-docker.ps1 livrer "ce que contient la mise à jour"` |
+| 2 | **VM** | `~/erp/docker/scripts/erp-docker.sh maj` |
 
-# Linux / macOS / Git Bash
-scripts_doc/publier_pro.sh "ce que contient cette livraison"
-```
+`livrer` enchaîne les trois étapes du poste et **s'arrête net si l'une échoue** :
 
-Puis sur la VM :
+1. reconstruit les conteneurs locaux (`up -d --build`) ;
+2. attend que les 8 services soient sains — **si l'un ne démarre pas, rien n'est publié** ;
+3. publie vers le dépôt de déploiement via `publier_pro.ps1`.
 
-```bash
-cd ~/erp && git pull && docker/scripts/erp-docker.sh up
-```
+Cette garde est le point important : publier du code qui ne démarre même pas sur le poste revient à casser la VM à distance, sans pouvoir la réparer autrement qu'en s'y connectant.
+
+`maj` fait le pendant côté serveur : `git pull --ff-only`, reconstruction, redémarrage, puis l'état des 8 conteneurs et l'URL. Les données ne sont jamais touchées — seule l'application est remplacée.
+
+> Sur un poste sans PowerShell (Linux, macOS, Git Bash), la publication s'écrit `scripts_doc/publier_pro.sh "…"`.
 
 ### Ce que fait `install.sh`
 
@@ -114,15 +117,15 @@ ERP_INSTANCE=recette ~/erp/docker/scripts/erp-docker.sh ps
 ~/erp/docker/scripts/erp-docker.sh ps
 ```
 
-`up` · `down` · `ps` · `logs [service]` · `psql` · `restore <dump.sql>` · `migrate` · `mirror` · `ged-bucket` · `reset` (⚠ efface les données).
+`maj` · `up` · `stop` · `start` · `restart` · `down` · `ps` · `logs [service]` · `psql` · `restore <dump.sql>` · `migrate` · `mirror` · `ged-bucket` · `reset` (⚠ efface les données).
 
 ### Mettre à jour après une modification du code
 
 ```bash
-cd ~/erp && git pull && docker/scripts/erp-docker.sh up
+~/erp/docker/scripts/erp-docker.sh maj
 ```
 
-`up` reconstruit l'image de l'app (le code est **cuit dans l'image**, il n'y a pas de bind-mount) et laisse la base intacte.
+Équivaut à `git pull` suivi de `up`. La reconstruction de l'image est nécessaire parce que le code est **cuit dans l'image** — il n'y a pas de bind-mount. La base n'est pas touchée.
 
 ---
 
