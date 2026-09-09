@@ -324,9 +324,9 @@ export const BDT_DATA = [
 ]
 
 // ─── SIDEBAR COMMUNE (style monochrome épuré, accent orange actif) ─
-const SIDEBAR_ITEMS: Array<{ href: string; icon: string; label: string; active: string }> = [
+const SIDEBAR_ITEMS: Array<{ href: string; icon: string; label: string; active: string; svc?: string }> = [
   { href: '/',                     icon: 'fa-home',              label: 'Accueil',       active: 'home' },
-  { href: '/dashboard',            icon: 'fa-gauge-high',        label: 'Tableaux de bord', active: 'dashboard-hub' },
+  { href: '/dashboard',            icon: 'fa-gauge-high',        label: 'Tableaux de bord', active: 'dashboard-hub', svc: '' },   // hub visible par tous ; chaque tableau reste filtré par son propre service
   { href: '/commercial/service',   icon: 'fa-briefcase',         label: 'Commercial',    active: 'service-commercial' },
   { href: '/be/service',           icon: 'fa-drafting-compass',  label: 'Bureau Études', active: 'be-service' },
   { href: '/achats/service',       icon: 'fa-shopping-cart',     label: 'Achats',        active: 'achats-service' },
@@ -365,7 +365,7 @@ export const SIDEBAR_V2 = (active = '') => `
   <nav style="flex:1;padding:10px 8px;font-size:.84rem;overflow-y:auto;display:flex;flex-direction:column;gap:2px;">
     ${SIDEBAR_ITEMS.map(it => {
       const on = active === it.active
-      return `<a href="${it.href}" data-svc="${it.href === '/' ? '' : it.href.split('/')[1]}" class="sb-link${on?' active':''}" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:6px;color:${on?'white':'#cdeaf8'};background:${on?'rgba(255,255,255,.18)':'transparent'};text-decoration:none;font-weight:${on?'700':'500'};border-left:3px solid ${on?'#f97316':'transparent'};transition:all .15s;position:relative;">
+      return `<a href="${it.href}" data-svc="${it.svc !== undefined ? it.svc : (it.href === '/' ? '' : it.href.split('/')[1])}" class="sb-link${on?' active':''}" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:6px;color:${on?'white':'#cdeaf8'};background:${on?'rgba(255,255,255,.18)':'transparent'};text-decoration:none;font-weight:${on?'700':'500'};border-left:3px solid ${on?'#f97316':'transparent'};transition:all .15s;position:relative;">
         <i class="fas ${it.icon}" style="color:${on?'#fb923c':'#7dd3fc'};width:18px;text-align:center;flex-shrink:0;font-size:.95rem;"></i>
         <span>${it.label}</span>
       </a>`

@@ -221,7 +221,7 @@ const DASHBOARD_SERVICE: Record<string, string> = {
   commercial: 'commercial', be: 'be', achats: 'achats', fournisseurs: 'achats',
   programmation: 'production', production: 'production', qualite: 'qualite', oas: 'oas',
   expedition: 'expeditions', maintenance: 'maintenance', stock: 'stock',
-  rh: 'rh', finance: 'compta', direction: 'direction',
+  environnement: 'environnement', rh: 'rh', finance: 'compta', direction: 'direction',
 }
 
 // Vrai si l'utilisateur a le niveau requis (écriture → rw ; lecture → r/rw) sur AU MOINS UN des services donnés.
@@ -239,30 +239,34 @@ export function canAccess(user: SessionUser | null, path: string, method: string
   const perms = Array.isArray(user.perms) ? user.perms : []
   if (perms.includes('all')) return true                 // direction : accès total
   if (isSelfService(path)) return true                   // actions atelier (PIN dans le corps)
+  // Accès définis sur la personne (fiche salarié). Calculés ICI, avant les services à règle
+  // spéciale : sinon leurs cases seraient cochables dans la fiche mais sans le moindre effet.
+  const ex = accesExplicites(perms)
+  const isW = !['GET', 'HEAD', 'OPTIONS'].includes(String(method).toUpperCase())
+  const niveau = isW ? ex.ecrire : ex.lire
   // Interlocuteurs : contacts clients (commercial) ET fournisseurs (achats/BE) → écriture si rw sur l'un des trois, lecture si r/rw.
-  if (path.startsWith('/api/interlocuteurs')) return hasAnyLevel(user, ['commercial', 'achats', 'be'], method)
+  if (path.startsWith('/api/interlocuteurs')) {
+    return ex.actif ? ['commercial', 'achats', 'be'].some(s => niveau.has(s))
+                    : hasAnyLevel(user, ['commercial', 'achats', 'be'], method)
+  }
   const svc = serviceFor(path)
   if (svc === '__neutral__') return true                 // route API explicitement neutre (liste blanche)
   if (!svc) return !path.startsWith('/api/')             // FAIL-CLOSED : /api inconnu = refusé ; page inconnue = ouverte au connecté
   if (svc === 'pointage') return true                    // borne self-service
-  if (svc === 'habilitations') return perms.includes('habilitations')  // RH + Qualité
+  if (svc === 'habilitations') {                         // RH + Qualité — les jetons priment sur le rôle
+    return ex.actif ? (niveau.has('rh') || niveau.has('qualite')) : perms.includes('habilitations')
+  }
   if (svc === 'plans') {  // maquette bâtiment : lecture ouverte à tout connecté ; écriture BE / Production / Maintenance / Qualité (+ Direction)
-    const isW = !['GET', 'HEAD', 'OPTIONS'].includes(String(method).toUpperCase())
+    if (ex.actif) return niveau.has('plans')             // jetons posés : ils décident seuls
     const canW = rolesOf(user).some(r => r === 'direction' || r === 'maintenance' || r === 'qualite' || r === 'bei' || r === 'production')
     return isW ? canW : true
   }
-  // Accès définis sur la personne : ils font foi dès qu'il en existe au moins un.
-  const ex = accesExplicites(perms)
-  if (ex.actif) {
-    const isW = !['GET', 'HEAD', 'OPTIONS'].includes(String(method).toUpperCase())
-    return isW ? ex.ecrire.has(svc) : ex.lire.has(svc)
-  }
+  if (ex.actif) return niveau.has(svc)                   // accès définis sur la personne : ils font foi
   // Multi-rôles : on prend le MEILLEUR niveau (rw > r) parmi tous les rôles de l'utilisateur.
   let level: Lvl | undefined
   for (const r of rolesOf(user)) { const l = (ROLE_MATRIX[r] || {})[svc]; if (l === 'rw') { level = 'rw'; break } if (l === 'r') level = 'r' }
   if (!level) return false                               // refusé
-  const isWrite = !['GET', 'HEAD', 'OPTIONS'].includes(String(method).toUpperCase())
-  return isWrite ? level === 'rw' : true                 // écriture → 'rw' ; lecture → 'r' ou 'rw'
+  return isW ? level === 'rw' : true                     // écriture → 'rw' ; lecture → 'r' ou 'rw'
 }
 
 // Services LISIBLES par l'utilisateur (pour filtrer le menu côté client).
@@ -271,7 +275,7 @@ export function navServices(user: SessionUser | null): string[] {
   const perms = Array.isArray(user.perms) ? user.perms : []
   if (perms.includes('all')) return MENU_SERVICES.slice()
   const ex = accesExplicites(perms)
-  if (ex.actif) return MENU_SERVICES.filter(s => s === 'plans' || ex.lire.has(s))   // 'plans' visible par tous (lecture)
+  if (ex.actif) return MENU_SERVICES.filter(s => ex.lire.has(s))   // jetons posés : ils décident seuls, 'plans' compris (aligné sur canAccess)
   const roles = rolesOf(user)
   return MENU_SERVICES.filter(s => s === 'plans' || roles.some(r => !!(ROLE_MATRIX[r] || {})[s]))  // 'plans' visible par tous (lecture)
 }

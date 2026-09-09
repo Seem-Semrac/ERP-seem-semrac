@@ -811,7 +811,7 @@ export function pageRHEmployes(dbEmps?: Employe[], dbOrphans?: any[], canWriteRH
           <div><label style="${FLBL}">Rôle principal *</label><select id="f_role" onchange="rhRoleChange()" style="${FINP}">${roleOptions}</select></div>
           <div id="f_entite_wrap"><label style="${FLBL}">Activité (opérateur)</label><select id="f_entite" style="${FINP}"><option>Seem</option><option>Semrac</option></select></div>
           <div><label style="${FLBL}">Poste</label><input id="f_poste" type="text" placeholder="Ex : Usinage CN" style="${FINP}"/></div>
-          <div><label style="${FLBL}">Contrat</label><select id="f_contrat" style="${FINP}"><option>CDI</option><option>CDD</option><option>Apprenti</option><option>Interim</option><option>Stage</option></select></div>
+          <div><label style="${FLBL}">Contrat</label><select id="f_contrat" style="${FINP}"><option value="CDI">CDI</option><option value="CDD">CDD</option><option value="apprenti">Apprenti</option><option value="interim">Intérim</option><option value="stagiaire">Stage</option></select></div>
           <div><label style="${FLBL}">Shift</label><select id="f_shift" style="${FINP}"><option value="matin">Matin 6h-14h</option><option value="apmidi">Après-midi 14h-22h</option><option value="journee">Journée 7h-17h</option><option value="soir">Nuit</option></select></div>
           <div><label style="${FLBL}">Date d'entrée</label><input id="f_date" type="date" style="${FINP}"/></div>
           <div><label style="${FLBL}">Taux horaire chargé (€/h) ${canWriteRH ? '<span title="Confidentiel — maintenir le clic pour révéler" style="color:#94a3b8;"><i class="fas fa-lock"></i></span>' : ''}</label>${canWriteRH
@@ -825,7 +825,8 @@ export function pageRHEmployes(dbEmps?: Employe[], dbOrphans?: any[], canWriteRH
         </div>
         <div style="margin-top:14px;border:1.5px solid #e2e8f0;border-radius:10px;padding:12px;background:#f8fafc;">
           <div style="font-size:.72rem;font-weight:800;color:#334155;margin-bottom:4px;"><i class="fas fa-user-shield" style="margin-right:6px;color:#6366f1;"></i>Accès par service — au-delà des rôles</div>
-          <div style="font-size:.66rem;color:#94a3b8;margin-bottom:10px;">Maintenez <strong>Ctrl</strong> (ou <strong>Cmd</strong>) pour sélectionner plusieurs services. Laissez les deux listes vides pour vous en tenir aux droits du rôle.</div>
+          <div style="font-size:.66rem;color:#94a3b8;margin-bottom:10px;">Cochez les services autorisés. <strong>Tout laisser vide</strong> = la personne garde exactement les droits de son rôle.</div>
+          <div id="f_acc_direction" style="display:none;font-size:.66rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:7px 9px;margin-bottom:10px;"><i class="fas fa-triangle-exclamation" style="margin-right:5px;"></i>Rôle <strong>Direction</strong> : accès total à l'ERP. Ces cases sont enregistrées mais <strong>sans effet</strong> tant que le rôle principal reste Direction.</div>
           <div style="display:grid;grid-template-columns:1fr 74px 74px;gap:2px 8px;align-items:center;">
             <div></div>
             <div style="font-size:.64rem;font-weight:800;color:#0891b2;text-align:center;text-transform:uppercase;"><i class="fas fa-eye" style="margin-right:3px;"></i>Lire</div>
@@ -874,13 +875,14 @@ export function pageRHEmployes(dbEmps?: Employe[], dbOrphans?: any[], canWriteRH
   </div>`
   const js = `<script>
 var RH_CAN_WRITE=${canWriteRH ? 'true' : 'false'};
-var RH_EMPS=${sjX(emps.map((e:any)=>({id:e.id,nom:e.nom,prenom:e.prenom,role:e.role,roles:e.roles,activite:e.activite,poste:e.poste,type_contrat:e.type_contrat,shift_id:e.shift_id,date_entree:e.date_entree,taux_horaire:(canWriteRH ? e.taux_horaire : null),email:e.email,telephone:e.telephone,adresse:e.adresse,statut:e.statut,matricule:e.matricule,solde_conges:e.solde_conges,solde_rtt:e.solde_rtt,sexe:e.sexe,oeth:e.oeth,date_sortie:e.date_sortie})))};
+var RH_EMPS=${sjX(emps.map((e:any)=>({id:e.id,nom:e.nom,prenom:e.prenom,role:e.role,roles:e.roles,activite:e.activite,poste:e.poste,type_contrat:e.type_contrat,shift_id:e.shift_id,date_entree:e.date_entree,taux_horaire:(canWriteRH ? e.taux_horaire : null),email:e.email,telephone:e.telephone,adresse:e.adresse,statut:e.statut,matricule:e.matricule,solde_conges:e.solde_conges,solde_rtt:e.solde_rtt,sexe:e.sexe,oeth:e.oeth,date_sortie:e.date_sortie,autorisations:e.autorisations||[]})))};
 var RH_PERMS={operateur:'Atelier : pointage, solder/réception BDT, autocontrôle (PIN perso). Lecture Prod/OAS/Qualité/Expéditions.',oas:'OAS (écriture). Lecture Prod/BE/Qualité/Stock/Maintenance/Sécurité. Pointage + autocontrôle.',qualite:'Qualité + Sécurité + Habilitations/certifications (écriture). Lecture Prod/OAS/BE/Expé/Stock/Maintenance.',commercial:'Commercial (écriture). Lecture BE/Prod/Qualité/Expéditions/Stock.',bei:'Bureau d\\'études (écriture). Lecture Commercial/Achats/Prod/OAS/Qualité/Sécurité/Stock/Maintenance.',achats:'Achats + Stock (écriture). Lecture Commercial/BE/Prod/Expéditions/Maintenance.',logistique:'Expéditions + Stock (écriture). Lecture Commercial/Achats/Production.',production:'Production (écriture). Lecture BE/Achats/OAS/Qualité/Sécurité/Expé/Stock/Maintenance.',comptable:'Comptabilité (écriture). Lecture RH/Commercial/Achats/Expéditions/Stock.',maintenance:'Maintenance (écriture). Lecture Achats/Prod/OAS/Stock/Sécurité.',rh:'RH : salariés, congés, habilitations (écriture). Lecture Compta/Production/Sécurité.',direction:'Accès complet (administrateur).'};
 function rhSearchEmp(q){ var lq=(q||'').toLowerCase(); document.querySelectorAll('.emp-row').forEach(function(r){r.style.display=(r.dataset.nom||'').indexOf(lq)>=0?'':'none';}); }
 function rhRoleChange(){
   var role=document.getElementById('f_role').value;
   document.getElementById('f_entite_wrap').style.display=(role==='operateur'||role==='oas')?'block':'none';
   var p=document.getElementById('f_role_perms'); if(p) p.innerHTML='<i class="fas fa-shield-alt" style="margin-right:4px;"></i>Autorisations ERP : <strong>'+(RH_PERMS[role]||'—')+'</strong>';
+  var d=document.getElementById('f_acc_direction'); if(d) d.style.display=(role==='direction')?'block':'none';
 }
 // Ecrire implique lire : cocher l'ecriture coche la lecture et la verrouille (on ne peut pas
 // ecrire sans lire). Decocher l'ecriture rend la lecture de nouveau libre — l'inverse n'est
@@ -927,7 +929,7 @@ function rhOpenFiche(id){
   document.querySelectorAll('.f-acc-ecrire').forEach(function(cb){ rhAccesEcrireChange(cb); });
   document.getElementById('f_entite').value=e.activite==='Semrac'?'Semrac':'Seem';
   document.getElementById('f_poste').value=e.poste||'';
-  document.getElementById('f_contrat').value=e.type_contrat||'CDI';
+  var _fc=document.getElementById('f_contrat'); _fc.value=e.type_contrat||'CDI'; if(_fc.selectedIndex<0) _fc.value='CDI';
   document.getElementById('f_shift').value=e.shift_id||'matin';
   document.getElementById('f_date').value=e.date_entree||'';
   if(RH_CAN_WRITE){ var _ft=document.getElementById('f_taux'); if(_ft){ _ft.value=(e.taux_horaire!=null?e.taux_horaire:''); _ft.type='password'; } }
@@ -958,11 +960,13 @@ function rhSaveFiche(){
   var _prim=document.getElementById('f_role').value;
   var _extras=[];   // plus de roles supplementaires : l'acces se definit par service
   var _cases=function(classe){ return [].slice.call(document.querySelectorAll('.'+classe+':checked')).map(function(x){return x.getAttribute('data-svc');}); };
+  // Champ vide => valeur par defaut (ou null) ; un 0 saisi reste 0. parseFloat(..)||null transformait 0 en null.
+  var _num=function(v,def){ v=String(v==null?'':v).trim(); if(v==='') return (def===undefined?null:def); var n=parseFloat(v.replace(',','.')); return isNaN(n)?(def===undefined?null:def):n; };
   var _lire=_cases('f-acc-lire'), _ecrire=_cases('f-acc-ecrire');
   // L'écriture implique la lecture : inutile de cocher les deux côtés pour un même service.
   var _jetons=_ecrire.map(function(v){return 'ecrire:'+v;}).concat(_lire.filter(function(v){return _ecrire.indexOf(v)<0;}).map(function(v){return 'lire:'+v;}));
   var _roles=[_prim].concat(_extras.filter(function(r){return r!==_prim;}));
-  var payload={ nom:nom, prenom:document.getElementById('f_prenom').value.trim(), role:_prim, roles:_roles, acces_services:_jetons, entite:document.getElementById('f_entite').value, poste:document.getElementById('f_poste').value.trim(), contrat:document.getElementById('f_contrat').value, shift_id:document.getElementById('f_shift').value, date_entree:document.getElementById('f_date').value||null, taux_horaire_charge:parseFloat(document.getElementById('f_taux').value)||null, email:document.getElementById('f_email').value.trim(), telephone:document.getElementById('f_tel').value.trim(), adresse:document.getElementById('f_adresse').value.trim(), actif:document.getElementById('f_actif').value==='true', matricule:document.getElementById('f_matricule').value.trim()||null, solde_conges:parseFloat(document.getElementById('f_solde').value), solde_rtt:parseFloat(document.getElementById('f_solde_rtt').value)||0, sexe:(document.getElementById('f_sexe')||{}).value||null, oeth:((document.getElementById('f_oeth')||{}).value==='true'), date_sortie:(document.getElementById('f_sortie')||{}).value||null };
+  var payload={ nom:nom, prenom:document.getElementById('f_prenom').value.trim(), role:_prim, roles:_roles, acces_services:_jetons, entite:document.getElementById('f_entite').value, poste:document.getElementById('f_poste').value.trim(), contrat:document.getElementById('f_contrat').value, shift_id:document.getElementById('f_shift').value, date_entree:document.getElementById('f_date').value||null, taux_horaire_charge:_num(document.getElementById('f_taux').value), email:document.getElementById('f_email').value.trim(), telephone:document.getElementById('f_tel').value.trim(), adresse:document.getElementById('f_adresse').value.trim(), actif:document.getElementById('f_actif').value==='true', matricule:document.getElementById('f_matricule').value.trim()||null, solde_conges:_num(document.getElementById('f_solde').value,175), solde_rtt:_num(document.getElementById('f_solde_rtt').value,0), sexe:(document.getElementById('f_sexe')||{}).value||null, oeth:((document.getElementById('f_oeth')||{}).value==='true'), date_sortie:(document.getElementById('f_sortie')||{}).value||null };
   if(!RH_CAN_WRITE) delete payload.taux_horaire_charge;   // jamais de taux depuis un compte sans droit d'écriture RH
   var pin=document.getElementById('f_pin').value.trim(); if(pin) payload.pin=pin;
   var url, method;

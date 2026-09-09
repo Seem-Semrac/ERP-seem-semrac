@@ -14,13 +14,15 @@ Le middleware appelle `canAccess(user, path, method)` sur **chaque** requête (h
 
 1. `perms` contient `all` (rôle **direction**) → **autorisé** (tout).
 2. Route **self-service** atelier (PIN dans le corps) → autorisé (`isSelfService`).
-3. `interlocuteurs` (contacts clients ET fournisseurs) → autorisé si écriture `rw` sur **commercial/achats/be** (cas multi-services).
-4. `serviceFor(path)` déduit le **service** de la route :
+3. `accesExplicites(perms)` est calculé **ici**, avant tout le reste : dès que la personne porte au moins un jeton `lire:`/`ecrire:`, ces jetons décident seuls — **y compris** pour `interlocuteurs`, `plans` et `habilitations`, qui les ignoraient jusqu'au 09/09/2026.
+4. `interlocuteurs` (contacts clients ET fournisseurs), **à défaut de jeton** → autorisé si écriture `rw` sur **commercial/achats/be** (cas multi-services).
+5. `serviceFor(path)` déduit le **service** de la route :
    - `/api/<famille>/…` → `API_FAM_SERVICE[famille]`
    - `/<segment>/…` (page) → `PAGE_SEG_SERVICE[segment]`
+   - `/dashboard/<segment>` → `DASHBOARD_SERVICE[segment]` — **toute** route `/dashboard/*` doit y figurer, faute de quoi elle retombe en « page inconnue » et s'ouvre à tout compte connecté.
    - routes explicitement neutres (`/api/me`, `/api/ged/file`, soumission `/api/validations`) → `__neutral__` (autorisé au connecté).
-5. **Défaut FAIL-CLOSED** (depuis l'audit 2026-07-04) : une route `/api/*` **non mappée** est **refusée** ; une page non mappée reste ouverte au connecté.
-6. Sinon : niveau du service dans `ROLE_MATRIX` — **écriture** (POST/PATCH/DELETE) exige `rw`, **lecture** (GET) accepte `r` ou `rw`. Multi-rôles → meilleur niveau.
+6. **Défaut FAIL-CLOSED** (depuis l'audit 2026-07-04) : une route `/api/*` **non mappée** est **refusée** ; une page non mappée reste ouverte au connecté.
+7. Sinon : niveau du service dans `ROLE_MATRIX` — **écriture** (POST/PATCH/DELETE) exige `rw`, **lecture** (GET) accepte `r` ou `rw`. Multi-rôles → meilleur niveau.
 
 > ⚠ **Règle d'or pour toute nouvelle route API** : ajouter sa **famille** à `API_FAM_SERVICE` (sinon elle est refusée par défaut). Voir skill `erp-new-module`.
 
@@ -43,14 +45,16 @@ Le middleware appelle `canAccess(user, path, method)` sur **chaque** requête (h
 | **operateur** | — (aucune) | production, oas, qualite, expeditions |
 
 ## Cas particuliers
-- **`plans` (Plan/Bâtiment)** : lecture ouverte à tout connecté ; écriture BE/Production/Maintenance/Qualité/Direction.
-- **`habilitations`** : géré par RH **et** Qualité (jeton `habilitations`), sans donner accès au reste de la RH.
+- **`plans` (Plan/Bâtiment)** : **sans jeton**, lecture ouverte à tout connecté et écriture BE/Production/Maintenance/Qualité/Direction. **Avec jetons**, `lire:plans` / `ecrire:plans` décident seuls.
+- **`habilitations`** : **sans jeton**, géré par RH **et** Qualité (jeton `habilitations`), sans donner accès au reste de la RH. **Avec jetons**, suit le niveau accordé sur `rh` ou `qualite` — sinon fermer la RH par les cases laissait les habilitations grandes ouvertes.
 - **`pointage`** : borne self-service (matricule+PIN dans le corps) → ouvert à tout connecté.
 - **GED** : ouverture d'un fichier (`/api/ged/file`) ouverte au connecté ; upload/suppression réservés au BE.
 - **Validations** : la **soumission** (`POST /api/validations`) est ouverte au connecté (n'importe quel service peut soumettre un jalon) ; la **décision** (`/decision`) est réservée à la Direction (garde inline + non neutre).
 
 ## Filtrage du menu
-`navServices(user)` retourne les services **lisibles** → la sidebar n'affiche que ce à quoi l'utilisateur a droit (`plans` visible par tous).
+`navServices(user)` retourne les services **lisibles** → la sidebar n'affiche que ce à quoi l'utilisateur a droit. Sans jeton, `plans` reste visible par tous ; avec jetons, il suit `lire:plans` comme les autres. Menu et `canAccess()` disent donc exactement la même chose.
+
+> ⚠ Les entrées de sidebar **sans service réel** (Accueil, Tableaux de bord, Pointage, Manuels) portent `data-svc=""` et ne sont jamais masquées. Une entrée dont le `data-svc` déduit de l'URL n'existe pas dans `MENU_SERVICES` est masquée **pour tout le monde** — c'était le cas du hub `/dashboard` jusqu'au 09/09/2026. Pour un lien hors nomenclature des services, poser `svc: ''` dans `SIDEBAR_ITEMS`.
 
 ---
 
@@ -66,11 +70,30 @@ La fiche salarié (**RH › Employés**) porte un tableau des **15 services**, c
 
 1. `perms` contient `all` (Direction) → accès total, jamais restreint ;
 2. route self-service atelier → autorisée ;
-3. **au moins un jeton `lire:` ou `ecrire:` → ces listes font foi** et remplacent la matrice des rôles pour l'accès aux services : elles peuvent aussi bien **ouvrir** un service que **fermer** un service que le rôle accordait ;
+3. **au moins un jeton `lire:` ou `ecrire:` → ces listes font foi** et remplacent la matrice des rôles pour l'accès aux services : elles peuvent aussi bien **ouvrir** un service que **fermer** un service que le rôle accordait. Cela vaut pour **les 15 services sans exception**, `plans` et `habilitations` compris ;
 4. aucun jeton → la matrice `ROLE_MATRIX` s'applique, comme avant.
+
+⚠ **Rôle Direction** : le jeton `all` court-circuite tout, en tête de `canAccess()`. Les cases sont bien enregistrées mais restent **sans effet** tant que le rôle principal est Direction — la fiche affiche désormais un avertissement quand ce rôle est choisi.
+
+⚠ **Prise d'effet différée** : `perms` est figé dans le cookie de session au moment de la **connexion** (`index.tsx`, construction du JWT). Un changement de droits ne s'applique donc qu'à la **prochaine connexion** de la personne concernée — jusqu'à 12 h. Vrai dans les deux sens : un accès retiré reste utilisable jusque-là. Corriger cela suppose une version de droits vérifiée à chaque requête ; ce n'est pas fait.
 
 `ecrire:<svc>` implique `lire:<svc>` : inutile de cocher le service des deux côtés.
 
 `navServices()` suit la même règle, donc le menu latéral reflète exactement les droits réels.
 
-**Vérifié par 10 cas** : comportement historique préservé sans jeton (3 cas), ouverture en lecture puis en écriture, écriture impliquant la lecture, fermeture d'un service que le rôle ouvrait, Direction jamais restreinte, et filtrage du menu.
+**Vérifié par 36 cas** : comportement historique préservé sans jeton (9 cas) ; ouverture **et** fermeture par jeton sur les services ordinaires comme sur `plans`, `habilitations`, `interlocuteurs` et `/dashboard/environnement` ; écriture impliquant la lecture ; Direction jamais restreinte ; et un contrôle de **cohérence menu ↔ `canAccess` sur 75 couples** (5 profils × 15 services), qui garantit que la sidebar ne ment jamais sur les droits réels.
+
+### Aller-retour de la fiche (le piège qui a coûté le plus cher)
+
+Les jetons transitent par une chaîne à quatre maillons ; **casser un seul rend la fonction inutilisable sans jamais lever d'erreur** :
+
+| # | Maillon | Fichier |
+|---|---|---|
+| 1 | `select('*')` sur `salaries` | `queries.ts` · `getSalaries()` |
+| 2 | `autorisations` conservé dans l'objet Employé | `index.tsx` · `mapSalarieToEmploye()` |
+| 3 | `autorisations` **projeté dans `RH_EMPS`** envoyé au navigateur | `rh_service.tsx` · `pageRHEmployes()` |
+| 4 | `acces_services` fusionné côté serveur — **POST *et* PATCH** | `index.tsx` · `jetonsAccesServices()` |
+
+Le maillon 3 manquait : les cases revenaient toujours vides et, comme `rhSaveFiche()` recalcule les jetons depuis les cases affichées, **le moindre ré-enregistrement de la fiche effaçait les accès déjà accordés**. Le maillon 4 manquait côté POST : les cases cochées à la création n'étaient jamais écrites.
+
+> **Règle générale** : toute projection `sjX(rows.map(…))` alimentant un formulaire doit contenir **tous** les champs que ce formulaire ré-enregistre. Un champ absent n'est pas seulement « pas réaffiché » : il est **écrasé au prochain enregistrement**. Même cause pour `sexe` / `oeth` / `date_sortie`, corrigés dans la foulée.

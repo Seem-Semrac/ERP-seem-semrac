@@ -7479,6 +7479,8 @@ function mapSalarieToEmploye(s: any): any {
     date_naissance: s.date_naissance,
     urgence_contact: s.urgence_contact, urgence_tel: s.urgence_tel,
     solde_conges: s.solde_conges, solde_rtt: s.solde_rtt,
+    // Données sociales RSE : sans elles la fiche les réaffiche vides… puis les efface au prochain enregistrement.
+    sexe: s.sexe ?? null, oeth: s.oeth === true, date_sortie: s.date_sortie ?? null,
     autorisations: s.autorisations || [],
     competences: s.competences || [], habilitations: s.habilitations || [],
     has_pin: !!s.pin,
@@ -7576,6 +7578,15 @@ function autorisationsUnion(roles: string[]): string[] {
   for (const r of roles) for (const a of autorisationsPourRole(r)) set.add(a)
   return [...set]
 }
+// Jetons d'accès par service cochés dans la fiche salarié (« lire:<svc> » / « ecrire:<svc> »).
+// Filtrés sur les services réellement connus du menu : un jeton inconnu est ignoré, jamais stocké.
+function jetonsAccesServices(b: any): string[] {
+  if (!Array.isArray(b?.acces_services)) return []
+  const svc = new Set(MENU_SERVICES_PUBLIC)
+  return [...new Set((b.acces_services as any[])
+    .map((x: any) => String(x || '').trim())
+    .filter((t: string) => /^(lire|ecrire):/.test(t) && svc.has(t.split(':')[1])))]
+}
 // Rôles depuis le body (roles[] sinon role seul), filtrés aux rôles connus, dédupliqués. Le 1er = primaire.
 function rolesFromBody(b: any): string[] {
   const raw: any[] = Array.isArray(b.roles) && b.roles.length ? b.roles : [b.role]
@@ -7640,7 +7651,7 @@ app.post('/api/rh/salarie', async (c) => {
     contrat: normContrat(b.contrat),
     shift_id: b.shift_id || (isOp ? 'matin' : 'journee'),
     taux_horaire_charge: b.taux_horaire_charge != null ? Number(b.taux_horaire_charge) : null,
-    autorisations: autorisationsUnion(roles),
+    autorisations: [...new Set([...autorisationsUnion(roles), ...jetonsAccesServices(b)])],   // les cases cochées à la création étaient jusqu'ici perdues
     competences: Array.isArray(b.competences) ? b.competences : [],
     habilitations: Array.isArray(b.habilitations) ? b.habilitations : [],
     solde_conges: b.solde_conges != null ? Number(b.solde_conges) : 175,  // heures (25 j × 7 h)
@@ -7708,20 +7719,25 @@ app.patch('/api/rh/salarie/:id', async (c) => {
     patch.role = roles[0]                       // rôle primaire
     patch.metier = roleToMetier(roles[0])
     patch.autorisations = autorisationsUnion(roles)   // union des permissions sur tous les rôles
-    // Accès par service choisis dans la fiche salarié (« lire:<svc> » / « ecrire:<svc> »).
-    // Ils s'ajoutent aux jetons du rôle et, dès qu'il y en a au moins un, deviennent
-    // la référence pour l'accès aux services (voir canAccess dans auth.ts).
-    if (Array.isArray(b.acces_services)) {
-      const svc = new Set(MENU_SERVICES_PUBLIC)
-      const jetons = (b.acces_services as any[])
-        .map((x: any) => String(x || '').trim())
-        .filter((t: string) => /^(lire|ecrire):/.test(t) && svc.has(t.split(':')[1]))
-      patch.autorisations = [...new Set([...patch.autorisations, ...jetons])]
-    }
     const isOp = roles.includes('operateur') || roles.includes('oas')
     patch.entite = isOp ? (b.entite === 'Semrac' ? 'Semrac' : 'Seem') : 'Support'
   } else if ('entite' in b) {
     patch.entite = b.entite === 'Seem' || b.entite === 'Semrac' ? b.entite : 'Support'
+  }
+  // Accès par service cochés dans la fiche salarié (« lire:<svc> » / « ecrire:<svc> »). Traités
+  // HORS du bloc des rôles : un PATCH qui ne touche qu'aux accès doit les enregistrer aussi.
+  // Dès qu'il en existe un, ils font foi pour l'accès aux services (voir canAccess dans auth.ts).
+  if (Array.isArray(b.acces_services)) {
+    let base: string[]
+    if (Array.isArray(patch.autorisations)) base = patch.autorisations
+    else {
+      // Rôles inchangés : on repart des autorisations en base, purgées de leurs anciens jetons
+      // de service — sinon décocher une case ne retirerait jamais le droit correspondant.
+      const actuel: any = await getSalarie(id).catch(() => null)
+      base = (Array.isArray(actuel?.autorisations) ? actuel.autorisations : [])
+        .filter((t: any) => !/^(lire|ecrire):/.test(String(t || '')))
+    }
+    patch.autorisations = [...new Set([...base, ...jetonsAccesServices(b)])]
   }
   if (!Object.keys(patch).length) return c.json({ ok: false, error: 'Aucun champ' }, 400)
   const { data, error } = await updateSalarie(id, patch)

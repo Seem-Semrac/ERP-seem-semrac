@@ -21,7 +21,7 @@
 | Téléphone | texte | Non | Le numéro de téléphone. | 06 12 34 56 78 |
 | Statut | liste déroulante (Actif, Inactif) | Non | Indique si le salarié est présent dans les effectifs. Un salarié « Inactif » n'apparaît plus comme actif. | Actif |
 | Adresse | texte | Non | L'adresse postale du salarié. | 12 rue des Fleurs, 74000 |
-| Rôles supplémentaires | cases à cocher (mêmes 12 rôles que « Rôle principal ») | Non | Cochez des rôles pour **ajouter** des droits d'accès en plus du rôle principal. Le rôle principal fixe le métier ; les cases ajoutent des permissions. | Cocher « Qualité » |
+| Accès par service | deux cases à cocher — **Lire** et **Écrire** — pour chacun des 15 services | Non | Affine ou remplace les droits du rôle. Cocher **Écrire** coche et verrouille **Lire**. Tout laisser vide = la personne garde exactement les droits de son rôle ; dès qu'une case est cochée, ce tableau décide seul et peut aussi **fermer** un service que le rôle accordait. Sans effet sur un rôle Direction (accès total). Prise d'effet à la prochaine connexion de la personne. | Cocher « Lire » sur Achats et « Écrire » sur Qualité |
 | Identifiant / Matricule | texte | Non | Le code personnel utilisé pour se connecter, pointer et solder les bons. | OP-010 |
 | Code PIN (MDP) | texte | Non | Le mot de passe (chiffres) associé au matricule. Laissez vide pour ne pas le changer lors d'une modification. | 1234 |
 | Solde congés payés (h) | nombre | Non | Le nombre d'heures de congés payés disponibles. Par défaut 175. | 175 |

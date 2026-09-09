@@ -4,19 +4,49 @@
     {
       "name": "ERP Dev Server",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js", "run", "preview"],
+      "runtimeArgs": [
+        "C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js",
+        "run",
+        "preview"
+      ],
       "port": 8788
+    },
+    {
+      "name": "ERP Captures (sans auth)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "wrangler",
+        "pages",
+        "dev",
+        "dist",
+        "--binding",
+        "AUTH_ENFORCE=off",
+        "--port",
+        "8789"
+      ],
+      "port": 8789
     },
     {
       "name": "Presentation Server",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["serve", "presentation", "-l", "3333"],
+      "runtimeArgs": [
+        "serve",
+        "presentation",
+        "-l",
+        "3333"
+      ],
       "port": 3333
     },
     {
       "name": "Audit Report",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8799", "--directory", "C:/Users/eddys/Desktop/Audit-ERP-SeemSemrac"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8799",
+        "--directory",
+        "C:/Users/eddys/Desktop/Audit-ERP-SeemSemrac"
+      ],
       "port": 8799
     }
   ]

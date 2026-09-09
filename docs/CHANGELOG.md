@@ -2,6 +2,57 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-09 — Les droits d'accès par service ne tenaient pas (et s'effaçaient tout seuls)
+
+**Signalé** : « je coche des cases, je valide, je reviens : plus rien n'est coché. »
+
+### La cause — une projection tronquée
+
+La fiche salarié se remplit depuis un tableau JS `RH_EMPS` projeté côté serveur. Cette projection listait 21 champs, **sans `autorisations`**. `rhOpenFiche()` lisant `e.autorisations`, la valeur était toujours `undefined` → `_cocher()` **décochait activement** toutes les cases à chaque ouverture.
+
+Les droits étaient pourtant bien enregistrés en base et bien appliqués par le RBAC : c'est l'affichage qui mentait.
+
+### L'effet de bord, plus grave que le symptôme
+
+`rhSaveFiche()` recalcule les jetons **depuis les cases affichées**. Comme elles revenaient vides, **tout ré-enregistrement de la fiche effaçait en base les accès déjà accordés** — y compris un enregistrement fait pour une tout autre raison (corriger un téléphone, un poste, un solde de congés). Perte de données silencieuse, sans le moindre message d'erreur.
+
+### Corrigé
+
+| # | Correctif | Fichier |
+|---|---|---|
+| 1 | `autorisations` ajouté à la projection `RH_EMPS` | `rh_service.tsx` |
+| 2 | `POST /api/rh/salarie` ignorait `acces_services` : les cases cochées **à la création** n'étaient jamais écrites | `index.tsx` |
+| 3 | Helper `jetonsAccesServices()` factorisé, la fusion sort du bloc conditionnel des rôles, et décocher une case **retire** réellement le droit | `index.tsx` |
+| 4 | `sexe` / `oeth` / `date_sortie` absents de `mapSalarieToEmploye()` — **même bug, mêmes conséquences** sur les données sociales RSE | `index.tsx` |
+| 5 | Contrat : le select proposait `Apprenti`/`Interim`/`Stage`, la base stocke `apprenti`/`interim`/`stagiaire` → le champ revenait vide puis basculait en CDI au ré-enregistrement | `rh_service.tsx` |
+| 6 | `parseFloat(…)||null` transformait un **taux horaire à 0** en valeur vide ; un solde vide donnait `NaN` | `rh_service.tsx` |
+
+### Les cases mentaient aussi sur trois services
+
+`canAccess()` traitait `plans`, `habilitations` et `interlocuteurs` **avant** de lire les jetons. Conséquences réelles :
+
+- cocher ou décocher **Plan / Bâtiment** n'avait strictement aucun effet ;
+- fermer la RH par les cases laissait **`/rh/habilitations` et les certifications grandes ouvertes** ;
+- fermer le Commercial laissait l'accès aux **contacts clients et fournisseurs**.
+
+Les jetons sont désormais évalués **en tête**, avant tous les cas particuliers, et `navServices()` suit la même règle — le menu ne peut plus diverger des droits réels.
+
+### Deux trous d'accès trouvés au passage
+
+- **`/dashboard/environnement`** n'était pas dans `DASHBOARD_SERVICE` : il retombait en « page inconnue » et s'ouvrait à **tout compte connecté**, y compris à qui on avait explicitement refusé l'Environnement.
+- **« Tableaux de bord »** disparaissait de la sidebar pour **tout le monde** : son `data-svc` déduit de l'URL valait `dashboard`, qui n'existe pas dans `MENU_SERVICES`. `SIDEBAR_ITEMS` accepte désormais un `svc` explicite.
+
+### Deux limites assumées, signalées dans l'interface
+
+- **Rôle Direction** : le jeton `all` court-circuite tout. Les cases sont enregistrées mais sans effet — la fiche affiche maintenant un avertissement quand ce rôle est choisi.
+- **Prise d'effet** : `perms` est figé dans le cookie de session à la connexion. Un changement de droits ne s'applique qu'à la **prochaine connexion** de la personne (jusqu'à 12 h), dans les deux sens. Non corrigé : cela suppose une version de droits vérifiée à chaque requête.
+
+### Vérification
+
+`tsc` 0 erreur · build ✓ · harnais **61 PASS / 0 FAIL** · **36 cas RBAC** dont un contrôle de cohérence menu ↔ `canAccess` sur **75 couples** (5 profils × 15 services) · **13 contrôles d'aller-retour** rejouant `_cocher()` et `rhSaveFiche()` sur la page réellement rendue.
+
+> **Règle à retenir** : toute projection `sjX(rows.map(…))` qui alimente un formulaire doit contenir **tous** les champs que ce formulaire ré-enregistre. Un champ absent n'est pas « seulement pas réaffiché » — il est **écrasé au prochain enregistrement**.
+
 ## 2026-09-09 — Correctif : `erp-docker.sh` pilotait une AUTRE stack que `install.sh`
 
 - **Symptôme sur la VM** : `erp-docker.sh maj` échouait sur `Conflict. The container name "/erp-kong" is already in use`, précédé de `a network with name erp-seem-semrac exists but was not created for project "erp-seem-semrac"` — et surtout de trois lignes **`Volume … Created`**.
