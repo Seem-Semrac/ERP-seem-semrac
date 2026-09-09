@@ -17,7 +17,16 @@ if [ -n "${ERP_INSTANCE:-}" ]; then
   export COMPOSE_PROJECT_NAME="erp-$ERP_INSTANCE"
 else
   ENV_FILE="${ENV_FILE:-.env}"
-  export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-erp}"
+  # On DETECTE la stack existante au lieu de la supposer. Selon la machine, elle peut
+  # porter « erp » (pose par install.sh sur la VM) OU le nom declare dans le
+  # docker-compose.yml (« erp-seem-semrac », cas d'un poste de dev demarre avec un
+  # simple `docker compose up`). Se tromper de nom ne provoque aucune erreur visible :
+  # Compose demarre simplement une SECONDE stack, vide, a cote de la vraie.
+  if [ -z "${COMPOSE_PROJECT_NAME:-}" ]; then
+    _proj="$(docker inspect erp-db --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null | head -1 | tr -d '')"
+    export COMPOSE_PROJECT_NAME="${_proj:-erp}"
+    [ -n "$_proj" ] && echo "· stack detectee : projet « $_proj »"
+  fi
 fi
 [ -f "$ENV_FILE" ] || { echo "→ $ENV_FILE absent : copie depuis .env.example"; cp .env.example "$ENV_FILE"; }
 # Toutes les commandes compose passent par ce fichier d'environnement.

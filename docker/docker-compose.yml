@@ -262,6 +262,10 @@ services:
     build:
       context: ..
       dockerfile: docker/app.Dockerfile
+      args:
+        # Renseignes par erp-docker.sh : permettent a /api/version de dire quel code tourne.
+        GIT_COMMIT: ${GIT_COMMIT:-}
+        BUILD_DATE: ${BUILD_DATE:-}
     restart: unless-stopped
     depends_on:
       db:
