@@ -999,6 +999,24 @@ function panelReceptions(bcs: any[], bcsAttendus: any[], receptions: any[], bds:
 
   const H = (cols: string[]) => `<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#fafafa;">${cols.map(c => c.startsWith('#') ? THC(c.slice(1)) : TH(c)).join('')}</tr></thead><tbody>`
 
+  // ── 6. Toutes les AUTRES commandes ────────────────────────────────────────
+  // Les deux files ci-dessus ne montrent que les commandes ÉMISES en attente du colis.
+  // Une commande déjà REÇUE, ou une proforma en ATTENTE DE PAIEMENT, n'apparaissait donc
+  // nulle part ici — et sa date d'arrivée n'était modifiable depuis aucun écran.
+  const _vus = new Set([...(bcsAttendus || []).map((b: any) => String(b.id)), ...bcVal.map((b: any) => String(b.id))])
+  const autresBc = (bcs || []).filter((b: any) => !_vus.has(String(b.id)))
+  const rowsAutres = autresBc.map((b: any) => tr([
+    TD(`<div style="font-weight:700;color:#475569;">${escX(b.num_bc ?? b.id)}</div><div style="font-size:.65rem;color:#94a3b8;">${b.type === 'st' ? 'Sous-traitant' : 'Fournisseur'}</div>`),
+    TD(escX(b.fournisseur ?? '—')),
+    TD(`<span style="font-size:.75rem;color:#475569;">${escX(b.articles ?? '—')}</span>`),
+    TDC(`<button onclick="expOpenArrivee('${escX(b.id)}')" title="Modifier la date d'arrivée prévue" style="background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:6px;font:inherit;">`
+      + (b.date_livraison_prevue ? `<span style="font-weight:700;color:#334155;">${_frDate(b.date_livraison_prevue)}</span>` : '<span style="color:#cbd5e1;">à planifier</span>')
+      + `<i class="fas fa-pen" style="margin-left:6px;font-size:.6rem;color:#cbd5e1;"></i></button>`),
+    TDC(b.date_reception_reelle ? `<span style="font-weight:700;color:#15803d;">${_frDate(b.date_reception_reelle)}</span>` : '<span style="color:#cbd5e1;">—</span>'),
+    TDC(bcStatutBadge(b.statut)),
+    TDC(`<button onclick="bcPdf('${escX(b.id)}')" style="background:#f5f3ff;color:#6d28d9;border:none;border-radius:7px;padding:5px 9px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-file-pdf"></i></button>`),
+  ])).join('')
+
   return `
   <div id="exp-panel-receptions" style="display:none;">
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 16px;margin-bottom:18px;font-size:.8rem;color:#1d4ed8;">
@@ -1016,6 +1034,9 @@ function panelReceptions(bcs: any[], bcsAttendus: any[], receptions: any[], bds:
 
     ${bcVal.length ? card('En attente de validation fournisseur', 'fa-hourglass-half', '#f59e0b', bcVal.length, 'commandes envoyées, pas encore confirmées',
       H(['N° BC', 'Fournisseur', 'Articles', '#Émis le', '#Arrivée prévue', '#Action']) + rowsVal + '</tbody></table>') : ''}
+
+    ${autresBc.length ? card('Autres commandes — date modifiable', 'fa-calendar-pen', '#64748b', autresBc.length, 'commandes deja recues, en attente de paiement, ou hors file : leur date reste corrigeable ici',
+      H(['N° BC', 'Fournisseur / ST', 'Articles', '#Arrivée prévue', '#Reçu le', '#Statut', '#BC']) + rowsAutres + '</tbody></table>') : ''}
 
     ${card('Arrivées enregistrées', 'fa-clipboard-check', '#16a34a', recAll.length, 'historique des réceptions et retours reçus',
       H(['N° BL', 'Fournisseur / Client', 'Pièce / Articles', '#Reçu le', '#Qté', '#Contrôle']) + (rowsRec || vide(6, 'Aucune arrivée enregistrée')) + '</tbody></table>')}
