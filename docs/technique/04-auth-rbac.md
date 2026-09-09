@@ -56,7 +56,11 @@ Le middleware appelle `canAccess(user, path, method)` sur **chaque** requête (h
 
 ## Accès par service définis sur la personne (depuis le 09/09/2026)
 
-La fiche salarié (**RH › Employés**) porte deux listes à sélection multiple : **Peut LIRE** et **Peut ÉCRIRE**, listant les 15 services. Elles se rangent dans `salaries.autorisations` sous forme de jetons `lire:<service>` et `ecrire:<service>` — aucune colonne nouvelle, la colonne est déjà `jsonb`.
+La fiche salarié (**RH › Employés**) porte un tableau des **15 services**, chacun avec deux **cases à cocher** : *Lire* et *Écrire*.
+
+**Cocher Écrire coche automatiquement Lire et la verrouille** — on ne peut pas écrire sans lire. Décocher Écrire rend la lecture de nouveau libre. La réciproque n'existe pas : on peut lire sans écrire, et faire passer quelqu'un de la lecture à l'écriture.
+
+> Le bloc **« Rôles supplémentaires »** a été retiré de la fiche : l'accès se définit désormais service par service, ce qui rend le cumul de rôles inutile. Le **rôle principal** reste, il fixe le métier et l'entité. Elles se rangent dans `salaries.autorisations` sous forme de jetons `lire:<service>` et `ecrire:<service>` — aucune colonne nouvelle, la colonne est déjà `jsonb`.
 
 **Règle appliquée par `canAccess()`** — dans cet ordre :
 

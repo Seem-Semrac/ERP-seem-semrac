@@ -822,30 +822,18 @@ export function pageRHEmployes(dbEmps?: Employe[], dbOrphans?: any[], canWriteRH
           <div><label style="${FLBL}">Téléphone</label><input id="f_tel" type="text" style="${FINP}"/></div>
           <div><label style="${FLBL}">Statut</label><select id="f_actif" style="${FINP}"><option value="true">Actif</option><option value="false">Inactif</option></select></div>
           <div style="grid-column:1/-1;"><label style="${FLBL}">Adresse</label><input id="f_adresse" type="text" style="${FINP}"/></div>
-          <div style="grid-column:1/-1;">
-            <label style="${FLBL}">Rôles supplémentaires <span style="font-weight:500;text-transform:none;color:#94a3b8;">(cumul des accès — optionnel)</span></label>
-            <div style="display:flex;flex-wrap:wrap;gap:7px;">
-              ${Object.entries(RH_ROLE_LABELS).map(([v, l]) => `<label style="display:inline-flex;align-items:center;gap:5px;font-size:.75rem;color:#374151;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:4px 10px;cursor:pointer;"><input type="checkbox" class="f-role-extra" value="${v}" style="width:14px;height:14px;accent-color:#6366f1;"/>${l}</label>`).join('')}
-            </div>
-            <div style="font-size:.66rem;color:#94a3b8;margin-top:4px;"><i class="fas fa-circle-info" style="margin-right:4px;"></i>Le rôle principal fixe le métier et l'entité ; les rôles cochés <strong>ajoutent</strong> leurs droits d'accès (permissions cumulées).</div>
-          </div>
         </div>
         <div style="margin-top:14px;border:1.5px solid #e2e8f0;border-radius:10px;padding:12px;background:#f8fafc;">
           <div style="font-size:.72rem;font-weight:800;color:#334155;margin-bottom:4px;"><i class="fas fa-user-shield" style="margin-right:6px;color:#6366f1;"></i>Accès par service — au-delà des rôles</div>
           <div style="font-size:.66rem;color:#94a3b8;margin-bottom:10px;">Maintenez <strong>Ctrl</strong> (ou <strong>Cmd</strong>) pour sélectionner plusieurs services. Laissez les deux listes vides pour vous en tenir aux droits du rôle.</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div>
-              <label style="${FLBL}"><i class="fas fa-eye" style="margin-right:5px;color:#0891b2;"></i>Peut LIRE</label>
-              <select id="f_lire" multiple size="8" style="${FINP}height:auto;padding:6px;">
-                ${Object.entries(RH_SERVICES).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}
-              </select>
-            </div>
-            <div>
-              <label style="${FLBL}"><i class="fas fa-pen" style="margin-right:5px;color:#c2410c;"></i>Peut ÉCRIRE</label>
-              <select id="f_ecrire" multiple size="8" style="${FINP}height:auto;padding:6px;">
-                ${Object.entries(RH_SERVICES).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}
-              </select>
-            </div>
+          <div style="display:grid;grid-template-columns:1fr 74px 74px;gap:2px 8px;align-items:center;">
+            <div></div>
+            <div style="font-size:.64rem;font-weight:800;color:#0891b2;text-align:center;text-transform:uppercase;"><i class="fas fa-eye" style="margin-right:3px;"></i>Lire</div>
+            <div style="font-size:.64rem;font-weight:800;color:#c2410c;text-align:center;text-transform:uppercase;"><i class="fas fa-pen" style="margin-right:3px;"></i>Écrire</div>
+            ${Object.entries(RH_SERVICES).map(([v, l]) => `
+            <div style="font-size:.78rem;color:#374151;padding:3px 0;border-top:1px solid #eef2f7;">${l}</div>
+            <div style="text-align:center;border-top:1px solid #eef2f7;"><input type="checkbox" class="f-acc-lire" data-svc="${v}" style="width:15px;height:15px;accent-color:#0891b2;cursor:pointer;"/></div>
+            <div style="text-align:center;border-top:1px solid #eef2f7;"><input type="checkbox" class="f-acc-ecrire" data-svc="${v}" onchange="rhAccesEcrireChange(this)" style="width:15px;height:15px;accent-color:#c2410c;cursor:pointer;"/></div>`).join('')}
           </div>
           <div style="font-size:.66rem;color:#94a3b8;margin-top:8px;"><i class="fas fa-circle-info" style="margin-right:4px;"></i>Un service en <strong>écriture</strong> donne aussi la lecture. Dès qu'au moins un service est choisi, ces deux listes <strong>remplacent</strong> les droits du rôle : elles définissent seules ce que la personne voit et modifie.</div>
         </div>
@@ -894,6 +882,27 @@ function rhRoleChange(){
   document.getElementById('f_entite_wrap').style.display=(role==='operateur'||role==='oas')?'block':'none';
   var p=document.getElementById('f_role_perms'); if(p) p.innerHTML='<i class="fas fa-shield-alt" style="margin-right:4px;"></i>Autorisations ERP : <strong>'+(RH_PERMS[role]||'—')+'</strong>';
 }
+// Ecrire implique lire : cocher l'ecriture coche la lecture et la verrouille (on ne peut pas
+// ecrire sans lire). Decocher l'ecriture rend la lecture de nouveau libre — l'inverse n'est
+// donc pas vrai : on peut lire sans ecrire, et faire passer quelqu'un de la lecture a l'ecriture.
+function rhAccesEcrireChange(cb){
+  var svc=cb.getAttribute('data-svc');
+  var lire=document.querySelector('.f-acc-lire[data-svc="'+svc+'"]');
+  if(!lire) return;
+  if(cb.checked){
+    lire.checked=true;
+    lire.disabled=true;
+    lire.title='Lecture incluse : on ne peut pas ecrire sans lire.';
+    lire.style.opacity='.55';
+    lire.style.cursor='not-allowed';
+  } else {
+    lire.disabled=false;
+    lire.title='';
+    lire.style.opacity='';
+    lire.style.cursor='pointer';
+  }
+}
+
 function rhOpenFiche(id){
   var creating=!id;
   document.getElementById('f_id').value=id||'';
@@ -905,16 +914,17 @@ function rhOpenFiche(id){
   document.getElementById('f_prenom').value=e.prenom||'';
   document.getElementById('f_role').value=e.role||'operateur';
   var _rs=Array.isArray(e.roles)?e.roles:[]; var _prim=e.role||'operateur';
-  document.querySelectorAll('.f-role-extra').forEach(function(cb){ cb.checked = _rs.indexOf(cb.value)>=0 && cb.value!==_prim; });
+  // Les roles supplementaires ont disparu : l'acces se definit service par service ci-dessous.
   // Accès par service : jetons « lire:<service> » / « ecrire:<service> » dans autorisations.
   var _au=Array.isArray(e.autorisations)?e.autorisations:[];
-  var _sel=function(selectId, prefixe){
-    var el=document.getElementById(selectId); if(!el) return;
+  var _cocher=function(classe, prefixe){
     var choisis={};
     _au.forEach(function(t){ t=String(t||''); if(t.indexOf(prefixe)===0) choisis[t.slice(prefixe.length)]=1; });
-    for(var i=0;i<el.options.length;i++){ el.options[i].selected = !!choisis[el.options[i].value]; }
+    document.querySelectorAll('.'+classe).forEach(function(cb){ cb.checked = !!choisis[cb.getAttribute('data-svc')]; });
   };
-  _sel('f_lire','lire:'); _sel('f_ecrire','ecrire:');
+  _cocher('f-acc-lire','lire:'); _cocher('f-acc-ecrire','ecrire:');
+  // Ecrire implique lire : on aligne l'affichage a l'ouverture de la fiche.
+  document.querySelectorAll('.f-acc-ecrire').forEach(function(cb){ rhAccesEcrireChange(cb); });
   document.getElementById('f_entite').value=e.activite==='Semrac'?'Semrac':'Seem';
   document.getElementById('f_poste').value=e.poste||'';
   document.getElementById('f_contrat').value=e.type_contrat||'CDI';
@@ -946,9 +956,9 @@ function rhSaveFiche(){
   var id=document.getElementById('f_id').value;
   var nom=document.getElementById('f_nom').value.trim(); if(!nom){ pushNotif('err','fa-exclamation-circle','Nom requis.'); return; }
   var _prim=document.getElementById('f_role').value;
-  var _extras=[].slice.call(document.querySelectorAll('.f-role-extra:checked')).map(function(x){return x.value;});
-  var _vals=function(selectId){ var el=document.getElementById(selectId); if(!el) return []; return [].slice.call(el.selectedOptions||[]).map(function(o){return o.value;}); };
-  var _lire=_vals('f_lire'), _ecrire=_vals('f_ecrire');
+  var _extras=[];   // plus de roles supplementaires : l'acces se definit par service
+  var _cases=function(classe){ return [].slice.call(document.querySelectorAll('.'+classe+':checked')).map(function(x){return x.getAttribute('data-svc');}); };
+  var _lire=_cases('f-acc-lire'), _ecrire=_cases('f-acc-ecrire');
   // L'écriture implique la lecture : inutile de cocher les deux côtés pour un même service.
   var _jetons=_ecrire.map(function(v){return 'ecrire:'+v;}).concat(_lire.filter(function(v){return _ecrire.indexOf(v)<0;}).map(function(v){return 'lire:'+v;}));
   var _roles=[_prim].concat(_extras.filter(function(r){return r!==_prim;}));

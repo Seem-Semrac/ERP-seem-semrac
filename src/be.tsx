@@ -511,7 +511,7 @@ export const pageServiceBE = (
         <span style="font-size:.72rem;color:#6b21a8;flex:1;min-width:200px;"><i class="fas fa-info-circle" style="margin-right:5px;"></i>Crée une nouvelle révision avec les modifications en cours. <strong>L'ancienne révision n'est pas effacée</strong> — elle reste récupérable via la liste déroulante d'indice.</span>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+      <div style="display:grid;grid-template-columns:minmax(340px,0.78fr) minmax(0,1.22fr);gap:20px;">
 
         <!-- COL GAUCHE : IDENTITÉ + FOURNITURES -->
         <div style="display:flex;flex-direction:column;gap:16px;">

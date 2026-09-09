@@ -29,6 +29,8 @@ Nomenclatures (BOM), analyse des DT, préparation technique, références.
 <!-- auto:notes -->
 Masse en g ; temps en millièmes d'heure ; réglage = coût FIXE/lot ; prix matière auto <3 mois sinon RFQ ; indices A/B/C ; drag-drop des process.
 
+Le formulaire nomenclature est en **deux colonnes** : saisie des champs à gauche (`minmax(340px, 0.78fr)`), déclaration des process et gamme à droite (`minmax(0, 1.22fr)`) — la gamme porte 10 colonnes depuis l'ajout de ROP/RGM et a besoin de la place.
+
 **Deux temps de réglage** depuis le 09/09/2026 — la gamme distingue **ROP** (réglage opérateur, imputé au **taux MO**) et **RGM** (réglage machine, imputé au **taux machine**). Un réglage occupe souvent les deux simultanément, ce que le champ unique ne permettait pas d'exprimer. Les deux restent des **coûts fixes par lot**, jamais multipliés par la quantité.
 
 | Forme d'étape | ROP | RGM |

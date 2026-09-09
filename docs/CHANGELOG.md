@@ -2,6 +2,23 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-09 — Droits en cases à cocher · rôles supplémentaires retirés · gamme élargie
+
+### 1. Nomenclatures — la colonne des process gagne en largeur
+Les deux colonnes étaient à `1fr 1fr`. La gamme porte **10 colonnes** depuis l'ajout de ROP/RGM et se retrouvait à l'étroit ; la colonne de gauche n'est que de la saisie de champs. Réparti en `minmax(340px, 0.78fr)` / `minmax(0, 1.22fr)` : le `minmax` garantit que la colonne gauche ne se tasse pas sous 340 px et que la droite peut se rétracter sans déborder.
+
+### 2. Fiche salarié — cases à cocher au lieu des listes multiples
+- **Demande** : « pour les définir on appuie sur une petite case à gauche ; si on met quelqu'un en écriture le champ lecture se coche aussi ou n'a plus besoin d'être marqué ; l'inverse n'est pas vrai. »
+- Les deux `<select multiple>` (qui imposaient Ctrl+clic) deviennent un **tableau des 15 services**, chacun avec une case *Lire* et une case *Écrire*.
+- **Cocher Écrire coche Lire et la verrouille** — on ne peut pas écrire sans lire. Décocher Écrire libère la lecture. Pas de réciproque : on lit sans écrire, et on peut faire passer quelqu'un de la lecture à l'écriture.
+- L'alignement est appliqué **à l'ouverture de la fiche** aussi, pas seulement au clic : un salarié déjà en écriture s'affiche correctement.
+
+### 3. Rôles supplémentaires retirés
+Le bloc **« Rôles supplémentaires »** disparaît de la fiche : l'accès se définissant service par service, le cumul de rôles n'a plus d'objet. Le **rôle principal** reste — il fixe le métier et l'entité, et sert de repli quand aucun service n'est coché.
+
+### Vérification
+`tsc` 0 erreur · build OK · harnais **61 PASS / 0 FAIL** · pages servies depuis Docker : `/rh/employes` (15 services avec leurs deux cases, règle écrire→lire présente, ancien bloc bien absent, **5 scripts valides**) et `/be/service` (nouvelle répartition des colonnes).
+
 ## 2026-09-09 — Droits par service sur la fiche salarié · validation de la préparation technique
 
 ### 1. Deux listes déroulantes de droits, par employé
