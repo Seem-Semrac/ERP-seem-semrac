@@ -1962,6 +1962,16 @@ app.post('/api/production/demande-achat-operateur', async (c) => {
 // vérifié par sonde), sous les clés réservées `_fusion` et `_regroupee_dans`. Aucune colonne
 // nouvelle : le brouillon de BC est précisément l'endroit où décrire ce que la demande va
 // devenir une fois commandée.
+// Écrit une demande d'achat dont le patch contient un `bc_draft` OBJET.
+// ⚠ La colonne est `jsonb` en cloud mais `text` dans le schéma Docker : sur une stack Docker,
+// écrire un objet échoue. On réessaie donc une fois en sérialisant — la lecture, elle, encaisse
+// déjà les deux formes (fusionDe et achOpenBC parsent la chaîne le cas échéant).
+async function majDaDraft(id: string, patch: any) {
+  const r = await updateDemandeAchat(id, patch)
+  if (!r?.error || patch?.bc_draft == null || typeof patch.bc_draft !== 'object') return r
+  return await updateDemandeAchat(id, { ...patch, bc_draft: JSON.stringify(patch.bc_draft) })
+}
+
 export function fusionDe(da: any): any[] {
   let d = da?.bc_draft
   if (typeof d === 'string') { try { d = JSON.parse(d) } catch { d = null } }
@@ -2002,7 +2012,7 @@ app.patch('/api/achats/da/:id', async (c) => {
   }
   patch.bc_draft = body.bc_draft ?? null
   patch.statut = 'brouillon'
-  const { data, error } = await updateDemandeAchat(id, patch)
+  const { data, error } = await majDaDraft(id, patch)
   if (error) return c.json({ ok: false, error: error.message }, 400)
   return c.json({ ok: true, da: data })
 })
@@ -2113,12 +2123,12 @@ app.post('/api/achats/da/fusionner', async (c) => {
     bc_draft: { ...draftPrim, _fusion: sources },
     updated_at: new Date().toISOString(),
   }
-  const { error: e1 } = await updateDemandeAchat(String(primaire.id), patchPrim)
+  const { error: e1 } = await majDaDraft(String(primaire.id), patchPrim)
   if (e1) return c.json({ ok: false, error: e1.message }, 400)
   let absorbees = 0
   for (const d of autres) {
     const dr: any = (typeof d.bc_draft === 'string' ? (() => { try { return JSON.parse(d.bc_draft) } catch { return {} } })() : d.bc_draft) || {}
-    const { error } = await updateDemandeAchat(String(d.id), {
+    const { error } = await majDaDraft(String(d.id), {
       statut: 'regroupee', visible: false,
       bc_draft: { ...dr, _regroupee_dans: String(primaire.id) },
       updated_at: new Date().toISOString(),
@@ -2144,13 +2154,13 @@ app.post('/api/achats/da/:id/defusionner', async (c) => {
     if (!d) continue
     const dr: any = (typeof d.bc_draft === 'string' ? (() => { try { return JSON.parse(d.bc_draft) } catch { return {} } })() : d.bc_draft) || {}
     delete dr._regroupee_dans
-    const { error } = await updateDemandeAchat(String(s.id), { statut: 'a_traiter', visible: true, bc_draft: Object.keys(dr).length ? dr : null, updated_at: new Date().toISOString() })
+    const { error } = await majDaDraft(String(s.id), { statut: 'a_traiter', visible: true, bc_draft: Object.keys(dr).length ? dr : null, updated_at: new Date().toISOString() })
     if (!error) restaurees++
   }
   const mien = sources.find((s: any) => String(s.id) === String(id))
   const drP: any = (typeof prim.bc_draft === 'string' ? (() => { try { return JSON.parse(prim.bc_draft) } catch { return {} } })() : prim.bc_draft) || {}
   delete drP._fusion
-  await updateDemandeAchat(String(id), {
+  await majDaDraft(String(id), {
     article: mien?.article || prim.article, qte: mien?.qte ?? prim.qte,
     bc_draft: Object.keys(drP).length ? drP : null, updated_at: new Date().toISOString(),
   }).catch(() => {})

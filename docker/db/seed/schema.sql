@@ -489,7 +489,7 @@ CREATE TABLE public.demandes_achat (
     affaire_id text,
     visible boolean,
     genere_par_adt boolean,
-    bc_draft text,
+    bc_draft jsonb,   -- aligne sur le cloud : porte le brouillon de BC ET la composition d une fusion
     type_bc text,
     fournisseur_id text,
     categorie text,
