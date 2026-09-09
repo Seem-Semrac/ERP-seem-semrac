@@ -1204,16 +1204,43 @@ export const pageReferencesPiecesACreer = () => {
 // ══════════════════════════════════════════════════════════════
 // PAGE PRÉPARATIONS TECHNIQUES
 // ══════════════════════════════════════════════════════════════
-export const pagePreparationsTechniques = (dbPreps?: any[]) => {
+export const prepCle = (cmdRef: any, piece: any) =>
+  String(cmdRef ?? '').trim() + '|' + String(piece ?? '').toLowerCase().trim()
+
+export const pagePreparationsTechniques = (dbPreps?: any[], extra: { noms?: any[]; lots?: any[]; dts?: any[] } = {}) => {
   // Alimentée par la cascade d'acceptation d'offre (table preparations_techniques).
+  // La table ne porte NI le site NI le lot : les deux se déduisent sans migration.
+  //  · site : code_ref_produit → nomenclatures.entite, repli sur demandes_travaux.activite
+  //           (c'est exactement la formule qui alimente bons_de_travail.activite dans la cascade)
+  //  · lot  : couple (commande, pièce) — lots.piece et preparations_techniques.piece viennent
+  //           littéralement de la même expression source, la correspondance est donc exacte.
+  const siteParCode: Record<string, string> = {}
+  for (const n of (extra.noms || [])) {
+    const c = String((n as any).code_ref_produit || '').toLowerCase().trim()
+    if (c && (n as any).entite) siteParCode[c] = String((n as any).entite)
+  }
+  const siteParDt: Record<string, string> = {}
+  for (const d of (extra.dts || [])) {
+    const id = String((d as any).id || '')
+    if (id && (d as any).activite) siteParDt[id] = String((d as any).activite)
+  }
+  const lotParCle: Record<string, string> = {}
+  for (const l of (extra.lots || [])) {
+    const k = prepCle((l as any).cmd_id, (l as any).piece)
+    if (k !== '|' && !lotParCle[k]) lotParCle[k] = String((l as any).id || '')
+  }
   const PREP_TECH = (Array.isArray(dbPreps) ? dbPreps : []).map((p: any) => {
     const parts: string[] = []
     if (p.manque_code_cnc) parts.push('Programme CN (FAO)')
     if (p.manque_plan) parts.push('Plan')
+    const cle = String(p.code_ref_produit || p.piece || '').toLowerCase().trim()
     return {
       id: p.id, type: p.type === 'maj' ? 'maj_produit' : 'nouveau_produit',
       dtRef: p.dt_ref || '—', numAffaire: p.num_affaire || '—',
       piece: p.piece || p.code_ref_produit || '—',
+      cmdRef: p.cmd_ref || '',
+      lotRef: p.lot_ref || lotParCle[prepCle(p.cmd_ref, p.piece)] || '',
+      site: String(p.activite || siteParCode[cle] || siteParDt[String(p.dt_ref || '')] || ''),
       preparation: parts.length ? 'À établir : ' + parts.join(' + ') : 'Préparation technique',
       responsable: p.responsable || '—',
       statut: p.statut === 'faite' ? 'realise' : (p.statut || 'a_faire'),
@@ -1221,6 +1248,15 @@ export const pagePreparationsTechniques = (dbPreps?: any[]) => {
       dateEcheance: p.echeance ? String(p.echeance).slice(0, 10) : '—',
     }
   })
+  const nbSeem = PREP_TECH.filter(p => p.site === 'Seem').length
+  const nbSemrac = PREP_TECH.filter(p => p.site === 'Semrac').length
+  // Pastille de site, calquée sur celle des listes de DT (même code couleur dans tout l'ERP).
+  const siteBadge = (s: string) => {
+    if (!s) return '<span style="color:#cbd5e1;font-size:.72rem;" title="Site indéterminé : nomenclature introuvable">—</span>'
+    const bg = s === 'Seem' ? '#dbeafe' : s === 'Semrac' ? '#fce7f3' : '#f1f5f9'
+    const col = s === 'Seem' ? '#1d4ed8' : s === 'Semrac' ? '#9d174d' : '#6b7280'
+    return '<span style="background:' + bg + ';color:' + col + ';border-radius:6px;padding:2px 9px;font-size:.68rem;font-weight:700;">' + escX(s) + '</span>'
+  }
   const nbTotal = PREP_TECH.length
   const nbAFaire = PREP_TECH.filter(p=>p.statut==='a_faire').length
   const nbEnCours = PREP_TECH.filter(p=>p.statut==='en_cours').length
@@ -1260,7 +1296,7 @@ export const pagePreparationsTechniques = (dbPreps?: any[]) => {
     <!-- FILTRES -->
     <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap;">
       <span style="font-size:.78rem;font-weight:600;color:#374151;">Filtrer :</span>
-      ${[['tous','Tous','#6b7280'],['a_faire','À faire','#ef4444'],['en_cours','En cours','#3b82f6'],['realise','Réalisés','#22c55e'],['nouveau_produit','Nouveau produit','#7c3aed'],['maj_produit','MAJ produit','#0369a1']].map(([s,l,c])=>'<button onclick="filtrerPrep(\''+s+'\')" data-prepf="'+s+'" style="padding:4px 12px;border-radius:999px;background:'+(s==='tous'?c+'20':'#f1f5f9')+';color:'+(s==='tous'?c:'#6b7280')+';border:1.5px solid '+(s==='tous'?c+'40':'#e2e8f0')+';font-size:.72rem;font-weight:700;cursor:pointer;">'+l+'</button>').join('')}
+      ${[['tous','Tous','#6b7280'],['a_faire','À faire','#ef4444'],['en_cours','En cours','#3b82f6'],['realise','Réalisés','#22c55e'],['nouveau_produit','Nouveau produit','#7c3aed'],['maj_produit','MAJ produit','#0369a1'],['Seem','Seem ('+nbSeem+')','#1d4ed8'],['Semrac','Semrac ('+nbSemrac+')','#9d174d']].map(([s,l,c])=>'<button onclick="filtrerPrep(\''+s+'\')" data-prepf="'+s+'" style="padding:4px 12px;border-radius:999px;background:'+(s==='tous'?c+'20':'#f1f5f9')+';color:'+(s==='tous'?c:'#6b7280')+';border:1.5px solid '+(s==='tous'?c+'40':'#e2e8f0')+';font-size:.72rem;font-weight:700;cursor:pointer;">'+l+'</button>').join('')}
     </div>
 
     <!-- TABLE -->
@@ -1269,8 +1305,9 @@ export const pagePreparationsTechniques = (dbPreps?: any[]) => {
         <thead><tr style="background:#f8fafc;border-bottom:2px solid #f1f5f9;">
           <th style="text-align:left;padding:10px 14px;color:#64748b;font-size:.68rem;text-transform:uppercase;font-weight:700;">ID</th>
           <th style="text-align:left;padding:10px 14px;color:#64748b;font-size:.68rem;text-transform:uppercase;font-weight:700;">Type</th>
+          <th style="text-align:center;padding:10px 14px;color:#64748b;font-size:.68rem;text-transform:uppercase;font-weight:700;">Site</th>
           <th style="text-align:left;padding:10px 14px;color:#64748b;font-size:.68rem;text-transform:uppercase;font-weight:700;">DT / Affaire</th>
-          <th style="text-align:left;padding:10px 14px;color:#64748b;font-size:.68rem;text-transform:uppercase;font-weight:700;">Pièce</th>
+          <th style="text-align:left;padding:10px 14px;color:#64748b;font-size:.68rem;text-transform:uppercase;font-weight:700;">Pièce / Lot</th>
           <th style="text-align:left;padding:10px 14px;color:#64748b;font-size:.68rem;text-transform:uppercase;font-weight:700;">Préparation à réaliser</th>
           <th style="text-align:center;padding:10px 14px;color:#64748b;font-size:.68rem;text-transform:uppercase;font-weight:700;">Responsable</th>
           <th style="text-align:center;padding:10px 14px;color:#64748b;font-size:.68rem;text-transform:uppercase;font-weight:700;">Priorité</th>
@@ -1282,13 +1319,15 @@ export const pagePreparationsTechniques = (dbPreps?: any[]) => {
           ${PREP_TECH.map(p=>{
             const prioBg = p.priorite==='critique'?'#fee2e2':p.priorite==='urgent'?'#fef9c3':'#f0fdf4'
             const prioCol = p.priorite==='critique'?'#b91c1c':p.priorite==='urgent'?'#854d0e':'#15803d'
-            return '<tr data-prepf="'+p.statut+'" data-preptype="'+p.type+'" style="border-bottom:1px solid #f9fafb;" onmouseenter="this.style.background=\'#f8fafc\'" onmouseleave="this.style.background=\'\'">'
-              +'<td style="padding:10px 14px;font-weight:700;color:#0891b2;font-size:.78rem;">'+p.id+'</td>'
+            return '<tr data-prepf="'+p.statut+'" data-preptype="'+p.type+'" data-prepsite="'+escX(p.site)+'" style="border-bottom:1px solid #f9fafb;" onmouseenter="this.style.background=\'#f8fafc\'" onmouseleave="this.style.background=\'\'">'
+              +'<td style="padding:10px 14px;font-weight:700;color:#0891b2;font-size:.78rem;">'+escX(p.id)+'</td>'
               +'<td style="padding:10px 14px;">'+prepTypeLbl(p.type)+'</td>'
-              +'<td style="padding:10px 14px;"><div style="font-weight:700;color:#374151;font-size:.78rem;">'+p.dtRef+'</div><div style="font-size:.68rem;color:#6366f1;">Affaire N° '+p.numAffaire+'</div></td>'
-              +'<td style="padding:10px 14px;color:#374151;font-weight:600;font-size:.8rem;">'+p.piece+'</td>'
-              +'<td style="padding:10px 14px;color:#374151;">'+p.preparation+'</td>'
-              +'<td style="padding:10px 14px;text-align:center;color:#6b7280;font-size:.78rem;">'+p.responsable+'</td>'
+              +'<td style="padding:10px 14px;text-align:center;">'+siteBadge(p.site)+'</td>'
+              +'<td style="padding:10px 14px;"><div style="font-weight:700;color:#374151;font-size:.78rem;">'+escX(p.dtRef)+'</div><div style="font-size:.68rem;color:#6366f1;">Affaire N° '+escX(p.numAffaire)+'</div></td>'
+              +'<td style="padding:10px 14px;color:#374151;font-weight:600;font-size:.8rem;">'+escX(p.piece)
+                +(p.lotRef?'<div style="font-family:monospace;font-size:.66rem;color:#0d9488;font-weight:700;margin-top:2px;">'+escX(p.lotRef)+'</div>':'<div style="font-size:.64rem;color:#cbd5e1;margin-top:2px;">lot non rattaché</div>')+'</td>'
+              +'<td style="padding:10px 14px;color:#374151;">'+escX(p.preparation)+'</td>'
+              +'<td style="padding:10px 14px;text-align:center;color:#6b7280;font-size:.78rem;">'+escX(p.responsable)+'</td>'
               +'<td style="padding:10px 14px;text-align:center;"><span style="padding:2px 8px;border-radius:999px;font-size:.66rem;font-weight:700;background:'+prioBg+';color:'+prioCol+';">'+p.priorite+'</span></td>'
               +'<td style="padding:10px 14px;text-align:center;color:#6b7280;font-size:.78rem;">'+p.dateEcheance+'</td>'
               +'<td style="padding:10px 14px;text-align:center;">'+prepStatut(p.statut)+'</td>'
@@ -1311,7 +1350,7 @@ export const pagePreparationsTechniques = (dbPreps?: any[]) => {
     var btn=document.querySelector('button[data-prepf="'+s+'"]');
     if(btn){ btn.style.background='#e0f7fa'; btn.style.color='#0891b2'; btn.style.borderColor='#b2ebf2'; }
     document.querySelectorAll('#prepTable tbody tr').forEach(function(tr){
-      var match = s==='tous' || tr.dataset.prepf===s || tr.dataset.preptype===s;
+      var match = s==='tous' || tr.dataset.prepf===s || tr.dataset.preptype===s || tr.dataset.prepsite===s;
       tr.style.display = match ? '' : 'none';
     });
   }

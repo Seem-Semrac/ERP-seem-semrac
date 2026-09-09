@@ -904,6 +904,34 @@ export async function getAffaireDetail(numAffaire: string) {
     cmdDetails.forEach((d: any) => (d.bdts || []).forEach((b: any) => { b.operateur = b.operateur_nom || opMap[String(b.operateur_id ?? '')] || (b.operateur_id != null ? String(b.operateur_id) : '') }))
   } catch { /* non bloquant */ }
   // Bons de livraison de l'affaire (BL n'a pas de num_affaire → via la commande : cmd_ref / cmd_id)
+  // ── Fabricabilité lot par lot ────────────────────────────────────────────
+  // Depuis le 09/09/2026 la porte de production se joue AU LOT et non plus à l'affaire.
+  // On annote donc chaque lot avec ce qui le bloque, pour que la fiche affaire montre
+  // noir sur blanc ce qui peut partir en fabrication et ce qui attend encore.
+  try {
+    const { data: prepAll } = await supabase.from('preparations_techniques').select('*')
+    const prepOuvLot = new Set<string>(), prepOuvAff = new Set<string>()
+    for (const p of ((prepAll ?? []) as any[])) {
+      if (String(p.statut) === 'faite') continue
+      const cmd = String(p.cmd_ref || '').trim(), pc = String(p.piece || '').toLowerCase().trim()
+      if (cmd && pc) prepOuvLot.add(cmd + '|' + pc); else prepOuvAff.add(String(p.num_affaire || ''))
+    }
+    for (const d of cmdDetails) {
+      const cmdId = String((d as any).cmd?.id ?? '')
+      const aff = String((d as any).cmd?.num_affaire ?? num)
+      for (const l of (((d as any).lots ?? []) as any[])) {
+        const pc = String(l.piece || '').toLowerCase().trim()
+        const bdtsLot = (((d as any).bdts ?? []) as any[])
+          .filter((b: any) => String(b.lot_ref ?? '') === String(l.id) || String(b.piece || '').toLowerCase().trim() === pc)
+        const raisons: string[] = []
+        if (prepOuvLot.has(cmdId + '|' + pc) || prepOuvAff.has(aff)) raisons.push('préparation technique')
+        if (bdtsLot.length && bdtsLot.every((b: any) => b.matiere_ok === false)) raisons.push('matière non réceptionnée')
+        l.blocages = raisons
+        l.pret = raisons.length === 0
+      }
+    }
+  } catch { /* table absente ou indisponible : la fiche s'affiche sans l'indicateur */ }
+
   const cmdIdSet = new Set(cmds.map((c: any) => String(c.id)))
   let bls: any[] = []
   if (cmds.length) {

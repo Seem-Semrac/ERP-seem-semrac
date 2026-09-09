@@ -870,6 +870,34 @@ async function cascadeLotsBdtBst(dt: any, cmdId: string, byCode: Record<string, 
   return { lots, bdt: nb, bds: ns }
 }
 
+// ── GOULOTTE matière + préparation technique ────────────────────────────────
+// Un BDT n'apparaît au planning que si la MATIÈRE est réceptionnée (matiere_ok) ET que la
+// préparation technique de SON LOT est terminée.
+//
+// ⚠ Changement du 09/09/2026 (demandé) : le blocage portait sur l'AFFAIRE ENTIÈRE — une seule
+// préparation en attente gelait TOUS les lots de l'affaire, y compris ceux dont le plan et le
+// programme CN étaient prêts. Il porte désormais sur le LOT, identifié par le couple
+// (commande, pièce) : `lots.piece`, `preparations_techniques.piece` et `bons_de_travail.piece`
+// sont écrits depuis la MÊME expression source dans la cascade, la correspondance est exacte.
+// Repli conservateur : une préparation sans commande ni pièce bloque encore toute son affaire.
+export function bdtBlocage(bdt: any, prepRows: any[]): string | null {
+  if (bdt && bdt.matiere_ok === false) return 'matière non réceptionnée'
+  const parLot = new Set<string>(), parAffaire = new Set<string>()
+  for (const p of (prepRows || [])) {
+    if (String((p as any).statut) === 'faite') continue
+    const cmd = String((p as any).cmd_ref || '').trim(), pc = String((p as any).piece || '').toLowerCase().trim()
+    if (cmd && pc) parLot.add(cmd + '|' + pc)
+    else parAffaire.add(String((p as any).num_affaire || ''))
+  }
+  const k = String(bdt?.cmd_ref || '').trim() + '|' + String(bdt?.piece || '').toLowerCase().trim()
+  if (parLot.has(k)) return 'préparation technique en attente'
+  if (parAffaire.has(String(bdt?.num_affaire || ''))) return 'préparation technique en attente (affaire)'
+  return null
+}
+function filtrerBdtsPrets(bdts: any[], prepRows: any[]): any[] {
+  return (bdts || []).filter((b: any) => !bdtBlocage(b, prepRows))
+}
+
 // (a) prépa technique : nomenclature sans programme CN (étape machine) OU sans plan.
 async function cascadePrepaTechnique(dt: any, cmdId: string, byCode: Record<string, any>) {
   const aff = String(dt.num_affaire || dt.id)
@@ -887,11 +915,19 @@ async function cascadePrepaTechnique(dt: any, cmdId: string, byCode: Record<stri
     try { const docs = await getDocumentsForNom(String(nom.id)); hasPlanGed = (docs as any[]).some((d: any) => ['plan_client', 'plan_cao'].includes(String(d.categorie))) } catch {}
     const manquePlan = !hasPlanField && !hasPlanGed
     if (!manqueCnc && !manquePlan) continue
-    await createPreparationTechnique({
+    // Site figé à la création, avec la MÊME formule que les BDT nés de la même cascade
+    // (src/index.tsx, cascadeLotsBdtBst) : la prépa et ses BDT affichent donc toujours le même site.
+    const actPrep = p.activite || nom.entite || dt.activite || 'Seem'
+    const basePrep: any = {
       id: 'PREP-' + _sanId(aff) + '-' + _sanId(p.ref_interne || ref), num_affaire: aff, dt_ref: dt.id, cmd_ref: cmdId,
       code_ref_produit: nom.code_ref_produit || p.ref_interne, piece: p.ref_interne || ref,
       type: p.piece_existante_a_jour ? 'maj' : 'nouvelle', manque_code_cnc: manqueCnc, manque_plan: manquePlan, statut: 'a_faire',
-    }).then((r: any) => { if (r && !r.error) created++ }).catch(() => {})
+    }
+    // La colonne `activite` peut ne pas exister encore (migration non appliquée) : on tente
+    // AVEC, et on retombe SANS en cas de rejet. L'affichage sait de toute façon déduire le site.
+    let r: any = await createPreparationTechnique({ ...basePrep, activite: actPrep }).catch(() => ({ error: true }))
+    if (!r || r.error) r = await createPreparationTechnique(basePrep).catch(() => ({ error: true }))
+    if (r && !r.error) created++
   }
   return created
 }
@@ -1866,6 +1902,42 @@ app.post('/api/production/demande-achat-operateur', async (c) => {
 })
 
 // ─── Sauvegarde brouillon d'une DA en cours de traitement (sans soumettre) ───
+// ── FUSION DE DEMANDES D'ACHAT ──────────────────────────────────────────────
+// La composition d'une fusion est rangée dans `demandes_achat.bc_draft` (colonne jsonb —
+// vérifié par sonde), sous les clés réservées `_fusion` et `_regroupee_dans`. Aucune colonne
+// nouvelle : le brouillon de BC est précisément l'endroit où décrire ce que la demande va
+// devenir une fois commandée.
+export function fusionDe(da: any): any[] {
+  let d = da?.bc_draft
+  if (typeof d === 'string') { try { d = JSON.parse(d) } catch { d = null } }
+  return Array.isArray(d?._fusion) ? d._fusion : []
+}
+// Affaires servies par un bon de commande : la sienne, plus celles de ses lignes.
+// ⚠ `num_affaire` reste TOUJOURS scalaire : c'est la clé d'égalité stricte de la porte
+// matière et du calcul de coût. Une valeur composite (« AFF-1 · AFF-2 ») gèlerait
+// matiere_ok à false et ferait disparaître les BDT des DEUX affaires du planning.
+export function bcAffaires(bc: any): string[] {
+  const out = new Set<string>()
+  const a = String(bc?.num_affaire || '').trim(); if (a) out.add(a)
+  const lg = Array.isArray(bc?.lignes) ? bc.lignes : []
+  for (const l of lg) { const x = String((l as any)?.num_affaire || '').trim(); if (x) out.add(x) }
+  return [...out]
+}
+
+// Une DA est « traitée » dès qu'elle a donné lieu à un bon de commande : elle n'est alors
+// plus ni modifiable ni retirable. Même prédicat que la liste côté client (achats.tsx).
+function daEstTraitee(statut: any): boolean {
+  const v = String(statut || '').toLowerCase().trim()
+  if (v === '' || v.startsWith('a_traiter') || v === 'nouveau' || v === 'en_attente' || v === 'brouillon') return false
+  return /(command|envoy|re[çc]u|recu|clotur|cl[oô]tur|trait[eé]|solde|bc)/i.test(v)
+}
+// DA retirée de l'affichage : la ligne reste en base (« du front, pas de la DB »).
+// ⚠ Tout lecteur de demandes_achat doit l'appliquer, sinon une demande retirée continue
+// d'être comptée dans les tableaux de bord ou de bloquer le réappro automatique.
+export function daMasquee(d: any): boolean {
+  return d?.visible === false || d?.statut === 'regroupee' || d?.statut === 'supprimee'
+}
+
 app.patch('/api/achats/da/:id', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json().catch(() => ({} as any))
@@ -1878,6 +1950,156 @@ app.patch('/api/achats/da/:id', async (c) => {
   const { data, error } = await updateDemandeAchat(id, patch)
   if (error) return c.json({ ok: false, error: error.message }, 400)
   return c.json({ ok: true, da: data })
+})
+
+// ─── DA : MODIFIER une demande d'achat (libre OU automatique rattachée à une commande) ───
+// Route distincte du PATCH ci-dessus, qui sert au brouillon de BC et force statut='brouillon'.
+// Ici on ne touche NI au statut, NI à genere_par_adt, NI au bc_draft, NI au rattachement d'une
+// DA automatique : num_affaire et cmd_ref portent la porte « matière reçue » et le coût de
+// l'affaire — les déplacer changerait silencieusement l'imputation de la dépense.
+app.post('/api/achats/da/:id/editer', async (c) => {
+  const id = c.req.param('id')
+  const b = await c.req.json().catch(() => ({} as any))
+  const das = await getDemandesAchat().catch(() => [] as any[])
+  const da = (das as any[]).find((d: any) => String(d.id) === String(id))
+  if (!da) return c.json({ ok: false, error: 'Demande introuvable.' }, 404)
+  if (daMasquee(da)) return c.json({ ok: false, error: 'Cette demande a été retirée de la liste.' }, 409)
+  if (daEstTraitee(da.statut)) return c.json({ ok: false, error: 'Demande déjà traitée : un bon de commande en découle, elle n\'est plus modifiable.' }, 409)
+  const patch: any = {}
+  for (const k of ['article', 'fournisseur', 'fournisseur_id', 'qte', 'priorite', 'livraison', 'type_da', 'type_bc', 'demandeur']) {
+    if (k in b) patch[k] = (b[k] === '' || b[k] == null) ? null : (k === 'qte' ? String(b[k]) : b[k])
+  }
+  if (!String(patch.article ?? da.article ?? '').trim()) return c.json({ ok: false, error: 'La désignation de l\'article est obligatoire.' }, 400)
+  // Rattachement : modifiable UNIQUEMENT sur une demande libre.
+  if (da.genere_par_adt !== true && 'num_affaire' in b) {
+    const aff = String(b.num_affaire || '').trim()
+    patch.num_affaire = aff || null
+    patch.affaire_id = aff ? await resolveAffaireId(aff) : null
+  }
+  if (!Object.keys(patch).length) return c.json({ ok: false, error: 'Aucun champ à modifier.' }, 400)
+  patch.updated_at = new Date().toISOString()
+  const { data, error } = await updateDemandeAchat(id, patch)
+  if (error) return c.json({ ok: false, error: error.message }, 400)
+  return c.json({ ok: true, da: data })
+})
+
+// ─── DA : RETIRER une demande d'achat de la liste ───
+// La ligne n'est PAS supprimée en base (et ne peut pas l'être : la clé anon n'a pas le droit
+// de DELETE ici). Elle est masquée, donc réversible côté base si besoin.
+// Refusé sur une demande AUTOMATIQUE : elle traduit un besoin matière réel issu d'une commande,
+// la retirer ferait disparaître l'engagement de dépense sans que personne ne le voie.
+app.post('/api/achats/da/:id/masquer', async (c) => {
+  const id = c.req.param('id')
+  const b = await c.req.json().catch(() => ({} as any))
+  const das = await getDemandesAchat().catch(() => [] as any[])
+  const da = (das as any[]).find((d: any) => String(d.id) === String(id))
+  if (!da) return c.json({ ok: false, error: 'Demande introuvable.' }, 404)
+  if (daMasquee(da)) return c.json({ ok: true, deja: true })
+  if (da.genere_par_adt === true) {
+    return c.json({ ok: false, error: 'Demande automatique issue d\'une commande : elle ne peut pas être retirée, seulement modifiée.' }, 409)
+  }
+  if (daEstTraitee(da.statut)) return c.json({ ok: false, error: 'Demande déjà traitée : un bon de commande en découle.' }, 409)
+  const motif = String(b.motif || '').trim()
+  const { error } = await updateDemandeAchat(id, {
+    visible: false, statut: 'supprimee',
+    demandeur: motif ? String(da.demandeur || '') + ' · retirée : ' + motif.slice(0, 80) : da.demandeur,
+    updated_at: new Date().toISOString(),
+  })
+  if (error) return c.json({ ok: false, error: error.message }, 400)
+  return c.json({ ok: true })
+})
+
+// ─── DA : FUSIONNER des demandes d'achat CHOISIES À LA MAIN ───
+// Règle métier posée par l'utilisateur : on ne fusionne que si la commande part chez UN SEUL
+// fournisseur. Les demandes sans fournisseur héritent de l'unique fournisseur du lot.
+// La demande fusionnée sert les DEUX affaires quand elles diffèrent : l'affaire porteuse reste
+// dans num_affaire (scalaire, indispensable aux portes de production), les autres voyagent
+// dans les LIGNES du bon de commande.
+app.post('/api/achats/da/fusionner', async (c) => {
+  const b = await c.req.json().catch(() => ({} as any))
+  const ids = [...new Set((Array.isArray(b.da_ids) ? b.da_ids : []).map((x: any) => String(x || '').trim()).filter(Boolean))]
+  if (ids.length < 2) return c.json({ ok: false, error: 'Sélectionnez au moins deux demandes à fusionner.' }, 400)
+  const das = await getDemandesAchat().catch(() => [] as any[])
+  const sel: any[] = []
+  for (const id of ids) {
+    const d = (das as any[]).find((x: any) => String(x.id) === id)
+    if (!d) return c.json({ ok: false, error: 'Demande introuvable : ' + id }, 404)
+    if (daMasquee(d)) return c.json({ ok: false, error: 'La demande ' + id + ' a été retirée de la liste.' }, 409)
+    if (daEstTraitee(d.statut)) return c.json({ ok: false, error: 'La demande ' + id + ' est déjà traitée : un bon de commande en découle.' }, 409)
+    if (fusionDe(d).length) return c.json({ ok: false, error: 'La demande ' + id + ' est déjà une fusion. Défusionnez-la d\'abord.' }, 409)
+    sel.push(d)
+  }
+  // ── Contrainte : un seul fournisseur ──
+  const fourns = [...new Set(sel.map((d: any) => String(d.fournisseur || '').trim()).filter(Boolean))]
+  const impose = String(b.fournisseur || '').trim()
+  if (fourns.length > 1) {
+    return c.json({ ok: false, error: 'Fusion impossible : ces demandes concernent ' + fourns.length + ' fournisseurs différents (' + fourns.join(', ') + '). Une fusion ne peut donner qu\'une seule commande, chez un seul fournisseur.' }, 409)
+  }
+  const fournisseur = fourns[0] || impose
+  if (!fournisseur) return c.json({ ok: false, error: 'Aucune des demandes ne porte de fournisseur : choisissez celui chez qui la commande sera passée.' }, 400)
+  const fournId = sel.map((d: any) => d.fournisseur_id).find(Boolean) || (b.fournisseur_id || null)
+  // ── Porteuse : celle demandée, sinon la plus ancienne ──
+  sel.sort((x: any, y: any) => String(x.date_da || x.created_at || '').localeCompare(String(y.date_da || y.created_at || '')))
+  const primaire = sel.find((d: any) => String(d.id) === String(b.primary_id || '')) || sel[0]
+  const autres = sel.filter((d: any) => String(d.id) !== String(primaire.id))
+  const prioRank: Record<string, number> = { critique: 3, urgent: 2, normal: 1 }
+  const snap = (d: any) => ({ id: d.id, article: d.article || '', qte: d.qte || '', type_da: d.type_da || '',
+    num_affaire: String(d.num_affaire || d.affaire_id || '').trim() || null, cmd_ref: d.cmd_ref || null,
+    categorie: d.categorie || null, machine_id: d.machine_id || null, livraison: d.livraison || null })
+  const sources = sel.map(snap)
+  const affaires = [...new Set(sources.map((s: any) => s.num_affaire).filter(Boolean))]
+  const draftPrim: any = (typeof primaire.bc_draft === 'string' ? (() => { try { return JSON.parse(primaire.bc_draft) } catch { return {} } })() : primaire.bc_draft) || {}
+  const patchPrim: any = {
+    article: sources.map((s: any) => (s.article || '—') + (s.qte ? ' (' + s.qte + ')' : '')).join(' · '),
+    fournisseur, fournisseur_id: fournId,
+    priorite: sel.map((d: any) => d.priorite || 'normal').sort((x: string, y: string) => (prioRank[y] || 0) - (prioRank[x] || 0))[0],
+    statut: 'a_traiter', visible: true,
+    livraison: sources.map((s: any) => s.livraison).filter(Boolean).sort()[0] || primaire.livraison || null,
+    bc_draft: { ...draftPrim, _fusion: sources },
+    updated_at: new Date().toISOString(),
+  }
+  const { error: e1 } = await updateDemandeAchat(String(primaire.id), patchPrim)
+  if (e1) return c.json({ ok: false, error: e1.message }, 400)
+  let absorbees = 0
+  for (const d of autres) {
+    const dr: any = (typeof d.bc_draft === 'string' ? (() => { try { return JSON.parse(d.bc_draft) } catch { return {} } })() : d.bc_draft) || {}
+    const { error } = await updateDemandeAchat(String(d.id), {
+      statut: 'regroupee', visible: false,
+      bc_draft: { ...dr, _regroupee_dans: String(primaire.id) },
+      updated_at: new Date().toISOString(),
+    })
+    if (!error) absorbees++
+  }
+  return c.json({ ok: true, primaire: primaire.id, absorbees, fournisseur, affaires })
+})
+
+// ─── DA : DÉFUSIONNER (rendre leur autonomie aux demandes absorbées) ───
+app.post('/api/achats/da/:id/defusionner', async (c) => {
+  const id = c.req.param('id')
+  const das = await getDemandesAchat().catch(() => [] as any[])
+  const prim = (das as any[]).find((d: any) => String(d.id) === String(id))
+  if (!prim) return c.json({ ok: false, error: 'Demande introuvable.' }, 404)
+  if (daEstTraitee(prim.statut)) return c.json({ ok: false, error: 'Fusion déjà commandée : elle ne peut plus être défaite.' }, 409)
+  const sources = fusionDe(prim)
+  if (!sources.length) return c.json({ ok: false, error: 'Cette demande n\'est pas une fusion.' }, 400)
+  let restaurees = 0
+  for (const s of sources) {
+    if (String(s.id) === String(id)) continue
+    const d = (das as any[]).find((x: any) => String(x.id) === String(s.id))
+    if (!d) continue
+    const dr: any = (typeof d.bc_draft === 'string' ? (() => { try { return JSON.parse(d.bc_draft) } catch { return {} } })() : d.bc_draft) || {}
+    delete dr._regroupee_dans
+    const { error } = await updateDemandeAchat(String(s.id), { statut: 'a_traiter', visible: true, bc_draft: Object.keys(dr).length ? dr : null, updated_at: new Date().toISOString() })
+    if (!error) restaurees++
+  }
+  const mien = sources.find((s: any) => String(s.id) === String(id))
+  const drP: any = (typeof prim.bc_draft === 'string' ? (() => { try { return JSON.parse(prim.bc_draft) } catch { return {} } })() : prim.bc_draft) || {}
+  delete drP._fusion
+  await updateDemandeAchat(String(id), {
+    article: mien?.article || prim.article, qte: mien?.qte ?? prim.qte,
+    bc_draft: Object.keys(drP).length ? drP : null, updated_at: new Date().toISOString(),
+  }).catch(() => {})
+  return c.json({ ok: true, restaurees })
 })
 
 // ─── DA : regrouper les demandes d'achat À TRAITER d'un même fournisseur en une seule ───
@@ -1965,6 +2187,8 @@ app.post('/api/achats/da/:id/soumettre', async (c) => {
   // Référence catalogue choisie par l'acheteur dans le formulaire. La DA n'en porte pas :
   // c'est au moment de commander qu'elle est arrêtée.
   const refArticle = String(body.reference || '').trim() || null
+  // Demandes absorbées par une fusion : chacune devient une ligne du bon de commande.
+  const _srcFusion = fusionDe(da)
   const montant = Number(body.montant_ht ?? body.montant ?? 0) || 0
   const fournisseurNom = body.fournisseur || da.fournisseur || null
   const bcPayload: any = {
@@ -1981,7 +2205,9 @@ app.post('/api/achats/da/:id/soumettre', async (c) => {
     cmd_ref: (da as any).cmd_ref || null,
     montant_ht: montant,
     devise: 'EUR',
-    qte_commandee: Number((da as any).qte) || Number(body.qte) || null,   // base de la réception TOTALE (recu_total)
+    qte_commandee: (_srcFusion.length
+      ? _srcFusion.reduce((s: number, x: any) => s + (Number(x.qte) || 0), 0) || null
+      : Number((da as any).qte) || Number(body.qte) || null),   // base de la réception TOTALE (recu_total)
     date_bc: TODAY_ISO(),
     date_livraison: body.date_livraison || da.livraison || null,
     conditions_paiement: body.conditions_paiement || null,
@@ -1992,7 +2218,13 @@ app.post('/api/achats/da/:id/soumettre', async (c) => {
     // `article` est CONSERVÉ : d'autres lecteurs de `lignes` (bcsView, BC de sous-traitance)
     // ne connaissent que cette clé. La référence s'ajoute, elle ne remplace rien — et c'est elle
     // qui part sur le PDF du fournisseur et sert de clé d'entrée en stock à la réception.
-    lignes: [{ article: articles, reference: refArticle, designation: articles, qte: da.qte || body.qte || null, fournisseur: fournisseurNom }],
+    // Une ligne par demande fusionnée, chacune portant SON affaire : c'est ainsi que le bon
+    // de commande sert plusieurs affaires sans jamais rendre `num_affaire` composite.
+    lignes: _srcFusion.length
+      ? _srcFusion.map((s: any) => ({ article: s.article || articles, reference: s.id === da.id ? refArticle : null,
+          designation: s.article || articles, qte: s.qte || null, fournisseur: fournisseurNom,
+          num_affaire: s.num_affaire || null, da_id: s.id }))
+      : [{ article: articles, reference: refArticle, designation: articles, qte: da.qte || body.qte || null, fournisseur: fournisseurNom, num_affaire: String((da as any).num_affaire || '').trim() || null }],
     // Hérité de la DA → route le prix à la réception (BC 'machine' → OPEX de la machine)
     categorie: (da as any).categorie || null,
     machine_id: (da as any).machine_id || null,
@@ -2173,15 +2405,17 @@ app.post('/api/expeditions/bc/:id/receptionner', async (c) => {
   // PORTE MATIÈRE : matiere_ok des BDT de l'affaire cochée SEULEMENT quand TOUS les BC matière/accessoire
   //   de l'affaire sont reçus en TOTALITÉ (recu_total) — plus au premier partiel.
   let bdtDebloques = 0
-  if ((bc as any).num_affaire) {
+  // Un BC issu d'une FUSION sert plusieurs affaires : on ouvre la porte matière de chacune.
+  const affairesBc = bcAffaires(bc)
+  if (affairesBc.length) {
     try {
-      const aff = String((bc as any).num_affaire)
       const estMatBc = (b: any) => String((b as any).type_bc || '') !== 'sous_traitant' && !/machine/i.test(String((b as any).categorie || ''))
       const estTotal = (b: any) => ['recu_total', 'controle', 'cloture'].includes(String((b as any).statut || ''))
       const [allBcs, bdts] = await Promise.all([getBonsDeCommande().catch(() => [] as any[]), getBonsDeTravail().catch(() => [] as any[])])
-      const affMatBcs = (allBcs as any[]).filter(b => String(b.num_affaire) === aff && estMatBc(b))
-      const allTotal = affMatBcs.length > 0 && affMatBcs.every(b => String(b.id) === id ? statutBc === 'recu_total' : estTotal(b))
-      if (allTotal) {
+      for (const aff of affairesBc) {
+        const affMatBcs = (allBcs as any[]).filter(b => bcAffaires(b).includes(aff) && estMatBc(b))
+        const allTotal = affMatBcs.length > 0 && affMatBcs.every(b => String(b.id) === id ? statutBc === 'recu_total' : estTotal(b))
+        if (!allTotal) continue
         for (const b of (bdts as any[])) {
           if (String(b.num_affaire) === aff && b.matiere_ok !== true) { await updateBDT(String(b.id), { matiere_ok: true }).catch(() => {}); bdtDebloques++ }
         }
@@ -4870,8 +5104,7 @@ app.get('/production/service', async (c) => {
   //    complète. À l'acceptation d'offre la cascade crée les BDT en matiere_ok:false → ils
   //    restent invisibles ici tant que DA→BC→BL/réception + prépa ne sont pas faits.
   //    (matiere_ok !== false : les BDT hérités à matiere_ok null restent visibles.)
-  const affPrepaOpen = new Set((prepRows as any[]).filter((p: any) => p.statut !== 'faite').map((p: any) => String(p.num_affaire)))
-  const bdtsPrets = (bdts as any[]).filter((b: any) => (b.matiere_ok !== false) && !affPrepaOpen.has(String(b.num_affaire)))
+  const bdtsPrets = filtrerBdtsPrets(bdts as any[], prepRows as any[])
   return c.html(pageServiceProd(bdtsPrets, machines, ops, lots, cmds, sousTraitants, processes, bds, bcStById, stock, presences, absences, mouvements, affByDate, congesOperateursPend, postes, machinesOpex))
 })
 
@@ -6066,9 +6299,8 @@ app.get('/production/gantt-bdt', async (c) => {
     getBonsDeTravail(), getMachines(), getOperateurs(),
     getProcessAtelier().catch(() => []), getPostes().catch(() => []), getPreparationsTechniques().catch(() => [])
   ])
-  // Même goulotte matière + prépa que /production/service et /production/planning.
-  const affPrepaOpen = new Set((prepRows as any[]).filter((p: any) => p.statut !== 'faite').map((p: any) => String(p.num_affaire)))
-  const bdtsPrets = (bdts as any[]).filter((b: any) => (b.matiere_ok !== false) && !affPrepaOpen.has(String(b.num_affaire)))
+  // Même goulotte matière + prépa que /production/service.
+  const bdtsPrets = filtrerBdtsPrets(bdts as any[], prepRows as any[])
   return c.html(pageGanttBDT(bdtsPrets, machines, ops, procs as any, postes as any))
 })
 app.get('/production/gantt-bst', async (c) => {
@@ -7183,7 +7415,11 @@ function computeRotations(mvts: any[]): Record<string, { rotation: number; jours
 // Réapprovisionnement automatique : crée une DA pour chaque réf configurée (auto_reappro) sous son seuil,
 // si aucune DA n'est déjà ouverte pour cette réf. Idempotent (dé-dup par libellé d'article).
 async function autoReappro(arts: any[], das: any[]) {
-  const openRefs = new Set((das as any[]).filter(d => !['traitee', 'annulee'].includes(String(d.statut))).map(d => String(d.article || '').toLowerCase().trim()))
+  // ⚠ Une DA RETIRÉE ne doit plus bloquer la recréation : sinon la référence ne serait
+  //   jamais réapprovisionnée automatiquement, sans que rien ne le signale.
+  const openRefs = new Set((das as any[])
+    .filter(d => !['traitee', 'annulee'].includes(String(d.statut)) && !daMasquee(d))
+    .map(d => String(d.article || '').toLowerCase().trim()))
   for (const a of arts) {
     if (!a.auto_reappro || !(a.point_commande > 0) || a.quantite > a.point_commande) continue
     const label = String(a.nom || a.reference || '').toLowerCase().trim()
@@ -8935,7 +9171,7 @@ app.delete('/api/kpi-objectifs/:id', async (c) => {
 app.get('/commercial/dt-liste',      async (c) => { const dts = await getDemandesTravaux(); return c.html(pageDTListe(dts)) })
 app.get('/commercial/offres-liste',  async (c) => { const offres = await getOffres(); return c.html(pageOffresListe(offres)) })
 app.get('/commercial/cmd-liste',     async (c) => { const cmds = await getCommandes(); return c.html(pageCmdListe(cmds)) })
-app.get('/achats/da-liste',          async (c) => { const das = await getDemandesAchat(); return c.html(pageDAListe(das)) })
+app.get('/achats/da-liste',          async (c) => { const das = await getDemandesAchat(); return c.html(pageDAListe((das as any[]).filter(d => !daMasquee(d)) as any)) })
 app.get('/qualite/nc-liste',         async (c) => { const ncs = await getNonConformites(); return c.html(pageNCListe(ncs)) })
 app.get('/expedition/bl-liste',      async (c) => { const bls = await getBonsDeLivraison(); return c.html(pageBLListe(bls)) })
 app.get('/production/bdt-liste',     async (c) => { const bdts = await getBonsDeTravail(); return c.html(pageBDTListe(bdts)) })
@@ -8945,9 +9181,20 @@ app.get('/rh/conge-liste',           (c) => c.redirect('/rh/service', 301))
 app.get('/commercial/avoirs-liste',  async (c) => { const credits = await getCredits(); return c.html(pageAvoirsCommercial(credits)) })
 app.get('/achats/fournisseurs-st',   async (c) => { const fsts = await getFournisseursSt(); return c.html(pageFournisseursST(fsts)) })
 app.get('/commercial/references-pieces', (c) => c.html(pageReferencesPiecesACreer()))
-app.get('/commercial/preparations-tech', async (c) => c.html(pagePreparationsTechniques(await getPreparationsTechniques().catch(() => []))))
+// La page a besoin des nomenclatures (site), des lots (rattachement) et des DT (site de repli).
+// Tout est fail-soft : sans ces données la page s'affiche comme avant, site et lot en « — ».
+const _pagePrepaTech = async () => {
+  const [preps, noms, lots, dts] = await Promise.all([
+    getPreparationsTechniques().catch(() => [] as any[]),
+    getNomenclatures().catch(() => [] as any[]),
+    getLots().catch(() => [] as any[]),
+    getDemandesTravaux().catch(() => [] as any[]),
+  ])
+  return pagePreparationsTechniques(preps as any[], { noms: noms as any[], lots: lots as any[], dts: dts as any[] })
+}
+app.get('/commercial/preparations-tech', async (c) => c.html(await _pagePrepaTech()))
 app.get('/be/references-pieces',         (c) => c.html(pageReferencesPiecesACreer()))
-app.get('/be/preparations-tech',         async (c) => c.html(pagePreparationsTechniques(await getPreparationsTechniques().catch(() => []))))
+app.get('/be/preparations-tech',         async (c) => c.html(await _pagePrepaTech()))
 // Marquer une préparation technique comme faite/en cours (depuis la liste)
 // Valide la préparation technique d'une NOMENCLATURE : marque « faite » toutes les lignes
 // de preparations_techniques portant la même référence produit. C'est l'une des deux portes

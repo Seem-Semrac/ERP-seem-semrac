@@ -121,8 +121,8 @@ export const pageServiceAchats = (
     return /(command|envoy|re[çc]u|recu|clotur|cl[oô]tur|trait[eé]|solde|\bbc\b)/i.test(v)
   }
   const isBrouillon = (s: string) => /brouillon/i.test(s || '')
-  // DA absorbée par un regroupement fournisseur → masquée des deux listes.
-  const isMasquee = (d: any) => d.statut === 'regroupee' || d.visible === false
+  // DA absorbée par un regroupement fournisseur, ou retirée de la liste → masquée partout.
+  const isMasquee = (d: any) => d.statut === 'regroupee' || d.statut === 'supprimee' || d.visible === false
   const DA_TRAITER  = DAS.filter(d => !isMasquee(d) && !isTraitee(d.statut))
   const DA_TRAITEES = DAS.filter(d => !isMasquee(d) && isTraitee(d.statut))
   const DA_CMDS     = DA_TRAITEES // compat dashboard
@@ -137,7 +137,8 @@ export const pageServiceAchats = (
       data-demandeur="${(d.demandeur||'').replace(/"/g,'&quot;')}"
       data-type="${(d.type_da||'').replace(/"/g,'&quot;')}"
       data-priorite="${d.priorite}">
-      <td style="${TD}font-weight:700;color:#374151;">${escX(d.id)}${(d as any).genere_par_adt?' <span style="font-size:.6rem;font-weight:700;color:#0369a1;background:#e0f2fe;border-radius:5px;padding:1px 5px;">AUTO</span>':''}</td>
+      <td style="${TD}text-align:center;"><input type="checkbox" class="da-sel" data-id="${escX(d.id)}" onchange="daSelChange()" style="width:14px;height:14px;cursor:pointer;"/></td>
+      <td style="${TD}font-weight:700;color:#374151;">${escX(d.id)}${(d as any).genere_par_adt?' <span style="font-size:.6rem;font-weight:700;color:#0369a1;background:#e0f2fe;border-radius:5px;padding:1px 5px;">AUTO</span>':''}${((d as any).bc_draft && (d as any).bc_draft._fusion)?' <span style="font-size:.6rem;font-weight:700;color:#6d28d9;background:#f5f3ff;border-radius:5px;padding:1px 5px;" title="Demande issue d\'une fusion">FUSION</span>':''}</td>
       <td style="${TD}font-weight:600;color:#374151;max-width:220px;">${escX(d.article)}${(d as any).affaire_id?`<div style="font-size:.65rem;color:#6366f1;">Affaire ${escX((d as any).affaire_id)}</div>`:''}</td>
       <td style="${TD}color:#6b7280;font-size:.78rem;">${escX(d.fournisseur)||'—'}</td>
       <td style="${TD}color:#374151;font-size:.78rem;">${escX(d.qte)||'—'}</td>
@@ -146,10 +147,13 @@ export const pageServiceAchats = (
       <td style="${TD}text-align:center;font-size:.75rem;color:#6b7280;">${d.date_da}</td>
       <td style="${TD}text-align:center;font-size:.75rem;color:#374151;font-weight:600;">${escX(d.livraison)||'—'}</td>
       <td style="${TD}text-align:center;">${draft?'<span style="padding:2px 9px;border-radius:999px;font-size:.66rem;font-weight:700;background:#e0e7ff;color:#4338ca;">Brouillon</span>':daStatutBadge('a_traiter')}</td>
-      <td style="${TD}text-align:center;">
+      <td style="${TD}text-align:center;white-space:nowrap;">
         <button onclick="achOpenBC('${d.id}')" style="padding:5px 12px;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:7px;font-size:.72rem;font-weight:700;cursor:pointer;">
           <i class="fas fa-file-invoice" style="margin-right:4px;"></i>${draft?'Reprendre':'Traiter → BC'}
         </button>
+        <button onclick="daOpenEdit('${d.id}')" title="Modifier cette demande" style="margin-left:4px;padding:5px 9px;background:#eef2ff;color:#4338ca;border:none;border-radius:7px;font-size:.72rem;font-weight:700;cursor:pointer;"><i class="fas fa-pen"></i></button>
+        ${((d as any).bc_draft && (d as any).bc_draft._fusion) ? `<button onclick="daDefusionner('${d.id}')" title="Défaire la fusion" style="margin-left:4px;padding:5px 9px;background:#f5f3ff;color:#6d28d9;border:none;border-radius:7px;font-size:.72rem;font-weight:700;cursor:pointer;"><i class="fas fa-object-ungroup"></i></button>` : ''}
+        ${(d as any).genere_par_adt ? '' : `<button onclick="daRetirer('${d.id}')" title="Retirer de la liste (la demande reste en base)" style="margin-left:4px;padding:5px 9px;background:#fef2f2;color:#b91c1c;border:none;border-radius:7px;font-size:.72rem;font-weight:700;cursor:pointer;"><i class="fas fa-trash"></i></button>`}
       </td>
     </tr>`
   }
@@ -174,7 +178,7 @@ export const pageServiceAchats = (
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         ${searchBar('ach-da',[['article','Article'],['fournisseur','Fournisseur'],['demandeur','Demandeur'],['type','Type'],['priorite','Priorité']])}
-        <button onclick="daRegrouper()" title="Fusionner les demandes d'achat à traiter d'un même fournisseur en une seule" style="padding:7px 14px;background:#ede9fe;color:#6d28d9;border:none;border-radius:9px;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;"><i class="fas fa-object-group" style="margin-right:5px;"></i>Regrouper par fournisseur</button>
+        <button id="da_btn_fusion" onclick="daOuvrirFusion()" title="Cochez les demandes à réunir, puis cliquez ici" style="padding:7px 14px;background:#ede9fe;color:#6d28d9;border:none;border-radius:9px;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;"><i class="fas fa-object-group" style="margin-right:5px;"></i>Fusionner les DA cochées <span id="da_sel_cpt" style="display:none;background:#6d28d9;color:white;border-radius:999px;padding:0 7px;margin-left:5px;font-size:.7rem;">0</span></button>
         <button onclick="achNewBC()" style="padding:7px 14px;background:linear-gradient(135deg,#0ea5e9,#0369a1);color:white;border:none;border-radius:9px;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;"><i class="fas fa-file-contract" style="margin-right:5px;"></i>Créer un BC</button>
       </div>
     </div>
@@ -182,6 +186,7 @@ export const pageServiceAchats = (
       <div style="overflow-x:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:.8rem;" id="ach-da">
           <thead><tr style="background:#f8fafc;border-bottom:2px solid #f1f5f9;">
+            <th style="text-align:center;${TH}width:34px;"><input type="checkbox" id="da_all" onchange="daSelAll(this)" title="Tout sélectionner" style="width:14px;height:14px;cursor:pointer;"/></th>
             <th style="text-align:left;${TH}">N° DA</th>
             <th style="text-align:left;${TH}">Article</th>
             <th style="text-align:left;${TH}">Fournisseur</th>
@@ -194,7 +199,7 @@ export const pageServiceAchats = (
             <th style="text-align:center;${TH}">Action</th>
           </tr></thead>
           <tbody>
-            ${DA_TRAITER.length === 0 ? emptyRow(10,'Aucune DA à traiter') : DA_TRAITER.map(rowTraiter).join('')}
+            ${DA_TRAITER.length === 0 ? emptyRow(11,'Aucune DA à traiter') : DA_TRAITER.map(rowTraiter).join('')}
           </tbody>
         </table>
       </div>
@@ -231,7 +236,7 @@ export const pageServiceAchats = (
   // BC modal data (DA en cours de traitement)
   // ⚠ Tout champ lu par achOpenBC DOIT figurer ici : une projection incomplète n'est pas
   //   seulement « pas réaffichée », le formulaire la réécrit vide à l'enregistrement suivant.
-  const DA_JSON = sjX(DA_TRAITER.map(d => ({ id:d.id, article:d.article, fournisseur:d.fournisseur||'', qte:d.qte||'', type_da:d.type_da||'', type_bc:(d as any).type_bc||'fournisseur', livraison:d.livraison||'', affaire_id:(d as any).affaire_id||'', num_affaire:(d as any).num_affaire||'', bc_draft:(d as any).bc_draft||null })))
+  const DA_JSON = sjX(DA_TRAITER.map(d => ({ id:d.id, article:d.article, fournisseur:d.fournisseur||'', fournisseur_id:(d as any).fournisseur_id||'', qte:d.qte||'', type_da:d.type_da||'', type_bc:(d as any).type_bc||'fournisseur', livraison:d.livraison||'', priorite:(d as any).priorite||'normal', demandeur:(d as any).demandeur||'', statut:d.statut||'', genere_par_adt:(d as any).genere_par_adt===true, cmd_ref:(d as any).cmd_ref||'', date_da:(d as any).date_da||'', affaire_id:(d as any).affaire_id||'', num_affaire:(d as any).num_affaire||'', bc_draft:(d as any).bc_draft||null })))
 
   // ── ONGLET DASHBOARD ──────────────────────────────────────────
   const totDA    = DAS.length
@@ -605,6 +610,70 @@ export const pageServiceAchats = (
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;border-top:1px solid #f1f5f9;padding-top:12px;">
           <button onclick="nettoiePurge()" style="background:#ef4444;color:white;border:none;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:.76rem;"><i class="fas fa-trash" style="margin-right:5px;"></i>Purger les éligibles (&gt; 90 j)</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL : Fusionner des demandes d'achat -->
+  <div id="ach-fusion-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:16px;max-width:640px;width:94%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+      <div style="padding:16px 22px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#7c3aed,#5b21b6);border-radius:16px 16px 0 0;">
+        <div style="font-weight:800;font-size:1rem;color:white;display:flex;align-items:center;gap:8px;"><i class="fas fa-object-group"></i>Fusionner des demandes d'achat</div>
+        <button onclick="daFermerFusion()" style="color:rgba(255,255,255,.8);background:none;border:none;font-size:1.2rem;cursor:pointer;"><i class="fas fa-times"></i></button>
+      </div>
+      <div style="padding:20px 22px;">
+        <div id="daf_liste" style="border:1.5px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:14px;"></div>
+        <div id="daf_verdict" style="border-radius:10px;padding:11px 14px;font-size:.78rem;margin-bottom:14px;"></div>
+        <div id="daf_fourn_wrap" style="display:none;margin-bottom:12px;">
+          <label style="${LBL}">Fournisseur de la commande *</label>
+          <select id="daf_fourn" style="${INP}"></select>
+          <div style="font-size:.66rem;color:#94a3b8;margin-top:3px;">Aucune des demandes cochées ne porte de fournisseur : choisissez celui chez qui la commande sera passée.</div>
+        </div>
+        <div><label style="${LBL}">Demande porteuse (celle qui restera dans la liste)</label>
+          <select id="daf_primaire" style="${INP}"></select>
+          <div style="font-size:.66rem;color:#94a3b8;margin-top:3px;">Son numéro d'affaire reste celui du bon de commande. Les autres affaires voyagent dans les lignes du BC et leur porte « matière reçue » s'ouvrira aussi à la réception.</div>
+        </div>
+      </div>
+      <div style="padding:14px 22px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;">
+        <button onclick="daFermerFusion()" style="padding:9px 18px;background:#f1f5f9;color:#374151;border:none;border-radius:8px;font-weight:600;cursor:pointer;">Annuler</button>
+        <button id="daf_ok" onclick="daConfirmerFusion()" style="padding:9px 18px;background:linear-gradient(135deg,#7c3aed,#5b21b6);color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;"><i class="fas fa-object-group" style="margin-right:5px;"></i>Fusionner</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL : Modifier une demande d'achat -->
+  <div id="ach-daedit-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:16px;max-width:520px;width:92%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+      <div style="padding:16px 22px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#6366f1,#4338ca);border-radius:16px 16px 0 0;">
+        <div style="font-weight:800;font-size:1rem;color:white;display:flex;align-items:center;gap:8px;"><i class="fas fa-pen-to-square"></i>Modifier la demande d'achat</div>
+        <button onclick="daCloseEdit()" style="color:rgba(255,255,255,.8);background:none;border:none;font-size:1.2rem;cursor:pointer;"><i class="fas fa-times"></i></button>
+      </div>
+      <div style="padding:22px;">
+        <input type="hidden" id="dae_id"/>
+        <div id="dae_banniere" style="border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:.78rem;"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div style="grid-column:1/-1;"><label style="${LBL}">Article / Désignation *</label><input id="dae_article" type="text" style="${INP}"/></div>
+          <div><label style="${LBL}">Quantité</label><input id="dae_qte" type="text" style="${INP}"/></div>
+          <div><label style="${LBL}">Type</label><input id="dae_type" type="text" list="dl_dae_type" style="${INP}"/>
+            <datalist id="dl_dae_type"><option value="Matière"></option><option value="Accessoire"></option><option value="Consommable"></option><option value="Outillage"></option><option value="Prestation"></option></datalist>
+          </div>
+          <div style="grid-column:1/-1;"><label style="${LBL}">Fournisseur pressenti</label>
+            <input id="dae_fourn" type="text" list="dl_dae_fourn" placeholder="— libre —" style="${INP}"/>
+            <datalist id="dl_dae_fourn">${[...new Set([...(FOURN as any[]).map((f: any) => String(f.nom || '').trim()), ...(STRAIT as any[]).map((s: any) => String(s.nom || '').trim())].filter(Boolean))].sort().map((n: string) => `<option value="${escX(n)}"></option>`).join('')}</datalist>
+          </div>
+          <div><label style="${LBL}">Priorité</label>
+            <select id="dae_prio" style="${INP}"><option value="normal">Normal</option><option value="urgent">Urgent</option><option value="critique">Critique</option></select>
+          </div>
+          <div><label style="${LBL}">Livraison souhaitée</label><input id="dae_liv" type="date" style="${INP}"/></div>
+          <div style="grid-column:1/-1;"><label style="${LBL}">N° d'affaire</label>
+            <input id="dae_affaire" type="text" list="dl_bc_affaires" style="${INP}"/>
+            <div id="dae_affaire_note" style="font-size:.66rem;color:#94a3b8;margin-top:3px;"></div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:14px 22px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;">
+        <button onclick="daCloseEdit()" style="padding:9px 18px;background:#f1f5f9;color:#374151;border:none;border-radius:8px;font-weight:600;cursor:pointer;">Annuler</button>
+        <button onclick="daSaveEdit()" style="padding:9px 18px;background:linear-gradient(135deg,#6366f1,#4338ca);color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;"><i class="fas fa-save" style="margin-right:5px;"></i>Enregistrer</button>
       </div>
     </div>
   </div>
@@ -1035,6 +1104,66 @@ export const pageServiceAchats = (
     });
   }
 
+  // ── Modifier une demande d'achat ──
+  // Les DA AUTOMATIQUES (nées d'une commande) sont modifiables, mais leur rattachement à
+  // l'affaire reste verrouillé : c'est lui qui porte la porte « matière reçue » et le coût.
+  function daOpenEdit(id){
+    var d=ACH_DA.find(function(x){return x.id===id;}); if(!d) return;
+    document.getElementById('dae_id').value=d.id;
+    document.getElementById('dae_article').value=d.article||'';
+    document.getElementById('dae_qte').value=d.qte||'';
+    document.getElementById('dae_type').value=d.type_da||'';
+    document.getElementById('dae_fourn').value=d.fournisseur||'';
+    document.getElementById('dae_prio').value=d.priorite||'normal';
+    document.getElementById('dae_liv').value=(d.livraison||'').slice(0,10);
+    var aff=document.getElementById('dae_affaire');
+    aff.value=d.num_affaire||d.affaire_id||'';
+    var auto=d.genere_par_adt===true;
+    aff.disabled=auto;
+    aff.style.background=auto?'#f1f5f9':'';
+    aff.style.cursor=auto?'not-allowed':'';
+    document.getElementById('dae_affaire_note').textContent = auto
+      ? 'Rattachement verrouillé : cette demande vient de la commande '+(d.cmd_ref||'—')+'. Le déplacer changerait l imputation de la dépense.'
+      : 'Modifiable : rattachez cette demande libre à une affaire, ou laissez vide.';
+    var b=document.getElementById('dae_banniere');
+    if(auto){
+      b.style.background='#e0f2fe'; b.style.border='1px solid #bae6fd'; b.style.color='#075985';
+      b.innerHTML='<i class="fas fa-robot" style="margin-right:6px;"></i><strong>'+d.id+'</strong> — demande automatique issue de la commande <strong>'+(d.cmd_ref||'—')+'</strong>. Modifiable, mais non retirable.';
+    } else {
+      b.style.background='#f0fdf4'; b.style.border='1px solid #bbf7d0'; b.style.color='#065f46';
+      b.innerHTML='<i class="fas fa-pen" style="margin-right:6px;"></i><strong>'+d.id+'</strong> — demande libre. Modifiable et retirable de la liste.';
+    }
+    document.getElementById('ach-daedit-overlay').style.display='flex';
+  }
+  function daCloseEdit(){ document.getElementById('ach-daedit-overlay').style.display='none'; }
+  function daSaveEdit(){
+    var id=document.getElementById('dae_id').value;
+    var art=document.getElementById('dae_article').value.trim();
+    if(!art){ pushNotif('err','fa-exclamation-circle','La désignation de l article est obligatoire.'); return; }
+    var aff=document.getElementById('dae_affaire');
+    var payload={ article:art, qte:document.getElementById('dae_qte').value.trim(),
+      type_da:document.getElementById('dae_type').value.trim(),
+      fournisseur:document.getElementById('dae_fourn').value.trim(),
+      priorite:document.getElementById('dae_prio').value,
+      livraison:document.getElementById('dae_liv').value||null };
+    if(!aff.disabled) payload.num_affaire=aff.value.trim();
+    fetch('/api/achats/da/'+encodeURIComponent(id)+'/editer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+      .then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Modification refusée.',6000); return; }
+        daCloseEdit(); pushNotif('ok','fa-check','Demande '+id+' modifiée.',4000); setTimeout(function(){softReload();},700);
+      }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
+  }
+  // Retrait : la ligne reste en base, elle disparaît seulement des listes.
+  async function daRetirer(id){
+    var d=ACH_DA.find(function(x){return x.id===id;})||{};
+    if(!await appConfirm('Retirer la demande '+id+' de la liste ?\\n\\n'+(d.article||'')+'\\n\\nElle disparaît des listes et des tableaux de bord, mais reste enregistrée en base : rien n est effacé.')) return;
+    fetch('/api/achats/da/'+encodeURIComponent(id)+'/masquer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})})
+      .then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Retrait refusé.',6000); return; }
+        pushNotif('ok','fa-trash','Demande '+id+' retirée de la liste.',4000); setTimeout(function(){softReload();},700);
+      }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
+  }
+
   // ── Traiter une DA → BC ──
   function achOpenBC(id){
     var da=ACH_DA.find(function(d){return d.id===id;}); if(!da) return;
@@ -1339,6 +1468,84 @@ export const pageServiceAchats = (
   }
   function rfqPdf(id){ window.open('/api/demandes-prix/'+id+'/pdf','_blank'); }
   function rfqPdfCur(){ var id=rfqId(); if(id) window.open('/api/demandes-prix/'+id+'/pdf','_blank'); }
+  // ── Fusion MANUELLE : on coche, on verifie, on fusionne ──
+  function daSelIds(){ return [].slice.call(document.querySelectorAll('.da-sel:checked')).map(function(c){return c.getAttribute('data-id');}); }
+  function daSelChange(){
+    var n=daSelIds().length, cpt=document.getElementById('da_sel_cpt');
+    if(cpt){ cpt.textContent=String(n); cpt.style.display=n?'inline-block':'none'; }
+  }
+  function daSelAll(cb){
+    document.querySelectorAll('.da-sel').forEach(function(c){ c.checked=cb.checked; });
+    daSelChange();
+  }
+  function daOuvrirFusion(){
+    var ids=daSelIds();
+    if(ids.length<2){ pushNotif('info','fa-circle-info','Cochez au moins deux demandes à réunir, puis cliquez sur ce bouton.',5000); return; }
+    var sel=ids.map(function(i){ return ACH_DA.find(function(d){return d.id===i;}); }).filter(Boolean);
+    var fourns=[]; sel.forEach(function(d){ var f=(d.fournisseur||'').trim(); if(f && fourns.indexOf(f)<0) fourns.push(f); });
+    var affs=[];  sel.forEach(function(d){ var a=(d.num_affaire||d.affaire_id||'').trim(); if(a && affs.indexOf(a)<0) affs.push(a); });
+    // Recapitulatif de ce qui est coche
+    var h='<table style="width:100%;border-collapse:collapse;font-size:.76rem;"><thead><tr style="background:#f8fafc;"><th style="text-align:left;padding:7px 10px;color:#6b7280;font-size:.64rem;text-transform:uppercase;">N° DA</th><th style="text-align:left;padding:7px 10px;color:#6b7280;font-size:.64rem;text-transform:uppercase;">Article</th><th style="text-align:center;padding:7px 10px;color:#6b7280;font-size:.64rem;text-transform:uppercase;">Qté</th><th style="text-align:left;padding:7px 10px;color:#6b7280;font-size:.64rem;text-transform:uppercase;">Fournisseur</th><th style="text-align:center;padding:7px 10px;color:#6b7280;font-size:.64rem;text-transform:uppercase;">Affaire</th></tr></thead><tbody>';
+    sel.forEach(function(d){
+      h+='<tr style="border-top:1px solid #f1f5f9;"><td style="padding:7px 10px;font-weight:700;color:#374151;">'+achEsc(d.id)+'</td><td style="padding:7px 10px;">'+achEsc(d.article||'—')+'</td><td style="padding:7px 10px;text-align:center;">'+achEsc(d.qte||'—')+'</td><td style="padding:7px 10px;color:'+((d.fournisseur||'').trim()?'#374151':'#cbd5e1')+';">'+achEsc((d.fournisseur||'').trim()||'non renseigné')+'</td><td style="padding:7px 10px;text-align:center;font-family:monospace;color:#6366f1;">'+achEsc((d.num_affaire||d.affaire_id||'').trim()||'—')+'</td></tr>';
+    });
+    document.getElementById('daf_liste').innerHTML=h+'</tbody></table>';
+    // Verdict : la regle metier est « une fusion = UNE commande, donc UN fournisseur »
+    var v=document.getElementById('daf_verdict'), ok=true;
+    var wrap=document.getElementById('daf_fourn_wrap');
+    wrap.style.display='none';
+    if(fourns.length>1){
+      ok=false;
+      v.style.background='#fef2f2'; v.style.border='1px solid #fecaca'; v.style.color='#b91c1c';
+      v.innerHTML='<i class="fas fa-ban" style="margin-right:6px;"></i><strong>Fusion impossible.</strong> Ces demandes concernent <strong>'+fourns.length+' fournisseurs différents</strong> ('+achEsc(fourns.join(', '))+'). Une fusion ne donne qu une seule commande, donc un seul fournisseur.';
+    } else {
+      v.style.background='#f0fdf4'; v.style.border='1px solid #bbf7d0'; v.style.color='#065f46';
+      var msg='<i class="fas fa-check" style="margin-right:6px;"></i>'+sel.length+' demandes réunies en une seule commande';
+      msg += fourns.length ? ' chez <strong>'+achEsc(fourns[0])+'</strong>.' : '.';
+      if(affs.length>1) msg+='<br/><i class="fas fa-code-branch" style="margin-right:6px;"></i>Commande <strong>commune à '+affs.length+' affaires</strong> ('+achEsc(affs.join(', '))+') : chacune verra sa matière débloquée à la réception.';
+      else if(affs.length===1) msg+='<br/>Affaire <strong>'+achEsc(affs[0])+'</strong>.';
+      v.innerHTML=msg;
+      if(!fourns.length){
+        wrap.style.display='block';
+        var sf=document.getElementById('daf_fourn');
+        sf.innerHTML='<option value="">— Choisir un fournisseur —</option>'+ACH_TOUS_FOURN.map(function(n){return '<option value="'+achAttr(n)+'">'+achEsc(n)+'</option>';}).join('');
+      }
+    }
+    var sp=document.getElementById('daf_primaire');
+    sp.innerHTML=sel.map(function(d){ return '<option value="'+achAttr(d.id)+'">'+achEsc(d.id+' — '+(d.article||'').slice(0,50)+((d.num_affaire||d.affaire_id)?'  ·  affaire '+(d.num_affaire||d.affaire_id):''))+'</option>'; }).join('');
+    document.getElementById('daf_ok').disabled=!ok;
+    document.getElementById('daf_ok').style.opacity=ok?'1':'.45';
+    document.getElementById('daf_ok').style.cursor=ok?'pointer':'not-allowed';
+    document.getElementById('ach-fusion-overlay').style.display='flex';
+  }
+  function daFermerFusion(){ document.getElementById('ach-fusion-overlay').style.display='none'; }
+  function daConfirmerFusion(){
+    var ids=daSelIds(); if(ids.length<2) return;
+    var body={ da_ids:ids, primary_id:document.getElementById('daf_primaire').value };
+    var wrap=document.getElementById('daf_fourn_wrap');
+    if(wrap.style.display!=='none'){
+      var f=document.getElementById('daf_fourn').value;
+      if(!f){ pushNotif('err','fa-exclamation-circle','Choisissez le fournisseur de la commande.'); return; }
+      body.fournisseur=f;
+    }
+    fetch('/api/achats/da/fusionner',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Fusion refusée.',8000); return; }
+        daFermerFusion();
+        var m=j.absorbees+' demande(s) réunie(s) dans <strong>'+j.primaire+'</strong>';
+        if(j.affaires&&j.affaires.length>1) m+=' — commande commune à '+j.affaires.length+' affaires';
+        pushNotif('ok','fa-object-group',m+'.',6000); setTimeout(function(){softReload();},900);
+      }).catch(function(){ pushNotif('err','fa-ban','Erreur réseau.'); });
+  }
+  async function daDefusionner(id){
+    if(!await appConfirm('Défaire la fusion de '+id+' ?\\n\\nLes demandes réunies redeviennent indépendantes et réapparaissent dans la liste.')) return;
+    fetch('/api/achats/da/'+encodeURIComponent(id)+'/defusionner',{method:'POST'})
+      .then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Défusion refusée.',6000); return; }
+        pushNotif('ok','fa-object-ungroup',j.restaurees+' demande(s) redevenue(s) indépendante(s).',5000); setTimeout(function(){softReload();},900);
+      }).catch(function(){ pushNotif('err','fa-ban','Erreur réseau.'); });
+  }
+
   async function daRegrouper(){
     if(!await appConfirm('Fusionner les demandes d\\'achat à traiter d\\'un même fournisseur en une seule demande par fournisseur ?')) return;
     fetch('/api/achats/da/regrouper',{method:'POST'}).then(function(r){return r.json();}).then(function(j){

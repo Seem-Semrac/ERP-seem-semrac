@@ -29,6 +29,23 @@ Demandes de prix (RFQ), demandes d'achat, bons de commande, fournisseurs & sous-
 <!-- auto:notes -->
 RFQ = source de vérité des prix → catalogue. BC n'écrit jamais le prix. Scorecard fournisseur/ST.
 
+## Demandes d'achat : modifier, retirer, fusionner (09/09/2026)
+
+**Modifier** — `POST /api/achats/da/:id/editer`. Route **distincte** du `PATCH /api/achats/da/:id`, qui sert au brouillon de BC et force `statut='brouillon'`. L'édition ne touche ni au statut, ni à `genere_par_adt`, ni au `bc_draft`. Elle s'applique aux demandes **libres comme automatiques**, mais le **rattachement d'une demande automatique est verrouillé** : `num_affaire` et `cmd_ref` portent la porte « matière reçue » et le coût de l'affaire — les déplacer changerait silencieusement l'imputation de la dépense. La modale l'affiche en lecture seule et l'explique.
+
+**Retirer** — `POST /api/achats/da/:id/masquer`. « Du front, pas de la DB » : la ligne est **masquée** (`visible=false`, `statut='supprimee'`), jamais supprimée — et de toute façon la clé anon **ne peut pas** faire de `DELETE` sur `demandes_achat` (RLS). Refusé sur une demande **automatique** (elle traduit un besoin matière réel issu d'une commande) et sur une demande déjà traitée.
+
+> ⚠ **Prédicat unique `daMasquee(d)`** = `visible === false || statut === 'regroupee' || statut === 'supprimee'`. **Tout** lecteur de `demandes_achat` doit l'appliquer, sinon une demande retirée continue d'être comptée. Branché sur : la page Achats (`isMasquee`), `/achats/da-liste`, les tableaux de bord (`kpi.ts`), et surtout **`autoReappro`** — dont la déduplication par libellé aurait sinon gelé à vie le réapprovisionnement automatique de la référence concernée.
+
+**Fusionner** — `POST /api/achats/da/fusionner` (`{ da_ids[], primary_id?, fournisseur? }`). La sélection est **manuelle** : cases à cocher dans la liste, puis une modale récapitule ce qui sera réuni avant de valider. Le serveur **recharge les demandes en base** (aucune confiance au client) et refuse : moins de deux demandes, une demande introuvable, retirée, déjà traitée ou déjà fusionnée.
+
+- **Règle métier : un seul fournisseur.** Une fusion ne donne **qu'une commande**, donc qu'un fournisseur. Deux fournisseurs distincts → refus (409), annoncé dès la modale. Les demandes **sans** fournisseur héritent de l'unique fournisseur du lot ; si aucune n'en porte, la modale le demande.
+- **Multi-affaires.** Quand les demandes viennent d'affaires différentes, la commande devient **commune** aux deux. ⚠ `num_affaire` reste **TOUJOURS scalaire** : c'est la clé d'égalité stricte de la porte matière et du calcul de coût — une valeur composite (« 0001 · 0002 ») gèlerait `matiere_ok` à `false` et ferait disparaître les BDT des **deux** affaires du planning. L'affaire porteuse reste dans `num_affaire` ; les autres voyagent dans les **lignes du bon de commande** (`lignes[].num_affaire`). `bcAffaires(bc)` réunit les deux, et la réception ouvre la porte matière de **chaque** affaire servie.
+- **Réversible.** `POST /api/achats/da/:id/defusionner` rend leur autonomie aux demandes absorbées et restaure l'article d'origine de la porteuse. Refusé une fois le BC émis.
+- **Aucune migration.** La composition vit dans `demandes_achat.bc_draft` (colonne **jsonb** — vérifié par sonde, le dump la déclarait `text`), sous les clés réservées `_fusion` (sur la porteuse) et `_regroupee_dans` (sur les absorbées). Le brouillon de BC est précisément l'endroit qui décrit ce que la demande va devenir une fois commandée.
+
+L'ancienne route `POST /api/achats/da/regrouper` (regroupement **automatique** par fournisseur, sans choix) est conservée mais n'est plus câblée à aucun bouton.
+
 **Traitement d'une DA → BC — référence du matériel** : la fenêtre porte **deux champs distincts**, *Référence du matériel* (`#bc_reference`) et *Désignation* (`#bc_articles`).
 
 Point de conception important : **`demandes_achat` ne possède aucune colonne `reference`**, et il n'en a pas été ajouté. La référence n'est pas une donnée que la demande transporte — sur les 7 générateurs de DA du dépôt, 4 ne produisent que du texte libre. C'est une donnée que **l'acheteur arrête au moment de commander**, au catalogue. Elle est donc saisie dans ce formulaire et voyage ensuite dans `bons_de_commande.lignes` (jsonb, déjà présente), jamais dans une colonne nouvelle.

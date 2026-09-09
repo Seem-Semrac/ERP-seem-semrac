@@ -5,6 +5,20 @@
 - **Accès (RBAC)** : écriture — production · lecture — be, achats, oas, qualité, sécurité, expéditions, stock, maintenance
 <!-- /auto -->
 
+## Goulotte du planning : matière + préparation technique — AU LOT (09/09/2026)
+
+Un BDT n'apparaît au planning que si **sa matière est réceptionnée** (`matiere_ok`) **et** que **la préparation technique de SON LOT est terminée**.
+
+⚠ **Changement de comportement.** Jusqu'au 09/09/2026 le blocage portait sur **l'affaire entière** : une seule préparation en attente gelait *tous* les lots de l'affaire, y compris ceux dont le plan et le programme CN étaient prêts. Il porte désormais sur le **lot**. Une affaire de trois pièces dont une seule attend son plan voit donc les deux autres partir en fabrication.
+
+**Identification du lot sans migration** : le couple `(cmd_ref, piece)`. `lots.piece`, `preparations_techniques.piece` et `bons_de_travail.piece` sont écrits depuis la **même expression source** dans la cascade d'acceptation d'offre (`p.ref_interne || ref`) — la correspondance est exacte, à la casse près (comparaison en minuscules).
+
+**Point d'entrée unique** : `bdtBlocage(bdt, prepRows)` dans `src/index.tsx` renvoie `null` (le BDT passe) ou le motif du blocage. `filtrerBdtsPrets()` l'applique aux deux consommateurs — `/production/service` et `/production/gantt-bdt` — qui dupliquaient auparavant la même expression de filtrage.
+
+**Repli conservateur** : une préparation sans `cmd_ref` ni `piece` (ligne antérieure au 09/09/2026) bloque encore **toute son affaire**. Aucune régression possible sur l'existant.
+
+**Lecture métier** : la fiche affaire (`/commercial/affaire/:num`, tableau « Production — lots ») affiche une colonne **Fabricable** par lot, avec le motif quand il est bloqué (*préparation technique*, *matière non réceptionnée*), et un compteur « N lot(s) prêt(s) · M en attente ».
+
 ## Mission
 <!-- auto:mission -->
 Planning Gantt BDT/BST, présence opérateurs, commandes & lots, process ateliers.

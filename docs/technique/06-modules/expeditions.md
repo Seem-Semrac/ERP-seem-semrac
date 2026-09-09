@@ -44,6 +44,11 @@ Bons de commande, bons de livraison, commandes en cours, OTD.
 - **Rattachement BC → fournisseur** : par `fournisseur_id` si présent, sinon repli sur le **nom normalisé** (`fournisseur_nom`), car beaucoup de BC anciens ne portent pas l'id. BL joints par `bons_de_livraison.bc_id`, avec repli sur `bons_de_commande.bl_id`.
 - 🐞 **BC annulés désormais exclus de TOUT le service** (`statut === 'annule'`), comme les BL l'étaient déjà : ils apparaissaient encore dans le Dashboard.
 - ⚠ `bons_de_commande` : **DELETE anon bloqué par RLS** (retourne 200/204 sans effet), comme `bons_de_livraison` et `ordres_maintenance`. Une donnée de test doit être neutralisée (`statut='annule'`) puis supprimée en SQL depuis Supabase.
+- ⚠ **Deux chevauchements de files corrigés (09/09/2026)** — le même objet apparaissait dans deux cartes à la fois :
+  1. *Réceptions › Retours de sous-traitance attendus* retenait aussi les BDS **pas encore partis** (`a_envoyer`, `a_planifier`, `planifie`), déjà listés dans *Envois › À envoyer en sous-traitance*.
+  2. *Envois › Commandes prêtes à expédier* gardait les commandes **dont le BL est déjà préparé**, elles-mêmes listées dans *Bons de livraison à envoyer* — ce qui invitait à créer un **second** BL pour la même expédition.
+  Les deux files étaient invisibles en production (tables vides), mais le défaut était réel.
+- ⚠ **Ce ne sont PAS les doublons observés en base.** Le doublon visible (deux lignes `BC-TESTARB` identiques dans *En attente de validation fournisseur*) vient de **5 lignes de test** partageant le même `num_bc` — donnée, pas code. Les deux files de réception s'excluent correctement (`accuse_fournisseur_le` présent d'un côté, absent de l'autre), et *réceptions* / *retours client* se partagent proprement les BL par `nc_id`.
 - ⚠ **Manifeste de captures corrigé** : il visait encore `#exp-tab-bl`, `#exp-tab-planning`, `#exp-tab-commandes`, supprimés lors de la réorganisation du 18/08 → 5 PNG périmés retirés, entrées réelles ajoutées (`envois`, `calendrier`, `fournisseurs`). Le **manuel HTML Expéditions a été entièrement réécrit** : il décrivait encore les 5 anciens onglets.
 ---
 > Fiche générée. Manuel utilisateur correspondant : `docs/manuel/expeditions.md`. Voir aussi `04-auth-rbac.md`, `07-api-reference.md`.

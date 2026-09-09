@@ -652,7 +652,10 @@ export function achats(d: DashboardData, f?: DashFilter) {
 
   // Instantanés (backlog/retards) : PAS de dateField (sinon un simple filtre Site/N-1 les écrase au mois courant).
   // Le bornage période se fait sur les flux via inP()/mk, à l'image de commercial()/finance().
-  const das = (filterRows(d.das || [], f, { clientField: 'fournisseur' }) as any[]).filter(x => passeFourn(x.fournisseur))
+  // Une DA retirée de la liste (visible=false / regroupee / supprimee) ne doit plus être comptée.
+  const das = (filterRows(d.das || [], f, { clientField: 'fournisseur' }) as any[])
+    .filter(x => passeFourn(x.fournisseur))
+    .filter(x => x?.visible !== false && x?.statut !== 'regroupee' && x?.statut !== 'supprimee')
   const daOpen = das.filter(x => isOpen(x.statut))
   const daCrit = daOpen.filter(x => lc(x.priorite) === 'critique').length
   const daParCat = topN(groupSum(das, x => x.categorie || x.type_da || 'Autres', () => 1), 6)

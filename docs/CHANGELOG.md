@@ -2,6 +2,57 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-09 — Préparation technique par lot · demandes d'achat modifiables et fusionnables à la main
+
+### 1. Préparation technique : le site et le lot, enfin visibles
+
+La liste affiche une colonne **Site** (Seem / Semrac) et le **lot** sous la pièce, avec deux boutons de filtre par site et leur compteur.
+
+La table `preparations_techniques` ne porte **ni** l'un **ni** l'autre. Les deux sont donc **déduits, sans migration** : le site par la nomenclature (`code_ref_produit` → `entite`, repli sur la DT — c'est exactement la formule qui alimente `bons_de_travail.activite`), le lot par le couple `(commande, pièce)` — `lots.piece` et `preparations_techniques.piece` sont écrits depuis la **même expression source** dans la cascade, la correspondance est exacte.
+
+### 2. La production ne se bloque plus par affaire, mais par lot
+
+**Changement de comportement, décidé explicitement.** Jusqu'ici une seule préparation en attente gelait au planning **tous** les BDT de l'affaire, y compris ceux de pièces parfaitement prêtes. Le blocage porte désormais sur le **lot** : sur une affaire de trois pièces dont une seule attend son plan, les deux autres partent en fabrication.
+
+- Point d'entrée unique `bdtBlocage(bdt, prepRows)` : les deux consommateurs (`/production/service` et `/production/gantt-bdt`) dupliquaient jusqu'ici la même expression de filtrage.
+- **Repli conservateur** : une préparation sans commande ni pièce (ligne ancienne) bloque encore toute son affaire — aucune régression possible.
+- **Lecture métier** : la fiche affaire porte une colonne **Fabricable** par lot, le motif du blocage, et un compteur « N prêt(s) · M en attente ».
+
+### 3. Demandes d'achat : modifiables, et retirables du front
+
+| | |
+|---|---|
+| **Modifier** | `POST /api/achats/da/:id/editer` — sur les demandes **libres comme automatiques**. Route distincte du PATCH existant, qui sert au brouillon de BC et force `statut='brouillon'`. |
+| **Rattachement verrouillé** | Sur une demande **automatique**, `num_affaire` / `cmd_ref` restent en lecture seule : ils portent la porte « matière reçue » et le coût de l'affaire. |
+| **Retirer** | `POST /api/achats/da/:id/masquer` — « du front, pas de la DB » : la ligne est masquée, jamais supprimée. Refusé sur une demande automatique. |
+
+⚠ Le prédicat `daMasquee(d)` a été branché sur **tous** les lecteurs de `demandes_achat` : page Achats, liste transverse, tableaux de bord — et surtout **`autoReappro`**, dont la déduplication par libellé aurait sinon **gelé à vie** le réapprovisionnement automatique de la référence retirée.
+
+### 4. Fusion de demandes d'achat : choisie à la main
+
+Le bouton « Regrouper par fournisseur » (qui fusionnait **automatiquement**, sans choix) devient **« Fusionner les DA cochées »**. On coche, une fenêtre récapitule, on valide.
+
+- **Règle métier : un seul fournisseur.** Une fusion ne donne qu'une commande. Deux fournisseurs distincts → refus, annoncé dès la fenêtre. Les demandes sans fournisseur héritent de l'unique fournisseur du lot ; si aucune n'en porte, la fenêtre le demande.
+- **Commune à deux affaires.** ⚠ `num_affaire` reste **TOUJOURS scalaire** : c'est la clé d'égalité stricte de la porte matière et du calcul de coût — une valeur composite gèlerait `matiere_ok` à `false` et ferait disparaître les BDT des **deux** affaires du planning. L'affaire porteuse reste dans `num_affaire`, les autres voyagent dans les **lignes du bon de commande**, et la réception ouvre la porte matière de **chaque** affaire servie.
+- **Réversible** : bouton défusionner, tant que le BC n'est pas émis.
+- **Aucune migration** : la composition vit dans `demandes_achat.bc_draft` — sondé, c'est du **jsonb** (le dump la déclarait `text`).
+
+### 5. Doublons des Expéditions — la réponse
+
+**Le doublon visible vient des données, pas du code.** Cinq lignes de test partagent le même `num_bc` « BC-TESTARB » ; deux d'entre elles tombent dans la même file et s'affichent à l'identique. Sur 8 bons de commande en base, **7 sont des déchets de test**. `bons_livraison` est vide, donc l'onglet Envois n'affiche rien.
+
+Deux **vrais** chevauchements de files ont tout de même été corrigés, invisibles aujourd'hui faute de données :
+1. *Réceptions › Retours de sous-traitance attendus* retenait les BDS **pas encore partis**, déjà listés dans *Envois*.
+2. *Envois › Commandes prêtes à expédier* gardait les commandes **dont le BL est déjà préparé** — ce qui invitait à créer un **second** BL pour la même expédition.
+
+### Migration
+
+**Aucune n'est nécessaire.** `scripts_import/prepa_site_lot_schema.sql` est fourni et **optionnel** : il ne fait que figer le site et le lot à la création plutôt que de les déduire.
+
+### Vérification
+
+`tsc` 0 erreur · build ✓ · harnais **61 PASS / 0 FAIL** (une régression d'échappement attrapée et corrigée au passage) · **10 cas** sur la goulotte par lot · **11 gardes serveur** (fusion, édition, retrait) · **fusion écrite puis défaite en base réelle**, état initial restauré à l'identique et vérifié champ par champ · **11 contrôles de rendu** sur les lignes et les boutons · contrôles navigateur sur les données réelles (site Semrac et lot LOT-2026-0001-01 déduits, verdicts de fusion, verrouillage du rattachement).
+
 ## 2026-09-09 — Référence du matériel dans le BC issu d'une demande d'achat
 
 **Demandé** : « en plus de la désignation il faut surtout mettre la réf du matériel à commander, avec les fournisseurs qui ont cette réf dans le catalogue. »

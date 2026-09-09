@@ -107,7 +107,7 @@
     <p class="tab-but"><b>À quoi ça sert.</b> Les demandes d'achat (DA) sont les besoins exprimés par l'atelier et les autres services : matière, outillage, consommables, produits chimiques. Votre travail d'acheteur consiste à les transformer en <b>bons de commande</b> (BC) fournisseur ou sous-traitant. Une fois le BC créé, son suivi (arrivée, réception) se fait dans le service <b>Expéditions</b>.</p>
 
     <h3>Ce que vous voyez</h3>
-    <p>Deux listes superposées. En haut, <b>« Demandes d'achat à traiter »</b> avec son compteur vert : colonnes <b>N° DA</b>, <b>Article</b>, <b>Fournisseur</b>, <b>Qté</b>, <b>Type</b> (Matière, Outillage, Consommable, Chimique), <b>Priorité</b> (<span class="b b-crit">critique</span> / <span class="b b-warn">urgent</span> / <span class="b b-ok">normal</span>), <b>Date DA</b>, <b>Livraison souhaitée</b>, <b>Statut</b> et le bouton d'action <b>« Traiter → BC »</b>. Une pastille <span class="b b-info">AUTO</span> à côté du numéro signale une DA générée automatiquement par l'ERP (et non saisie à la main) ; le numéro d'affaire lié s'affiche sous l'article. En bas, <b>« Demandes d'achat traitées »</b> (compteur bleu) : un BC a été généré, avec les colonnes <b>Type BC</b> (Fournisseur ou Sous-traitant), <b>Statut</b> (<span class="b b-ok">Commandé ✓</span>, <span class="b b-info">En cours</span>, <span class="b b-ok">Reçu ✓</span>, <span class="b b-crit">Annulé</span>…) et un lien <b>« Voir BC »</b> qui mène aux bons de commande du service Expéditions. Au-dessus des listes : une <b>barre de recherche</b> (par article, fournisseur, demandeur, type ou priorité), le bouton <b>« Regrouper par fournisseur »</b> et le bouton <b>« Créer un BC »</b>.</p>
+    <p>Deux listes superposées. En haut, <b>« Demandes d'achat à traiter »</b> avec son compteur vert : colonnes <b>N° DA</b>, <b>Article</b>, <b>Fournisseur</b>, <b>Qté</b>, <b>Type</b> (Matière, Outillage, Consommable, Chimique), <b>Priorité</b> (<span class="b b-crit">critique</span> / <span class="b b-warn">urgent</span> / <span class="b b-ok">normal</span>), <b>Date DA</b>, <b>Livraison souhaitée</b>, <b>Statut</b> et le bouton d'action <b>« Traiter → BC »</b>. Une pastille <span class="b b-info">AUTO</span> à côté du numéro signale une DA générée automatiquement par l'ERP (et non saisie à la main) ; le numéro d'affaire lié s'affiche sous l'article. En bas, <b>« Demandes d'achat traitées »</b> (compteur bleu) : un BC a été généré, avec les colonnes <b>Type BC</b> (Fournisseur ou Sous-traitant), <b>Statut</b> (<span class="b b-ok">Commandé ✓</span>, <span class="b b-info">En cours</span>, <span class="b b-ok">Reçu ✓</span>, <span class="b b-crit">Annulé</span>…) et un lien <b>« Voir BC »</b> qui mène aux bons de commande du service Expéditions. Au-dessus des listes : une <b>barre de recherche</b> (par article, fournisseur, demandeur, type ou priorité), le bouton <b>« Fusionner les DA cochées »</b> et le bouton <b>« Créer un BC »</b>. Chaque ligne « à traiter » porte une <b>case à cocher</b> (pour la fusion) et, à droite, deux petits boutons : <b>crayon</b> pour modifier la demande, <b>corbeille</b> pour la retirer de la liste — la corbeille n'apparaît pas sur les demandes <span class="b b-info">AUTO</span>, qui traduisent un besoin réel issu d'une commande et ne peuvent être que modifiées.</p>
     <figure class="shot">
       <img src="../../assets/achats-da.png" alt="Capture de l'onglet Demandes d'achat" loading="lazy">
       <figcaption><b>Demandes d'achat</b> — la liste « à traiter » en haut avec priorités et bouton « Traiter → BC », les DA déjà transformées en BC en dessous.</figcaption>
@@ -151,10 +151,22 @@
       <figcaption><b>Créer un BC</b> — destinataire, articles, montant HT, livraison prévue et lignes détaillées ; le montant se recalcule à partir des lignes.</figcaption>
     </figure>
 
-    <h3>Pas à pas — regrouper les DA d'un même fournisseur</h3>
+    <h3>Pas à pas — modifier ou retirer une demande d'achat</h3>
     <ol class="steps">
-      <li>Cliquez <b>« Regrouper par fournisseur »</b> puis confirmez.</li>
-      <li>L'ERP fusionne les DA « à traiter » qui visent le même fournisseur en <b>une seule demande par fournisseur</b> et vous indique le nombre de fusions effectuées ; les DA absorbées disparaissent des listes. Vous ne passez plus qu'un seul BC au lieu de plusieurs.</li>
+      <li>Sur la ligne de la demande, cliquez le <b>crayon</b>. La fenêtre reprend l'article, la quantité, le type, le fournisseur pressenti, la priorité, la livraison souhaitée et le numéro d'affaire.</li>
+      <li>Corrigez ce qu'il faut, puis <b>Enregistrer</b>. Une bannière en haut de la fenêtre rappelle si la demande est <b>libre</b> ou <b>automatique</b>.</li>
+      <li>Sur une demande <b>automatique</b> (pastille AUTO), le <b>numéro d'affaire est verrouillé</b> : il relie la dépense à sa commande et commande l'ouverture de la matière en production. Tout le reste se modifie normalement.</li>
+      <li>Pour retirer une demande <b>libre</b>, cliquez la <b>corbeille</b> et confirmez. Elle disparaît des listes et des tableaux de bord — <b>mais reste enregistrée en base</b> : rien n'est effacé, c'est un retrait d'affichage.</li>
+    </ol>
+
+    <h3>Pas à pas — réunir plusieurs demandes en une seule commande</h3>
+    <ol class="steps">
+      <li><b>Cochez</b> les demandes que vous voulez réunir (au moins deux). Le compteur du bouton se met à jour.</li>
+      <li>Cliquez <b>« Fusionner les DA cochées »</b>. Une fenêtre récapitule ce qui va être réuni : article, quantité, fournisseur et affaire de chaque demande.</li>
+      <li>Lisez le <b>verdict</b> affiché en dessous. Une fusion ne donne <b>qu'une seule commande</b>, donc <b>un seul fournisseur</b> : si les demandes cochées visent des fournisseurs différents, la fusion est <b>refusée</b> et le bouton reste inactif. Si aucune ne porte de fournisseur, la fenêtre vous demande de le choisir.</li>
+      <li>Si les demandes viennent d'<b>affaires différentes</b>, le verdict vous l'annonce : la commande sera <b>commune aux deux affaires</b>, et chacune verra sa matière débloquée à la réception.</li>
+      <li>Choisissez la <b>demande porteuse</b> (celle qui restera dans la liste), puis <b>Fusionner</b>. Les autres disparaissent de la liste et une pastille <b>FUSION</b> apparaît sur la porteuse.</li>
+      <li>Erreur de sélection ? Le bouton <b>défusionner</b> (deux carrés séparés) sur la demande porteuse rend leur autonomie à toutes les demandes réunies — tant que le bon de commande n'a pas été émis.</li>
     </ol>
 
     <h3>Règles &amp; points d'attention</h3>

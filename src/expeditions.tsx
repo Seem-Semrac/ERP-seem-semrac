@@ -940,7 +940,11 @@ function panelReceptions(bcs: any[], bcsAttendus: any[], receptions: any[], bds:
   }).join('')
 
   // 2. Retours de sous-traitance attendus (vrais BDS)
-  const bdsAtt = (bds || []).filter((s: any) => !['recu', 'termine', 'cloture', 'annule'].includes(String(s.statut)) && !s.date_retour_effective && (s.date_retour_prevue || s.date_envoi))
+  // Un BDS pas encore parti n'est pas « attendu au retour » : sans cette exclusion il figurait
+  // à la fois dans « À envoyer en sous-traitance » (Envois) et ici — le même bon, deux fois.
+  const bdsAtt = (bds || []).filter((s: any) => !['recu', 'termine', 'cloture', 'annule'].includes(String(s.statut))
+    && !['a_envoyer', 'a_planifier', 'planifie'].includes(String(s.statut))
+    && !s.date_retour_effective && (s.date_retour_prevue || s.date_envoi))
   const rowsBds = bdsAtt.map((s: any) => tr([
     TD(`<div style="font-weight:700;color:#5b21b6;">${escX(s.id)}</div><div style="font-size:.65rem;color:#94a3b8;">${escX(s.lot_ref ?? s.cmd_ref ?? '')}</div>`),
     TD(escX(s.sous_traitant_nom ?? s.sous_traitant_id ?? '—')),
@@ -1052,7 +1056,13 @@ function panelEnvois(bds: any[], blsClient: any[], cmds: any[], qualiteBloque: (
 
   // 3. Commandes clients prêtes à expédier (production soldée) + celles bloquées qualité
   const cmdsOuv = (cmds || []).filter((c: any) => !['livree', 'annulee'].includes(String(c.statut)))
-  const pretes = cmdsOuv.filter((c: any) => Number(c.bdt_total) > 0 && Number(c.bdt_soldes) === Number(c.bdt_total))
+  // Une commande dont le BL est deja prepare figure dans la carte « Bons de livraison a envoyer » :
+  // la laisser ici affichait la meme expedition deux fois, et invitait a creer un SECOND BL.
+  const cmdAvecBl = new Set((blsClient || [])
+    .filter((b: any) => String(b.statut || '') !== 'annule')
+    .map((b: any) => String(b.cmd_id ?? b.cmd_ref ?? '')).filter(Boolean))
+  const pretes = cmdsOuv.filter((c: any) => Number(c.bdt_total) > 0 && Number(c.bdt_soldes) === Number(c.bdt_total)
+    && !cmdAvecBl.has(String(c.id)) && !cmdAvecBl.has(String(c.num_affaire ?? '')))
   const rowsCmd = pretes.map((c: any) => {
     const bloc = qualiteBloque(c)
     return tr([
