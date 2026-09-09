@@ -2,6 +2,28 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-09 — Le schéma de la base se met à jour sur la VM, sans toucher aux données
+
+**Le trou** : les scripts d'initialisation ne sont joués par Postgres **que sur une base vide**. Sur une VM déjà en service, `erp-docker.sh maj` mettait le **code** à jour mais **jamais le schéma** — une nouvelle colonne n'arrivait pas, et rien ne le signalait.
+
+**Le mécanisme** : un conteneur éphémère `erp-migrate` démarre à chaque `up` (après que la base est saine), applique les fichiers de `docker/db/migrations/` **jamais encore joués**, puis s'arrête. Journal dans la table `_erp_migrations`. Le service `app` **dépend de sa réussite** : jamais de code neuf sur un schéma ancien.
+
+### Les données ne sont jamais touchées
+
+Le runner inspecte **tous** les fichiers *avant* d'en appliquer un seul et **refuse le lot entier** si l'un contient `DROP TABLE`, `DROP COLUMN`, `DROP DATABASE`, `DROP SCHEMA`, `DROP TYPE`, `DROP SEQUENCE`, `TRUNCATE` ou `DELETE FROM`. Les commentaires SQL sont retirés avant l'analyse — un `-- …drop table…` ne déclenche pas de faux positif. Restent autorisés parce qu'ils ne détruisent aucune donnée : `drop policy`, `drop index`, `drop trigger`, `drop constraint`.
+
+Chaque fichier tourne dans **une transaction** (`psql -1`) : tout ou rien. Un `notify pgrst, 'reload schema'` suit, pour que les nouvelles colonnes soient visibles à l'API sans redémarrage.
+
+### Première migration livrée
+
+`001-bc-draft-jsonb.sql` aligne `demandes_achat.bc_draft` (`text` sur Docker, `jsonb` en cloud). **Prudente par construction** : si une seule ligne contient du texte qui n'est pas du JSON valide, la conversion est **abandonnée proprement**, la colonne reste en `text`, la migration se termine sans erreur et l'application continue de fonctionner (le serveur sait déjà écrire dans les deux types).
+
+### Vérification
+
+`docker compose config` valide · `bash -n` sur les deux scripts · runner exécuté contre un **faux `psql`** : une migration déjà appliquée est sautée, une nouvelle est appliquée une seule fois, le journal reçoit un insert, PostgREST est rechargé · **chemin de refus prouvé** : avec une migration destructrice dans le lot, code de sortie non nul et **zéro** migration appliquée, y compris la légitime · garde-fou vérifié sur 5 fichiers (`drop table`, `delete from`, `TRUNCATE` majuscule, `drop policy` autorisé, commentaire piégeux ignoré).
+
+⚠ Non exécuté contre une vraie base : Docker Desktop n'était pas démarré sur le poste. Le premier `erp-docker.sh maj` sur la VM affichera le résultat des migrations — c'est là que ça se confirmera.
+
 ## 2026-09-09 — Droits instantanés · nomenclature · OAS au prix · proforma en compta
 
 ### 1. Les droits s'appliquent sans reconnexion

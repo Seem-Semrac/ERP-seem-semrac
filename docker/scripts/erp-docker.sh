@@ -45,6 +45,11 @@ case "$cmd" in
     echo "→ Reconstruction et redemarrage…"
     compose up -d --build
     echo
+    # Migrations de SCHEMA : le conteneur `migrate` a tourne pendant le up ci-dessus.
+    # Les DONNEES ne sont jamais touchees (toute instruction destructrice est refusee).
+    echo "Schema de la base :"
+    compose logs migrate 2>/dev/null | sed -n 's/^[^|]*| //p' | tail -12 || echo "  (aucune sortie)"
+    echo
     compose ps --format 'table {{.Name}}\t{{.Status}}'
     echo
     _port="$(sed -n 's/^APP_PORT=//p' "$ENV_FILE" | head -1)"; _port="${_port:-3000}"

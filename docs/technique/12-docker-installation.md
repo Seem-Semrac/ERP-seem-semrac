@@ -8,6 +8,32 @@
 
 ---
 
+## Migrations de schéma — la base se met à jour sans perdre de données
+
+**Le piège que ce mécanisme corrige** : les scripts de `/docker-entrypoint-initdb.d/` (dont `db/seed/schema.sql`) ne sont joués par Postgres **que si le répertoire de données est vide**, c'est-à-dire à la toute première création de la base. Sur une VM déjà en service, une nouvelle colonne n'arrivait donc **jamais** : `erp-docker.sh maj` mettait le code à jour, et le schéma restait figé.
+
+**Le mécanisme** : un conteneur éphémère `erp-migrate` (`docker/migrate.Dockerfile`) démarre à chaque `up`, après que la base est saine, applique les fichiers de `docker/db/migrations/` **jamais encore joués**, puis s'arrête. Son journal est la table `_erp_migrations`. Le service `app` **dépend de sa réussite** (`service_completed_successfully`) : jamais de code neuf sur un schéma ancien.
+
+**Les données ne sont jamais touchées.** Le runner inspecte **tous** les fichiers *avant* d'en appliquer un seul et **refuse le lot entier** si l'un contient :
+
+```
+DROP TABLE · DROP COLUMN · DROP DATABASE · DROP SCHEMA · DROP TYPE · DROP SEQUENCE · TRUNCATE · DELETE FROM
+```
+
+Les commentaires SQL sont retirés avant l'analyse (pas de faux positif sur un `-- …drop table…`). Restent autorisés, car ils ne détruisent aucune donnée : `drop policy`, `drop index`, `drop trigger`, `drop constraint`. Une suppression réellement voulue se fait à la main : `docker exec -it erp-db psql -U postgres`.
+
+**Chaque fichier s'exécute dans une transaction** (`psql -1`) : soit tout passe, soit rien. Après application, un `notify pgrst, 'reload schema'` rend les nouvelles colonnes visibles à l'API sans redémarrage.
+
+**Écrire une migration** : `docker/db/migrations/NNN-sujet.sql`, numéro jamais réutilisé (l'ordre alphabétique est l'ordre d'exécution), idempotente (`add column if not exists`), et le même DDL reporté dans `db/seed/schema.sql` pour les nouvelles installations. Règles complètes : `docker/db/migrations/README.md`.
+
+**Vérifier après une mise à jour** :
+
+```bash
+docker logs erp-migrate
+docker exec erp-db psql -U postgres -d postgres -c "table _erp_migrations"
+```
+
+
 ## 1. Ce que ça installe
 
 Un seul `docker compose` monte 8 conteneurs (dérivé du compose **officiel** Supabase,

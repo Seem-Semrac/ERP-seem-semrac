@@ -53,6 +53,28 @@ services:
       - -c
       - log_min_messages=fatal
 
+  # ─── Migrations de SCHÉMA (conteneur éphémère : applique puis s'arrête) ───
+  # Les scripts de /docker-entrypoint-initdb.d/ ne sont joués QUE sur une base vide.
+  # Sur une VM déjà en service, une nouvelle colonne n'arrivait donc jamais : le code
+  # se mettait à jour, le schéma non. Ce conteneur rejoue db/migrations/ à chaque
+  # démarrage, uniquement les fichiers jamais appliqués (journal : _erp_migrations).
+  # ⚠ Il REFUSE toute migration destructrice — voir db/migrations/README.md.
+  migrate:
+    container_name: erp-migrate
+    build:
+      context: .
+      dockerfile: migrate.Dockerfile
+    restart: "no"          # travail ponctuel : il applique, il sort.
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: ${POSTGRES_PORT}
+      PGUSER: postgres
+      PGDATABASE: ${POSTGRES_DB}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+
   # ─── PostgREST : l'API REST que @supabase/supabase-js utilise (.from()) ───
   rest:
     container_name: erp-rest
@@ -246,6 +268,8 @@ services:
         condition: service_healthy
       kong:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully   # jamais de code neuf sur un schéma ancien
     environment:
       PORT: 3000
       # L'app parle à Supabase par la passerelle Kong INTERNE au réseau Docker.
