@@ -43,15 +43,23 @@ case "$cmd" in
     echo "→ Recuperation de la derniere version…"
     git -C "$REPO_ROOT" pull --ff-only || { echo "✗ git pull a echoue — resolvez le conflit puis relancez."; exit 1; }
     echo "→ Reconstruction et redemarrage…"
-    compose up -d --build
+    # ⚠ `set -e` en tete de ce script : sans ce garde, un service qui sort en erreur
+    #   (ex. une migration en echec) faisait AVORTER la commande ici — l'utilisateur ne
+    #   voyait alors ni les logs de migration, ni l'etat des conteneurs.
+    rc_up=0; compose up -d --build || rc_up=$?
     echo
     # Migrations de SCHEMA : le conteneur `migrate` a tourne pendant le up ci-dessus.
     # Les DONNEES ne sont jamais touchees (toute instruction destructrice est refusee).
     echo "Schema de la base :"
-    compose logs migrate 2>/dev/null | sed -n 's/^[^|]*| //p' | tail -12 || echo "  (aucune sortie)"
+    compose logs migrate --no-log-prefix 2>/dev/null | tail -30 || echo "  (aucune sortie)"
     echo
-    compose ps --format 'table {{.Name}}\t{{.Status}}'
+    compose ps -a --format 'table {{.Name}}\t{{.Status}}'
     echo
+    if [ "$rc_up" != "0" ]; then
+      echo "  ! un service a signale une erreur (voir ci-dessus)."
+      echo "    L'application demarre malgre tout : rien ne depend des migrations."
+      echo
+    fi
     _port="$(sed -n 's/^APP_PORT=//p' "$ENV_FILE" | head -1)"; _port="${_port:-3000}"
     _ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
     echo "✓ Mise a jour terminee. App : http://${_ip:-localhost}:${_port}" ;;

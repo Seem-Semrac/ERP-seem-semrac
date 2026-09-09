@@ -91,6 +91,9 @@ for f in "${fichiers[@]}"; do
     emp="$(md5sum "$f" 2>/dev/null | cut -d' ' -f1)"
     psql_ -q -c "insert into public._erp_migrations (fichier, empreinte) values ('$nom', '${emp:-?}')" >/dev/null 2>&1
     echo "  + $nom"
+    # Les NOTICE de la migration portent l'explication (ex. « conversion abandonnee (…) ») :
+    # sans ca, un fichier qui renonce proprement semblerait n'avoir rien fait.
+    [ -s /tmp/err ] && sed 's/^/      /' /tmp/err
     applique=$((applique + 1))
   else
     echo "  ✗ ECHEC : $nom — la transaction a ete annulee, la base est INTACTE." >&2
