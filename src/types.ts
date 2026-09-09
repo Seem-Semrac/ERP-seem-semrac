@@ -643,7 +643,8 @@ export interface EtapeProduction {
   machine_id?: string
   machine_nom?: string
   machine_taux_h?: number
-  temps_reglage_min: number
+  temps_reglage_min: number             // ROP — réglage opérateur (minutes)
+  temps_reglage_machine_min?: number    // RGM — réglage machine (minutes)
   temps_unitaire_min: number
   temps_mo_min?: number
   temps_machine_min?: number
@@ -662,7 +663,9 @@ export interface EtapeProduction {
   oas_apres?: boolean
   // Étapes importées (temps en millièmes d'heure)
   temps_variable_mille?: number
-  temps_reglage_mille?: number
+  temps_reglage_mille?: number          // historique : réglage unique, imputé à la ressource de l'étape
+  temps_reglage_op_mille?: number       // ROP — réglage opérateur, imputé au taux MO
+  temps_reglage_machine_mille?: number  // RGM — réglage machine, imputé au taux machine
   est_fixe?: boolean
 }
 

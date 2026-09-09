@@ -2,6 +2,32 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-09 — Nomenclatures : deux temps de réglage, ROP (homme) et RGM (machine)
+
+- **Demande** : « dans les nomenclatures, il faut mettre deux temps de réglages, le temps réglage homme (ROP) et le temps réglage machine (RGM), en millièmes d'heures ».
+- La gamme n'avait qu'**un seul** temps de réglage, imputé **soit** à l'opérateur **soit** à la machine selon la ressource de l'étape — jamais aux deux. Or un réglage mobilise couramment un homme **et** une machine en même temps : la moitié du coût échappait au chiffrage.
+
+| | ROP — réglage opérateur | RGM — réglage machine |
+|---|---|---|
+| Imputé au | **taux main d'œuvre** | **taux machine** |
+| Formulaire BE (minutes) | `temps_reglage_min` | `temps_reglage_machine_min` |
+| Gamme importée (millièmes) | `temps_reglage_op_mille` | `temps_reglage_machine_mille` |
+
+Les deux restent des **coûts fixes par lot**, jamais multipliés par la quantité produite.
+
+### Aucune migration de base
+Les étapes vivent dans la colonne `nomenclatures.etapes_production` (jsonb) : les nouveaux champs s'ajoutent au JSON, rien à faire côté schéma — ni sur le cloud, ni sur Docker.
+
+### Compatibilité ascendante — le point sensible
+Requalifier le champ historique aurait **déplacé le coût de réglage** des 318 nomenclatures importées, silencieusement. `etapeDecomp()` ne bascule donc sur la répartition explicite **que si l'un des deux nouveaux champs est renseigné** ; sinon il applique exactement l'ancienne règle.
+
+**Vérifié par 7 cas de non-régression** exécutés contre le moteur réel : étape machine et étape homme en ancien format (coûts **identiques** à avant), ROP+RGM, ROP seul, RGM seul, et les deux formes minutes. Les 7 passent.
+
+### Portée des modifications
+`src/shared.ts` (`etapeDecomp`, moteur de coût canonique) · `src/types.ts` · `src/be.tsx` (4ᵉ colonne de temps dans la gamme, totaux, coûts du formulaire, dérivation des gammes importées) · `src/index.tsx` (analyse DT, helper `reglageMilleTotal`, temps machine) · `src/prod.tsx` (OF).
+
+`tsc` 0 erreur · build OK · harnais **61 PASS / 0 FAIL** · écran BE servi depuis Docker avec les colonnes ROP et RGM.
+
 ## 2026-09-09 — Préparation technique : plan et programme CN chargés par un sélecteur de fichier
 
 - **Demande** : « le plan et le fichier du code doivent se charger avec le bouton qui permet d'aller chercher dans les fichiers, tout simplement. Le nom doit se remplir en fonction du nom du plan. »

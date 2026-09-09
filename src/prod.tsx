@@ -1107,11 +1107,13 @@ export const pageLotDetail = (
       const hasMin = (e.temps_mo_min != null || e.temps_machine_min != null || e.temps_reglage_min != null)
       let reg: number, moU: number, machU: number
       if (hasMin) {
-        reg = (Number(e.temps_reglage_min) || 0) / 60
+        reg = ((Number(e.temps_reglage_min) || 0) + (Number(e.temps_reglage_machine_min) || 0)) / 60   // ROP + RGM
         moU = (Number(e.temps_mo_min) || 0) / 60
         machU = (Number(e.temps_machine_min) || 0) / 60
       } else {
-        reg = (Number(e.temps_reglage_mille) || 0) / 1000
+        reg = ((e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null)
+          ? ((Number(e.temps_reglage_op_mille) || 0) + (Number(e.temps_reglage_machine_mille) || 0))
+          : (Number(e.temps_reglage_mille) || 0)) / 1000
         const uni = (Number(e.temps_variable_mille) || 0) / 1000
         const isMach = String(e.ressource || '').toLowerCase() === 'machine'
         moU = isMach ? 0 : uni; machU = isMach ? uni : 0

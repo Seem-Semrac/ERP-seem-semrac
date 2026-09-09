@@ -3039,11 +3039,21 @@ app.get('/api/nomenclature/:id/fournitures', async (c) => {
 // Pour chaque pièce de la DT, retrouve sa nomenclature validée (par code_ref_produit ↔ ref_interne)
 // et calcule tout pour la quantité voulue : matière, MO, machine, réglage, sous-traitance (forfait inclus).
 // Temps d'une étape en minutes — gère le modèle importé (millièmes d'heure, /1000) ET le manuel (minutes).
+// Réglage total d'une étape, en millièmes d'heure : ROP (opérateur) + RGM (machine)
+// quand ils sont renseignés, sinon le champ historique unique.
+function reglageMilleTotal(e: any): number {
+  if (!e) return 0
+  if (e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null) {
+    return (Number(e.temps_reglage_op_mille) || 0) + (Number(e.temps_reglage_machine_mille) || 0)
+  }
+  return Number(e.temps_reglage_mille) || 0
+}
+
 // Réglage = part fixe (par lot) ; varMin = part variable (par pièce). Une op importée 'est_fixe' bascule en réglage.
 function etapeTempsMin(e: any): { reglageMin: number; varMin: number } {
-  if (e && (e.temps_variable_mille != null || e.temps_reglage_mille != null)) {
+  if (e && (e.temps_variable_mille != null || e.temps_reglage_mille != null || e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null)) {
     const vmin = (Number(e.temps_variable_mille) || 0) * 0.06   // millième d'h → minutes (×60/1000)
-    const rmin = (Number(e.temps_reglage_mille) || 0) * 0.06
+    const rmin = reglageMilleTotal(e) * 0.06
     return e.est_fixe ? { reglageMin: rmin + vmin, varMin: 0 } : { reglageMin: rmin, varMin: vmin }
   }
   return { reglageMin: Number(e.temps_reglage_min) || 0, varMin: (Number(e.temps_mo_min) || 0) + (Number(e.temps_machine_min) || 0) }
@@ -3110,9 +3120,9 @@ app.get('/api/be/analyse-dt/:id', async (c) => {
       .map((e: any, idx: number) => {
         // TEMPS (min) — pour l'affichage : réglage/lot + variable/pièce (op. fixe importée → part réglage).
         let reglage = 0, mo = 0, mach = 0
-        if (e && (e.temps_variable_mille != null || e.temps_reglage_mille != null)) {
+        if (e && (e.temps_variable_mille != null || e.temps_reglage_mille != null || e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null)) {
           const varMin = (Number(e.temps_variable_mille) || 0) * 0.06   // millième d'heure → minutes
-          const regMin = (Number(e.temps_reglage_mille) || 0) * 0.06
+          const regMin = reglageMilleTotal(e) * 0.06                    // ROP + RGM
           reglage = regMin
           if (e.est_fixe) reglage += varMin                               // opération fixe → part réglage/lot
           else if (e.ressource === 'machine') mach = varMin
@@ -7243,10 +7253,14 @@ app.get('/maintenance/service', async (c) => {
     let mMinUnit = 0, mReg = 0
     if (e.ressource === 'machine') {
       mMinUnit = (Number(e.temps_variable_mille) || 0) / 1000 * 60
-      mReg = (Number(e.temps_reglage_mille) || 0) / 1000 * 60
+      // Temps MACHINE : seul le reglage machine (RGM) immobilise la machine ; a defaut,
+      // le champ historique, qui etait deja impute a la machine pour une etape 'machine'.
+      mReg = (e.temps_reglage_machine_mille != null || e.temps_reglage_op_mille != null)
+        ? (Number(e.temps_reglage_machine_mille) || 0) / 1000 * 60
+        : (Number(e.temps_reglage_mille) || 0) / 1000 * 60
     } else {
       mMinUnit = Number(e.temps_machine_min ?? ((e.machine_id || e.machine_taux_h) ? (e.temps_unitaire_min ?? 0) : 0)) || 0
-      mReg = (e.machine_id || e.machine_taux_h) ? (Number(e.temps_reglage_min) || 0) : 0
+      mReg = (e.machine_id || e.machine_taux_h) ? (Number(e.temps_reglage_machine_min ?? e.temps_reglage_min) || 0) : 0
     }
     if (mMinUnit <= 0 && mReg <= 0) return null
     const qte = Math.max(1, Number(lotById[String(bdt.lot_id)]?.qte) || 1)

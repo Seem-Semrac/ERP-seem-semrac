@@ -701,12 +701,13 @@ export const pageServiceBE = (
             </div>
             <!-- Header colonnes -->
             <div style="font-size:.62rem;color:#7c3aed;font-weight:700;margin:0 2px 5px;"><i class="fas fa-clock" style="margin-right:4px;"></i>Temps en <strong>millièmes d'heure</strong> (1000&nbsp;‰&nbsp;=&nbsp;1&nbsp;h) — totaux affichés en heures/minutes</div>
-            <div style="display:grid;grid-template-columns:34px 84px 1fr 1.2fr 62px 62px 66px 92px 26px;gap:4px;margin-bottom:4px;padding:0 2px;">
+            <div style="display:grid;grid-template-columns:34px 84px 1fr 1.2fr 58px 58px 58px 62px 88px 26px;gap:4px;margin-bottom:4px;padding:0 2px;">
               <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">N°</span>
               <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Type</span>
               <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;" title="Poste d'atelier (interne) / sous-traitant">Poste</span>
               <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;" title="Process du poste choisi (interne) / opération (sous-traité)">Process</span>
-              <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;" title="Temps de réglage — millièmes d'heure (1000 = 1 h)">Régl. ‰h</span>
+              <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;" title="ROP — réglage OPÉRATEUR, en millièmes d'heure (1000 = 1 h). Coût fixe par lot, au taux main d'œuvre.">ROP ‰h</span>
+              <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;" title="RGM — réglage MACHINE, en millièmes d'heure (1000 = 1 h). Coût fixe par lot, au taux machine.">RGM ‰h</span>
               <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;" title="Temps main d'œuvre / homme — millièmes d'heure (1000 = 1 h)">MO ‰h</span>
               <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;" title="Temps machine — millièmes d'heure (1000 = 1 h)">Mach ‰h</span>
               <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Coût/pc</span>
@@ -1723,15 +1724,19 @@ export const pageServiceBE = (
       // Gammes importées (temps en MILLIÈMES d'heure) → rendre réglage/MO/machine VISIBLES en minutes.
       //   millième → minutes = ×0.06 (×60/1000). Réglage = part fixe/lot ; MO ou machine selon la ressource du process.
       //   Le calcul de coût serveur reste basé sur les millièmes (source de vérité) ; ici on dérive l'affichage.
-      var hasMille = (e.temps_variable_mille != null || e.temps_reglage_mille != null);
+      var hasMille = (e.temps_variable_mille != null || e.temps_reglage_mille != null || e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null);
       if (hasMille && e.type == null) e.type = 'interne';   // gammes importées = procédés internes (ni ST)
       if (hasMille && e.temps_reglage_min == null && e.temps_mo_min == null && e.temps_machine_min == null) {
         var isMach = (e.ressource === 'machine');
         var varMin = (Number(e.temps_variable_mille) || 0) * 0.06;
-        var regMin = (Number(e.temps_reglage_mille) || 0) * 0.06;
-        if (e.est_fixe) { regMin += varMin; varMin = 0; }   // opération fixe = comptée par lot (réglage)
+        // ROP et RGM s'ils existent, sinon le champ historique impute a la ressource de l'etape.
+        var aSplit = (e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null);
+        var ropMin = aSplit ? (Number(e.temps_reglage_op_mille) || 0) * 0.06 : (isMach ? 0 : (Number(e.temps_reglage_mille) || 0) * 0.06);
+        var rgmMin = aSplit ? (Number(e.temps_reglage_machine_mille) || 0) * 0.06 : (isMach ? (Number(e.temps_reglage_mille) || 0) * 0.06 : 0);
+        if (e.est_fixe) { if (isMach) { rgmMin += varMin; } else { ropMin += varMin; } varMin = 0; }   // operation fixe = comptee par lot
         var r2 = function(x){ return Math.round(x * 100) / 100; };
-        e.temps_reglage_min = r2(regMin);
+        e.temps_reglage_min = r2(ropMin);
+        e.temps_reglage_machine_min = r2(rgmMin);
         e.temps_mo_min      = r2(isMach ? 0 : varMin);
         e.temps_machine_min = r2(isMach ? varMin : 0);
         if (e.taux_mo_h == null) e.taux_mo_h = Number(nom.taux_mo) || TAUX_MO_MOYEN;
@@ -2245,9 +2250,10 @@ export const pageServiceBE = (
   //   - Sous-traitée : prix unitaire pièce du ST (le forfait est appliqué comme plancher à la commande)
   function nomEtapeCoutMO(e) { return ((e.temps_mo_min||0) + (e.temps_reglage_min||0))/60 * (e.taux_mo_h || TAUX_MO_MOYEN); }
   // Part RÉGLAGE du coût MO d'une étape (fixe / lot — ne se multiplie pas avec la quantité produite).
-  function nomEtapeCoutReglage(e) { return (e.temps_reglage_min||0)/60 * (e.taux_mo_h || TAUX_MO_MOYEN); }
+  // ROP au taux MO + RGM au taux machine — les deux sont fixes par lot.
+  function nomEtapeCoutReglage(e) { return (e.temps_reglage_min||0)/60 * (e.taux_mo_h || TAUX_MO_MOYEN) + (e.temps_reglage_machine_min||0)/60 * (e.machine_taux_h || nomMachCoutH(e.machine_id) || 0); }
   function nomMachCoutH(mid){ if(!mid) return 0; var m=(BE_REFS_JS.machines||[]).find(function(x){return String(x.id)===String(mid);}); return m?(Number(m.cout_h!=null?m.cout_h:m.taux_horaire)||0):0; }
-  function nomEtapeCoutMachine(e) { return (e.temps_machine_min||0)/60 * (e.machine_taux_h || nomMachCoutH(e.machine_id) || 0); }   // taux horaire de la machine du process
+  function nomEtapeCoutMachine(e) { return ((e.temps_machine_min||0) + (e.temps_reglage_machine_min||0))/60 * (e.machine_taux_h || nomMachCoutH(e.machine_id) || 0); }   // operation + reglage machine, au taux horaire de la machine
   function nomEtapeCoutUnitaire(e) {
     if (e.type === 'sous_traite') {
       return (e.prix_unitaire_st_ht != null ? e.prix_unitaire_st_ht : (e.cout_st_unitaire || 0)) || 0;
@@ -2363,15 +2369,19 @@ export const pageServiceBE = (
       // → aucun impact sur le moteur de coût / l'OF / les dashboards. Affichage input = min × 1000/60.
       var mkTime = function(field, val){ var mil = val ? +((Number(val)*1000/60).toFixed(1)) : 0; return '<input class="nom-f-inp" type="number" step="1" min="0" inputmode="decimal" placeholder="0" title="1000 millièmes = 1 heure" value="'+mil+'" oninput="nomEtapes['+i+'].'+field+'=(parseFloat(this.value)||0)*60/1000;nomCalcTotaux()" onchange="nomRenderEtapes()" style="text-align:right;"/>'; };
       var greyInput = function(titleTxt){ return '<input class="nom-f-inp" type="number" placeholder="—" disabled title="'+titleTxt+'" style="'+greyStyle+'"/>'; };
+      // ROP = reglage operateur (au taux MO) · RGM = reglage machine (au taux machine).
+      // Les deux sont des couts FIXES par lot, jamais multiplies par la quantite.
       var regInput = greyTime ? greyInput('Non applicable en sous-traitance') : mkTime('temps_reglage_min', e.temps_reglage_min);
+      var regMacInput = (greyTime || noMachine) ? greyInput(greyTime ? 'Non applicable en sous-traitance' : 'Process manuel — pas de machine a regler') : mkTime('temps_reglage_machine_min', e.temps_reglage_machine_min);
       var moInput  = greyTime ? greyInput('Non applicable en sous-traitance') : mkTime('temps_mo_min', e.temps_mo_min);
       var macInput = (greyTime || noMachine) ? greyInput(greyTime ? 'Non applicable en sous-traitance' : 'Process manuel — pas de machine') : mkTime('temps_machine_min', e.temps_machine_min);
-      return '<div ondragover="nomEtapeDragOver(event)" ondrop="nomEtapeDrop(event,'+i+')" style="display:grid;grid-template-columns:34px 84px 1fr 1.2fr 62px 62px 66px 92px 26px;gap:4px;margin-bottom:4px;align-items:start;">'
+      return '<div ondragover="nomEtapeDragOver(event)" ondrop="nomEtapeDrop(event,'+i+')" style="display:grid;grid-template-columns:34px 84px 1fr 1.2fr 58px 58px 58px 62px 88px 26px;gap:4px;margin-bottom:4px;align-items:start;">'
         + '<div draggable="true" ondragstart="nomEtapeDragStart(event,'+i+')" ondragend="nomEtapeDragEnd(event)" title="Glisser pour réordonner les procédés" style="text-align:center;cursor:grab;font-size:.74rem;font-weight:800;color:#94a3b8;font-family:monospace;padding-top:6px;user-select:none;"><i class="fas fa-grip-vertical" style="color:#cbd5e1;font-size:.66rem;"></i> '+(e.ordre || (i+1))+'</div>'
         + typeCol
         + posteCol
         + midCol
         + regInput
+        + regMacInput
         + moInput
         + macInput
         + coutCol
@@ -2394,7 +2404,7 @@ export const pageServiceBE = (
     // Totaux étapes
     var reglageTotal  = 0, unitaireTotal = 0, etapesTotal = 0, machineTotal = 0;
     nomEtapes.forEach(function(e){
-      reglageTotal  += e.temps_reglage_min || 0;
+      reglageTotal  += (e.temps_reglage_min || 0) + (e.temps_reglage_machine_min || 0);   // ROP + RGM
       unitaireTotal += (e.temps_mo_min || 0) + (e.temps_machine_min || 0);
       etapesTotal  += nomEtapeCoutUnitaire(e);
       if (e.type === 'interne') machineTotal += nomEtapeCoutMachine(e);

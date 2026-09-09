@@ -85,14 +85,28 @@ export function etapeDecomp(
   if (e.type === 'sous_traite') {
     return { ...z, st: true, forfait: Math.max(0, Number(e.forfait_st_ht ?? 0) || 0), unit: Number(e.prix_unitaire_st_ht ?? e.cout_st_unitaire ?? 0) || 0 }
   }
-  if (e.temps_variable_mille != null || e.temps_reglage_mille != null) {
+  if (e.temps_variable_mille != null || e.temps_reglage_mille != null || e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null) {
     // Étape importée : temps en MILLIÈMES d'heure → heures = millième / 1000
     const isMach = e.ressource === 'machine'
     const taux = isMach ? mr(e.machine_id, tauxMachDef) : tauxMoDef
     const varH = (Number(e.temps_variable_mille) || 0) / 1000
-    const regH = (Number(e.temps_reglage_mille) || 0) / 1000
     const r = { ...z }
-    if (isMach) r.machFixe += regH * taux; else r.moFixe += regH * taux           // réglage = fixe / lot
+    // Réglage : deux temps distincts quand ils sont renseignés — ROP occupe l'opérateur,
+    // RGM immobilise la machine, et un réglage occupe souvent LES DEUX simultanément.
+    // Sans eux, on retombe sur le champ historique, imputé à la ressource de l'étape :
+    // les nomenclatures déjà chiffrées gardent donc exactement le même coût.
+    const aSplit = e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null
+    let regH = 0
+    if (aSplit) {
+      const ropH = (Number(e.temps_reglage_op_mille) || 0) / 1000
+      const rgmH = (Number(e.temps_reglage_machine_mille) || 0) / 1000
+      r.moFixe += ropH * tauxMoDef
+      r.machFixe += rgmH * mr(e.machine_id, tauxMachDef)
+      regH = ropH + rgmH
+    } else {
+      regH = (Number(e.temps_reglage_mille) || 0) / 1000
+      if (isMach) r.machFixe += regH * taux; else r.moFixe += regH * taux           // réglage = fixe / lot
+    }
     if (e.est_fixe) { if (isMach) r.machFixe += varH * taux; else r.moFixe += varH * taux }  // opération fixe / lot
     else { if (isMach) r.machPc += varH * taux; else r.moPc += varH * taux }                 // opération variable / pièce
     r.reglageMin = regH * 60
@@ -101,11 +115,12 @@ export function etapeDecomp(
   }
   // Étape manuelle (minutes) — logique historique
   const tMo = Number(e.temps_mo_min ?? e.temps_unitaire_min ?? 0) || 0
-  const tReg = Number(e.temps_reglage_min ?? 0) || 0
+  const tReg = Number(e.temps_reglage_min ?? 0) || 0            // ROP — réglage opérateur
+  const tRegMach = Number(e.temps_reglage_machine_min ?? 0) || 0 // RGM — réglage machine
   const tMach = Number(e.temps_machine_min ?? ((e.machine_id || e.machine_taux_h) ? (e.temps_unitaire_min ?? 0) : 0)) || 0
   const tauxMo = Number(e.taux_mo_h ?? 0) || 0
   const tauxMach = mr(e.machine_id, Number(e.machine_taux_h ?? 0) || 0)   // machine : base étape + incrément OPEX poste (0 si non renseigné)
-  return { ...z, moPc: tMo / 60 * tauxMo, machPc: tMach / 60 * tauxMach, moFixe: tReg / 60 * tauxMo, machFixe: 0, reglageMin: tReg, moMin: tMo, machineMin: tMach }
+  return { ...z, moPc: tMo / 60 * tauxMo, machPc: tMach / 60 * tauxMach, moFixe: tReg / 60 * tauxMo, machFixe: tRegMach / 60 * tauxMach, reglageMin: tReg + tRegMach, moMin: tMo, machineMin: tMach }
 }
 
 // ─── Calcul complet du coût d'une nomenclature pour une quantité (pour l'analyse DT) ──────────
