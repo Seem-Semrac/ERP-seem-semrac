@@ -2,11 +2,51 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-09 (soir) — Tout le flux d'une affaire porte le même numéro
+
+**Le symptôme** : une affaire `0001` produisait bien `CMD-2026-0001`, `LOT-2026-0001-01`, `DA-0001-…` — puis, à partir des achats, la chaîne repartait sur des compteurs **globaux** : `BC-2026-003`, `BL-2026-002`, `FOURN-2026-0002`. Le flux se lisait `0001` à moitié.
+
+**La cause** : la numérotation par affaire n'avait été posée que sur les documents **créés ensuite**. Les documents déjà en base gardaient leur ancien numéro, et rien ne les reprenait.
+
+### Ce que ça donne maintenant
+
+```
+CMD-2026-0001 ─ LOT-2026-0001-01 ─ BDT-2026-0001-01-01
+              └ DA-0001-125237-M ─ BC-2026-0001-01 ─ BL-2026-0001-01-01
+                                                   └ PRO-2026-0001-01   (proforma)
+                                                   └ BST-2026-0001-01-01 (sous-traitance)
+```
+
+Un document adossé à un bon de commande **reprend le numéro de ce BC** et lui ajoute son rang : en lisant un BL ou une proforma, on remonte au BC, et de là à l'affaire. Plusieurs BC dans une affaire ⇒ plusieurs BL, chacun sous le sien.
+
+### Les rattachements ne bougent pas
+
+Seuls les **numéros affichés** changent (`bons_de_commande.num_bc`, colonne `num_bl` ajoutée aux BL, `factures_fournisseur.num_facture`). Les **identifiants techniques** (`id`) restent intacts : ce sont eux qui portent `bons_de_livraison.bc_id`, la proforma `FF-<id du BC>`, la pièce jointe GED `BC:<id>`, `demande_achat_id` et les écritures comptables. L'ancien numéro reste donc lisible dans `id` — **rien n'est perdu**.
+
+### Migrations livrées
+
+- `002-renumerotation-bc-bl-par-affaire.sql` — ajoute `num_bl`, renumérote les BC par (année, affaire), adosse chaque BL de réception au numéro de **son** BC, numérote par affaire les BL sans BC (BL clients, retours).
+- `003-proforma-numero-suit-le-bc.sql` — la proforma fournisseur prend le numéro de son BC. **Uniquement** les numéros encore au format auto-généré (`FOURN-AAAA-NNNN` / `ST-AAAA-NNNN`) : dès que le comptable a saisi le vrai numéro du fournisseur, il ne correspond plus au motif et **n'est jamais écrasé**.
+
+Les deux sont idempotentes : relancées, elles ne réécrivent que ce qui diffère.
+
+### Corrigé au passage
+
+- Le BL de réception se numérotait à partir de l'**identifiant technique** du BC, pas de son numéro : sur un BC antérieur à la renumérotation (`id` `BC-2026-003`, numéro `BC-2026-0001-01`) le BL serait sorti en `BL-2026-003-01`. Il suit désormais `num_bc`.
+- Le BST du planning avait un identifiant horodaté illisible (`BST-mfk3z9x`), sans rapport avec l'affaire. Il porte maintenant le numéro de son BC.
+- Expéditions affichait l'identifiant technique du BL ; elle affiche son numéro (helper `numBL`, repli sur `id` quand la colonne `num_bl` n'existe pas encore).
+
+### Vérification
+
+`tsc --noEmit` propre · harnais toutes-pages **61 PASS / 0 FAIL** · `npm run build` · migrations 002 et 003 **exécutées pour de vrai** sur la base Docker locale : affaire `0001` → `BC-2026-0001-01` / `-02`, BL `BL-2026-LIBRE-01-01` adossé à son BC, proformas `PRO-2026-0001-01` / `-02`. Aucune ligne perdue, relance = 0 modification.
+
+⚠ **Supabase cloud** : les migrations ne s'y appliquent pas toutes seules (pas de conteneur `erp-migrate` en face). Le contenu des deux fichiers est à jouer une fois dans le SQL Editor de Supabase Studio. Tant que ce n'est pas fait, l'affichage retombe sur `id` — correct, simplement à l'ancien format.
+
 ## 2026-09-09 — Le schéma de la base se met à jour sur la VM, sans toucher aux données
 
 **Le trou** : les scripts d'initialisation ne sont joués par Postgres **que sur une base vide**. Sur une VM déjà en service, `erp-docker.sh maj` mettait le **code** à jour mais **jamais le schéma** — une nouvelle colonne n'arrivait pas, et rien ne le signalait.
 
-**Le mécanisme** : un conteneur éphémère `erp-migrate` démarre à chaque `up` (après que la base est saine), applique les fichiers de `docker/db/migrations/` **jamais encore joués**, puis s'arrête. Journal dans la table `_erp_migrations`. Le service `app` **dépend de sa réussite** : jamais de code neuf sur un schéma ancien.
+**Le mécanisme** : un conteneur éphémère `erp-migrate` démarre à chaque `up` (après que la base est saine), applique les fichiers de `docker/db/migrations/` **jamais encore joués**, puis s'arrête. Journal dans la table `_erp_migrations`. ⚠ **Correction du 09/09 (soir)** : `app` ne dépend **plus** de la réussite de `erp-migrate`. Une migration en échec mettait toute l'application à terre (`exit 3` sur la VM) ; un schéma en retard est un désagrément, un ERP arrêté est un arrêt de travail. Une migration en échec est signalée bruyamment, n'est pas journalisée, et est **retentée au démarrage suivant**.
 
 ### Les données ne sont jamais touchées
 

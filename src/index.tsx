@@ -1896,6 +1896,26 @@ const _sanAff = (a: any) => String(a ?? '').trim().toUpperCase().replace(/[^A-Z0
 //
 // Repli : sans bon de commande identifiable (BL client, retour), on retombe sur la
 // numérotation par affaire — un BL client répond à une commande CLIENT, pas à un BC.
+// Numero d'un document ADOSSE a un bon de commande (BST du planning aujourd'hui) :
+// il reprend le numero du BC et lui ajoute son propre rang.
+//   BC-2026-0001-03  ->  BST-2026-0001-03-01
+// En lisant le document on remonte a son BC, et de la a l'affaire.
+// ⚠ On lui passe le NUMERO du BC (`num_bc`), pas son identifiant technique : sur un BC
+//   anterieur a la renumerotation les deux different (id BC-2026-003, numero
+//   BC-2026-0001-01) et c'est le numero, celui que l'atelier lit, qui doit se propager.
+export function nextBstPourBc(bcNum: any, ids: (string | undefined | null)[]): string {
+  // Le suffixe ne contient que chiffres, lettres et tirets : rien a echapper ensuite.
+  const base = String(bcNum ?? '').trim().replace(/^BC-/, '').replace(/[^A-Za-z0-9-]/g, '')
+  if (!base) return 'BST-' + new Date().getFullYear() + '-LIBRE-' + Date.now().toString(36)
+  const motif = new RegExp('^BST-' + base + '-(\d+)$')
+  let max = 0
+  for (const id of ids) {
+    const m = String(id ?? '').match(motif)
+    if (m) { const v = parseInt(m[1], 10); if (v > max) max = v }
+  }
+  return 'BST-' + base + '-' + String(max + 1).padStart(2, '0')
+}
+
 export function nextBlPourBc(bcId: any, affaire: any, ids: (string | undefined | null)[]): string {
   // Le suffixe ne contient que chiffres, lettres et tirets : rien a echapper ensuite.
   const base = String(bcId ?? '').trim().replace(/^BC-/, '').replace(/[^A-Za-z0-9-]/g, '')
@@ -2457,7 +2477,7 @@ app.post('/api/expeditions/bc/:id/receptionner', async (c) => {
   const bls = await getBonsDeLivraison().catch(() => [] as any[])
   const blId = (body.num_bl && String(body.num_bl).trim())
     ? String(body.num_bl).trim()
-    : nextBlPourBc((bc as any).id, body.affaire_id || (bc as any).num_affaire || (bc as any).affaire_id, (bls as any[]).map(b => b.id))
+    : nextBlPourBc((bc as any).num_bc || (bc as any).id, body.affaire_id || (bc as any).num_affaire || (bc as any).affaire_id, (bls as any[]).map(b => b.id))
   const affaireRaw = body.affaire_id || bc.affaire_id || null
   const affaireId = await resolveAffaireId(affaireRaw)
   const blPayload: any = {
@@ -5927,8 +5947,11 @@ app.post('/api/production/bst/affecter', async (c) => {
   if (bcRes.error) return c.json({ ok: false, error: bcRes.error.message })
 
   // 2) BST du planning (bons_sous_traitance) relié au BC
+  // Son numero est celui de son bon de commande : BC-2026-0001-03 -> BST-2026-0001-03-01.
+  // (Avant : 'BST-' + horodatage base36, illisible et sans rapport avec l'affaire.)
+  const bdsExistants = await getPlanningBDS().catch(() => [] as any[])
   const bdsPayload: Record<string, any> = {
-    id: 'BST-' + Date.now().toString(36),
+    id: nextBstPourBc(bcId, (bdsExistants as any[]).map((x: any) => x.id)),
     statut: 'a_envoyer',
     date_envoi: new Date().toISOString().slice(0, 10),
     date_debut: body.day || new Date().toISOString().slice(0, 10),

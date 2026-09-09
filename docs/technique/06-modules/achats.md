@@ -47,7 +47,25 @@ BC-2026-0001-04            une autre commande de la même affaire
 
 Repli : sans bon de commande identifiable, on retombe sur `BL-YYYY-<affaire>-NN`. C'est le cas des **BL clients** et des **retours client**, qui répondent à une commande CLIENT et non à un bon de commande fournisseur. Un BC à l'ancien format reste exploitable : `BC-2026-007` → `BL-2026-007-01`.
 
-⚠ **Les numéros déjà attribués ne sont pas touchés** : l'ancien format `BC-YYYY-NNN` reste tel quel en base, seul le prochain numéro change de forme. Les deux formats coexistent sans se gêner — le générateur ne compte que les numéros du nouveau format, pour l'affaire concernée.
+### Les documents DÉJÀ en base ont été renumérotés (migration 002)
+
+Poser la règle sur les seuls documents à venir ne servait à rien : une affaire `0001` gardait des `BC-2026-003`, et le flux se lisait `0001` à moitié. `docker/db/migrations/002-renumerotation-bc-bl-par-affaire.sql` reprend l'existant.
+
+**Ce qui change, et ce qui ne change pas** — seul le **numéro affiché** est réécrit (`bons_de_commande.num_bc`, et une colonne `num_bl` ajoutée aux BL). Les **identifiants techniques** (`id`) ne bougent pas : ce sont eux qui portent `bons_de_livraison.bc_id`, la proforma `FF-<id du BC>`, la pièce jointe GED `BC:<id>`, `demande_achat_id` et les écritures comptables. Les renommer casserait ces liens en silence. L'ancien numéro reste donc lisible dans `id`.
+
+Conséquence pour le code : **toujours propager `num_bc`, jamais `id`**, quand on numérote un document adossé à un BC — sur un BC antérieur à la migration les deux diffèrent (`id` `BC-2026-003`, numéro `BC-2026-0001-01`).
+
+L'affichage retombe sur `id` quand `num_bl` est absent (`numBL()` dans `src/expeditions.tsx`) : une base non encore migrée — la **Supabase cloud**, qui n'a pas de conteneur `erp-migrate` — reste correcte, simplement à l'ancien format.
+
+### La proforma fournisseur suit son BC (migration 003)
+
+`BC-2026-0001-01` → proforma `PRO-2026-0001-01`. Avant : compteur global `FOURN-YYYY-NNNN`, sans rapport avec l'affaire.
+
+Ce numéro est un **placeholder** : à la réception, le comptable saisit le vrai numéro de facture du fournisseur (c'est lui qui l'émet). La migration ne touche donc **que** les numéros encore au format auto-généré (`FOURN-AAAA-NNNN` / `ST-AAAA-NNNN`) — une saisie humaine n'est jamais écrasée. Le rattachement passe par `id` (`FF-<id du BC>`), jamais par ce libellé.
+
+### Le BST du planning aussi
+
+`nextBstPourBc(numBc, ids)` : `BC-2026-0001-03` → `BST-2026-0001-03-01`. Avant : `'BST-' + Date.now().toString(36)`, illisible et sans rapport avec l'affaire.
 
 ⚠ **Limite assumée** : supprimer la dernière commande d'une affaire libère son numéro, qui sera réattribué. Éliminer complètement ce cas demanderait une table de séquences (donc une migration) ; l'ancien compteur global avait le même défaut, mais à l'échelle de TOUTES les commandes.
 
