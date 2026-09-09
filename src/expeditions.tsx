@@ -1,6 +1,6 @@
 // ══════════════════════════════════════════════════════════════
 // EXPÉDITIONS – Service Expéditions unifié
-// BL Clients · BST · BC Fournisseurs/ST · Commandes · Dashboard
+// Réceptions · Envois · Calendrier · Fournisseurs · Dashboard
 // ══════════════════════════════════════════════════════════════
 import { escX, layout, serviceHeader, demandeAchatModal, buildValDirMap, valDirBadge } from './shared'
 import type { BonDeLivraison, BonDeCommande, Commande, DemandeAchat, FournisseurSt } from './types'
@@ -10,17 +10,11 @@ const AMB   = '#f59e0b'
 const AMB_D = '#d97706'
 const TODAY = new Date().toISOString().slice(0, 10)
 
-// ─── Données de démonstration ─────────────────────────────────
+// ─── Replis : listes vides quand la base ne renvoie rien ──────────────
 
 const BL_CLIENTS_DEFAULT: BonDeLivraison[] = []
 
 const BST_DEFAULT: BonDeLivraison[] = []
-
-const BC_DEFAULT: BonDeCommande[] = []
-
-const CMDS_DEFAULT: Commande[] = []
-
-const DA_DEFAULT: DemandeAchat[] = []
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -63,28 +57,6 @@ function bcStatutBadge(s: string) {
   return badge(v[0], v[1], v[2])
 }
 
-function cmdStatutBadge(s: string, retard: boolean) {
-  if (retard) return badge('#fee2e2','#b91c1c','En retard')
-  const m: Record<string,[string,string,string]> = {
-    en_cours:  ['#dbeafe','#1d4ed8','En production'],
-    a_livrer:  ['#fef3c7','#92400e','A livrer'],
-    livree:    ['#dcfce7','#15803d','Livree'],
-  }
-  const v = m[s] ?? ['#f1f5f9','#6b7280', s]
-  return badge(v[0], v[1], v[2])
-}
-
-function daStatutBadge(s: string) {
-  const m: Record<string,[string,string,string]> = {
-    en_attente: ['#fef3c7','#92400e','En attente'],
-    commandee:  ['#dbeafe','#1d4ed8','Commandee'],
-    en_transit: ['#cffafe','#0e7490','En transit'],
-    recu:       ['#dcfce7','#15803d','Recu'],
-  }
-  const v = m[s] ?? ['#f1f5f9','#6b7280', s]
-  return badge(v[0], v[1], v[2])
-}
-
 function kpiCard(icon: string, col: string, val: string|number, lbl: string, sub = '') {
   return `<div style="background:white;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.07);border-top:3px solid ${col};">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
@@ -98,468 +70,11 @@ function kpiCard(icon: string, col: string, val: string|number, lbl: string, sub
   </div>`
 }
 
-function subTabBar(tabs: [string,string,string][], activeFirst: string, fn: string) {
-  return `<div style="display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:4px;width:fit-content;margin-bottom:20px;">
-    ${tabs.map(([id,lbl,ic],i) => `<button onclick="${fn}('${id}')" id="exp-sub-${id}" class="exp-sub-tab${i===0?' exp-sub-active':''}">
-      <i class="fas ${ic}"></i>${lbl}
-    </button>`).join('')}
-  </div>`
-}
-
-// ══════════════════════════════════════════════════════════════
-// PANEL 1 – BONS DE LIVRAISON
-// ══════════════════════════════════════════════════════════════
-
 // Numéro AFFICHÉ d'un bon de livraison. La renumérotation par affaire écrit `num_bl`
 // (migration 002) sans toucher à l'identifiant technique, qui porte les rattachements.
 // Fail-soft : sans cette colonne, on retombe sur l'identifiant — qui EST déjà le bon
 // numéro pour tout BL créé depuis la nouvelle numérotation.
 const numBL = (b: any) => String(b?.num_bl || b?.id || '')
-
-function panelBL(bls: BonDeLivraison[], bsts: BonDeLivraison[], receptions: any[] = [], bcAttendus: any[] = []) {
-  const aEnvoyer = bls.filter(b => b.statut === 'a_envoyer' || b.statut === 'prepare')
-  const historique = bls.filter(b => b.statut === 'expedie' || b.statut === 'livre')
-  const bstAujourdhui = bsts.filter(b => b.statut === 'a_envoyer')
-  const bstTransit = bsts.filter(b => b.statut === 'en_transit')
-  const bstHisto = bsts.filter(b => b.statut === 'recu' || b.statut === 'livre')
-  const otdLivres = bls.filter(b => b.statut === 'livre')
-  const otdOK = otdLivres.filter(b => b.otd && b.otd <= b.date_bl).length
-  const otdRate = otdLivres.length > 0 ? Math.round(otdOK / otdLivres.length * 100) : 100
-
-  return `
-  <div id="exp-panel-bl" style="display:none;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
-      <div style="font-size:1rem;font-weight:800;color:#111827;display:flex;align-items:center;gap:8px;">
-        <i class="fas fa-truck-loading" style="color:${AMB};"></i>Bons de Livraison
-        <span style="background:${AMB}20;color:${AMB_D};border-radius:999px;padding:1px 10px;font-size:.72rem;font-weight:800;">${bls.length + bsts.length}</span>
-      </div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-        <div style="font-size:.78rem;color:#374151;">OTD : <strong style="color:${otdRate>=95?'#15803d':otdRate>=85?'#92400e':'#b91c1c'};">${otdRate}%</strong></div>
-        <button onclick="expOpenModal('bl')" style="padding:8px 18px;background:linear-gradient(135deg,${AMB},${AMB_D});color:white;border:none;border-radius:10px;font-size:.82rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;"><i class="fas fa-plus"></i>Nouveau BL</button>
-      </div>
-    </div>
-
-    ${subTabBar([['bl-reception','Réceptions Fourn./ST','fa-dolly'],['bl-client','BL Clients','fa-users'],['bl-bst','BST Sous-Traitants','fa-exchange-alt']], 'bl-reception', 'expSwitchBLType')}
-
-    <!-- RÉCEPTIONS FOURNISSEURS / SOUS-TRAITANTS (BC validés → BL de réception à l'arrivée du colis) -->
-    <div id="exp-sub-panel-bl-reception">
-      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:.8rem;color:#1d4ed8;display:flex;align-items:center;gap:10px;">
-        <i class="fas fa-dolly"></i>
-        <span>Les bons de commande <strong>validés par le fournisseur/ST</strong> attendent ici la <strong>réception du colis</strong> : à l'arrivée, cliquez <strong>Réceptionner</strong> pour générer le bon de livraison de réception (entrée en stock + PV de contrôle).</span>
-      </div>
-      <div style="font-size:.75rem;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;display:flex;align-items:center;gap:8px;">
-        <i class="fas fa-truck-loading" style="color:${AMB};"></i>Réceptions attendues
-        <span style="background:${AMB}20;color:${AMB_D};border-radius:999px;padding:1px 8px;font-size:.68rem;">${bcAttendus.length}</span>
-      </div>
-      <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;margin-bottom:20px;">
-        <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#fafafa;">
-          ${TH('N° BC')}${TH('Fournisseur / ST')}${TH('Articles')}${THC('Montant')}${THC('Affaire')}${THC('Action')}
-        </tr></thead><tbody>
-          ${bcAttendus.length === 0 ? `<tr><td colspan="6" style="text-align:center;padding:24px;color:#9ca3af;font-size:.82rem;">Aucune réception attendue — les BC validés par le fournisseur apparaîtront ici.</td></tr>` :
-          bcAttendus.map((bc: any) => `
-          <tr onmouseenter="this.style.background='#fafafa'" onmouseleave="this.style.background=''">
-            ${TD(`<div style="font-weight:700;color:${AMB};">${escX(bc.num_bc ?? bc.id)}</div><button onclick="bcPdf('${bc.id}')" style="margin-top:4px;background:#f5f3ff;color:#6d28d9;border:none;border-radius:6px;padding:3px 8px;font-size:.62rem;font-weight:700;cursor:pointer;"><i class="fas fa-file-pdf"></i> PDF</button>`)}
-            ${TD(`<span style="font-weight:600;">${escX(bc.fournisseur ?? '—')}</span>${bc.type==='st'?' <span style="font-size:.6rem;color:#8b5cf6;font-weight:700;">ST</span>':''}`)}
-            ${TD(`<span style="font-size:.73rem;color:#6b7280;">${escX(bc.articles ?? '—')}</span>`)}
-            ${TDC(`<span style="font-weight:700;color:#374151;">${(bc.montant||0).toLocaleString('fr-FR')} €</span>`)}
-            ${TDC(`<span style="font-size:.72rem;color:#6366f1;">${escX(bc.affaire_id ?? '—')}</span>`)}
-            ${TDC(`<button onclick="expOpenReception('${bc.id}')" style="padding:5px 12px;background:linear-gradient(135deg,#0ea5e9,#0284c7);color:white;border:none;border-radius:7px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-dolly"></i> Réceptionner</button>`)}
-          </tr>`).join('')}
-        </tbody></table></div>
-      </div>
-      <div style="font-size:.75rem;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;display:flex;align-items:center;gap:8px;">
-        <i class="fas fa-box-open" style="color:#10b981;"></i>Réceptions effectuées
-        <span style="background:#dcfce7;color:#15803d;border-radius:999px;padding:1px 8px;font-size:.68rem;">${receptions.length}</span>
-      </div>
-      <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;margin-bottom:20px;">
-        <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#fafafa;">
-          ${TH('N° BL')}${TH('Fournisseur / ST')}${TH('BC')}${TH('Articles')}${THC('Qté')}${THC('Date')}${THC('Statut')}
-        </tr></thead><tbody>
-          ${receptions.length === 0 ? `<tr><td colspan="7" style="text-align:center;padding:24px;color:#9ca3af;font-size:.82rem;">Aucune réception enregistrée</td></tr>` :
-          receptions.map((bl: any) => `
-          <tr onmouseenter="this.style.background='#fafafa'" onmouseleave="this.style.background=''">
-            ${TD(`<div style="font-weight:700;color:${AMB};">${escX(bl.id)}</div>`)}
-            ${TD(escX(bl.client_nom ?? '—'))}
-            ${TD(`<span style="font-size:.73rem;color:#6b7280;">${escX(bl.bc_id ?? '—')}</span>`)}
-            ${TD(`<span style="font-weight:600;">${escX(bl.piece ?? '—')}</span>`)}
-            ${TDC(`<strong>${bl.qte ?? '—'}</strong>`)}
-            ${TDC(`<span style="font-size:.75rem;color:#6b7280;">${bl.date_bl ?? '—'}</span>`)}
-            ${TDC(blStatutBadge(bl.statut))}
-          </tr>`).join('')}
-        </tbody></table></div>
-      </div>
-    </div>
-
-    <!-- BL CLIENTS -->
-    <div id="exp-sub-panel-bl-client" style="display:none;">
-      ${aEnvoyer.length > 0 ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:.8rem;color:#1d4ed8;display:flex;align-items:center;gap:10px;">
-        <i class="fas fa-exclamation-circle"></i>
-        <span><strong>${aEnvoyer.length} bon(s) de livraison</strong> en attente de depart.</span>
-      </div>` : ''}
-      <div style="font-size:.75rem;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;display:flex;align-items:center;gap:8px;">
-        <i class="fas fa-clock" style="color:${AMB};"></i>A envoyer
-        <span style="background:${AMB}20;color:${AMB_D};border-radius:999px;padding:1px 8px;font-size:.68rem;">${aEnvoyer.length}</span>
-      </div>
-      <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;margin-bottom:20px;">
-        <div style="overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;">
-            <thead><tr style="background:#fafafa;">
-              ${TH('N° BL')}${TH('Client')}${TH('Commande')}${TH('Piece')}${THC('Qte')}${TH('Transport')}${THC('Date prevue')}${THC('Statut')}${THC('Actions')}
-            </tr></thead>
-            <tbody>
-              ${aEnvoyer.length === 0 ? `<tr><td colspan="9" style="text-align:center;padding:24px;color:#9ca3af;font-size:.82rem;">Aucun BL a envoyer</td></tr>` :
-              aEnvoyer.map(bl => `
-              <tr onmouseenter="this.style.background='#fafafa'" onmouseleave="this.style.background=''">
-                ${TD(`<div style="font-weight:700;color:${AMB};">${escX(bl.id)}</div>`)}
-                ${TD(escX(bl.client_nom ?? '—'))}
-                ${TD(`<span style="font-size:.73rem;color:#6b7280;">${escX(bl.cmd_id ?? '—')}</span>`)}
-                ${TD(`<span style="font-weight:600;">${escX(bl.piece ?? '—')}</span>`)}
-                ${TDC(`<strong>${bl.qte}</strong>`)}
-                ${TD(escX(bl.transport ?? '—'))}
-                ${TDC(`<span style="font-size:.75rem;color:#6b7280;">${bl.date_bl}</span>`)}
-                ${TDC(blStatutBadge(bl.statut))}
-                ${TDC(`<div style="display:flex;gap:6px;justify-content:center;">
-                  <button onclick="expEnvoyerBL('${bl.id}')" style="padding:5px 12px;background:linear-gradient(135deg,${AMB},${AMB_D});color:white;border:none;border-radius:7px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-paper-plane"></i> Envoyer</button>
-                  <button onclick="expImprimerBL('${bl.id}')" style="padding:5px 10px;background:#f1f5f9;color:#475569;border:none;border-radius:7px;font-size:.7rem;cursor:pointer;" title="Imprimer"><i class="fas fa-print"></i></button>
-                </div>`)}
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div style="font-size:.75rem;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="expToggleSection('bl-histo')">
-        <i class="fas fa-history" style="color:#6b7280;"></i>Historique (12 mois)
-        <span style="background:#f1f5f9;color:#6b7280;border-radius:999px;padding:1px 8px;font-size:.68rem;">${historique.length}</span>
-        <i class="fas fa-chevron-down" id="bl-histo-ico" style="margin-left:auto;color:#94a3b8;font-size:.65rem;"></i>
-      </div>
-      <div id="bl-histo" style="display:none;">
-        <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;margin-bottom:20px;">
-          <div style="overflow-x:auto;">
-            <table style="width:100%;border-collapse:collapse;">
-              <thead><tr style="background:#fafafa;">
-                ${TH('N° BL')}${TH('Client')}${TH('Commande')}${TH('Piece')}${THC('Qte')}${TH('Transport')}${THC('Date BL')}${THC('OTD')}${THC('Statut')}
-              </tr></thead>
-              <tbody>
-                ${historique.map(bl => `
-                <tr onmouseenter="this.style.background='#fafafa'" onmouseleave="this.style.background=''">
-                  ${TD(`<div style="font-weight:700;color:#6b7280;">${escX(bl.id)}</div>`)}
-                  ${TD(escX(bl.client_nom ?? '—'))}
-                  ${TD(`<span style="font-size:.73rem;color:#6b7280;">${escX(bl.cmd_id ?? '—')}</span>`)}
-                  ${TD(escX(bl.piece ?? '—'))}
-                  ${TDC(`${bl.qte}`)}
-                  ${TD(escX(bl.transport ?? '—'))}
-                  ${TDC(`<span style="font-size:.75rem;color:#6b7280;">${bl.date_bl}</span>`)}
-                  ${TDC(bl.otd ? (bl.otd <= bl.date_bl ? badge('#dcfce7','#15803d','Dans les delais') : badge('#fee2e2','#b91c1c','En retard')) : '—')}
-                  ${TDC(blStatutBadge(bl.statut))}
-                </tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- BST SOUS-TRAITANTS -->
-    <div id="exp-sub-panel-bl-bst" style="display:none;">
-      ${bstAujourdhui.length > 0 ? `<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:.8rem;color:#78350f;display:flex;align-items:center;gap:10px;">
-        <i class="fas fa-calendar-day"></i>
-        <span><strong>${bstAujourdhui.length} BST a preparer aujourd&#39;hui</strong> selon le Gantt sous-traitance.</span>
-      </div>` : `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:.8rem;color:#15803d;display:flex;align-items:center;gap:10px;"><i class="fas fa-check-circle"></i><span>Aucun BST a preparer aujourd&#39;hui.</span></div>`}
-      <div style="font-size:.75rem;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;display:flex;align-items:center;gap:8px;">
-        <i class="fas fa-calendar-day" style="color:${AMB};"></i>A preparer aujourd&#39;hui
-        <span style="background:${AMB}20;color:${AMB_D};border-radius:999px;padding:1px 8px;font-size:.68rem;">${bstAujourdhui.length}</span>
-      </div>
-      <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;margin-bottom:20px;">
-        <div style="overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;">
-            <thead><tr style="background:#fafafa;">
-              ${TH('N° BST')}${TH('Sous-traitant')}${TH('Lot')}${TH('Piece')}${TH('Operation ST')}${THC('Qte')}${THC('Date prevue Gantt')}${THC('Actions')}
-            </tr></thead>
-            <tbody>
-              ${bstAujourdhui.length === 0 ? `<tr><td colspan="8" style="text-align:center;padding:24px;color:#9ca3af;">Aucun BST prevu aujourd&#39;hui</td></tr>` :
-              bstAujourdhui.map(b => `
-              <tr onmouseenter="this.style.background='#fffbeb'" onmouseleave="this.style.background=''">
-                ${TD(`<div style="font-weight:700;color:${AMB};">${escX(b.id)}</div>`)}
-                ${TD(`<span style="font-weight:600;">${escX(b.client_nom ?? '—')}</span>`)}
-                ${TD(`<span style="font-size:.73rem;color:#374151;font-weight:600;">${escX(b.lot_id ?? '—')}</span>`)}
-                ${TD(escX(b.piece ?? '—'))}
-                ${TD(`<span style="font-size:.73rem;color:#6b7280;">${escX(b.operation ?? '—')}</span>`)}
-                ${TDC(`<strong>${b.qte}</strong>`)}
-                ${TDC(`<span style="font-size:.75rem;font-weight:700;color:${AMB_D};">${b.date_envoi_prevu ?? b.date_bl}</span>`)}
-                ${TDC(`<div style="display:flex;gap:6px;justify-content:center;">
-                  <button onclick="expEnvoyerBST('${b.id}')" style="padding:5px 12px;background:linear-gradient(135deg,${AMB},${AMB_D});color:white;border:none;border-radius:7px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-paper-plane"></i> Envoyer</button>
-                  <button onclick="expOpenModal('bst')" style="padding:5px 10px;background:#f1f5f9;color:#475569;border:none;border-radius:7px;font-size:.7rem;cursor:pointer;"><i class="fas fa-file-alt"></i></button>
-                </div>`)}
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div style="font-size:.75rem;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;display:flex;align-items:center;gap:8px;">
-        <i class="fas fa-shipping-fast" style="color:#0891b2;"></i>En transit (retour attendu)
-        <span style="background:#cffafe;color:#0e7490;border-radius:999px;padding:1px 8px;font-size:.68rem;">${bstTransit.length}</span>
-      </div>
-      <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;margin-bottom:20px;">
-        <div style="overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;">
-            <thead><tr style="background:#fafafa;">
-              ${TH('N° BST')}${TH('Sous-traitant')}${TH('Lot')}${TH('Piece')}${TH('Operation ST')}${THC('Qte')}${THC('Date envoi')}${THC('Statut')}${THC('Action')}
-            </tr></thead>
-            <tbody>
-              ${bstTransit.length === 0 ? `<tr><td colspan="9" style="text-align:center;padding:24px;color:#9ca3af;">Aucun BST en transit</td></tr>` :
-              bstTransit.map(b => `
-              <tr onmouseenter="this.style.background='#f0fdfa'" onmouseleave="this.style.background=''">
-                ${TD(`<div style="font-weight:700;color:#0891b2;">${escX(b.id)}</div>`)}
-                ${TD(escX(b.client_nom ?? '—'))}
-                ${TD(`<span style="font-size:.73rem;font-weight:600;">${escX(b.lot_id ?? '—')}</span>`)}
-                ${TD(escX(b.piece ?? '—'))}
-                ${TD(`<span style="font-size:.73rem;color:#6b7280;">${escX(b.operation ?? '—')}</span>`)}
-                ${TDC(b.qte.toString())}
-                ${TDC(`<span style="font-size:.75rem;color:#6b7280;">${b.date_bl}</span>`)}
-                ${TDC(blStatutBadge(b.statut))}
-                ${TDC(`<button onclick="expReceptionnerBST('${b.id}')" style="padding:5px 12px;background:#dcfce7;color:#15803d;border:none;border-radius:7px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-check"></i> Retour recu</button>`)}
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div style="font-size:.75rem;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;cursor:pointer;" onclick="expToggleSection('bst-histo')">
-        <i class="fas fa-history" style="color:#6b7280;"></i> Historique BST (${bstHisto.length})
-      </div>
-      <div id="bst-histo" style="display:none;">
-        <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;margin-bottom:16px;">
-          <div style="overflow-x:auto;">
-            <table style="width:100%;border-collapse:collapse;">
-              <thead><tr style="background:#fafafa;">${TH('N° BST')}${TH('Sous-traitant')}${TH('Lot')}${TH('Piece')}${THC('Qte')}${THC('Date envoi')}${THC('Statut')}</tr></thead>
-              <tbody>
-                ${bstHisto.map(b => `
-                <tr onmouseenter="this.style.background='#fafafa'" onmouseleave="this.style.background=''">
-                  ${TD(`<span style="font-weight:700;color:#6b7280;">${escX(b.id)}</span>`)}
-                  ${TD(escX(b.client_nom ?? '—'))}
-                  ${TD(`<span style="font-size:.73rem;">${escX(b.lot_id ?? '—')}</span>`)}
-                  ${TD(escX(b.piece ?? '—'))}
-                  ${TDC(b.qte.toString())}
-                  ${TDC(`<span style="font-size:.75rem;color:#6b7280;">${b.date_bl}</span>`)}
-                  ${TDC(blStatutBadge(b.statut))}
-                </tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>`
-}
-
-// ══════════════════════════════════════════════════════════════
-// PANEL 2 – BONS DE COMMANDE
-// ══════════════════════════════════════════════════════════════
-
-function panelBC(bcs: any[], _fstList: FournisseurSt[], vdMap: Record<string, any> = {}, hasAck = false) {
-  // Mapping statuts DB → cycle métier :
-  //  envoye/en_attente/confirme/brouillon/accuse = commande émise (avant réception)
-  //  recu_partiel/receptionne                    = réceptionné, PV de contrôle à faire
-  //  recu/controle/cloture                       = PV fait, parti en Qualité
-  const isEnAttente   = (s: string) => ['en_attente','envoye','confirme','brouillon','accuse'].includes(s)
-  const isReceptionne = (s: string) => ['receptionne','recu_partiel','recu','controle','cloture'].includes(s)
-  const pvDone        = (s: string) => ['recu','controle','cloture'].includes(s)
-  // Chaîne : BC émis → EN ATTENTE DE VALIDATION fournisseur (tant que non validé) → une fois
-  // validé (accuse_fournisseur_le), EN ATTENTE DE RÉCEPTION. Repli sans la colonne (base non
-  // migrée, ex. Cloudflare) : on saute la validation → tout BC émis va direct en réception.
-  const enValidation = (b: any) => hasAck && isEnAttente(b.statut) && !b.accuse_fournisseur_le
-  const bcOuverts = bcs.filter(b => isEnAttente(b.statut) || b.statut === 'recu_partiel' || b.statut === 'receptionne').length
-
-  // Rendu d'un tableau de BC selon l'étape du cycle métier :
-  //  'validation' → BC envoyé, EN ATTENTE DE VALIDATION par le fournisseur/ST (bouton Valider ; Relancer à J+7)
-  //  'attente'    → BC validé par le fournisseur → EN ATTENTE DE RÉCEPTION (bouton Réceptionner)
-  //  'recus'      → réceptionné → PV de contrôle → Qualité
-  const bcTable = (rows: any[], kind: 'four' | 'st', mode: 'validation' | 'attente' | 'recus') => {
-    const stCol = kind === 'st'
-    const headCols = stCol
-      ? `${TH('N° BC')}${TH('Sous-traitant')}${TH('Operation / Lot')}${THC('Montant')}${THC('Affaire')}${THC('Livraison')}${THC('Statut')}${THC('Action')}`
-      : `${TH('N° BC')}${TH('Fournisseur')}${TH('Articles')}${TH('DA liée')}${THC('Montant')}${THC('Affaire')}${THC('Statut')}${THC('Action')}`
-    const colspan = 8
-    const emptyMsg = mode === 'validation' ? 'Aucune commande en attente de validation' : mode === 'attente' ? 'Aucune commande en attente de réception' : 'Aucune commande réceptionnée'
-    const body = rows.length === 0
-      ? `<tr><td colspan="${colspan}" style="text-align:center;padding:22px;color:#9ca3af;">${emptyMsg}</td></tr>`
-      : rows.map(bc => {
-          // Relance suggérée : sans validation fournisseur au bout de 7 jours calendaires
-          // (repart de la dernière relance notifiée si elle existe, sinon de la date du BC).
-          const _base = bc.date_relance || bc.date_bc
-          const _baseMs = _base ? new Date(_base).getTime() : 0
-          const bcRelance = mode === 'validation' && _baseMs > 0 && (Date.now() - _baseMs) >= 7 * 86400000
-          const action = mode === 'validation'
-            ? `<button onclick="bcAccuse('${bc.id}')" title="Le fournisseur/ST a validé la commande → passe en attente de réception" style="padding:5px 12px;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:7px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-check"></i> Valider</button>`
-            : mode === 'attente'
-              ? `<button onclick="expOpenReception('${bc.id}')" style="padding:5px 12px;background:linear-gradient(135deg,#0ea5e9,#0284c7);color:white;border:none;border-radius:7px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-truck-loading"></i> Réceptionner</button>`
-              : (pvDone(bc.statut)
-                  ? `<a href="/qualite/service" style="padding:5px 10px;background:#dcfce7;color:#15803d;border:none;border-radius:7px;font-size:.7rem;font-weight:700;text-decoration:none;display:inline-block;"><i class="fas fa-clipboard-check"></i> PV → Qualité</a>`
-                  : `<button onclick="expOpenPV('${bc.id}')" style="padding:5px 12px;background:linear-gradient(135deg,#ef4444,#b91c1c);color:white;border:none;border-radius:7px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-clipboard-check"></i> PV de contrôle</button>`)
-          const mid = stCol
-            ? `${TDC(`<span style="font-weight:700;color:#374151;">${(bc.montant||0).toLocaleString('fr-FR')} €</span>`)}${TDC(`<span style="font-size:.72rem;color:#6366f1;">${escX(bc.affaire_id ?? '—')}</span>`)}${TDC(`<span style="font-size:.75rem;color:#6b7280;">${bc.date_livraison_prevue ?? '—'}</span>`)}`
-            : `${TD(bc.da_id ? `<span style="font-size:.72rem;font-weight:600;color:#3b82f6;">${escX(bc.da_id)}</span>` : '<span style="color:#9ca3af;">—</span>')}${TDC(`<span style="font-weight:700;color:#374151;">${(bc.montant||0).toLocaleString('fr-FR')} €</span>`)}${TDC(`<span style="font-size:.72rem;color:#6366f1;">${escX(bc.affaire_id ?? '—')}</span>`)}`
-          // PDF toujours accessible ; Relancer n'apparaît qu'en attente de validation passé J+7.
-          const bcTools = `<div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap;">`
-            + `<button onclick="bcPdf('${bc.id}')" title="Exporter / envoyer le BC en PDF" style="background:#f5f3ff;color:#6d28d9;border:none;border-radius:6px;padding:3px 8px;font-size:.63rem;font-weight:700;cursor:pointer;"><i class="fas fa-file-pdf"></i> PDF</button>`
-            + (bcRelance ? `<button onclick="bcRelancer('${bc.id}')" title="Noter la relance (régénère le PDF à renvoyer)" style="background:#ffedd5;color:#9a3412;border:none;border-radius:6px;padding:3px 8px;font-size:.63rem;font-weight:700;cursor:pointer;"><i class="fas fa-rotate-right"></i> Relancer</button>` : '')
-            + `</div>`
-          return `
-          <tr onmouseenter="this.style.background='#fafafa'" onmouseleave="this.style.background=''">
-            ${TD(`<div style="font-weight:700;color:${AMB};">${escX(bc.num_bc ?? bc.id)}</div>${bc.bl_id?`<div style="font-size:.64rem;color:#0369a1;">BL ${escX(bc.bl_id)}</div>`:''}${bcTools}`)}
-            ${TD(`<span style="font-weight:600;">${escX(bc.fournisseur ?? '—')}</span>`)}
-            ${TD(`<span style="font-size:.73rem;color:#6b7280;">${escX(bc.articles ?? '—')}</span>`)}
-            ${mid}
-            ${TDC(`<div style="display:flex;flex-direction:column;align-items:center;gap:3px;">${bcStatutBadge(bc.statut)}${bc.accuse_fournisseur_le?'<span style="background:#dcfce7;color:#15803d;border-radius:999px;padding:1px 8px;font-size:.58rem;font-weight:800;">validée fournisseur</span>':''}${bcRelance?'<span style="background:#ffedd5;color:#9a3412;border-radius:999px;padding:1px 8px;font-size:.58rem;font-weight:800;">à relancer</span>':''}${valDirBadge(vdMap, 'bons_de_commande', bc.id)}</div>`)}
-            ${TDC(action)}
-          </tr>`
-        }).join('')
-    const hdr = mode === 'validation'
-      ? { ic: 'fa-user-clock', col: '#f59e0b', bg: '#fef3c7', fg: '#92400e', lbl: kind === 'st' ? 'En attente de validation sous-traitant' : 'En attente de validation fournisseur' }
-      : mode === 'attente'
-        ? { ic: 'fa-hourglass-half', col: '#0ea5e9', bg: '#e0f2fe', fg: '#0369a1', lbl: 'En attente de réception' }
-        : { ic: 'fa-box-open', col: '#10b981', bg: '#dcfce7', fg: '#15803d', lbl: 'Commandes réceptionnées' }
-    return `<div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;margin-bottom:20px;">
-      <div style="padding:11px 16px;border-bottom:1px solid #f1f5f9;font-size:.82rem;font-weight:700;color:#374151;display:flex;align-items:center;gap:8px;">
-        <i class="fas ${hdr.ic}" style="color:${hdr.col};"></i>
-        ${hdr.lbl}
-        <span style="background:${hdr.bg};color:${hdr.fg};border-radius:999px;padding:1px 9px;font-size:.68rem;font-weight:800;">${rows.length}</span>
-      </div>
-      <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#fafafa;">${headCols}</tr></thead><tbody>${body}</tbody></table></div>
-    </div>`
-  }
-
-  const bcFourVal = bcs.filter(b => b.type === 'fournisseur' && enValidation(b))
-  const bcFourRec = bcs.filter(b => b.type === 'fournisseur' && isReceptionne(b.statut))
-  const bcSTVal   = bcs.filter(b => b.type === 'st' && enValidation(b))
-  const bcSTRec   = bcs.filter(b => b.type === 'st' && isReceptionne(b.statut))
-
-  return `
-  <div id="exp-panel-bc" style="display:block;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
-      <div style="font-size:1rem;font-weight:800;color:#111827;display:flex;align-items:center;gap:8px;">
-        <i class="fas fa-file-contract" style="color:${AMB};"></i>Bons de Commande
-        <span style="background:${AMB}20;color:${AMB_D};border-radius:999px;padding:1px 10px;font-size:.72rem;font-weight:800;">${bcOuverts} en cours</span>
-      </div>
-      <span style="font-size:.74rem;color:#92400e;background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:6px 12px;"><i class="fas fa-info-circle" style="margin-right:5px;"></i>Les BC se créent uniquement depuis une Demande d'Achat (Service Achats)</span>
-    </div>
-
-    <div style="background:#fef9c3;border:1px solid #fde68a;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:.8rem;color:#78350f;display:flex;align-items:center;gap:10px;">
-      <i class="fas fa-info-circle"></i>
-      <span>Les BC sont générés depuis les <strong>Demandes d'Achat soumises</strong> (Service Achats). Ouvrez une commande <strong>en attente</strong> pour la lier à un bon de livraison à réception ; puis remplissez le <strong>PV de contrôle</strong> qui part en Qualité.</span>
-    </div>
-
-    ${subTabBar([['bc-four','BC Fournisseurs','fa-truck'],['bc-st','BC Sous-Traitants','fa-industry']], 'bc-four', 'expSwitchBCType')}
-
-    <!-- BC FOURNISSEURS · réception déplacée dans l'onglet Bons de Livraison (Réceptions Fourn./ST) -->
-    <div id="exp-sub-panel-bc-four">
-      ${bcTable(bcFourVal, 'four', 'validation')}
-      ${bcTable(bcFourRec, 'four', 'recus')}
-    </div>
-
-    <!-- BC SOUS-TRAITANTS -->
-    <div id="exp-sub-panel-bc-st" style="display:none;">
-      ${bcTable(bcSTVal, 'st', 'validation')}
-      ${bcTable(bcSTRec, 'st', 'recus')}
-    </div>
-  </div>`
-}
-
-// ══════════════════════════════════════════════════════════════
-// PANEL 3 – COMMANDES EN COURS
-// ══════════════════════════════════════════════════════════════
-
-function panelCommandes(cmds: Commande[], das: DemandeAchat[], qualiteBloque: (c: any) => string | null) {
-  const cmdsEnCours = cmds.filter(c => c.statut !== 'livree' && c.statut !== 'annulee')
-  const dasPending  = das.filter(d => d.statut === 'commandee' || d.statut === 'en_attente' || d.statut === 'en_transit')
-  const retards = cmdsEnCours.filter(c => c.retard).length
-
-  return `
-  <div id="exp-panel-commandes" style="display:none;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
-      <div style="font-size:1rem;font-weight:800;color:#111827;display:flex;align-items:center;gap:8px;">
-        <i class="fas fa-stream" style="color:${AMB};"></i>Commandes en cours
-        ${retards > 0 ? `<span style="background:#fee2e2;color:#b91c1c;border-radius:999px;padding:1px 10px;font-size:.72rem;font-weight:800;">${retards} en retard</span>` : ''}
-      </div>
-    </div>
-
-    ${subTabBar([['cmd-client','Production clients','fa-industry'],['cmd-four','Fournisseurs / ST en attente','fa-truck']], 'cmd-client', 'expSwitchCmdType')}
-
-    <!-- COMMANDES CLIENTS EN PRODUCTION -->
-    <div id="exp-sub-panel-cmd-client">
-      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:.8rem;color:#1d4ed8;display:flex;align-items:center;gap:10px;">
-        <i class="fas fa-eye"></i>
-        <span>Vue lecture seule depuis le Commercial. Consultez le Service Commercial pour modifier les commandes.</span>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
-        ${kpiCard('fa-layer-group',AMB, cmdsEnCours.length, 'Commandes en production', '')}
-        ${kpiCard('fa-exclamation-triangle','#ef4444', retards, 'En retard', 'Date livraison depassee')}
-        ${kpiCard('fa-check-circle','#22c55e', cmdsEnCours.filter(c=>c.bdt_soldes===c.bdt_total&&c.bdt_total>0&&!qualiteBloque(c)).length, 'Prets a expedier', 'BDT soldes + qualite OK')}
-        ${kpiCard('fa-lock','#b91c1c', cmdsEnCours.filter(c=>c.bdt_soldes===c.bdt_total&&c.bdt_total>0&&qualiteBloque(c)).length, 'Bloquees qualite', 'NC bloquante / quarantaine')}
-      </div>
-      <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;">
-        <div style="overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;">
-            <thead><tr style="background:#fafafa;">${TH('N° Affaire')}${TH('Client')}${TH('Pieces')}${THC('Montant')}${THC('Date livraison')}${THC('Avancement BDT')}${THC('ST')}${THC('Statut')}</tr></thead>
-            <tbody>
-              ${cmdsEnCours.length === 0 ? `<tr><td colspan="8" style="text-align:center;padding:24px;color:#9ca3af;">Aucune commande en cours</td></tr>` :
-              cmdsEnCours.map(c => {
-                const pct = c.bdt_total > 0 ? Math.round(c.bdt_soldes / c.bdt_total * 100) : 0
-                return `
-                <tr onmouseenter="this.style.background='#fafafa'" onmouseleave="this.style.background=''">
-                  ${TD(`<div style="font-weight:700;color:${AMB};">${escX(c.num_affaire)}</div>`)}
-                  ${TD(`<span style="font-weight:600;">${escX(c.client_nom ?? '—')}</span>`)}
-                  ${TD(`<span style="font-size:.73rem;color:#6b7280;">${escX(c.pieces?.join(', ') ?? '—')}</span>`)}
-                  ${TDC(`<span style="font-weight:700;">${c.montant?.toLocaleString('fr-FR')} EUR</span>`)}
-                  ${TDC(`<span style="font-size:.75rem;font-weight:700;color:${c.retard?'#b91c1c':'#374151'};">${c.date_liv ?? '—'}</span>`)}
-                  ${TDC(`<div style="display:flex;align-items:center;gap:6px;">
-                    <div style="flex:1;height:6px;background:#f1f5f9;border-radius:999px;min-width:60px;"><div style="height:100%;background:${pct===100?'#22c55e':AMB};border-radius:999px;width:${pct}%;"></div></div>
-                    <span style="font-size:.68rem;font-weight:700;color:#374151;">${c.bdt_soldes}/${c.bdt_total}</span>
-                  </div>`)}
-                  ${TDC(c.has_st ? badge('#fef3c7','#92400e','ST') : '<span style="color:#9ca3af;">—</span>')}
-                  ${TDC(cmdStatutBadge(c.statut, c.retard) + (c.bdt_total > 0 && c.bdt_soldes === c.bdt_total && qualiteBloque(c) ? `<div style="margin-top:4px;font-size:.58rem;font-weight:800;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:1px 6px;display:inline-block;"><i class="fas fa-lock" style="margin-right:3px;"></i>Bloqué : ${escX(qualiteBloque(c))}</div>` : ''))}
-                </tr>`
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- FOURNISSEURS / ST EN ATTENTE -->
-    <div id="exp-sub-panel-cmd-four" style="display:none;">
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
-        ${kpiCard('fa-clock','#f59e0b', dasPending.length, 'DA / livraisons en attente', '')}
-        ${kpiCard('fa-exclamation-circle','#ef4444', dasPending.filter(d=>(d.livraison??'') < TODAY && d.statut!=='recu').length, 'Livraisons en retard', 'Date depassee')}
-        ${kpiCard('fa-truck','#0891b2', dasPending.filter(d=>d.statut==='en_transit').length, 'En transit', 'En cours de livraison')}
-      </div>
-      <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;">
-        <div style="overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;">
-            <thead><tr style="background:#fafafa;">${TH('N° DA')}${TH('Article')}${TH('Fournisseur')}${THC('Qte')}${THC('Priorite')}${THC('Date commande')}${THC('Livraison prevue')}${THC('Statut')}${THC('BC lie')}</tr></thead>
-            <tbody>
-              ${dasPending.length === 0 ? `<tr><td colspan="9" style="text-align:center;padding:24px;color:#9ca3af;">Aucune livraison en attente</td></tr>` :
-              dasPending.map(d => `
-              <tr onmouseenter="this.style.background='#fafafa'" onmouseleave="this.style.background=''">
-                ${TD(`<div style="font-weight:700;color:#6b7280;">${escX(d.id)}</div>`)}
-                ${TD(`<span style="font-weight:600;font-size:.79rem;">${escX(d.article)}</span>`)}
-                ${TD(escX(d.fournisseur ?? '—'))}
-                ${TDC(d.qte ?? '—')}
-                ${TDC(d.priorite === 'urgent' ? badge('#fee2e2','#b91c1c','Urgent') : badge('#f1f5f9','#6b7280','Normal'))}
-                ${TDC(`<span style="font-size:.75rem;color:#6b7280;">${d.date_da}</span>`)}
-                ${TDC(`<span style="font-size:.75rem;font-weight:700;color:${(d.livraison??'') < TODAY && d.statut!=='recu' ? '#b91c1c' : '#374151'};">${d.livraison ?? '—'}</span>`)}
-                ${TDC(daStatutBadge(d.statut))}
-                ${TDC('<span style="color:#9ca3af;font-size:.73rem;">—</span>')}
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>`
-}
 
 // ══════════════════════════════════════════════════════════════
 // PANEL 4 – DASHBOARD EXPÉDITIONS
@@ -656,149 +171,6 @@ function panelDashboard(bls: BonDeLivraison[], bsts: BonDeLivraison[], bcs: BonD
         }).join('')}
       </div>
     </div>
-  </div>`
-}
-
-// ══════════════════════════════════════════════════════════════
-// PANEL – PLANNING DES ARRIVÉES (BC fournisseurs/ST → date d'arrivée prévue)
-//   Timeline/Gantt par fournisseur ; statuts colorés ; retards en rouge ;
-//   OTD figé sur la 1ʳᵉ date prévue (date_livraison_initiale).
-// ══════════════════════════════════════════════════════════════
-function panelPlanningArrivees(bcsRaw: any[]) {
-  const dISO = (s: string) => new Date(String(s).slice(0, 10) + 'T00:00:00Z')
-  const isoOf = (d: Date) => d.toISOString().slice(0, 10)
-  const addDays = (s: string, n: number) => { const d = dISO(s); d.setUTCDate(d.getUTCDate() + n); return isoOf(d) }
-  const diffDays = (a: string, b: string) => Math.round((dISO(b).getTime() - dISO(a).getTime()) / 86400000)
-  const dow = (s: string) => (dISO(s).getUTCDay() + 6) % 7            // 0 = lundi
-  const frDate = (s: string) => { const p = String(s).slice(0, 10).split('-'); return p.length === 3 ? p[2] + '/' + p[1] : s }
-  const attr = (s: any) => escX(String(s ?? '')).replace(/"/g, '&quot;')
-
-  const recu = (b: any) => ['recu_partiel', 'recu_total', 'recu', 'controle', 'cloture'].includes(String(b.statut)) || !!b.bl_id
-  const norm = (b: any) => ({
-    id: b.id, num_bc: b.num_bc || b.id,
-    type: b.type === 'st' ? 'st' : 'fournisseur',
-    fournisseur: b.fournisseur || '—',
-    montant: Number(b.montant || 0) || 0,
-    prevue: b.date_livraison_prevue ? String(b.date_livraison_prevue).slice(0, 10) : null,
-    initiale: b.date_livraison_initiale ? String(b.date_livraison_initiale).slice(0, 10) : null,
-    reception: b.date_reception_reelle ? String(b.date_reception_reelle).slice(0, 10) : null,
-    bl_id: b.bl_id || null,
-    statut: b.statut || 'en_attente',
-  })
-  const all = (bcsRaw || []).map(norm)
-  const planifiables = all.filter(b => b.prevue && b.statut !== 'annule')
-  const sansDate = all.filter(b => !b.prevue && !recu(b) && b.statut !== 'annule' && b.statut !== 'cloture')
-
-  const stateOf = (b: any) => recu(b)
-    ? (b.statut === 'recu_partiel' ? 'partiel' : 'recu')
-    : (b.prevue < TODAY ? 'retard' : (b.statut === 'accuse' ? 'accuse' : 'attente'))
-  const COL: Record<string, [string, string, string]> = {
-    attente: ['#fef3c7', '#d97706', '#92400e'],
-    accuse:  ['#dbeafe', '#2563eb', '#1d4ed8'],
-    retard:  ['#fee2e2', '#dc2626', '#b91c1c'],
-    partiel: ['#cffafe', '#0891b2', '#0e7490'],
-    recu:    ['#dcfce7', '#16a34a', '#15803d'],
-  }
-  const LABELS: Record<string, string> = { attente: 'En attente', accuse: 'Accusé', retard: 'En retard', partiel: 'Reçu partiel', recu: 'Réceptionné' }
-
-  const nRetard = planifiables.filter(b => stateOf(b) === 'retard').length
-  const nAttente = planifiables.filter(b => ['attente', 'accuse'].includes(stateOf(b))).length
-  const nRecu = planifiables.filter(b => recu(b)).length
-  let otdTot = 0, otdOk = 0
-  for (const b of planifiables) { if (!recu(b)) continue; const prom = b.initiale || b.prevue; const act = b.reception; if (!prom || !act) continue; otdTot++; if (act <= prom) otdOk++ }
-  const otdGlobal = otdTot ? Math.round(otdOk / otdTot * 100) : null
-
-  // ── Fenêtre temporelle : passé borné à −21 j, futur à +120 j, snap lundi→dimanche ──
-  let minD = TODAY, maxD = TODAY
-  for (const b of planifiables) { if ((b.prevue as string) < minD) minD = b.prevue as string; if ((b.prevue as string) > maxD) maxD = b.prevue as string }
-  let start = minD < addDays(TODAY, -21) ? addDays(TODAY, -21) : (minD < TODAY ? minD : TODAY)
-  let end = maxD > addDays(TODAY, 120) ? addDays(TODAY, 120) : (maxD > addDays(TODAY, 21) ? maxD : addDays(TODAY, 21))
-  start = addDays(start, -dow(start)); end = addDays(end, 6 - dow(end))
-  const totalDays = Math.max(7, diffDays(start, end))
-  const PX = 15, LABW = 200, width = totalDays * PX
-  const leftOf = (s: string) => Math.max(0, Math.min(totalDays, diffDays(start, s))) * PX
-
-  const byF: Record<string, any[]> = {}
-  for (const b of planifiables) { (byF[b.fournisseur] = byF[b.fournisseur] || []).push(b) }
-  const lanes = Object.keys(byF).sort((a, b) => a.localeCompare(b)).map(k => ({ nom: k, type: byF[k][0].type, list: byF[k] }))
-
-  let weekCells = ''
-  for (let d = start; d <= end; d = addDays(d, 7)) {
-    weekCells += `<div style="position:absolute;left:${leftOf(d)}px;top:0;bottom:0;border-left:1px solid #eef2f7;"></div>`
-      + `<div style="position:absolute;left:${leftOf(d) + 4}px;top:5px;font-size:.6rem;color:#94a3b8;font-family:monospace;white-space:nowrap;">${frDate(d)}</div>`
-  }
-  const todayLine = (TODAY >= start && TODAY <= end)
-    ? `<div style="position:absolute;left:${leftOf(TODAY)}px;top:0;bottom:0;width:2px;background:#ef4444;z-index:1;"></div>`
-      + `<div style="position:absolute;left:${leftOf(TODAY) + 3}px;top:5px;font-size:.58rem;color:#ef4444;font-weight:800;">auj.</div>` : ''
-
-  const marker = (b: any) => {
-    const st = stateOf(b); const c = COL[st]
-    const slip = b.initiale && b.prevue && b.initiale !== b.prevue
-    const ghost = slip
-      ? `<div title="Date initiale : ${attr(frDate(b.initiale))}" style="position:absolute;left:${leftOf(b.initiale)}px;top:12px;width:9px;height:9px;border-radius:50%;border:1.5px dashed #cbd5e1;background:#fff;z-index:2;"></div>`
-        + `<div style="position:absolute;left:${Math.min(leftOf(b.initiale), leftOf(b.prevue))}px;top:16px;width:${Math.abs(leftOf(b.prevue) - leftOf(b.initiale))}px;border-top:1.5px dashed #cbd5e1;"></div>`
-      : ''
-    return ghost + `<div class="arr-mk" data-bc="${attr(b.id)}" data-state="${st}" title="${attr(b.num_bc + ' · ' + b.fournisseur + ' · prevu ' + frDate(b.prevue) + ' · ' + LABELS[st])}" `
-      + `style="position:absolute;left:${leftOf(b.prevue)}px;top:6px;background:${c[0]};border:1.5px solid ${c[1]};color:${c[2]};border-radius:7px;padding:2px 7px;font-size:.64rem;font-weight:700;white-space:nowrap;cursor:pointer;z-index:3;box-shadow:0 1px 2px rgba(0,0,0,.08);">`
-      + `${slip ? '<i class="fas fa-clock-rotate-left" style="font-size:.55rem;margin-right:3px;opacity:.7;"></i>' : ''}${escX(b.num_bc)}</div>`
-  }
-  const laneOtd = (list: any[]) => { let t = 0, o = 0; for (const b of list) { if (!recu(b)) continue; const p = b.initiale || b.prevue; const a = b.reception; if (!p || !a) continue; t++; if (a <= p) o++ } return t ? Math.round(o / t * 100) : null }
-
-  const lanesHtml = lanes.map(ln => {
-    const otd = laneOtd(ln.list)
-    const tBadge = ln.type === 'st'
-      ? '<span style="background:#ede9fe;color:#6d28d9;border-radius:5px;padding:0 5px;font-size:.55rem;font-weight:800;">ST</span>'
-      : '<span style="background:#fef3c7;color:#92400e;border-radius:5px;padding:0 5px;font-size:.55rem;font-weight:800;">FOU</span>'
-    return `<div class="arr-lane" data-type="${ln.type}" style="display:flex;border-top:1px solid #f1f5f9;">`
-      + `<div style="width:${LABW}px;flex:none;position:sticky;left:0;background:#fff;z-index:4;padding:7px 10px;border-right:1px solid #e2e8f0;">`
-        + `<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:.75rem;font-weight:700;color:#1e293b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px;">${escX(ln.nom)}</span>${tBadge}</div>`
-        + `<div style="font-size:.6rem;color:#94a3b8;margin-top:2px;">${ln.list.length} BC${otd != null ? ` · OTD <b style="color:${otd >= 95 ? '#15803d' : otd >= 85 ? '#b45309' : '#b91c1c'};">${otd}%</b>` : ''}</div>`
-      + `</div>`
-      + `<div class="arr-track" style="position:relative;width:${width}px;height:36px;flex:none;">${ln.list.map(marker).join('')}</div>`
-      + `</div>`
-  }).join('')
-
-  const fbtns = [['all', 'Tous', 'fa-layer-group'], ['fournisseur', 'Fournisseurs', 'fa-industry'], ['st', 'Sous-traitants', 'fa-exchange-alt'], ['attente', 'À recevoir', 'fa-hourglass-half'], ['retard', 'En retard', 'fa-triangle-exclamation']]
-    .map(([f, l, ic], i) => `<button class="arr-fbtn${i === 0 ? ' arr-fbtn-on' : ''}" data-f="${f}" onclick="expArrFilter('${f}')"><i class="fas ${ic}"></i> ${l}</button>`).join('')
-
-  return `
-  <div id="exp-panel-planning" style="display:none;">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
-      <div style="font-size:1rem;font-weight:800;color:#111827;display:flex;align-items:center;gap:8px;">
-        <i class="fas fa-calendar-week" style="color:${AMB};"></i>Planning des arrivées <span style="font-weight:500;color:#94a3b8;font-size:.82rem;">fournisseurs &amp; sous-traitants</span>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">${fbtns}</div>
-    </div>
-
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
-      ${kpiCard('fa-hourglass-half', AMB, nAttente, 'À recevoir', 'BC en attente de réception')}
-      ${kpiCard('fa-triangle-exclamation', '#dc2626', nRetard, 'En retard', 'date prévue dépassée')}
-      ${kpiCard('fa-boxes-packing', '#16a34a', nRecu, 'Réceptionnés', 'sur la période affichée')}
-      ${kpiCard('fa-bullseye', otdGlobal != null && otdGlobal >= 95 ? '#16a34a' : otdGlobal != null && otdGlobal >= 85 ? '#d97706' : '#dc2626', otdGlobal != null ? otdGlobal + '%' : '—', 'OTD figé', 'vs 1ʳᵉ date promise')}
-    </div>
-
-    ${planifiables.length === 0 ? `<div style="text-align:center;padding:40px;color:#9ca3af;font-size:.85rem;background:#f8fafc;border-radius:12px;">Aucune commande fournisseur/ST avec une date d'arrivée prévue.</div>` : `
-    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
-      <div style="overflow-x:auto;">
-        <div style="min-width:${LABW + width}px;">
-          <div style="display:flex;border-bottom:2px solid #f1f5f9;background:#fafafa;">
-            <div style="width:${LABW}px;flex:none;position:sticky;left:0;background:#fafafa;z-index:5;padding:6px 10px;font-size:.62rem;font-weight:800;color:#64748b;border-right:1px solid #e2e8f0;text-transform:uppercase;letter-spacing:.04em;">Fournisseur / ST</div>
-            <div style="position:relative;width:${width}px;height:24px;flex:none;">${weekCells}${todayLine}</div>
-          </div>
-          ${lanesHtml}
-        </div>
-      </div>
-    </div>`}
-
-    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;font-size:.7rem;color:#64748b;align-items:center;">
-      ${Object.keys(LABELS).map(k => `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:11px;height:11px;border-radius:3px;background:${COL[k][0]};border:1.5px solid ${COL[k][1]};"></span>${LABELS[k]}</span>`).join('')}
-      <span style="display:inline-flex;align-items:center;gap:5px;"><i class="fas fa-clock-rotate-left" style="color:#94a3b8;"></i>date repoussée (1ʳᵉ date gardée pour l'OTD)</span>
-    </div>
-
-    ${sansDate.length ? `<div style="margin-top:18px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;">
-      <div style="font-size:.78rem;font-weight:700;color:#92400e;margin-bottom:8px;"><i class="fas fa-circle-question" style="margin-right:6px;"></i>${sansDate.length} BC sans date d'arrivée prévue — à planifier</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;">${sansDate.map(b => `<button class="arr-mk" data-bc="${attr(b.id)}" style="background:#fff;border:1px solid #fcd34d;color:#92400e;border-radius:7px;padding:3px 9px;font-size:.68rem;font-weight:700;cursor:pointer;">${escX(b.num_bc)} · ${escX(b.fournisseur)}</button>`).join('')}</div>
-    </div>` : ''}
   </div>`
 }
 
@@ -1518,7 +890,7 @@ export const pageServiceExpeditions = (
       color: AMB,
       darkBg: '#451a03',
       title: 'Service Expéditions',
-      subtitle: 'Sabine · BL Clients · BST · BC Fournisseurs/ST · Commandes · OTD · EN 9100:2018',
+      subtitle: 'Sabine · Réceptions · Envois · Calendrier · Fournisseurs · OTD · EN 9100:2018',
       tabs: TABS.map(([id,lbl,ic]) => ({
         id, label: lbl, icon: ic,
         badge: id === 'receptions' ? (MOUVEMENTS.filter(m => m.sens === 'in' && !m.fait).length || undefined)
@@ -1721,35 +1093,6 @@ export const pageServiceExpeditions = (
     });
   }
 
-  function expSwitchBLType(type){
-    var panels=['bl-reception','bl-client','bl-bst'];
-    panels.forEach(function(p){
-      var el=document.getElementById('exp-sub-panel-'+p);
-      if(el) el.style.display=(p===type)?'block':'none';
-      var btn=document.getElementById('exp-sub-'+p);
-      if(btn) btn.classList.toggle('exp-sub-active',p===type);
-    });
-  }
-
-  function expSwitchBCType(type){
-    var panels=['bc-four','bc-st'];
-    panels.forEach(function(p){
-      var el=document.getElementById('exp-sub-panel-'+p);
-      if(el) el.style.display=(p===type)?'block':'none';
-      var btn=document.getElementById('exp-sub-'+p);
-      if(btn) btn.classList.toggle('exp-sub-active',p===type);
-    });
-  }
-
-  function expSwitchCmdType(type){
-    var panels=['cmd-client','cmd-four'];
-    panels.forEach(function(p){
-      var el=document.getElementById('exp-sub-panel-'+p);
-      if(el) el.style.display=(p===type)?'block':'none';
-      var btn=document.getElementById('exp-sub-'+p);
-      if(btn) btn.classList.toggle('exp-sub-active',p===type);
-    });
-  }
 
   function expFilter(tableId, q){
     var tbl=document.getElementById(tableId);
@@ -1793,7 +1136,6 @@ export const pageServiceExpeditions = (
   async function expEnvoyerBST(id){ if(await appConfirm('Confirmer l envoi du BST '+id+' au sous-traitant ?')){ pushNotif('ok','fa-exchange-alt','BST parti chez le sous-traitant. BC ST mis a jour.',5000); } }
   async function expReceptionnerBST(id){ if(await appConfirm('Confirmer la reception du retour BST '+id+' ?')){ pushNotif('ok','fa-check-circle','Retour BST confirme. Lot remis en production.',5000); } }
   async function expReceptionnerBC(id){ if(await appConfirm('Confirmer la reception BC '+id+' ?')){ pushNotif('ok','fa-boxes','Reception confirmee. Stock mis a jour.',5000); } }
-  function expImprimerBL(id){ pushNotif('ok','fa-print','Impression BL '+id+' en cours.',3000); }
 
   function expSaveBL(){ pushNotif('ok','fa-truck-loading','BL cree et ajoute a la liste d envoi.',5000); expCloseModal(); }
   function expSaveBST(){ pushNotif('ok','fa-exchange-alt','BST cree. Apparaitra le jour J dans la liste.',5000); expCloseModal(); }
@@ -1959,21 +1301,7 @@ export const pageServiceExpeditions = (
     }).catch(function(){ pushNotif('err','fa-ban','Erreur reseau.'); });
   }
 
-  // ── Planning des arrivées : filtre, détail au clic, changement de date ──
-  function expArrFilter(mode){
-    var pn=document.getElementById('exp-panel-planning'); if(!pn) return;
-    pn.querySelectorAll('.arr-fbtn').forEach(function(b){ b.classList.toggle('arr-fbtn-on', b.getAttribute('data-f')===mode); });
-    pn.querySelectorAll('.arr-lane').forEach(function(ln){
-      var showLane=(mode==='all'||mode==='attente'||mode==='retard')?true:(ln.getAttribute('data-type')===mode);
-      ln.style.display=showLane?'flex':'none';
-      ln.querySelectorAll('.arr-mk').forEach(function(mk){
-        var st=mk.getAttribute('data-state'); var show=true;
-        if(mode==='retard') show=(st==='retard');
-        else if(mode==='attente') show=(st==='attente'||st==='accuse'||st==='retard');
-        mk.style.display=show?'':'none';
-      });
-    });
-  }
+  // ── Changement de la date d'arrivée prévue d'un bon de commande ──
   function expOpenArrivee(id){
     var b=null; for(var i=0;i<EXP_PLAN.length;i++){ if(EXP_PLAN[i].id===id){ b=EXP_PLAN[i]; break; } }
     if(!b) return; _arrCur=b;
@@ -2018,15 +1346,8 @@ export const pageServiceExpeditions = (
         setTimeout(function(){ softReload(); },700);   // on reste sur l'onglet en cours
       }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur reseau.'); });
   }
-  function expVoirBL(blId){
-    expCloseArrivee(); location.hash='receptions'; expShowTab('bl');
-    if(typeof expSwitchBLType==='function') expSwitchBLType('bl-reception');
-    pushNotif('ok','fa-receipt','BL '+blId+' \\u2014 onglet Bons de Livraison, Receptions.',4500);
-    var el=document.getElementById('exp-panel-bl'); if(el) el.scrollIntoView({behavior:'smooth'});
-  }
+  // Fermeture de la modale au clic sur le fond.
   document.addEventListener('click',function(e){
-    var mk=(e.target&&e.target.closest)?e.target.closest('.arr-mk'):null;
-    if(mk&&mk.getAttribute('data-bc')){ expOpenArrivee(mk.getAttribute('data-bc')); return; }
     var ov=document.getElementById('exp-arrivee-overlay');
     if(e.target===ov) expCloseArrivee();
   });
@@ -2036,16 +1357,6 @@ export const pageServiceExpeditions = (
   </script>
 
   <style>
-  .exp-sub-tab{padding:7px 14px;border:none;border-radius:8px;background:transparent;color:#64748b;font-size:.79rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all .15s;}
-  .exp-sub-active{background:white;color:${AMB_D};font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.1);}
-  .exp-sub-tab:hover:not(.exp-sub-active){color:#374151;}
-  .exp-sub-tab i{font-size:.7rem;}
-  .arr-fbtn{padding:6px 11px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;color:#64748b;font-size:.73rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;}
-  .arr-fbtn:hover{background:#f8fafc;color:#334151;}
-  .arr-fbtn-on{background:${AMB};color:#fff;border-color:${AMB};}
-  .arr-fbtn-on:hover{background:${AMB_D};color:#fff;}
-  .arr-mk:hover{filter:brightness(.96);transform:translateY(-1px);}
-  .arr-lane:hover{background:#fcfcfd;}
   </style>`
 
   return layout('Service Expeditions', content + demandeAchatModal('Expéditions', '#f59e0b'), 'service-expeditions')

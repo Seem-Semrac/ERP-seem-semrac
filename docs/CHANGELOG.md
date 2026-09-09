@@ -2,6 +2,28 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-10 — 689 lignes mortes retirées de l'écran Expéditions
+
+**Ce qui traînait** : quatre panneaux entiers (`panelBL`, `panelBC`, `panelCommandes`, `panelPlanningArrivees`) n'étaient plus rendus depuis la refonte des onglets — leurs identifiants avaient disparu de `TABS` et de `EXP_TABS`, mais le code, lui, était resté. Résultat : un `grep bcPdf` dans ce fichier remontait **5 boutons dont 2 ne s'affichaient jamais**, et chaque intervention commençait par démîler le vivant du mort.
+
+C'est ce qui avait produit le bouton « BL &lt;n°&gt; » qui **vidait la page** : il visait un onglet supprimé, dans un panneau lui-même supprimé.
+
+**Retiré** — après vérification, pour chaque symbole, qu'aucune référence ne subsistait **hors** des blocs supprimés :
+
+- les 4 panneaux ci-dessus ;
+- morts par ricochet : `subTabBar`, `cmdStatutBadge`, `daStatutBadge`, `BC_DEFAULT` / `CMDS_DEFAULT` / `DA_DEFAULT`, `expArrFilter`, `expSwitchBCType` / `expSwitchCmdType` / `expSwitchBLType`, `expVoirBL`, `expImprimerBL` (qui n'imprimait rien — elle affichait une notification mensongère) ;
+- la délégation de clic sur `.arr-mk` (plus aucun marqueur n'est rendu) et les styles `.exp-sub-*` / `.arr-*` devenus sans objet.
+
+**Gardé — attention aux faux jumeaux** : `BL_CLIENTS_DEFAULT` et `BST_DEFAULT` sont, eux, toujours utilisés ; `kpiCard` sert au Dashboard ; `numBL` aux trois listes de BL.
+
+**Recalé au passage** : l'en-tête du fichier et le sous-titre de la page annonçaient encore « BL Clients · BST · BC Fournisseurs/ST · Commandes » — la sous-nav d'avant la refonte. Les onglets réels sont Réceptions · Envois · Calendrier · Fournisseurs · Dashboard. Et la section « Données de démonstration » ne contenait plus que deux replis vides.
+
+**2 053 → 1 364 lignes.**
+
+### Vérification
+
+`tsc --noEmit` propre · harnais toutes-pages **61 PASS / 0 FAIL** · `npm run build` · balayage post-suppression : **zéro résidu** des 24 symboles retirés, les 5 panneaux vivants toujours présents, chaque import encore utilisé. **Page ouverte dans le navigateur** : les 5 onglets s'affichent avec leur contenu réel (628 à 2 779 px de hauteur), **zéro erreur console**, et le crayon de date ouvre toujours sa fenêtre avec son unique bouton.
+
 ## 2026-09-09 (soir, 2) — La date d'arrivée d'un BC se change depuis les Achats
 
 **Le reproche** : « je vois pas pourquoi on télécharge un doc ». Dans la carte que j'avais ajoutée aux Expéditions pour rendre les dates corrigeables, la **seule action visible** était un bouton PDF ; le crayon, lui, se perdait dans la cellule de la date. On croyait corriger une date, on récupérait un document.
