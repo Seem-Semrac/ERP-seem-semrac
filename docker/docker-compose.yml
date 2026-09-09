@@ -268,8 +268,10 @@ services:
         condition: service_healthy
       kong:
         condition: service_healthy
-      migrate:
-        condition: service_completed_successfully   # jamais de code neuf sur un schéma ancien
+      # ⚠ PAS de dependance sur `migrate` : une migration qui echoue ne doit JAMAIS
+      #   empecher l'ERP de demarrer. Un schema en retard est un desagrement, un ERP
+      #   a terre est un arret de travail — et le code est fail-soft sur les colonnes
+      #   absentes (sondes de capacite, .catch, repli majDaDraft).
     environment:
       PORT: 3000
       # L'app parle à Supabase par la passerelle Kong INTERNE au réseau Docker.
