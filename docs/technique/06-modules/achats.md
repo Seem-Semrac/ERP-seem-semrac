@@ -33,7 +33,19 @@ RFQ = source de vérité des prix → catalogue. BC n'écrit jamais le prix. Sco
 
 `BC-YYYY-<affaire>-NN` · `BL-YYYY-<affaire>-NN`, même logique que `LOT-YYYY-<affaire>-ZZ` et `BDT-YYYY-<affaire>-ZZ-AA`. L'affaire se lit directement dans le numéro, et **le compteur repart à 01 par affaire et par année** : deux affaires ne se marchent plus dessus.
 
-Générateur unique : `nextAffaireId(prefix, affaire, ids)` dans `src/index.tsx`, appliqué aux **8** points de création (BC direct, BC issu d'une demande d'achat, 2 BC de sous-traitance, BL de réception fournisseur, BL de retour client, BL client). Sans affaire, on retombe sur la référence `LIBRE-XXX` déjà attribuée par `prochaineRefLibre()`.
+Générateur `nextAffaireId(prefix, affaire, ids)` dans `src/index.tsx`, appliqué aux points de création. Sans affaire, on retombe sur la référence `LIBRE-XXX` déjà attribuée par `prochaineRefLibre()`.
+
+**Un BL de réception est adossé à SON bon de commande** (`nextBlPourBc`). Une affaire porte plusieurs commandes, et chaque commande plusieurs livraisons — les deux se lisent d'un coup d'œil :
+
+```
+BC-2026-0001-03            la 3ᵉ commande de l'affaire 0001
+  └─ BL-2026-0001-03-01    sa 1ʳᵉ réception
+  └─ BL-2026-0001-03-02    sa 2ᵉ réception (partielle)
+BC-2026-0001-04            une autre commande de la même affaire
+  └─ BL-2026-0001-04-01    ses réceptions repartent à 01
+```
+
+Repli : sans bon de commande identifiable, on retombe sur `BL-YYYY-<affaire>-NN`. C'est le cas des **BL clients** et des **retours client**, qui répondent à une commande CLIENT et non à un bon de commande fournisseur. Un BC à l'ancien format reste exploitable : `BC-2026-007` → `BL-2026-007-01`.
 
 ⚠ **Les numéros déjà attribués ne sont pas touchés** : l'ancien format `BC-YYYY-NNN` reste tel quel en base, seul le prochain numéro change de forme. Les deux formats coexistent sans se gêner — le générateur ne compte que les numéros du nouveau format, pour l'affaire concernée.
 

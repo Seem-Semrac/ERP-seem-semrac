@@ -1885,6 +1885,29 @@ app.post('/api/achats/sous-traitant', async (c) => {
 // ⚠ Les numéros DÉJÀ attribués (ancien format BC-YYYY-NNN) sont laissés intacts :
 //   seul le prochain numéro change de forme.
 const _sanAff = (a: any) => String(a ?? '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 16)
+// Un BL de RÉCEPTION est adossé à SON bon de commande : le numéro du BC se lit
+// dans celui du BL. Une affaire peut porter plusieurs commandes, et chaque commande
+// plusieurs livraisons (réceptions partielles) — les deux se lisent d'un coup d'œil :
+//
+//     BC-2026-0001-03   la 3ᵉ commande de l'affaire 0001
+//       └─ BL-2026-0001-03-01   sa 1ʳᵉ réception
+//       └─ BL-2026-0001-03-02   sa 2ᵉ réception (partielle)
+//
+// Repli : sans bon de commande identifiable (BL client, retour), on retombe sur la
+// numérotation par affaire — un BL client répond à une commande CLIENT, pas à un BC.
+export function nextBlPourBc(bcId: any, affaire: any, ids: (string | undefined | null)[]): string {
+  // Le suffixe ne contient que chiffres, lettres et tirets : rien a echapper ensuite.
+  const base = String(bcId ?? '').trim().replace(/^BC-/, '').replace(/[^A-Za-z0-9-]/g, '')
+  if (!base) return nextAffaireId('BL', affaire, ids)
+  const motif = new RegExp('^BL-' + base + '-(\\d+)$')
+  let max = 0
+  for (const id of ids) {
+    const m = String(id ?? '').match(motif)
+    if (m) { const v = parseInt(m[1], 10); if (v > max) max = v }
+  }
+  return 'BL-' + base + '-' + String(max + 1).padStart(2, '0')
+}
+
 export function nextAffaireId(prefix: 'BC' | 'BL', affaire: any, ids: (string | undefined | null)[]): string {
   const year = new Date().getFullYear()
   const aff = _sanAff(affaire) || 'LIBRE'
@@ -2433,7 +2456,7 @@ app.post('/api/expeditions/bc/:id/receptionner', async (c) => {
   const bls = await getBonsDeLivraison().catch(() => [] as any[])
   const blId = (body.num_bl && String(body.num_bl).trim())
     ? String(body.num_bl).trim()
-    : nextAffaireId('BL', body.affaire_id || (bc as any).num_affaire || (bc as any).affaire_id, (bls as any[]).map(b => b.id))
+    : nextBlPourBc((bc as any).id, body.affaire_id || (bc as any).num_affaire || (bc as any).affaire_id, (bls as any[]).map(b => b.id))
   const affaireRaw = body.affaire_id || bc.affaire_id || null
   const affaireId = await resolveAffaireId(affaireRaw)
   const blPayload: any = {
