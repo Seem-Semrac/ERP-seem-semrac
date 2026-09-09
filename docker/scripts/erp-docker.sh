@@ -8,11 +8,16 @@ cd "$DOCKER_DIR"
 
 # Plusieurs stacks sur la même machine : ERP_INSTANCE=recette cible .env.recette
 # et le projet compose « erp-recette ». Sans variable → instance principale.
+# Le nom de projet Compose DOIT etre identique a celui utilise par install.sh :
+# c'est lui qui rattache les conteneurs et les volumes existants. Un nom different
+# fait croire a Compose qu'il s'agit d'une nouvelle stack — il cree des volumes vides
+# et bute sur les noms de conteneurs deja pris.
 if [ -n "${ERP_INSTANCE:-}" ]; then
   ENV_FILE=".env.$ERP_INSTANCE"
   export COMPOSE_PROJECT_NAME="erp-$ERP_INSTANCE"
 else
   ENV_FILE="${ENV_FILE:-.env}"
+  export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-erp}"
 fi
 [ -f "$ENV_FILE" ] || { echo "→ $ENV_FILE absent : copie depuis .env.example"; cp .env.example "$ENV_FILE"; }
 # Toutes les commandes compose passent par ce fichier d'environnement.

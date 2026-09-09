@@ -2,6 +2,21 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-09 — Correctif : `erp-docker.sh` pilotait une AUTRE stack que `install.sh`
+
+- **Symptôme sur la VM** : `erp-docker.sh maj` échouait sur `Conflict. The container name "/erp-kong" is already in use`, précédé de `a network with name erp-seem-semrac exists but was not created for project "erp-seem-semrac"` — et surtout de trois lignes **`Volume … Created`**.
+- **Cause** : le nom de projet Compose divergeait entre les deux scripts.
+
+| | Nom de projet |
+|---|---|
+| `docker-compose.yml` déclare | `erp-seem-semrac` |
+| `install.sh` l'écrasait avec | **`erp`** ← la stack a été créée là |
+| `erp-docker.sh` ne le fixait pas → retombait sur | `erp-seem-semrac` |
+
+- **Gravité réelle** : le nom de projet rattache les conteneurs **et les volumes**. Compose ne retrouvait donc ni les uns ni les autres et s'apprêtait à démarrer sur des **volumes neufs, vides** — une base sans données. Le conflit de nom sur `erp-kong` a interrompu l'opération avant ce point ; sans lui, la stack serait repartie vierge en apparence, les données restant en réalité dans les anciens volumes.
+- **Correctif** : `erp-docker.sh` et `erp-docker.ps1` fixent désormais `COMPOSE_PROJECT_NAME=erp` par défaut, comme `install.sh`. Le commentaire est posé dans les trois scripts et dans `12-docker-installation.md` : ces noms ne doivent jamais diverger.
+- **Amorçage** : la VM tournait encore sur l'ancien script, sans la commande `maj` — d'où l'aide affichée au lieu d'une mise à jour. Un `git pull` manuel est nécessaire **une fois** pour installer un script qui se met ensuite à jour lui-même.
+
 ## 2026-09-09 — Droits en cases à cocher · rôles supplémentaires retirés · gamme élargie
 
 ### 1. Nomenclatures — la colonne des process gagne en largeur

@@ -79,6 +79,8 @@ Variante en une seule commande côté poste, avec garde de santé :
 
 Elle reconstruit les conteneurs locaux, attend que les 8 services soient sains, puis committe et pousse — **et s'arrête sans rien envoyer si un conteneur ne démarre pas**. Publier du code qui ne se lance pas sur le poste revient à casser la VM à distance.
 
+> ⚠️ **Nom de projet Compose.** `install.sh` **et** `erp-docker.sh` fixent tous deux `COMPOSE_PROJECT_NAME=erp`, qui prime sur le `name:` du `docker-compose.yml`. Ce nom rattache les conteneurs **et les volumes** existants : deux scripts qui n'utilisent pas le même pilotent deux stacks distinctes. Compose créerait alors des volumes vides — donc une base vide — avant de buter sur les noms de conteneurs déjà pris. Ne pas les désaligner.
+
 `maj` fait le pendant côté serveur : `git pull --ff-only`, reconstruction, redémarrage, puis l'état des 8 conteneurs et l'URL. Les données ne sont jamais touchées — seule l'application est remplacée.
 
 ### Ce que fait `install.sh`

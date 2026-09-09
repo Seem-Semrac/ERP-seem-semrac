@@ -23,6 +23,9 @@ param(
 # git ecrit des avertissements benins sur stderr ; en PowerShell 5.1 avec Stop, cela
 # suffit a interrompre le script. On teste $? explicitement la ou c'est necessaire.
 $ErrorActionPreference = "Continue"
+# Meme nom de projet que install.sh : c'est lui qui rattache conteneurs et volumes
+# existants. Un nom different ferait repartir Compose sur une stack vide.
+if (-not $env:COMPOSE_PROJECT_NAME) { $env:COMPOSE_PROJECT_NAME = "erp" }
 $dockerDir = Split-Path -Parent $PSScriptRoot          # ...\docker
 $repoRoot  = Split-Path -Parent $dockerDir             # racine du dépôt
 Push-Location $dockerDir

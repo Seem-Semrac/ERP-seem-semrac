@@ -38,6 +38,8 @@ if [ -n "$INSTANCE" ]; then
   ENV_FILE=".env.$INSTANCE"
   PROJECT="erp-$INSTANCE"
 fi
+# Ce nom prime sur le « name: » du docker-compose.yml. Il DOIT rester identique dans
+# erp-docker.sh, sinon les deux scripts pilotent deux stacks distinctes.
 export COMPOSE_PROJECT_NAME="$PROJECT"
 
 etape() { printf '\n\033[1;34m▸ %s\033[0m\n' "$1"; }
