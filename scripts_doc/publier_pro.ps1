@@ -1,76 +1,28 @@
-# ═══════════════════════════════════════════════════════════════════════════
-# Publie l'état de `main` vers le dépôt professionnel (Seem-Semrac).
+# ===========================================================================
+#  OBSOLETE depuis le 9 septembre 2026.
 #
-#   .\scripts_doc\publier_pro.ps1 "message de publication"
+#  Le depot Seem-Semrac/ERP-seem-semrac est desormais le depot PRINCIPAL
+#  (« origin ») : on y committe directement, il n'y a plus d'etape de
+#  publication separee.
 #
-# Équivalent PowerShell de publier_pro.sh, pour un poste Windows sans WSL.
-# Le dépôt professionnel garde un historique PROPRE : un commit par
-# publication, jamais les 262 commits (4,8 Go) du dépôt de travail. Le contenu
-# publié est toujours strictement identique à `main`.
+#      git add -A ; git commit -m "..." ; git push
 #
-# L'historique n'est jamais réécrit : la VM peut faire `git pull` sans heurt.
-# ═══════════════════════════════════════════════════════════════════════════
-param(
-    [string]$Message = ""
-)
-# PowerShell 5.1 transforme la moindre ligne de stderr d'un exe natif en erreur fatale
-# quand ErrorActionPreference vaut Stop. git ecrit des avertissements benins sur stderr
-# (commit-graph, detached HEAD...) : on ne s'arrete donc PAS dessus, on teste $? nous-memes.
-$ErrorActionPreference = "Continue"
-
-$racine = git rev-parse --show-toplevel
-if (-not $?) { Write-Host "X Pas dans un depot git." -ForegroundColor Red; exit 1 }
-Set-Location $racine
-
-$REMOTE = "pro"
-$BRANCHE = "livraison"
-
-# Le depot distant est-il configure ?
-git remote get-url $REMOTE *> $null
-if (-not $?) {
-    Write-Host "X Le depot distant << $REMOTE >> n'est pas configure. Une fois :" -ForegroundColor Red
-    Write-Host "    git remote add $REMOTE https://Seem-Semrac@github.com/Seem-Semrac/ERP-seem-semrac.git"
-    exit 1
-}
-
-# Arbre de travail propre ?
-$sale = git status --porcelain 2>$null
-if ($sale) {
-    Write-Host "X Arbre de travail non propre - committez ou remisez d'abord." -ForegroundColor Red
-    git status --short
-    exit 1
-}
-
-# Sur main ?
-$depart = git branch --show-current
-if ($depart -ne "main") {
-    Write-Host "X Placez-vous sur main (actuellement : $depart)." -ForegroundColor Red
-    exit 1
-}
-
-if (-not $Message) { $Message = "Mise a jour " + (Get-Date -Format "yyyy-MM-dd") }
-
-git checkout -q $BRANCHE
-# Aligne index ET copie de travail sur l'arbre de main - gere aussi les suppressions.
-git read-tree -u --reset main
-git add -A
-
-git diff --cached --quiet
-if ($?) {
-    Write-Host "  Rien de nouveau a publier."
-} else {
-    git commit -q -m $Message
-    Write-Host ("  Commit de publication : " + (git log --oneline -1))
-}
-
-git push -q $REMOTE "$BRANCHE`:main"
-$pousse = $?
-git checkout -q main
-
-if ($pousse) {
-    Write-Host "OK Publie - https://github.com/Seem-Semrac/ERP-seem-semrac" -ForegroundColor Green
-    Write-Host "   Sur la VM :  cd ~/erp && git pull && docker/scripts/erp-docker.sh up"
-} else {
-    Write-Host "X Le push a echoue. Vous etes revenu sur main, rien n'est perdu." -ForegroundColor Red
-    exit 1
-}
+#  Puis, sur la VM :   ~/erp/docker/scripts/erp-docker.sh maj
+#
+#  Ce fichier ne fait plus que rappeler la marche a suivre.
+#  L'ancien depot de travail reste accessible sous le remote « archive ».
+# ===========================================================================
+Write-Host ""
+Write-Host "  Ce script n'est plus necessaire." -ForegroundColor Yellow
+Write-Host ""
+Write-Host "  Seem-Semrac/ERP-seem-semrac est maintenant le depot principal (origin)."
+Write-Host "  On y committe directement :"
+Write-Host ""
+Write-Host "      git add -A" -ForegroundColor Cyan
+Write-Host "      git commit -m 'ce que contient la mise a jour'" -ForegroundColor Cyan
+Write-Host "      git push" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  Puis, sur la VM :"
+Write-Host ""
+Write-Host "      ~/erp/docker/scripts/erp-docker.sh maj" -ForegroundColor Cyan
+Write-Host ""

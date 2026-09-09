@@ -23,6 +23,11 @@ SSR **Hono** (TSX server-side, zéro framework client) + **Supabase** (PostgREST
 4. **Secrets** : ne jamais écrire le PAT Supabase en clair (fichier, commit, memory). Clé anon committée = choix assumé, ne pas y toucher.
 5. JS client dans les templates TSX : suivre les conventions d'échappement de `erp-new-module` (`\\'`, `\\n`, `sjX`, délégation d'événements).
 
+## Dépôt git — Seem-Semrac est le dépôt principal (depuis le 09/09/2026)
+- **`origin` = `Seem-Semrac/ERP-seem-semrac`** (privé). On y **committe et pousse directement** : plus d'étape de publication séparée, `scripts_doc/publier_pro.*` est obsolète.
+- **`archive` = `Krmaaaaaa/ERP`** — ancien dépôt de travail, conservé pour l'historique (277 commits, 4,8 Go). Branche locale `archive-historique`.
+- La VM tire de `origin`. Cycle complet : `git push` sur le poste, puis `~/erp/docker/scripts/erp-docker.sh maj` sur la VM.
+
 ## Repères du dépôt
 - `src/index.tsx` = routeur (≈290 routes) · `src/queries.ts` = accès données · `src/shared.ts` = layout/sidebar/helpers · `src/auth.ts` = RBAC (4 points de câblage par service).
 - `scripts_import/*.sql` = schémas DB (source de vérité DDL) · `scripts_doc/` = outillage doc/vérif.

@@ -66,20 +66,20 @@ git clone git@github-erp:Seem-Semrac/ERP-seem-semrac.git ~/erp
 
 | Ordre | Où | Commande |
 |---|---|---|
-| 1 | **Poste de développement** (PowerShell) | `.\docker\scripts\erp-docker.ps1 livrer "ce que contient la mise à jour"` |
+| 1 | **Poste de développement** | `git add -A ; git commit -m "…" ; git push` |
 | 2 | **VM** | `~/erp/docker/scripts/erp-docker.sh maj` |
 
-`livrer` enchaîne les trois étapes du poste et **s'arrête net si l'une échoue** :
+Depuis le 9 septembre 2026, **`Seem-Semrac/ERP-seem-semrac` est le dépôt principal** (`origin`) : on y committe directement, il n'y a plus d'étape de publication séparée. L'ancien dépôt de travail `Krmaaaaaa/ERP` reste consultable sous le remote **`archive`**, avec les 277 commits d'historique.
 
-1. reconstruit les conteneurs locaux (`up -d --build`) ;
-2. attend que les 8 services soient sains — **si l'un ne démarre pas, rien n'est publié** ;
-3. publie vers le dépôt de déploiement via `publier_pro.ps1`.
+Variante en une seule commande côté poste, avec garde de santé :
 
-Cette garde est le point important : publier du code qui ne démarre même pas sur le poste revient à casser la VM à distance, sans pouvoir la réparer autrement qu'en s'y connectant.
+```powershell
+.\docker\scripts\erp-docker.ps1 livrer "ce que contient la mise à jour"
+```
+
+Elle reconstruit les conteneurs locaux, attend que les 8 services soient sains, puis committe et pousse — **et s'arrête sans rien envoyer si un conteneur ne démarre pas**. Publier du code qui ne se lance pas sur le poste revient à casser la VM à distance.
 
 `maj` fait le pendant côté serveur : `git pull --ff-only`, reconstruction, redémarrage, puis l'état des 8 conteneurs et l'URL. Les données ne sont jamais touchées — seule l'application est remplacée.
-
-> Sur un poste sans PowerShell (Linux, macOS, Git Bash), la publication s'écrit `scripts_doc/publier_pro.sh "…"`.
 
 ### Ce que fait `install.sh`
 

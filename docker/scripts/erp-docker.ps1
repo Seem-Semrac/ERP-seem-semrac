@@ -74,11 +74,22 @@ try {
         exit 1
       }
 
-      Write-Host "`n[3/3] Publication vers le depot de deploiement..." -ForegroundColor Cyan
+      Write-Host "`n[3/3] Commit et envoi vers Seem-Semrac..." -ForegroundColor Cyan
       $msg = $Arg
       if (-not $msg) { $msg = "Mise a jour " + (Get-Date -Format "yyyy-MM-dd") }
-      & (Join-Path $repoRoot "scripts_doc\publier_pro.ps1") $msg
-      if (-not $?) { Write-Host "X La publication a echoue." -ForegroundColor Red; exit 1 }
+      Push-Location $repoRoot
+      try {
+        $sale = git status --porcelain 2>$null
+        if ($sale) {
+          git add -A
+          git commit -m $msg
+          if (-not $?) { Write-Host "X Le commit a echoue." -ForegroundColor Red; exit 1 }
+        } else {
+          Write-Host "  Rien de nouveau a committer." -ForegroundColor Yellow
+        }
+        git push
+        if (-not $?) { Write-Host "X Le push a echoue." -ForegroundColor Red; exit 1 }
+      } finally { Pop-Location }
 
       Write-Host "`nOK Livre. Sur la VM :  ~/erp/docker/scripts/erp-docker.sh maj" -ForegroundColor Green
     }
@@ -131,7 +142,7 @@ try {
       Write-Host "Postgres   : localhost:54322  (user postgres, mdp = POSTGRES_PASSWORD du .env)"
       Write-Host "`nCommandes : livrer [message] | up | stop | start | restart | down | reset"
       Write-Host "            logs [svc] | ps | psql | restore <f> | ged-bucket | migrate | mirror [n]"
-      Write-Host "`nlivrer = reconstruit en local, verifie que tout demarre, PUIS publie sur GitHub." -ForegroundColor Cyan
+      Write-Host "`nlivrer = reconstruit en local, verifie que tout demarre, PUIS committe et pousse." -ForegroundColor Cyan
       Write-Host "         Ensuite, sur la VM :  ~/erp/docker/scripts/erp-docker.sh maj" -ForegroundColor Cyan
     }
     default { Write-Host "Commande inconnue : $Cmd. Voir l'en-tête du script." -ForegroundColor Red }

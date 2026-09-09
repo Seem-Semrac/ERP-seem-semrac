@@ -2,6 +2,32 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-09 — Seem-Semrac devient le dépôt principal
+
+- **Demande** : « je veux commiter juste la dernière version de l'ERP avec tout sur Seem Semrac, et que chaque nouvelle mise à jour Seem Semrac devienne le nouveau commitement principal, à partir de maintenant et pour toujours ».
+- **`Seem-Semrac/ERP-seem-semrac` est désormais `origin`.** On y committe et pousse directement : l'étape de publication séparée disparaît.
+
+| Avant | Après |
+|---|---|
+| commit sur `Krmaaaaaa/ERP`, puis `publier_pro.ps1` vers Seem-Semrac, puis `maj` sur la VM | `git push`, puis `maj` sur la VM |
+
+### Comment la bascule a été faite, sans rien perdre
+Le dépôt Seem-Semrac portait déjà l'historique propre de la branche `livraison` (un commit par livraison, contenu identique à `main`). Plutôt que d'y pousser les 4,8 Go d'historique du dépôt de travail — dont la quasi-totalité n'est que des régénérations successives de captures d'écran —, c'est **cette lignée qui devient `main`** :
+
+- ancienne `main` (277 commits) renommée **`archive-historique`**, toujours poussable vers le remote **`archive`** (`Krmaaaaaa/ERP`) ;
+- `livraison` renommée **`main`**, suivant `origin/main` ;
+- `origin` → Seem-Semrac, ancien `origin` → `archive`.
+
+Vérifié avant bascule : **0 différence de fichier** entre les deux branches, **497 fichiers** de part et d'autre. Rien n'est perdu : l'historique complet reste sur `archive-historique` et sur GitHub.
+
+### Conséquences sur l'outillage
+- `scripts_doc/publier_pro.ps1` et `.sh` : **obsolètes**. Ils ne publient plus rien et se contentent de rappeler la marche à suivre.
+- `erp-docker.ps1 livrer` : reconstruit en local, vérifie la santé des 8 conteneurs, puis **committe et pousse directement** (au lieu d'appeler le script de publication). La garde reste : si un conteneur ne démarre pas, **rien n'est envoyé**.
+- `docs/technique/12-docker-installation.md` et `CLAUDE.md` mis en cohérence.
+
+### Correctif inclus
+`publier_pro.ps1` et `erp-docker.ps1` posaient `ErrorActionPreference = "Stop"` : en PowerShell 5.1, la moindre ligne écrite par git sur **stderr** devient une erreur fatale. Un avertissement anodin (« unable to find all commit-graph files ») suffisait à interrompre la publication **avant le premier contrôle**. Les scripts passent en `Continue` et testent `$?` explicitement. Le commit-graph corrompu du dépôt a par ailleurs été reconstruit, ce qui supprime l'avertissement à la source.
+
 ## 2026-09-08 — BC : rattachement à une affaire, facture en pièce jointe — et la GED réparée
 
 ### Deux bugs bloquants découverts en implémentant — le dépôt de fichier ne fonctionnait pas
