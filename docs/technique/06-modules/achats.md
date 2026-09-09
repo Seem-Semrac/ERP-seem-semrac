@@ -29,6 +29,16 @@ Demandes de prix (RFQ), demandes d'achat, bons de commande, fournisseurs & sous-
 <!-- auto:notes -->
 RFQ = source de vérité des prix → catalogue. BC n'écrit jamais le prix. Scorecard fournisseur/ST.
 
+## Numérotation des BC et des BL — alignée sur l'affaire (09/09/2026)
+
+`BC-YYYY-<affaire>-NN` · `BL-YYYY-<affaire>-NN`, même logique que `LOT-YYYY-<affaire>-ZZ` et `BDT-YYYY-<affaire>-ZZ-AA`. L'affaire se lit directement dans le numéro, et **le compteur repart à 01 par affaire et par année** : deux affaires ne se marchent plus dessus.
+
+Générateur unique : `nextAffaireId(prefix, affaire, ids)` dans `src/index.tsx`, appliqué aux **8** points de création (BC direct, BC issu d'une demande d'achat, 2 BC de sous-traitance, BL de réception fournisseur, BL de retour client, BL client). Sans affaire, on retombe sur la référence `LIBRE-XXX` déjà attribuée par `prochaineRefLibre()`.
+
+⚠ **Les numéros déjà attribués ne sont pas touchés** : l'ancien format `BC-YYYY-NNN` reste tel quel en base, seul le prochain numéro change de forme. Les deux formats coexistent sans se gêner — le générateur ne compte que les numéros du nouveau format, pour l'affaire concernée.
+
+⚠ **Limite assumée** : supprimer la dernière commande d'une affaire libère son numéro, qui sera réattribué. Éliminer complètement ce cas demanderait une table de séquences (donc une migration) ; l'ancien compteur global avait le même défaut, mais à l'échelle de TOUTES les commandes.
+
 ## Demandes d'achat : modifier, retirer, fusionner (09/09/2026)
 
 **Modifier** — `POST /api/achats/da/:id/editer`. Route **distincte** du `PATCH /api/achats/da/:id`, qui sert au brouillon de BC et force `statut='brouillon'`. L'édition ne touche ni au statut, ni à `genere_par_adt`, ni au `bc_draft`. Elle s'applique aux demandes **libres comme automatiques**, mais le **rattachement d'une demande automatique est verrouillé** : `num_affaire` et `cmd_ref` portent la porte « matière reçue » et le coût de l'affaire — les déplacer changerait silencieusement l'imputation de la dépense. La modale l'affiche en lecture seule et l'explique.

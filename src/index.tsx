@@ -1876,6 +1876,27 @@ app.post('/api/achats/sous-traitant', async (c) => {
 // ══════════════════════════════════════════════════════════════
 
 // Génère le prochain identifiant séquentiel PREFIX-ANNÉE-NNN
+// Numérotation ALIGNÉE SUR L'AFFAIRE, comme les lots et les bons de travail :
+//   BC-YYYY-<affaire>-NN   ·   BL-YYYY-<affaire>-NN
+// (cf. fmtLotId / fmtBonId : LOT-YYYY-<affaire>-ZZ, BDT-YYYY-<affaire>-ZZ-AA)
+// Le compteur repart à 01 PAR AFFAIRE et par année : deux affaires ne se marchent
+// plus dessus, et l'affaire se lit directement dans le numéro.
+// Sans affaire, on utilise la référence LIBRE-XXX déjà attribuée par prochaineRefLibre().
+// ⚠ Les numéros DÉJÀ attribués (ancien format BC-YYYY-NNN) sont laissés intacts :
+//   seul le prochain numéro change de forme.
+const _sanAff = (a: any) => String(a ?? '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 16)
+export function nextAffaireId(prefix: 'BC' | 'BL', affaire: any, ids: (string | undefined | null)[]): string {
+  const year = new Date().getFullYear()
+  const aff = _sanAff(affaire) || 'LIBRE'
+  const motif = new RegExp('^' + prefix + '-' + year + '-' + aff.replace(/[-]/g, '\\-') + '-(\\d+)$')
+  let max = 0
+  for (const id of ids) {
+    const m = String(id ?? '').match(motif)
+    if (m) { const v = parseInt(m[1], 10); if (v > max) max = v }
+  }
+  return prefix + '-' + year + '-' + aff + '-' + String(max + 1).padStart(2, '0')
+}
+
 function nextSeqId(prefix: string, ids: (string | undefined | null)[]): string {
   const year = new Date().getFullYear()
   const re = new RegExp('^' + prefix + '-' + year + '-(\\d+)$')
@@ -2224,7 +2245,7 @@ app.post('/api/achats/bc', async (c) => {
   const fournisseurNom = (body.fournisseur || '').trim()
   if (!fournisseurNom) return c.json({ ok: false, error: 'Fournisseur / sous-traitant requis' }, 400)
   const bcs = await getBonsDeCommande().catch(() => [] as any[])
-  const bcId = nextSeqId('BC', (bcs as any[]).map(b => b.id))
+  const bcId = nextAffaireId('BC', body.affaire_id || prochaineRefLibre(bcs as any[]), (bcs as any[]).map(b => b.id))
   const isST = (body.type_bc || 'fournisseur') === 'st'
   const articles = (body.articles || '—')
   const montant = Number(body.montant_ht ?? body.montant ?? 0) || 0
@@ -2262,7 +2283,8 @@ app.post('/api/achats/da/:id/soumettre', async (c) => {
   const da = await getDemandeAchat(id)
   if (!da) return c.json({ ok: false, error: 'DA introuvable' }, 404)
   const bcs = await getBonsDeCommande().catch(() => [] as any[])
-  const bcId = nextSeqId('BC', (bcs as any[]).map(b => b.id))
+  const _affBc = String(body.affaire_id || '').trim() || (da as any).num_affaire || (da as any).affaire_id || prochaineRefLibre(bcs as any[])
+  const bcId = nextAffaireId('BC', _affBc, (bcs as any[]).map(b => b.id))
   const isST = (body.type_bc || da.type_bc || 'fournisseur') === 'st'
   const typeBc = isST ? 'sous_traitant' : 'fournisseur'  // valeurs contraintes en DB
   const articles = body.articles || da.article || '—'
@@ -2411,7 +2433,7 @@ app.post('/api/expeditions/bc/:id/receptionner', async (c) => {
   const bls = await getBonsDeLivraison().catch(() => [] as any[])
   const blId = (body.num_bl && String(body.num_bl).trim())
     ? String(body.num_bl).trim()
-    : nextSeqId('BL', (bls as any[]).map(b => b.id))
+    : nextAffaireId('BL', body.affaire_id || (bc as any).num_affaire || (bc as any).affaire_id, (bls as any[]).map(b => b.id))
   const affaireRaw = body.affaire_id || bc.affaire_id || null
   const affaireId = await resolveAffaireId(affaireRaw)
   const blPayload: any = {
@@ -2524,7 +2546,8 @@ app.post('/api/expeditions/retour-client/:ncId/receptionner', async (c) => {
   if ((nc as any).retour_statut === 'recu') return c.json({ ok: false, error: 'Retour déjà réceptionné' }, 409)
 
   const bls = await getBonsDeLivraison().catch(() => [] as any[])
-  const blId = (body.num_bl && String(body.num_bl).trim()) ? String(body.num_bl).trim() : nextSeqId('BL', (bls as any[]).map(b => b.id))
+  const blId = (body.num_bl && String(body.num_bl).trim()) ? String(body.num_bl).trim()
+    : nextAffaireId('BL', (nc as any).num_affaire || (nc as any).n_commande || body.cmd_id, (bls as any[]).map(b => b.id))
   // Rattachement à la commande client : n° saisi, sinon celui porté par la NC.
   const cmdRef = String(body.cmd_id || (nc as any).n_commande || '').trim() || null
   const cmds = await getCommandes().catch(() => [] as any[])
@@ -2680,7 +2703,7 @@ app.post('/api/expeditions/bl-partiel', async (c) => {
   const warnings: string[] = []
 
   // 1) Crée le BL client (partiel) EN PREMIER : si échec, on abandonne AVANT de toucher au stock.
-  const blId = nextSeqId('BL', (bls as any[]).map((x: any) => x.id))
+  const blId = nextAffaireId('BL', numAffaire, (bls as any[]).map((x: any) => x.id))
   const prixTransport = Number(b.prix_transport ?? 0) || 0
   const { error: blErr } = await createBonDeLivraison({
     id: blId, type_bl: 'client', cmd_id: (cmd ? cmd.id : null),
@@ -5863,7 +5886,7 @@ app.post('/api/production/bst/affecter', async (c) => {
   const affaireFk = await resolveAffaireId(lot?.affaire_id || lot?.cmd_id)
 
   // 1) BC sous-traitant — statut 'brouillon' = en attente d'envoi
-  const bcId = nextSeqId('BC', (bcs as any[]).map((b: any) => b.id))
+  const bcId = nextAffaireId('BC', lot?.num_affaire || lot?.affaire_id || lot?.cmd_id, (bcs as any[]).map((b: any) => b.id))
   const bcPayload: any = {
     id: bcId, num_bc: bcId, type_bc: 'sous_traitant',
     fournisseur_nom: st?.nom ?? null,
@@ -5918,7 +5941,7 @@ app.post('/api/production/bst/:id/affecter-st', async (c) => {
 
   // Crée le BC ST seulement s'il n'existe pas encore pour ce BST
   if (!bcId) {
-    bcId = nextSeqId('BC', (bcs as any[]).map((b: any) => b.id))
+    bcId = nextAffaireId('BC', (bds as any).num_affaire || (bds as any).cmd_ref || (bds as any).lot_ref, (bcs as any[]).map((b: any) => b.id))
     const piece = bds.piece || '—'
     const operation = bds.operation || (Array.isArray(st?.prestations) && st.prestations[0]) || 'Sous-traitance'
     const bcPayload: any = {
