@@ -2,6 +2,24 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-10 — `install.sh` pouvait rendre un secret introuvable
+
+**Le symptôme**, remonté par l'exploitant : sur la VM, `grep '^DASHBOARD_PASSWORD=' docker/.env` ne renvoyait rien, alors que Studio demandait bien un mot de passe.
+
+**La cause** : la fonction `set_env` d'`install.sh` ajoutait une clé absente avec un simple `>>`, sans vérifier que le fichier se terminait par un saut de ligne. Si ce n'était pas le cas, la nouvelle clé se **collait** à la dernière ligne :
+
+```
+AUTRE_CLE=valeurDASHBOARD_PASSWORD=le_secret
+```
+
+Deux dégâts d'un coup : la nouvelle clé devient introuvable (`^DASHBOARD_PASSWORD=` ne matche plus) **et** la valeur précédente est corrompue. Silencieux — le script se termine sans erreur.
+
+**Le correctif** : `set_env` garantit désormais la fin de ligne avant d'ajouter.
+
+**Reproduit puis vérifié** sur trois formes de fichier : sans saut de ligne final (l'ancienne version produit bien `B=2DASHBOARD_PASSWORD=…` et la clé est perdue ; la nouvelle l'écrit sur sa propre ligne, retrouvée par un `grep` ancré), avec saut de ligne final (pas de ligne vide en trop), et sur une clé déjà présente (remplacement en place, inchangé).
+
+ℹ **Pour récupérer un mot de passe malgré un `.env` abîmé** : la valeur en service est celle du conteneur, `docker exec erp-kong env | grep -i dashboard`. Elle fait foi quel que soit l'état du fichier.
+
 ## 2026-09-10 — 689 lignes mortes retirées de l'écran Expéditions
 
 **Ce qui traînait** : quatre panneaux entiers (`panelBL`, `panelBC`, `panelCommandes`, `panelPlanningArrivees`) n'étaient plus rendus depuis la refonte des onglets — leurs identifiants avaient disparu de `TABS` et de `EXP_TABS`, mais le code, lui, était resté. Résultat : un `grep bcPdf` dans ce fichier remontait **5 boutons dont 2 ne s'affichaient jamais**, et chaque intervention commençait par démîler le vivant du mort.

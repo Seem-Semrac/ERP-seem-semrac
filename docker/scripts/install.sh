@@ -132,6 +132,11 @@ else
     if grep -qE "^$1=" "$ENV_FILE"; then
       sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"
     else
+      # ⚠ Si le fichier ne se termine PAS par un saut de ligne, l'ajout se collerait
+      #   a la derniere ligne : AUTRE_CLE=valeurNOUVELLE_CLE=secret. La cle deviendrait
+      #   introuvable (^NOUVELLE_CLE= ne matche plus) ET la precedente serait corrompue.
+      #   On garantit donc la fin de ligne AVANT d'ajouter.
+      [ -s "$ENV_FILE" ] && [ -n "$(tail -c 1 "$ENV_FILE")" ] && printf '\n' >> "$ENV_FILE"
       printf '%s=%s\n' "$1" "$2" >> "$ENV_FILE"
     fi
   }
