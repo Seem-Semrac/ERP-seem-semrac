@@ -167,6 +167,13 @@ const API_FAM_SERVICE: Record<string, string> = {
   rh: 'rh', salarie: 'rh', salaries: 'rh', competence: 'rh', competences: 'rh', certification: 'rh', certifications: 'rh', conge: 'rh', conges: 'rh', pointage: 'rh',
   factures: 'compta', 'factures-fournisseur': 'compta', ecritures: 'compta', compta: 'compta',
   plans: 'plans', marqueurs: 'plans',
+  // ⚠ Toute famille /api/<fam>/ DOIT figurer ici : `serviceFor` renvoie sinon null et
+  //   `canAccess` refuse (fail-closed). La fonctionnalite meurt alors en silence pour
+  //   TOUS les roles sauf direction — aucune erreur serveur, juste un 403 discret.
+  //   Ajoutees le 10/09/2026 apres un balayage des 50 familles reellement routees :
+  'prepa-technique': 'be',        // cloture d'une preparation technique (page BE)
+  environnement: 'environnement', // perissables perimes, diagnostics ISO 14001 / 26000
+  atex: 'environnement',          // DRPCE (zonage ATEX)
   // Familles ajoutées pour fermer le « default-open » (chaque famille DOIT être mappée) :
   quarantaine: 'qualite',
   commandes: 'commercial', commande: 'commercial', 'commandes-p': 'commercial',
@@ -205,8 +212,11 @@ export function serviceFor(path: string): string | null {
   // L'ANALYSE d'une DT (chiffrage/validation BE) est une action du BUREAU D'ÉTUDES, même si la DT est une ressource
   // commerciale (dt→commercial). Sans cette exception, un analyste `bei` (commercial:'r') ne pourrait pas valider l'analyse.
   if (/^\/api\/dt\/[^/]+\/analyse$/.test(clean)) return 'be'
-  // Export SEIRICH (risque chimique) : gardé par le service Sécurité (la famille /api/export est sinon multi-domaines).
-  if (clean === '/api/export/seirich.xlsx') return 'securite'
+  // La famille /api/export est MULTI-DOMAINES : chaque export est gardé par le service
+  // qui possède la donnée exportée, sinon un seul mapping ouvrirait les trois.
+  if (clean === '/api/export/seirich.xlsx') return 'securite'        // risque chimique
+  if (clean === '/api/export/fournisseurs.xlsx') return 'achats'
+  if (clean === '/api/export/clients.xlsx') return 'commercial'
   if (clean.startsWith('/api/')) {
     const fam = clean.slice(5).split('/')[0]
     return API_FAM_SERVICE[fam] || null

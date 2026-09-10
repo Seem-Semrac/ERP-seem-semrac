@@ -2,6 +2,41 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-10 — Validation de préparation technique : 4 familles d'API étaient refusées en silence
+
+**Le signalement** : « quand j'appuie sur le bouton de validation ça ne part pas dans la liste des prépas techniques terminées ».
+
+### La faille de fond : une famille d'API non déclarée = fonctionnalité morte, sans trace
+
+`serviceFor()` déduit le service du **premier segment après `/api/`**. Une famille absente d'`API_FAM_SERVICE` renvoie `null`, et `canAccess()` applique alors sa règle fail-closed : `if (!svc) return !path.startsWith('/api/')` — refus. La fonctionnalité est **morte pour tous les rôles sauf `direction`**, sans la moindre erreur côté serveur : juste un `403` discret que l'utilisateur perçoit comme « ça ne marche pas ».
+
+Balayage des **50 familles réellement routées** dans `src/index.tsx`, confrontées à la table : **4 trous**.
+
+| Famille | Méthodes | Conséquence | Service assigné |
+|---|---|---|---|
+| `prepa-technique` | POST | le BE ne pouvait pas clôturer une prépa | `be` |
+| `environnement` | POST | périssables périmés + diagnostics ISO 14001/26000 bloqués | `environnement` |
+| `atex` | GET | DRPCE (zonage ATEX) illisible | `environnement` |
+| `export` | GET | `fournisseurs.xlsx` et `clients.xlsx` refusés | `achats` / `commercial` |
+
+`export` est **multi-domaines** : chaque fichier est gardé par le service qui possède la donnée, comme l'était déjà `seirich.xlsx` → `securite`. `interlocuteurs` reste volontairement hors table : il est traité à part dans `canAccess` (contacts clients **et** fournisseurs).
+
+**Vérifié en exécutant `canAccess`** sur le bundle réel de `src/auth.ts`, 6 chemins × 8 rôles : avant, `serviceFor` renvoyait `null` partout ; après, `prepa-technique` → `be` ouvre à `bei` + direction, `environnement` → `qualite`/`oas`/direction, et chaque export au service qui détient la donnée.
+
+### La validation à vide ne passe plus pour un succès
+
+`POST /api/nomenclature/:id/prepa-validee` **avalait les échecs d'écriture** (`if (!error) { n++ }`) : une écriture refusée ressortait en « 0 ligne validée », indiscernable d'un « rien à valider » — et le client affichait un message **vert**. Désormais les échecs sont comptés et remontés en `400`, la réponse porte un champ `candidates` (combien de prépas portent cette référence, tous statuts confondus), et « 0 ligne validée » devient un **avertissement orange** qui distingue les deux cas : déjà faites, ou **aucune prépa ne porte cette référence** (mauvaise nomenclature choisie).
+
+### Ce qui n'était pas en cause
+
+La base : aucune contrainte `CHECK` sur `statut`, RLS permissive (`prep_all` ALL/anon/true), `GRANT UPDATE` à anon, et un `UPDATE` testé sous `set local role anon` renvoie bien `UPDATE 1`. L'identifiant affiché est la clé primaire brute. Le filtre de la liste est cohérent (`'faite'` en base → `'realise'` à l'écran) et remis à zéro au rechargement.
+
+**⚠ Le second bouton, « Valider la prépa » (formulaire), refuse délibérément** tant qu'une étape CNC n'a pas son code programme : `409 « 1 étape(s) CNC sans code programme »`. C'est la porte qualité, elle fonctionne. Testé de bout en bout : code programme renseigné → validation `200`, `validees: 1`, la prépa passe à « faite ». Données de test remises dans leur état d'origine après l'essai.
+
+### Écart de schéma constaté au passage
+
+`scripts_import/prepa_site_lot_schema.sql` (colonnes `activite`, `lot_ref`, `priorite`) **n'a jamais été appliqué** sur la base Docker : le site et le lot de la prépa passent donc toujours par les replis déduits. Sans effet sur ce bug, à traiter séparément.
+
 ## 2026-09-10 — `install.sh` pouvait rendre un secret introuvable
 
 **Le symptôme**, remonté par l'exploitant : sur la VM, `grep '^DASHBOARD_PASSWORD=' docker/.env` ne renvoyait rien, alors que Studio demandait bien un mot de passe.

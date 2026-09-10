@@ -5077,8 +5077,17 @@ app.get('/be/preparation', async (c) => {
         .then(function(j){
           relacher();
           if(!j||!j.ok){ if(window.pushNotif) pushNotif('err','fa-ban',(j&&j.error)||'Validation refusee.',7000); return; }
-          var msg='Prepa <strong>'+(j.reference||'')+'</strong> validee.';
-          msg += j.validees ? ' '+j.validees+' ligne(s) passee(s) en « faite »' + (j.affaires.length? ' — affaire(s) '+j.affaires.join(', ') : '') + '.' : ' Aucune ligne en attente pour cette piece.';
+          // Rien de valide = ce n'est PAS un succes : ou bien la reference ne correspond a
+          // aucune preparation, ou bien elles etaient deja faites. On le dit, en orange.
+          if(!j.validees){
+            var pourquoi = j.candidates
+              ? 'Les preparations de cette reference etaient deja marquees faites.'
+              : 'AUCUNE preparation ne porte la reference <strong>'+(j.reference||'')+'</strong> : verifiez que la nomenclature choisie est bien celle de la piece a preparer.';
+            if(window.pushNotif) pushNotif('warn','fa-triangle-exclamation','Rien n\\'a change. '+pourquoi, 10000);
+            return;
+          }
+          var msg='Prepa <strong>'+(j.reference||'')+'</strong> validee \\u2014 '+j.validees+' ligne(s) passee(s) en « faite »';
+          msg += (j.affaires.length? ' (affaire'+(j.affaires.length>1?'s':'')+' '+j.affaires.join(', ')+')' : '') + '.';
           msg += ' Reste la reception matiere pour lancer la production.';
           if(window.pushNotif) pushNotif('ok','fa-check-double', msg, 8000);
         })
@@ -9438,11 +9447,26 @@ app.post('/api/nomenclature/:id/prepa-validee', async (c) => {
     [String(p.code_ref_produit || '').toLowerCase().trim(), String(p.piece || '').toLowerCase().trim()].includes(ref))
   let n = 0
   const affaires: string[] = []
+  const echecs: string[] = []
   for (const pr of cibles) {
     const { error } = await updatePreparationTechnique(String(pr.id), { statut: 'faite', updated_at: new Date().toISOString() } as any)
-    if (!error) { n++; if (pr.num_affaire) affaires.push(String(pr.num_affaire)) }
+    // ⚠ Un echec d'ecriture etait purement ignore : il ressortait en « 0 ligne validee »,
+    //   indiscernable d'un « rien a valider ». On le remonte maintenant.
+    if (error) echecs.push(String(pr.id) + ' (' + error.message + ')')
+    else { n++; if (pr.num_affaire) affaires.push(String(pr.num_affaire)) }
   }
-  return c.json({ ok: true, validees: n, affaires: [...new Set(affaires)], reference: nom.code_ref_produit || nom.num_nom })
+  if (echecs.length) {
+    return c.json({ ok: false, validees: n, echecs, error: echecs.length + ' preparation(s) n\'ont pas pu etre validees : ' + echecs.join(' ; ') }, 400)
+  }
+  return c.json({
+    ok: true, validees: n, affaires: [...new Set(affaires)],
+    reference: nom.code_ref_produit || nom.num_nom,
+    // `candidates` dit combien de lignes portaient cette reference, toutes statuts confondus :
+    // 0 candidate = la reference ne correspond a AUCUNE preparation (probleme d'appariement),
+    // ce qui n'est pas la meme chose que « tout etait deja fait ».
+    candidates: (preps as any[]).filter((p: any) =>
+      [String(p.code_ref_produit || '').toLowerCase().trim(), String(p.piece || '').toLowerCase().trim()].includes(ref)).length,
+  })
 })
 
 app.post('/api/prepa-technique/:id/statut', async (c) => {
