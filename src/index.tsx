@@ -5088,8 +5088,11 @@ app.get('/be/preparation', async (c) => {
           }
           var msg='Prepa <strong>'+(j.reference||'')+'</strong> validee \\u2014 '+j.validees+' ligne(s) passee(s) en « faite »';
           msg += (j.affaires.length? ' (affaire'+(j.affaires.length>1?'s':'')+' '+j.affaires.join(', ')+')' : '') + '.';
-          msg += ' Reste la reception matiere pour lancer la production.';
+          msg += ' Plan et codes programme enregistres dans la nomenclature.';
           if(window.pushNotif) pushNotif('ok','fa-check-double', msg, 8000);
+          // On SORT de la prepa : elle est faite, il n'y a plus rien a y saisir.
+          // Retour a la liste, ancre sur la section « faites » ou la ligne vient d'arriver.
+          setTimeout(function(){ location.href='/be/preparations-tech#faites'; }, 1200);
         })
         .catch(function(){ relacher(); if(window.pushNotif) pushNotif('err','fa-times','Erreur reseau.',4000); });
     });

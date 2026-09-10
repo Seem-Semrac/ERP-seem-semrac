@@ -1262,6 +1262,12 @@ export const pagePreparationsTechniques = (dbPreps?: any[], extra: { noms?: any[
   const nbEnCours = PREP_TECH.filter(p=>p.statut==='en_cours').length
   const nbRealises = PREP_TECH.filter(p=>p.statut==='realise').length
 
+  // Deux listes DISTINCTES a l'ecran : une prepa validee quitte celle du haut et
+  // atterrit dans « faites ». (Avant : un seul tableau ou la ligne restait en place,
+  // seul son badge changeant — ce qui donnait l'impression que rien ne se passait.)
+  const PREP_A_FAIRE = PREP_TECH.filter(p => p.statut !== 'realise')
+  const PREP_FAITES  = PREP_TECH.filter(p => p.statut === 'realise')
+
   const prepStatut = (s: string) => {
     const m: Record<string,{bg:string,col:string,lbl:string}> = {
       a_faire: {bg:'#fee2e2',col:'#b91c1c',lbl:'À faire'},
@@ -1275,6 +1281,29 @@ export const pagePreparationsTechniques = (dbPreps?: any[], extra: { noms?: any[
   const prepTypeLbl = (t: string) => t==='nouveau_produit'
     ? '<span style="font-size:.68rem;font-weight:700;color:#7c3aed;background:#f5f3ff;padding:2px 8px;border-radius:4px;">Nouveau produit</span>'
     : '<span style="font-size:.68rem;font-weight:700;color:#0369a1;background:#e0f2fe;padding:2px 8px;border-radius:4px;">MAJ produit</span>'
+
+  // Une seule fabrique de ligne, partagee par les deux tableaux.
+  const lignePrep = (p: any) => {
+            const prioBg = p.priorite==='critique'?'#fee2e2':p.priorite==='urgent'?'#fef9c3':'#f0fdf4'
+            const prioCol = p.priorite==='critique'?'#b91c1c':p.priorite==='urgent'?'#854d0e':'#15803d'
+            return '<tr data-prepf="'+p.statut+'" data-preptype="'+p.type+'" data-prepsite="'+escX(p.site)+'" style="border-bottom:1px solid #f9fafb;" onmouseenter="this.style.background=\'#f8fafc\'" onmouseleave="this.style.background=\'\'">'
+              +'<td style="padding:10px 14px;font-weight:700;color:#0891b2;font-size:.78rem;">'+escX(p.id)+'</td>'
+              +'<td style="padding:10px 14px;">'+prepTypeLbl(p.type)+'</td>'
+              +'<td style="padding:10px 14px;text-align:center;">'+siteBadge(p.site)+'</td>'
+              +'<td style="padding:10px 14px;"><div style="font-weight:700;color:#374151;font-size:.78rem;">'+escX(p.dtRef)+'</div><div style="font-size:.68rem;color:#6366f1;">Affaire N° '+escX(p.numAffaire)+'</div></td>'
+              +'<td style="padding:10px 14px;color:#374151;font-weight:600;font-size:.8rem;">'+escX(p.piece)
+                +(p.lotRef?'<div style="font-family:monospace;font-size:.66rem;color:#0d9488;font-weight:700;margin-top:2px;">'+escX(p.lotRef)+'</div>':'<div style="font-size:.64rem;color:#cbd5e1;margin-top:2px;">lot non rattaché</div>')+'</td>'
+              +'<td style="padding:10px 14px;color:#374151;">'+escX(p.preparation)+'</td>'
+              +'<td style="padding:10px 14px;text-align:center;color:#6b7280;font-size:.78rem;">'+escX(p.responsable)+'</td>'
+              +'<td style="padding:10px 14px;text-align:center;"><span style="padding:2px 8px;border-radius:999px;font-size:.66rem;font-weight:700;background:'+prioBg+';color:'+prioCol+';">'+p.priorite+'</span></td>'
+              +'<td style="padding:10px 14px;text-align:center;color:#6b7280;font-size:.78rem;">'+p.dateEcheance+'</td>'
+              +'<td style="padding:10px 14px;text-align:center;">'+prepStatut(p.statut)+'</td>'
+              +'<td style="padding:10px 14px;text-align:center;">'+(p.statut!=='realise'
+                ? '<button onclick="marquerFait(\''+p.id+'\')" style="padding:4px 10px;background:linear-gradient(135deg,#22c55e,#16a34a);color:white;border:none;border-radius:6px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-check mr-1"></i>Fait</button>'
+                : '<span style="font-size:.72rem;color:#22c55e;font-weight:600;"><i class="fas fa-check-double mr-1"></i>Réalisé</span>')
+              +'</td>'
+              +'</tr>'
+  }
 
   const content = `
   <div style="background:linear-gradient(135deg,#0891b2,#0e7490);padding:20px 24px;color:white;">
@@ -1299,7 +1328,7 @@ export const pagePreparationsTechniques = (dbPreps?: any[], extra: { noms?: any[
       ${[['tous','Tous','#6b7280'],['a_faire','À faire','#ef4444'],['en_cours','En cours','#3b82f6'],['realise','Réalisés','#22c55e'],['nouveau_produit','Nouveau produit','#7c3aed'],['maj_produit','MAJ produit','#0369a1'],['Seem','Seem ('+nbSeem+')','#1d4ed8'],['Semrac','Semrac ('+nbSemrac+')','#9d174d']].map(([s,l,c])=>'<button onclick="filtrerPrep(\''+s+'\')" data-prepf="'+s+'" style="padding:4px 12px;border-radius:999px;background:'+(s==='tous'?c+'20':'#f1f5f9')+';color:'+(s==='tous'?c:'#6b7280')+';border:1.5px solid '+(s==='tous'?c+'40':'#e2e8f0')+';font-size:.72rem;font-weight:700;cursor:pointer;">'+l+'</button>').join('')}
     </div>
 
-    <!-- TABLE -->
+    <!-- TABLE 1 : les preparations qui restent A FAIRE -->
     <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;">
       <table style="width:100%;border-collapse:collapse;font-size:.8rem;" id="prepTable">
         <thead><tr style="background:#f8fafc;border-bottom:2px solid #f1f5f9;">
@@ -1316,29 +1345,36 @@ export const pagePreparationsTechniques = (dbPreps?: any[], extra: { noms?: any[
           <th style="text-align:center;padding:10px 14px;color:#64748b;font-size:.68rem;text-transform:uppercase;font-weight:700;">Action</th>
         </tr></thead>
         <tbody>
-          ${PREP_TECH.map(p=>{
-            const prioBg = p.priorite==='critique'?'#fee2e2':p.priorite==='urgent'?'#fef9c3':'#f0fdf4'
-            const prioCol = p.priorite==='critique'?'#b91c1c':p.priorite==='urgent'?'#854d0e':'#15803d'
-            return '<tr data-prepf="'+p.statut+'" data-preptype="'+p.type+'" data-prepsite="'+escX(p.site)+'" style="border-bottom:1px solid #f9fafb;" onmouseenter="this.style.background=\'#f8fafc\'" onmouseleave="this.style.background=\'\'">'
-              +'<td style="padding:10px 14px;font-weight:700;color:#0891b2;font-size:.78rem;">'+escX(p.id)+'</td>'
-              +'<td style="padding:10px 14px;">'+prepTypeLbl(p.type)+'</td>'
-              +'<td style="padding:10px 14px;text-align:center;">'+siteBadge(p.site)+'</td>'
-              +'<td style="padding:10px 14px;"><div style="font-weight:700;color:#374151;font-size:.78rem;">'+escX(p.dtRef)+'</div><div style="font-size:.68rem;color:#6366f1;">Affaire N° '+escX(p.numAffaire)+'</div></td>'
-              +'<td style="padding:10px 14px;color:#374151;font-weight:600;font-size:.8rem;">'+escX(p.piece)
-                +(p.lotRef?'<div style="font-family:monospace;font-size:.66rem;color:#0d9488;font-weight:700;margin-top:2px;">'+escX(p.lotRef)+'</div>':'<div style="font-size:.64rem;color:#cbd5e1;margin-top:2px;">lot non rattaché</div>')+'</td>'
-              +'<td style="padding:10px 14px;color:#374151;">'+escX(p.preparation)+'</td>'
-              +'<td style="padding:10px 14px;text-align:center;color:#6b7280;font-size:.78rem;">'+escX(p.responsable)+'</td>'
-              +'<td style="padding:10px 14px;text-align:center;"><span style="padding:2px 8px;border-radius:999px;font-size:.66rem;font-weight:700;background:'+prioBg+';color:'+prioCol+';">'+p.priorite+'</span></td>'
-              +'<td style="padding:10px 14px;text-align:center;color:#6b7280;font-size:.78rem;">'+p.dateEcheance+'</td>'
-              +'<td style="padding:10px 14px;text-align:center;">'+prepStatut(p.statut)+'</td>'
-              +'<td style="padding:10px 14px;text-align:center;">'+(p.statut!=='realise'
-                ? '<button onclick="marquerFait(\''+p.id+'\')" style="padding:4px 10px;background:linear-gradient(135deg,#22c55e,#16a34a);color:white;border:none;border-radius:6px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-check mr-1"></i>Fait</button>'
-                : '<span style="font-size:.72rem;color:#22c55e;font-weight:600;"><i class="fas fa-check-double mr-1"></i>Réalisé</span>')
-              +'</td>'
-              +'</tr>'
-          }).join('')}
+          ${PREP_A_FAIRE.length === 0
+            ? '<tr><td colspan="11" style="padding:34px;text-align:center;color:#9ca3af;font-size:.82rem;"><i class="fas fa-check-circle" style="font-size:1.6rem;display:block;margin-bottom:6px;color:#22c55e;"></i>Aucune préparation en attente.</td></tr>'
+            : PREP_A_FAIRE.map(lignePrep).join('')}
         </tbody>
       </table>
+    </div>
+
+    <!-- TABLE 2 : les preparations FAITES. Demande utilisateur du 10/09/2026 :
+         une prepa validee doit QUITTER la liste du haut et apparaitre ici. -->
+    <div id="faites" style="margin-top:28px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+        <div style="font-size:1rem;font-weight:800;color:#111827;display:flex;align-items:center;gap:8px;">
+          <i class="fas fa-check-double" style="color:#22c55e;"></i>Préparations techniques faites
+          <span style="background:#dcfce7;color:#166534;border-radius:999px;padding:1px 10px;font-size:.72rem;font-weight:800;">${PREP_FAITES.length}</span>
+        </div>
+        <span style="font-size:.72rem;color:#9ca3af;font-weight:600;">· plan et codes programme enregistrés dans la nomenclature · la porte production de ce lot est ouverte</span>
+      </div>
+      <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;font-size:.8rem;" id="prepTableFaites">
+          <thead><tr style="background:#f0fdf4;border-bottom:2px solid #dcfce7;">
+            ${['ID','Type','Site','DT / Affaire','Pièce / Lot','Préparation réalisée','Responsable','Priorité','Échéance','Statut','Action']
+              .map((t,i)=>'<th style="text-align:'+([2,6,7,8,9,10].indexOf(i)>=0?'center':'left')+';padding:10px 14px;color:#166534;font-size:.68rem;text-transform:uppercase;font-weight:700;">'+t+'</th>').join('')}
+          </tr></thead>
+          <tbody>
+            ${PREP_FAITES.length === 0
+              ? '<tr><td colspan="11" style="padding:34px;text-align:center;color:#9ca3af;font-size:.82rem;"><i class="fas fa-inbox" style="font-size:1.6rem;display:block;margin-bottom:6px;"></i>Aucune préparation terminée pour le moment.</td></tr>'
+              : PREP_FAITES.map(lignePrep).join('')}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -1349,7 +1385,7 @@ export const pagePreparationsTechniques = (dbPreps?: any[], extra: { noms?: any[
     });
     var btn=document.querySelector('button[data-prepf="'+s+'"]');
     if(btn){ btn.style.background='#e0f7fa'; btn.style.color='#0891b2'; btn.style.borderColor='#b2ebf2'; }
-    document.querySelectorAll('#prepTable tbody tr').forEach(function(tr){
+    document.querySelectorAll('#prepTable tbody tr, #prepTableFaites tbody tr').forEach(function(tr){
       var match = s==='tous' || tr.dataset.prepf===s || tr.dataset.preptype===s || tr.dataset.prepsite===s;
       tr.style.display = match ? '' : 'none';
     });

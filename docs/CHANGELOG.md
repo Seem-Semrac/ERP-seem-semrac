@@ -2,6 +2,30 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-10 — Préparation technique : on sort de la prépa, et il y a enfin une liste « faites »
+
+Demande de l'exploitant : « quand on appuie sur la validation à l'intérieur de la prépa, on doit en sortir, les données doivent migrer dans la nomenclature associée, et passer dans une liste qui n'existe pas encore — préparations techniques faites. »
+
+### Il n'y avait pas de liste « faites » : il n'y avait qu'un seul tableau
+
+C'était la vraie source du malentendu. L'écran ne comportait **qu'un tableau**, où la prépa validée restait à sa place : seul son badge passait au vert. Rien ne « partait » nulle part, et les puces de filtre ne suffisaient pas à le faire sentir.
+
+Désormais **deux sections distinctes** : les prépas restantes en haut, et **« Préparations techniques faites »** en dessous, avec son compteur, son en-tête vert et son propre état vide. Une prépa validée **quitte** la première et **apparaît** dans la seconde. La fabrique de ligne a été factorisée pour que les deux tableaux restent identiques colonne par colonne, et le filtre balaie les deux.
+
+### On sort de la prépa après validation
+
+« Valider la prépa » laissait l'utilisateur dans le formulaire, devant une prépa qui n'a plus rien à saisir. Elle renvoie maintenant vers `/be/preparations-tech#faites`, directement sur la section où la ligne vient d'arriver.
+
+### La migration vers la nomenclature existait déjà — elle est maintenant dite
+
+« Valider la prépa » enregistre d'abord (`POST /api/nomenclature/:id/programmes`), ce qui écrit dans la nomenclature : `num_plan`, `plan_fichier`, et pour chaque étape `programme` + `programme_fichier`. Les quatre champs du formulaire y passent, il n'en manquait aucun. Le message de confirmation le dit désormais explicitement, au lieu de laisser deviner.
+
+### Vérification
+
+`tsc --noEmit` propre · harnais toutes-pages **61 PASS / 0 FAIL** · `npm run build` · **essai réel dans le navigateur, sur une seule et même base** : avant → la prépa est dans « à faire » et « faites » affiche son état vide ; après validation → « à faire » affiche « Aucune préparation en attente » et la ligne est dans « faites ». Donnée remise dans son état d'origine après l'essai.
+
+⚠ **Piège d'environnement rencontré pendant les tests** : `wrangler pages dev` n'a pas de `SUPABASE_URL` et retombe sur la **Supabase cloud**, alors que `docker exec erp-db` interroge la base **Docker**. Comparer l'une à l'autre fait conclure à tort qu'une écriture « ne prend pas ». Toujours lire et écrire dans le même environnement.
+
 ## 2026-09-10 — Validation de préparation technique : 4 familles d'API étaient refusées en silence
 
 **Le signalement** : « quand j'appuie sur le bouton de validation ça ne part pas dans la liste des prépas techniques terminées ».
