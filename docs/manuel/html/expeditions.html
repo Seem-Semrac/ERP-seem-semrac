@@ -19,7 +19,7 @@
       <div class="kind">docs/manuel/html</div>
     </div>
     <h1>Service <span class="hi">Expéditions</span></h1>
-    <p class="lede">Les Expéditions sont la porte d'entrée et de sortie des marchandises. Le service est organisé selon le <b>sens du flux</b> : ce qui <b>part</b> (onglet Envois, ouvert par défaut), ce qui <b>arrive</b> (onglet Réceptions), puis une vue <b>Calendrier</b> qui réunit les deux et détaille la journée. S'y ajoutent le référentiel <b>Fournisseurs</b> — avec l'historique des commandes envoyées et des livraisons reçues — et un <b>Dashboard</b>. Vous y apprendrez aussi comment l'ERP mesure la ponctualité (OTD), la vôtre envers les clients et celle de vos fournisseurs.</p>
+    <p class="lede">Les Expéditions sont la porte d'entrée et de sortie des marchandises. Le service est organisé autour d'une idée simple : <b>chaque chose a un seul endroit</b>. Ce qu'il y a <b>à faire</b> — réceptionner, envoyer — est dans le <b>Calendrier</b>, et nulle part ailleurs : c'est l'onglet d'accueil, votre plan de journée. <b>Envois</b> montre ce qui <b>va</b> partir (les commandes en cours, pour voir venir la charge) ; <b>Réceptions</b> montre ce qui <b>est</b> arrivé, et c'est de là qu'on remplit le PV de contrôle. S'y ajoutent le référentiel <b>Fournisseurs</b> et un <b>Dashboard</b>. Vous y apprendrez aussi comment l'ERP mesure la ponctualité (OTD), la vôtre envers les clients et celle de vos fournisseurs.</p>
     <div class="metachips">
       <span class="chip">👤 Pour qui : <b>Agent d'expédition</b> (écriture : Expéditions, Stock · lecture : Commercial, Achats, Production)</span>
       <span class="chip">🧭 Dans l'ERP : <b>Sidebar → Expéditions</b></span>
@@ -30,30 +30,60 @@
   <nav class="toc">
     <div class="toc-t">Sommaire</div>
     <ol>
-      <li><a href="#tab-envois">Envois (ce qui part)</a></li>
-      <li><a href="#tab-receptions">Réceptions (ce qui arrive)</a></li>
-      <li><a href="#tab-calendrier">Calendrier &amp; journée</a></li>
+      <li><a href="#tab-calendrier">Calendrier &amp; journée (accueil)</a></li>
+      <li><a href="#tab-envois">Envois (ce qui va partir)</a></li>
+      <li><a href="#tab-receptions">Réceptions (ce qui est arrivé)</a></li>
       <li><a href="#tab-fournisseurs">Fournisseurs (référentiel, BC &amp; BL)</a></li>
       <li><a href="#tab-dashboard">Dashboard</a></li>
     </ol>
   </nav>
 
-  <div class="note"><b>Le principe du service.</b> Les cinq onglets ne sont pas cinq bases de données différentes : ce sont <b>cinq projections des mêmes tables</b> (bons de commande, bons de sous-traitance, bons de livraison, commandes, non-conformités). Une réception enregistrée apparaît immédiatement dans le calendrier et dans l'historique du fournisseur — vous n'avez jamais à saisir deux fois.</div>
+  <div class="note"><b>Le principe du service.</b> Les cinq onglets ne sont pas cinq bases de données différentes : ce sont <b>cinq projections des mêmes tables</b> (bons de commande, bons de sous-traitance, bons de livraison, commandes, non-conformités). Une réception enregistrée apparaît immédiatement dans le calendrier et dans l'historique du fournisseur — vous n'avez jamais à saisir deux fois.<br><br><b>Et une règle de rangement :</b> les <b>actions du jour</b> vivent dans le <b>Calendrier</b>, uniquement. Les onglets Envois et Réceptions sont des <b>vues</b> — ils montrent ce qui vient et ce qui est entré, ils ne demandent rien. Si vous cherchez un bouton, il est dans le Calendrier.</div>
 
-  <!-- ═══════════════ ONGLET 1 : ENVOIS ═══════════════ -->
-  <section class="tab" id="tab-envois">
-    <div class="tab-head"><span class="tab-num">1</span><h2>Envois — ce qui part</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> C'est l'onglet d'accueil du service : tout ce qui <b>quitte</b> l'atelier — les commandes clients prêtes à expédier, les bons de livraison à envoyer, et les pièces à confier à un sous-traitant. Le badge compte ce qui reste à faire partir.</p>
+  <!-- ═══════════════ ONGLET 1 : CALENDRIER (ACCUEIL) ═══════════════ -->
+  <section class="tab" id="tab-calendrier">
+    <div class="tab-head"><span class="tab-num">1</span><h2>Calendrier &amp; journée — l'onglet d'accueil</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est votre plan de journée, et le <b>seul endroit</b> où l'on agit. Voir <b>arrivées et départs sur une même frise</b> pour anticiper les journées chargées et repérer les retards d'un coup d'œil ; en dessous, le bloc <b>« Aujourd'hui »</b> liste précisément ce qui doit entrer et sortir, retards compris, chaque ligne portant son bouton.</p>
 
     <h3>Ce que vous voyez</h3>
     <ul class="points">
-      <li><b>Commandes prêtes à expédier</b> — les commandes dont la production est terminée et le lot <b>libéré</b> par la Qualité. C'est de là que part la création d'un BL.</li>
-      <li><b>BL à envoyer</b> — les bons de livraison créés mais pas encore partis.</li>
-      <li><b>À envoyer en sous-traitance</b> — les bons de sous-traitance (BST) en attente d'expédition chez le prestataire.</li>
+      <li>Une <b>frise unique</b>, une ligne par sens de flux, chaque mouvement positionné à sa date. Une légende de couleurs distingue les natures : commande fournisseur, envoi ou retour de sous-traitance, livraison client, retour client.</li>
+      <li>Un repère sur le <b>jour courant</b>, et les mouvements dépassés signalés <span class="b b-crit">en retard</span>.</li>
+      <li>Sous la frise, deux blocs : <b>à réceptionner aujourd'hui</b> et <b>à envoyer aujourd'hui</b>. Chaque ligne porte son bouton <b>« Traiter »</b> — c'est là que se font la réception d'un BC, le départ d'un BST, son retour et l'arrivée d'un retour client.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/expeditions-calendrier.png" alt="Capture de l'onglet Calendrier" loading="lazy">
+      <figcaption><b>Calendrier</b> — arrivées et départs sur une frise commune, puis le détail de la journée avec les actions à portée de clic.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — envoyer un BST chez le sous-traitant</h3>
+    <ol class="steps">
+      <li>Dans le bloc <b>« à envoyer aujourd'hui »</b>, repérez la ligne <span class="b b-mut">Vers ST</span> du BST et cliquez <b>« Traiter »</b>.</li>
+      <li>Confirmez : le départ est horodaté, et la pièce est désormais <b>attendue en retour</b> — elle apparaît à ce titre dans les arrivées de la frise.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-expeditions-bst.png" alt="Fenêtre d'envoi en sous-traitance" loading="lazy">
+      <figcaption><b>Envoi en sous-traitance</b> — le départ horodaté bascule automatiquement la pièce en « retour attendu ».</figcaption>
+    </figure>
+
+    <div class="warn"><b>La porte de la gamme.</b> Un BST ne peut partir que si <b>l'opération juste avant lui, dans la gamme du lot, est soldée</b>. C'est du bon sens d'atelier : on n'expédie pas une pièce dont l'usinage précédent n'est pas terminé, il n'y aurait rien à mettre dans le carton.<br><br>Quand la porte est fermée, le bouton « Traiter » laisse la place à une <b>pastille verrou</b> qui <b>nomme l'opération</b> attendue — par exemple <span class="b b-mut">🔒 BDT-2026-0001-01-04 (Ébavurage) n'est pas soldé</span>. Vous savez donc immédiatement qui relancer. La pièce repart d'elle-même dès que l'atelier solde ce bon de travail. Un BST placé <b>en tête de gamme</b> (rien avant lui — un traitement de surface sur matière brute, par exemple) part librement.</div>
+
+    <div class="astuce"><b>Astuce :</b> commencez toujours la journée par cet onglet. Le bloc « Aujourd'hui » vous donne la liste de travail complète — entrées et sorties — sans avoir à basculer d'un onglet à l'autre. Les deux onglets suivants ne servent qu'à <b>voir venir</b>.</div>
+  </section>
+
+  <!-- ═══════════════ ONGLET 2 : ENVOIS ═══════════════ -->
+  <section class="tab" id="tab-envois">
+    <div class="tab-head"><span class="tab-num">2</span><h2>Envois — ce qui va partir</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Voir venir la charge d'expédition. Ce n'est <b>pas</b> une liste de tâches : rien ne s'y valide. On y lit ce qui est en cours de fabrication et ce qui est en cours de sous-traitance, pour savoir ce qu'on aura à faire partir dans les jours qui viennent.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <ul class="points">
+      <li><b>Client</b> — les <b>commandes en cours</b>, dès qu'elles sont passées en programmation. Chaque ligne porte l'affaire, le client, la pièce, une <b>barre d'avancement</b> (bons de travail soldés sur le total), la livraison prévue et l'état : <span class="b b-mut">En production</span>, <span class="b b-ok">Prête à expédier</span>, ou le <b>motif du blocage qualité</b> s'il y en a un.</li>
+      <li><b>Sous-traitance</b> — les <b>BST en cours</b> : le sous-traitant, l'opération, la quantité, l'envoi prévu. La colonne d'état affiche <span class="b b-mut">🔒 attend …</span> quand l'opération précédente de la gamme n'est pas encore soldée.</li>
     </ul>
     <figure class="shot">
       <img src="../../assets/expeditions-envois.png" alt="Capture de l'onglet Envois" loading="lazy">
-      <figcaption><b>Envois</b> — commandes prêtes, BL à expédier et pièces à envoyer en sous-traitance, avec la porte qualité appliquée en amont.</figcaption>
+      <figcaption><b>Envois</b> — les commandes en cours et les sous-traitances en cours : ce qu'on aura à faire partir.</figcaption>
     </figure>
 
     <h3>Pas à pas — créer un bon de livraison client</h3>
@@ -68,41 +98,32 @@
       <figcaption><b>Nouveau bon de livraison</b> — choix des lots libérés, quantités (partiel possible), transporteur et prix de transport.</figcaption>
     </figure>
 
-    <h3>Pas à pas — envoyer en sous-traitance</h3>
-    <ol class="steps">
-      <li>Dans <b>« À envoyer en sous-traitance »</b>, repérez le BST et cliquez son bouton d'envoi.</li>
-      <li>L'horodatage de départ est enregistré ; la pièce est désormais attendue en retour, et apparaît à ce titre dans l'onglet <b>Réceptions</b>.</li>
-    </ol>
-    <figure class="shot">
-      <img src="../../assets/form-expeditions-bst.png" alt="Fenêtre d'envoi en sous-traitance" loading="lazy">
-      <figcaption><b>Envoi en sous-traitance</b> — le départ horodaté bascule automatiquement la pièce en « retour attendu » côté Réceptions.</figcaption>
-    </figure>
-
     <div class="warn"><b>La porte qualité.</b> Un bon de livraison est <b>refusé</b> si le lot porte une non-conformité ouverte ou s'il est en quarantaine. Ce n'est pas un bug : c'est la garantie qu'aucune pièce douteuse ne part chez un client. Faites lever le blocage par la Qualité (libération du lot, dérogation, ou traitement de la NC).</div>
   </section>
 
-  <!-- ═══════════════ ONGLET 2 : RÉCEPTIONS ═══════════════ -->
+  <!-- ═══════════════ ONGLET 3 : RÉCEPTIONS ═══════════════ -->
   <section class="tab" id="tab-receptions">
-    <div class="tab-head"><span class="tab-num">2</span><h2>Réceptions — ce qui arrive</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> C'est votre écran du matin : tout ce que l'entreprise <b>attend</b>, quelle qu'en soit l'origine — commandes fournisseurs, retours de sous-traitance, retours clients — et tout ce qui a <b>déjà été réceptionné</b>. Le badge de l'onglet compte ce qui reste à recevoir.</p>
+    <div class="tab-head"><span class="tab-num">3</span><h2>Réceptions — ce qui est arrivé</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> L'inverse d'Envois : tout ce qui est <b>déjà entré</b>, rangé par nature. Une ligne y arrive au moment de la réception — enregistrée, elle, depuis le <b>Calendrier</b>. C'est de cet onglet qu'on remplit le <b>PV de contrôle de réception</b>.</p>
 
     <h3>Ce que vous voyez</h3>
-    <p>Des blocs empilés, du plus urgent au plus froid :</p>
+    <p>Trois familles, selon la provenance :</p>
     <ul class="points">
-      <li><b>À réceptionner — fournisseurs &amp; sous-traitants</b> : un bon de commande par ligne, avec son numéro, le fournisseur, les articles, le montant et la <b>date d'arrivée prévue</b>. Une date dépassée passe en <span class="b b-crit">en retard</span>.</li>
-      <li><b>Retours de sous-traitance attendus</b> : les pièces parties chez un prestataire et qui doivent revenir.</li>
-      <li><b>Retours clients attendus</b> : annoncés en amont depuis une <b>non-conformité client</b> (service Qualité), avec le n° de commande, la quantité et la date prévue.</li>
-      <li><b>En attente de validation fournisseur</b> : les BC envoyés dont le fournisseur n'a pas encore accusé réception.</li>
-      <li><b>Arrivées enregistrées</b> : l'historique de ce qui est entré, avec le bon de livraison correspondant.</li>
+      <li><b>Fournisseur</b> — les commandes fournisseurs réceptionnées : n° de BC, fournisseur, articles, quantité reçue, date d'arrivée réelle, bon de livraison rattaché.</li>
+      <li><b>Sous-traitance</b> — les pièces revenues de chez un prestataire.</li>
+      <li><b>Retour client</b> — les retours arrivés, rattachés à leur non-conformité.</li>
     </ul>
+    <p>Chaque ligne porte un bouton <b>« PV de contrôle »</b> : c'est le contrôle de réception, et il se remplit ici, au moment où l'on a la pièce en main.</p>
+    <div class="note"><b>Ce qui n'est <em>plus</em> ici.</b> Les commandes <b>à réceptionner</b> sont dans le <b>Calendrier</b> — c'est une action, elle vit avec les autres actions du jour. Et la <b>validation d'une commande par le fournisseur</b> se fait désormais dans <b>Achats → onglet « Bons de commande »</b> : c'est l'acheteur qui suit l'accusé de réception de son fournisseur, pas l'expéditionnaire.</div>
     <figure class="shot">
       <img src="../../assets/expeditions-receptions.png" alt="Capture de l'onglet Réceptions" loading="lazy">
       <figcaption><b>Réceptions</b> — tout ce qui arrive, regroupé par nature : commandes fournisseurs et sous-traitants, retours de sous-traitance, retours clients, puis les arrivées déjà enregistrées.</figcaption>
     </figure>
 
     <h3>Pas à pas — enregistrer une réception fournisseur</h3>
+    <p>Cela se fait depuis le <b>Calendrier</b>, bloc « à réceptionner aujourd'hui ».</p>
     <ol class="steps">
-      <li>Repérez la ligne du bon de commande dans <b>« À réceptionner »</b> et cliquez son bouton d'action.</li>
+      <li>Repérez la ligne du bon de commande et cliquez <b>« Traiter »</b>. Le <b>n° d'affaire</b> et le <b>n° de bon de livraison</b> sont <b>déjà remplis</b> — ils viennent du bon de commande, il n'y a pas à les ressaisir.</li>
       <li>Vérifiez la <b>quantité reçue</b> : elle peut être inférieure à la quantité commandée (réception partielle), le BC reste alors ouvert pour le solde.</li>
       <li>Renseignez le <b>transporteur</b> et la référence de transport si le colis en porte une — c'est ce qui alimentera la colonne Transporteur de l'historique fournisseur.</li>
       <li>Enregistrez : un <b>bon de livraison de réception</b> est créé et rattaché au BC, la date d'arrivée réelle est posée, et la ligne bascule dans « Arrivées enregistrées ».</li>
@@ -115,7 +136,7 @@
     <h3>Pas à pas — réceptionner un retour client</h3>
     <ol class="steps">
       <li>Le retour doit d'abord avoir été <b>annoncé en Qualité</b> : à la déclaration de la non-conformité client, cochez « Retour de marchandise prévu » et renseignez le n° de commande, la quantité et la date prévue.</li>
-      <li>Il apparaît alors ici, dans <b>« Retours clients attendus »</b>. Cliquez <b>« Enregistrer l'arrivée »</b>.</li>
+      <li>Il apparaît alors dans le <b>Calendrier</b>, en arrivée attendue. Cliquez <b>« Traiter »</b>, puis <b>« Enregistrer l'arrivée »</b>.</li>
       <li>Le n° de commande est <b>prérempli depuis la non-conformité</b> ; complétez la quantité réellement revenue et validez.</li>
       <li>Un bon de livraison d'entrée est créé et rattaché à la commande, et la non-conformité passe en « retour reçu ».</li>
     </ol>
@@ -125,32 +146,12 @@
     <ul class="points">
       <li>La <b>date d'arrivée prévue</b> peut être modifiée, mais l'ERP <b>gèle la première date promise</b> : c'est elle, et non la date repoussée, qui sert à calculer l'OTD du fournisseur. Un fournisseur ne peut donc pas « racheter » sa ponctualité en décalant ses dates. Ce changement de date se fait à deux endroits :
         <ul class="points">
-          <li><b>Ici même, aux Expéditions</b> — le <b>crayon</b> posé sur la date, dans les files <b>« À réceptionner »</b> et <b>« En attente de validation fournisseur »</b>. C'est le geste naturel du réceptionnaire tant que le colis est attendu : le fournisseur annonce un retard, vous repoussez la date.</li>
           <li><b>Dans Achats → onglet « Bons de commande »</b> — pour <b>n'importe quelle commande encore attendue</b>, y compris une commande <b>déjà validée par le fournisseur</b>. Une date saisie de travers se corrige donc tant que la marchandise n'est pas arrivée, ce qui remet le suivi des délais d'aplomb. Sur les lignes <b>déjà réceptionnées</b>, le bouton bleu « Date d'arrivée » laisse place à une pastille grise <span class="b b-mut">🔒 Figée</span>.</li>
         </ul>
-        Dans les deux cas, la fenêtre qui s'ouvre ne demande qu'une seule chose : la <b>nouvelle date</b>, puis <b>« Enregistrer la date »</b>.</li>
+        La fenêtre qui s'ouvre ne demande qu'une seule chose : la <b>nouvelle date</b>, puis <b>« Enregistrer la date »</b>. ⚠ <b>Après la validation du fournisseur, la date n'est plus modifiable</b> : c'est sa promesse, elle l'engage.</li>
       <li><b>Dès que la marchandise est arrivée, la date d'arrivée prévue est figée, définitivement</b> — et cela vaut aussi pour une <b>réception partielle</b>. La raison est simple : cette date est la <b>promesse du fournisseur</b>, c'est elle qui mesure sa ponctualité, et la réécrire après coup effacerait le retard constaté. C'est le prolongement direct de la règle ci-dessus sur le gel de la première date promise. Une commande est considérée comme arrivée dès qu'elle porte une <b>date de réception réelle</b>, un <b>bon de livraison rattaché</b> ou un <b>statut de réception</b> (« Reçu » comme « Reçu partiel »). Si vous ouvrez la fenêtre de changement de date sur une telle commande, le champ date apparaît <b>grisé</b> et la mention <b>« Date figée depuis la réception »</b> remplace le bouton « Enregistrer la date ». En pratique, les files « À réceptionner » et « En attente de validation fournisseur » ne contiennent que des commandes encore attendues : le cas ne s'y présente quasiment jamais.</li>
       <li>Un bon de commande <b>annulé</b> n'apparaît nulle part dans le service — ni en réception, ni au calendrier, ni dans l'historique fournisseur.</li>
     </ul>
-  </section>
-
-  <!-- ═══════════════ ONGLET 3 : CALENDRIER ═══════════════ -->
-  <section class="tab" id="tab-calendrier">
-    <div class="tab-head"><span class="tab-num">3</span><h2>Calendrier &amp; journée</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> Voir <b>arrivées et départs sur une même frise</b>, pour anticiper les journées chargées et repérer les retards d'un coup d'œil. En dessous, le bloc <b>« Aujourd'hui »</b> liste précisément ce qui doit entrer et sortir dans la journée, retards compris.</p>
-
-    <h3>Ce que vous voyez</h3>
-    <ul class="points">
-      <li>Une <b>frise unique</b>, une ligne par sens de flux, chaque mouvement positionné à sa date. Une légende de couleurs distingue les natures : commande fournisseur, envoi ou retour de sous-traitance, livraison client, retour client.</li>
-      <li>Un repère sur le <b>jour courant</b>, et les mouvements dépassés signalés <span class="b b-crit">en retard</span>.</li>
-      <li>Sous la frise, deux blocs : <b>à réceptionner aujourd'hui</b> et <b>à envoyer aujourd'hui</b>, chaque ligne portant directement son bouton d'action.</li>
-    </ul>
-    <figure class="shot">
-      <img src="../../assets/expeditions-calendrier.png" alt="Capture de l'onglet Calendrier" loading="lazy">
-      <figcaption><b>Calendrier</b> — arrivées et départs sur une frise commune, puis le détail de la journée avec les actions à portée de clic.</figcaption>
-    </figure>
-
-    <div class="astuce"><b>Astuce :</b> commencez la journée par cet onglet plutôt que par les deux premiers. Le bloc « Aujourd'hui » vous donne la liste de travail complète — entrées et sorties — sans avoir à basculer d'un onglet à l'autre.</div>
   </section>
 
   <!-- ═══════════════ ONGLET 4 : FOURNISSEURS ═══════════════ -->

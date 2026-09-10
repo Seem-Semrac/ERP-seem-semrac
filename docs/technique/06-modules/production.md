@@ -5,19 +5,39 @@
 - **Accès (RBAC)** : écriture — production · lecture — be, achats, oas, qualité, sécurité, expéditions, stock, maintenance
 <!-- /auto -->
 
-## Goulotte du planning : matière + préparation technique — AU LOT (09/09/2026)
+## Le planning ne cache plus rien (10/09/2026)
 
-Un BDT n'apparaît au planning que si **sa matière est réceptionnée** (`matiere_ok`) **et** que **la préparation technique de SON LOT est terminée**.
+**Programmer n'est pas produire.** Tous les BDT et BDS d'un lot sont disponibles à la
+programmation **dès que la commande existe** — c'est même l'intérêt d'un planning : on
+pose la charge **avant** que la matière arrive, sinon on ne la voit jamais venir.
 
-⚠ **Changement de comportement.** Jusqu'au 09/09/2026 le blocage portait sur **l'affaire entière** : une seule préparation en attente gelait *tous* les lots de l'affaire, y compris ceux dont le plan et le programme CN étaient prêts. Il porte désormais sur le **lot**. Une affaire de trois pièces dont une seule attend son plan voit donc les deux autres partir en fabrication.
+⚠ **Changement de comportement — la goulotte du 09/09/2026 est levée.** Un BDT dont la
+matière n'était pas réceptionnée (`matiere_ok`) ou dont la préparation technique n'était
+pas terminée **disparaissait purement et simplement du planning**. L'atelier voyait une
+page vide et en concluait que l'ERP avait perdu ses ordres de travail. Plus rien n'est
+retiré : `filtrerBdtsPrets()` a été **supprimée**, ses deux consommateurs
+(`/production/service`, `/production/gantt-bdt`) reçoivent la liste entière.
 
-**Identification du lot sans migration** : le couple `(cmd_ref, piece)`. `lots.piece`, `preparations_techniques.piece` et `bons_de_travail.piece` sont écrits depuis la **même expression source** dans la cascade d'acceptation d'offre (`p.ref_interne || ref`) — la correspondance est exacte, à la casse près (comparaison en minuscules).
+**Ce qui manque reste écrit, à côté de l'ordre.** `bdtVigilance(bdt, prepRows)`
+(`src/index.tsx`, ex-`bdtBlocage`) fait le même calcul, mais ce qu'elle rend est
+désormais un **avertissement** et non un motif d'exclusion. La page de production
+affiche, au-dessus des Gantt, la carte **« Ordres de travail programmables, mais pas
+encore lançables »** : un ordre par ligne, avec ce qu'il attend (*matière non
+réceptionnée*, *préparation technique en attente*).
 
-**Point d'entrée unique** : `bdtBlocage(bdt, prepRows)` dans `src/index.tsx` renvoie `null` (le BDT passe) ou le motif du blocage. `filtrerBdtsPrets()` l'applique aux deux consommateurs — `/production/service` et `/production/gantt-bdt` — qui dupliquaient auparavant la même expression de filtrage.
+**Le lot, pas l'affaire** (inchangé depuis le 09/09/2026) : l'avertissement est identifié
+par le couple `(cmd_ref, piece)`. `lots.piece`, `preparations_techniques.piece` et
+`bons_de_travail.piece` sont écrits depuis la **même expression source** dans la cascade
+d'acceptation d'offre (`p.ref_interne || ref`). Repli conservateur : une préparation sans
+`cmd_ref` ni `piece` avertit encore sur **toute son affaire**.
 
-**Repli conservateur** : une préparation sans `cmd_ref` ni `piece` (ligne antérieure au 09/09/2026) bloque encore **toute son affaire**. Aucune régression possible sur l'existant.
+**Lecture métier** : la fiche affaire (`/commercial/affaire/:num`, tableau « Production —
+lots ») garde sa colonne **Fabricable** — elle répond à « peut-on *lancer* ce lot ? », qui
+reste une question distincte de « peut-on le *programmer* ? ».
 
-**Lecture métier** : la fiche affaire (`/commercial/affaire/:num`, tableau « Production — lots ») affiche une colonne **Fabricable** par lot, avec le motif quand il est bloqué (*préparation technique*, *matière non réceptionnée*), et un compteur « N lot(s) prêt(s) · M en attente ».
+**La seule porte physique restante est ailleurs** : l'envoi d'un BST chez le sous-traitant
+exige que l'opération précédente de la gamme soit soldée. Voir
+[Expéditions](expeditions.md#la-porte-denvoi-dun-bst-10092026) et `src/gamme.ts`.
 
 ## Mission
 <!-- auto:mission -->

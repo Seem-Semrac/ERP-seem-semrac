@@ -5,6 +5,49 @@
 - **Accès (RBAC)** : écriture — expéditions, stock (logistique) · lecture — commercial, achats, production
 <!-- /auto -->
 
+## La porte d'envoi d'un BST (10/09/2026)
+
+> « Pour envoyer le BST au sous-traitant, il faut que le BDT juste avant soit soldé. »
+
+C'est la **seule porte physique** du circuit de production : on n'expédie pas une pièce
+dont l'opération précédente n'est pas finie, il n'y aurait rien à mettre dans le carton.
+Elle ne s'applique **qu'à l'envoi**, jamais à la programmation (voir
+[Production](production.md#le-planning-ne-cache-plus-rien-10092026)).
+
+**La gamme d'un lot** est la **fusion des BDT et des BDS**, triée par `seq` — la colonne
+existe sur `bons_de_travail` **et** `bons_sous_traitance`, écrite par la cascade.
+Le module `src/gamme.ts` porte toute la logique, sans dépendance à Hono ni à Supabase :
+
+| Fonction | Rôle |
+|---|---|
+| `cleLot(op)` | rattachement au lot : `lot_id` sinon `lot_ref` (les deux coexistent selon l'origine) |
+| `opSoldee(op)` | un BDT est soldé par l'atelier (`statut: 'solde'`) ; un BDS est fini quand les pièces sont **revenues** (`date_retour_effective` fait foi, le statut peut traîner) |
+| `gammeDuLot(ops)` | tri par `seq`, l'`id` départage les ex æquo |
+| `etapePrecedente(cible, ops)` | l'opération juste avant, **les annulées enjambées** |
+| `bdsEnvoiBlocage(bds, ops)` | `null` si le BST peut partir, sinon la raison, rédigée pour l'écran |
+| `blocagesEnvoiBds(bds, bdts)` | la raison de **chaque** BST, indexée par id — regroupe d'abord par lot |
+
+**Un BST en tête de gamme part librement** (rien avant lui) : c'est le cas d'un traitement
+de surface sur matière brute. Un BDS sans lot n'a pas de gamme à respecter.
+
+**Le refus est SERVEUR** — l'écran ne fait qu'éviter le clic :
+
+- `POST /api/expeditions/bds/:id/envoyer` → **409** avec la raison ;
+- `PATCH /api/production/bds/:id` avec `statut: 'envoye'` → **409** aussi, sinon la porte
+  se contournerait d'un simple appel direct.
+
+⚠ **Double câblage RBAC, volontaire.** `serviceFor()` déduit le service du 1ᵉʳ segment
+après `/api/`. Le bouton d'envoi vivait aux Expéditions mais appelait
+`/api/production/bds/…` : il était évalué sur le service **production**, où le rôle
+`logistique` n'a que la **lecture** (`ROLE_MATRIX`, `src/auth.ts`). L'envoi **et** le
+retour de sous-traitance étaient donc **morts pour ceux dont c'est le métier**, refusés
+en silence. Les deux familles de routes existent désormais :
+`/api/expeditions/bds/:id/{envoyer,retour}` et `/api/production/bds/:id/{envoyer,retour}`.
+
+**À l'écran** : dans le **Calendrier** (départ du jour), le bouton « Traiter » cède la
+place à une pastille verrou portant la raison ; dans **Envois › Sous-traitance**, la
+colonne Statut affiche « attend `<n° de l'opération>` ».
+
 ## Mission
 <!-- auto:mission -->
 Bons de commande, bons de livraison, commandes en cours, OTD.

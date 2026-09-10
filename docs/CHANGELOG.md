@@ -2,6 +2,65 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-10 — Programmer n'est pas produire : le planning ne cache plus rien, et le BST attend son tour
+
+Règle métier arrêtée ce jour : *« Les BDT et BST (ou BDS) d'un lot doivent être tous
+disponibles à la programmation à partir du moment où la commande est arrivée. Mais pour
+envoyer le BST au sous-traitant dans les expéditions, il faut que le BDT juste avant soit
+soldé. »* Elle sépare deux choses qu'on avait confondues.
+
+### Ce qui change au planning
+
+Un BDT dont la matière n'était pas réceptionnée, ou dont la préparation technique n'était
+pas terminée, **disparaissait du planning**. Sans un mot. L'atelier voyait une page vide
+et en concluait que l'ERP avait perdu ses ordres de travail — c'est exactement ce qui
+s'est produit sur la commande 0001, dont les 4 BDT étaient invisibles.
+
+Plus rien n'est retiré. `filtrerBdtsPrets()` est **supprimée** ; ses deux consommateurs
+(`/production/service`, `/production/gantt-bdt`) reçoivent la liste entière. La fonction
+de calcul survit sous son vrai nom — `bdtVigilance()`, ex-`bdtBlocage()` — mais ce qu'elle
+rend est un **avertissement**, affiché dans la carte « Ordres de travail programmables,
+mais pas encore lançables », un ordre par ligne avec ce qu'il attend.
+
+C'est cohérent avec le métier : on pose la charge **avant** que la matière arrive, sinon
+on ne la voit jamais venir.
+
+### La porte, désormais, est à l'envoi du BST
+
+C'est la seule porte physique du circuit, et elle est à sa place : on n'expédie pas une
+pièce dont l'opération précédente n'est pas finie, il n'y aurait rien à mettre dans le
+carton.
+
+Nouveau module **`src/gamme.ts`**, sans dépendance à Hono ni à Supabase : la gamme d'un
+lot est la **fusion BDT + BDS triée par `seq`** ; `bdsEnvoiBlocage()` remonte l'opération
+qui retient un BST, les annulées enjambées. Un BDT est soldé par l'atelier
+(`statut: 'solde'`) ; un BDS est fini quand les pièces sont **revenues**
+(`date_retour_effective` fait foi, le statut peut traîner). Un BST en tête de gamme part
+librement.
+
+**Le refus est serveur** — l'écran ne fait qu'éviter le clic : `409` sur
+`POST /api/expeditions/bds/:id/envoyer` **et** sur le `PATCH` générique qui passerait le
+statut à `envoye`, sinon la porte se contournerait d'un appel direct.
+
+### Un bouton mort depuis toujours, corrigé au passage
+
+`serviceFor()` déduit le service du 1ᵉʳ segment après `/api/`. Le bouton d'envoi vivait
+aux Expéditions mais appelait `/api/production/bds/…` : il était évalué sur le service
+**production**, où le rôle `logistique` n'a que la **lecture**. L'envoi **et** le retour
+de sous-traitance étaient donc refusés en silence **pour ceux dont c'est précisément le
+métier**. Les deux familles de routes existent maintenant
+(`/api/expeditions/bds/:id/{envoyer,retour}`).
+
+### Vérifié
+
+Contre la base Docker réelle, avec deux BST de test (`-TEST-`, supprimés après coup,
+suppression relue) : prédécesseur BDT non soldé → **409** ; contournement par le `PATCH`
+générique → **409** ; prédécesseur BDS parti mais pas revenu → **409** ; le même une fois
+revenu → **200**. Les 4 BDT de la commande 0001 sont de retour au planning, chacun avec
+la mention « matière non réceptionnée ». Harnais 60/0, `tsc` propre.
+
+**Aucune migration** — ni colonne, ni contrainte.
+
 ## 2026-09-10 — Annulation de commande, lot L0 : les fondations
 
 Premier lot du plan `docs/etudes/plan-annulation-commande.md`. Aucune fonctionnalité

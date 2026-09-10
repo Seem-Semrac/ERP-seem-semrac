@@ -11,6 +11,7 @@ import {
   dashFinance, dashStock, dashFournisseurs, dashEnvironnement, dashHub
 } from './dashboards'
 import { parseFilter } from './dash_filter'
+import { blocagesEnvoiBds, bdsEnvoiBlocage, cleLot } from './gamme'
 import { pageAffectation, pageCompetences, pageHoraires } from './affectation'
 import { pageStock, pageStockAlertes } from './stock'
 import { pageFinancesCouts, pageFinancesTaux, pageFinancesMachines, pageFinancesImputations } from './finances'
@@ -943,8 +944,13 @@ async function cascadeLotsBdtBst(dt: any, cmdId: string, byCode: Record<string, 
 }
 
 // ── GOULOTTE matière + préparation technique ────────────────────────────────
-// Un BDT n'apparaît au planning que si la MATIÈRE est réceptionnée (matiere_ok) ET que la
-// préparation technique de SON LOT est terminée.
+// ⚠ CE N'EST PLUS UNE BARRIÈRE (règle du 10/09/2026). Programmer, ce n'est pas produire :
+// tous les BDT et BDS d'un lot sont disponibles à la programmation dès que la commande
+// existe — c'est même l'intérêt : on pose la charge AVANT que la matière arrive, sinon on
+// ne la voit jamais venir. Ce que cette fonction rend n'est donc plus un motif d'exclusion
+// mais un AVERTISSEMENT porté sur l'ordre de travail, à l'écran, sans le retirer du planning.
+// La seule porte physique restante est ailleurs : l'envoi d'un BST chez le sous-traitant
+// exige que l'opération précédente de la gamme soit soldée (src/gamme.ts).
 //
 // ⚠ Changement du 09/09/2026 (demandé) : le blocage portait sur l'AFFAIRE ENTIÈRE — une seule
 // préparation en attente gelait TOUS les lots de l'affaire, y compris ceux dont le plan et le
@@ -952,7 +958,7 @@ async function cascadeLotsBdtBst(dt: any, cmdId: string, byCode: Record<string, 
 // (commande, pièce) : `lots.piece`, `preparations_techniques.piece` et `bons_de_travail.piece`
 // sont écrits depuis la MÊME expression source dans la cascade, la correspondance est exacte.
 // Repli conservateur : une préparation sans commande ni pièce bloque encore toute son affaire.
-export function bdtBlocage(bdt: any, prepRows: any[]): string | null {
+export function bdtVigilance(bdt: any, prepRows: any[]): string | null {
   if (bdt && bdt.matiere_ok === false) return 'matière non réceptionnée'
   const parLot = new Set<string>(), parAffaire = new Set<string>()
   for (const p of (prepRows || [])) {
@@ -965,9 +971,6 @@ export function bdtBlocage(bdt: any, prepRows: any[]): string | null {
   if (parLot.has(k)) return 'préparation technique en attente'
   if (parAffaire.has(String(bdt?.num_affaire || ''))) return 'préparation technique en attente (affaire)'
   return null
-}
-function filtrerBdtsPrets(bdts: any[], prepRows: any[]): any[] {
-  return (bdts || []).filter((b: any) => !bdtBlocage(b, prepRows))
 }
 
 // (a) prépa technique : nomenclature sans programme CN (étape machine) OU sans plan.
@@ -5386,19 +5389,17 @@ app.get('/production/service', async (c) => {
   //    complète. À l'acceptation d'offre la cascade crée les BDT en matiere_ok:false → ils
   //    restent invisibles ici tant que DA→BC→BL/réception + prépa ne sont pas faits.
   //    (matiere_ok !== false : les BDT hérités à matiere_ok null restent visibles.)
-  const bdtsPrets = filtrerBdtsPrets(bdts as any[], prepRows as any[])
-  // ⚠ Les BDT retenus par la goulotte DISPARAISSAIENT sans explication : la raison etait
-  //   calculee par bdtBlocage() puis jetee. On la remonte, sinon l'atelier voit une page
-  //   vide et croit que l'ERP a perdu ses ordres de travail.
-  const bdtsBloques = (bdts as any[])
-    .map((b: any) => ({ bdt: b, raison: bdtBlocage(b, prepRows as any[]) }))
+  // TOUS les BDT partent au planning — plus aucun n'est retiré. Ce qui leur manque
+  // encore (matière, préparation) les accompagne sous forme d'avertissement.
+  const bdtsVigilance = (bdts as any[])
+    .map((b: any) => ({ bdt: b, raison: bdtVigilance(b, prepRows as any[]) }))
     .filter((x) => !!x.raison)
     .map((x) => ({
       id: String(x.bdt.id ?? ''), piece: String(x.bdt.piece ?? ''), operation: String(x.bdt.operation ?? ''),
       lot_ref: String(x.bdt.lot_ref ?? x.bdt.lot_id ?? ''), num_affaire: String(x.bdt.num_affaire ?? ''),
       cmd_ref: String(x.bdt.cmd_ref ?? ''), raison: x.raison as string,
     }))
-  return c.html(pageServiceProd(bdtsPrets, machines, ops, lots, cmds, sousTraitants, processes, bds, bcStById, stock, presences, absences, mouvements, affByDate, congesOperateursPend, postes, machinesOpex, bdtsBloques))
+  return c.html(pageServiceProd(bdts as any[], machines, ops, lots, cmds, sousTraitants, processes, bds, bcStById, stock, presences, absences, mouvements, affByDate, congesOperateursPend, postes, machinesOpex, bdtsVigilance))
 })
 
 // ─── PLANNING UNIFIÉ (Gantt Usine BDT + Gantt Sous-Traitance BDS) ───
@@ -5447,10 +5448,64 @@ app.patch('/api/production/bds/:id', async (c) => {
   if ('sous_traitant_id' in patch && patch.sous_traitant_id != null && !UUID_RE.test(String(patch.sous_traitant_id)))
     delete patch.sous_traitant_id
   if (!Object.keys(patch).length) return c.json({ ok: false, error: 'no valid fields' })
+  // Passer un BDS à « envoyé » par ce PATCH générique, c'est le faire PARTIR chez le
+  // sous-traitant : la porte de gamme s'applique ici aussi, sinon elle se contourne
+  // d'un simple appel direct.
+  if (String(patch.statut || '') === 'envoye') {
+    const raison = await blocageEnvoiBds(id)
+    if (raison) return c.json({ ok: false, error: `Envoi impossible : ${raison}.` }, 409)
+  }
   const { data, error } = await updateBDS(id, patch)
   if (error) return c.json({ ok: false, error: error.message })
   return c.json({ ok: true, data })
 })
+
+// ─── ENVOI / RETOUR d'un bon de sous-traitance ──────────────────────────────
+// La porte : on n'expédie pas une pièce dont l'opération précédente de la gamme
+// n'est pas soldée — il n'y aurait rien à mettre dans le carton. La gamme d'un lot
+// est la fusion BDT + BDS triée par `seq` (src/gamme.ts).
+const blocageEnvoiBds = async (id: string): Promise<string | null> => {
+  const [bdsRows, bdtRows] = await Promise.all([
+    getPlanningBDS().catch(() => [] as any[]), getBonsDeTravail().catch(() => [] as any[]),
+  ])
+  const cible = (bdsRows as any[]).find((s: any) => String(s.id) === String(id))
+  if (!cible) return null                       // inconnu : la mise à jour échouera d'elle-même
+  const k = cleLot(cible)
+  if (!k) return null                           // sans lot, aucune gamme à faire respecter
+  const ops = [...(bdtRows as any[]), ...(bdsRows as any[])].filter((o: any) => cleLot(o) === k)
+  return bdsEnvoiBlocage(cible, ops)
+}
+
+const envoyerBdsHandler = async (c: any) => {
+  const id = c.req.param('id')
+  const raison = await blocageEnvoiBds(id)
+  if (raison) return c.json({ ok: false, error: `Envoi impossible : ${raison}.` }, 409)
+  const body = await c.req.json().catch(() => ({} as any))
+  const jour = String(body?.date_envoi || '').slice(0, 10) || new Date().toISOString().slice(0, 10)
+  const { data, error } = await updateBDS(id, { date_envoi: jour, statut: 'envoye' } as any)
+  if (error) return c.json({ ok: false, error: error.message })
+  return c.json({ ok: true, data })
+}
+
+const retourBdsHandler = async (c: any) => {
+  const id = c.req.param('id')
+  const body = await c.req.json().catch(() => ({} as any))
+  const jour = String(body?.date_retour_effective || '').slice(0, 10) || new Date().toISOString().slice(0, 10)
+  const { data, error } = await updateBDS(id, { date_retour_effective: jour, statut: 'recu' } as any)
+  if (error) return c.json({ ok: false, error: error.message })
+  return c.json({ ok: true, data })
+}
+
+// ⚠ DOUBLE CÂBLAGE VOLONTAIRE — et il ne s'agit pas de confort. `serviceFor()` déduit
+//   le service du 1ᵉʳ segment après /api/ : un bouton des Expéditions qui appelait
+//   /api/production/... était évalué sur le service « production », où le rôle
+//   logistique n'a que la LECTURE (ROLE_MATRIX, src/auth.ts). Résultat : l'envoi et le
+//   retour de sous-traitance étaient MORTS pour ceux dont c'est le métier, refusés en
+//   silence. La production garde ses routes, les expéditions ont enfin les leurs.
+app.post('/api/expeditions/bds/:id/envoyer', envoyerBdsHandler)
+app.post('/api/production/bds/:id/envoyer', envoyerBdsHandler)
+app.post('/api/expeditions/bds/:id/retour', retourBdsHandler)
+app.post('/api/production/bds/:id/retour', retourBdsHandler)
 
 app.post('/api/production/non-conformites', async (c) => {
   const body = await c.req.json().catch(() => ({}))
@@ -6595,9 +6650,10 @@ app.get('/production/gantt-bdt', async (c) => {
     getBonsDeTravail(), getMachines(), getOperateurs(),
     getProcessAtelier().catch(() => []), getPostes().catch(() => []), getPreparationsTechniques().catch(() => [])
   ])
-  // Même goulotte matière + prépa que /production/service.
-  const bdtsPrets = filtrerBdtsPrets(bdts as any[], prepRows as any[])
-  return c.html(pageGanttBDT(bdtsPrets, machines, ops, procs as any, postes as any))
+  // Comme /production/service : aucun BDT n'est retiré du planning (règle du 10/09/2026).
+  // `prepRows` reste chargé — il sert aux avertissements de la page de service.
+  void prepRows
+  return c.html(pageGanttBDT(bdts as any[], machines, ops, procs as any, postes as any))
 })
 app.get('/production/gantt-bst', async (c) => {
   const [lots, fournisseurs] = await Promise.all([getLots(), getFournisseursSt()])
@@ -7639,12 +7695,16 @@ app.get('/expeditions/service', async (c) => {
   //   désespérément vide alors que la base en contenait. On charge donc TOUS les BL.
   //   Idem pour les vrais bons de sous-traitance (table bons_sous_traitance), que la page
   //   n'avait jamais : l'onglet ST n'affichait que du décor.
-  const [blsAll, bds, bcs, cmds, das, fst, lots, ncs, quar, hasAck, fourns] = await Promise.all([
+  const [blsAll, bds, bcs, cmds, das, fst, lots, ncs, quar, hasAck, fourns, bdtsExp] = await Promise.all([
     getBonsDeLivraison(), getPlanningBDS().catch(() => [] as any[]),
     getBonsDeCommande(), getCommandes(), getDemandesAchat(), getFournisseursSt(), getLots(),
     getNonConformites().catch(() => [] as any[]), getQuarantaines().catch(() => [] as any[]),
     bcHasAckColumn().catch(() => false), getFournisseurs().catch(() => [] as any[]),
+    getBonsDeTravail().catch(() => [] as any[]),   // pour la porte d'envoi des BST (gamme du lot)
   ])
+  // Pour CHAQUE BST : l'opération de gamme qui le retient encore, s'il y en a une.
+  // Calculé ici, une fois, avec la fonction qui refusera vraiment l'envoi côté serveur.
+  const bdsBlocages = blocagesEnvoiBds(bds as any[], bdtsExp as any[])
   // Map des BC DB → vue Expéditions (colonnes type_bc / fournisseur_nom / montant_ht / date_livraison…)
   const bcsView = (bcs as any[]).map((b: any) => ({
     id: b.id,
@@ -7679,7 +7739,7 @@ app.get('/expeditions/service', async (c) => {
   }))
   const validations = await getValidations().catch(() => [])
   return c.html(pageServiceExpeditions(blsAll as any, bcsView as any, cmds, das, fst, lots, ncs as any, quar as any, validations as any, hasAck,
-    { bds: bds as any[], today: TODAY_ISO(), fournisseurs: fourns as any[] }))   // BDS réels + date du jour calculée PAR REQUÊTE (le TODAY du module dérive) + référentiel fournisseurs (onglet Fournisseurs)
+    { bds: bds as any[], today: TODAY_ISO(), fournisseurs: fourns as any[], bdsBlocages }))   // BDS réels + date du jour calculée PAR REQUÊTE (le TODAY du module dérive) + référentiel fournisseurs (onglet Fournisseurs)
 })
 
 // ══════════════════════════════════════════════════════════════

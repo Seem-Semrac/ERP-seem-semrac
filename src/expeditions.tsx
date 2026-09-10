@@ -377,7 +377,7 @@ function panelReceptions(bcs: any[], _bcsAttendus: any[], receptions: any[], bds
 //   ⚠ Les files « à envoyer aujourd'hui » ne sont plus ici : elles vivent dans le
 //     CALENDRIER, qui est l'écran des échéances (demande utilisateur du 10/09/2026).
 // ══════════════════════════════════════════════════════════════
-function panelEnvois(bds: any[], blsClient: any[], cmds: any[], qualiteBloque: (c: any) => string | null, today: string) {
+function panelEnvois(bds: any[], blsClient: any[], cmds: any[], qualiteBloque: (c: any) => string | null, today: string, bdsBloc: Record<string, string> = {}) {
   const tr = (cells: string[]) => `<tr style="border-bottom:1px solid #f8fafc;">${cells.join('')}</tr>`
   const vide = (n: number, txt: string) => `<tr><td colspan="${n}" style="text-align:center;padding:22px;color:#9ca3af;font-size:.8rem;">${txt}</td></tr>`
   const card = (titre: string, icone: string, coul: string, cpt: number, sous: string, corps: string) => `
@@ -437,7 +437,11 @@ function panelEnvois(bds: any[], blsClient: any[], cmds: any[], qualiteBloque: (
     TDC(s.date_envoi
       ? `<span style="font-weight:700;color:${enRetardExp(s.date_envoi, today) ? '#b91c1c' : '#334155'};">${_frDate(s.date_envoi)}</span>`
       : '<span style="color:#cbd5e1;">à planifier</span>'),
-    TDC(blStatutBadge(s.statut)),
+    // La porte de gamme prime sur le statut : tant que l'opération précédente n'est pas
+    // soldée, ce BST ne peut pas partir — autant le lire ici plutôt qu'au moment du refus.
+    TDC(bdsBloc[String(s.id)]
+      ? `<span style="background:#fef3c7;color:#92400e;border-radius:999px;padding:2px 9px;font-size:.66rem;font-weight:700;" title="${escX(bdsBloc[String(s.id)])}"><i class="fas fa-lock" style="margin-right:4px;"></i>attend ${escX(bdsBloc[String(s.id)].split(' ')[0])}</span>`
+      : blStatutBadge(s.statut)),
   ])).join('')
 
   return `
@@ -451,10 +455,13 @@ function panelEnvois(bds: any[], blsClient: any[], cmds: any[], qualiteBloque: (
 
     ${card('Sous-traitance', 'fa-arrow-right-arrow-left', '#4f46e5', bdsEnCours.length, 'pièces à faire partir chez un sous-traitant',
       H(['N° BDS', 'Sous-traitant', 'Opération / Pièce', '#Qté', '#Envoi prévu', '#Statut']) + (rowsSt || vide(6, 'Aucune sous-traitance en cours')) + '</tbody></table>')}
+    <div style="font-size:.7rem;color:#94a3b8;margin-top:-8px;margin-bottom:16px;padding-left:4px;">
+      <i class="fas fa-lock" style="margin-right:5px;"></i>Un BST ne part chez le sous-traitant qu'une fois l'opération précédente de la gamme soldée. Le départ se déclenche depuis l'onglet <strong>Calendrier</strong>.
+    </div>
   </div>`
 }
 
-function panelCalendrier(mvts: Mvt[], today: string) {
+function panelCalendrier(mvts: Mvt[], today: string, bdsBloc: Record<string, string> = {}) {
   const dISO = (s: string) => new Date(String(s).slice(0, 10) + 'T00:00:00Z')
   const isoOf = (d: Date) => d.toISOString().slice(0, 10)
   const addDays = (s: string, n: number) => { const d = dISO(s); d.setUTCDate(d.getUTCDate() + n); return isoOf(d) }
@@ -506,7 +513,12 @@ function panelCalendrier(mvts: Mvt[], today: string) {
   const ligneJour = (m: Mvt) => {
     const look = MVT_LOOK[m.kind]
     const retard = (m.date as string) < today
-    const act = m.kind === 'bc' ? `expOpenReception('${escX(m.id)}')`
+    // Porte de gamme : un BST dont l'opération précédente n'est pas soldée ne peut pas
+    // partir. On retire le bouton ET on affiche la raison — un bouton qui s'évapore sans
+    // explication fait croire à une panne.
+    const verrou = m.kind === 'bds_envoi' ? (bdsBloc[String(m.id)] || '') : ''
+    const act = verrou ? ''
+      : m.kind === 'bc' ? `expOpenReception('${escX(m.id)}')`
       : m.kind === 'bds_retour' ? `expRetourBds('${escX(m.id)}')`
       : m.kind === 'retour_client' ? `expOpenRetourClient('${escX(m.id)}')`
       : m.kind === 'bds_envoi' ? `expEnvoyerBds('${escX(m.id)}')`
@@ -517,6 +529,7 @@ function panelCalendrier(mvts: Mvt[], today: string) {
       <span style="font-size:.76rem;color:#475569;">${escX(m.tiers)}</span>
       <span style="font-size:.72rem;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:230px;">${escX(m.objet)}</span>
       ${retard ? `<span style="background:#fee2e2;color:#b91c1c;border-radius:999px;padding:1px 8px;font-size:.62rem;font-weight:800;">en retard — ${_frDate(m.date)}</span>` : ''}
+      ${verrou ? `<span style="margin-left:auto;background:#fef3c7;color:#92400e;border-radius:999px;padding:3px 11px;font-size:.66rem;font-weight:700;"><i class="fas fa-lock" style="margin-right:5px;"></i>${escX(verrou)}</span>` : ''}
       ${act ? `<button onclick="${act}" style="margin-left:auto;background:#0f172a;color:white;border:none;border-radius:7px;padding:5px 12px;font-size:.68rem;font-weight:700;cursor:pointer;">Traiter</button>` : ''}
     </div>`
   }
@@ -771,11 +784,15 @@ export const pageServiceExpeditions = (
   dbQuar?:  any[],
   dbValidations?: any[],
   dbHasAck?: boolean,   // la colonne bons_de_commande.accuse_fournisseur_le existe-t-elle (gate validation fournisseur) ?
-  extra: { bds?: any[]; today?: string; fournisseurs?: any[] } = {},   // BDS réels (bons_sous_traitance) + date du jour calculée par requête
+  extra: { bds?: any[]; today?: string; fournisseurs?: any[]; bdsBlocages?: Record<string, string> } = {},   // BDS réels (bons_sous_traitance) + date du jour calculée par requête
 ) => {
   const TODAY_REQ = extra.today || TODAY          // ⚠ le TODAY du module est figé au chargement (isolate réutilisée)
   const FOURNS = extra.fournisseurs ?? []   // référentiel fournisseurs (onglet Fournisseurs)
   const BDS = extra.bds ?? []                     // vrais bons de sous-traitance (la page n'en avait jamais eu)
+  // Porte de gamme : pour CHAQUE BST, l'opération qui le retient encore — calculée par le
+  // serveur avec la fonction qui refusera vraiment l'envoi (src/gamme.ts). On n'expédie pas
+  // une pièce dont l'opération précédente n'est pas soldée.
+  const BDS_BLOC: Record<string, string> = extra.bdsBlocages ?? {}
   const VD_MAP = buildValDirMap(dbValidations || [])   // décisions Direction par (ref_table, ref_id)
   // Un BL annulé n'est ni une arrivée ni un départ : écarté des 3 onglets et du calendrier.
   const allBLs = (dbBLs ?? [...BL_CLIENTS_DEFAULT, ...BST_DEFAULT]).filter((b: any) => String(b.statut || '') !== 'annule')
@@ -859,9 +876,9 @@ export const pageServiceExpeditions = (
     })}
 
     <div style="padding:22px 30px;">
-      ${panelEnvois(BDS, BLS, CMDS, qualiteBloque, TODAY_REQ)}
+      ${panelEnvois(BDS, BLS, CMDS, qualiteBloque, TODAY_REQ, BDS_BLOC)}
       ${panelReceptions(BCS, BCS_A_RECEVOIR, BLS_RECEPTION, BDS, dbNcs ?? [], BLS_RETOUR, VD_MAP, !!dbHasAck, TODAY_REQ)}
-      ${panelCalendrier(MOUVEMENTS, TODAY_REQ)}
+      ${panelCalendrier(MOUVEMENTS, TODAY_REQ, BDS_BLOC)}
       ${panelFournisseurs(FOURNS, BCS, allBLs)}
       ${panelDashboard(BLS, BSTS, BCS, CMDS)}
     </div>
@@ -972,6 +989,8 @@ export const pageServiceExpeditions = (
   var EXP_RETOURS=${RETOURS_JSON};
   var EXP_LOTS=${LOTS_JSON};
   var EXP_CMDS=${CMDS_JSON};
+  // Ce qui retient chaque BST au départ (gamme du lot). Même source que le refus serveur.
+  var EXP_BDS_BLOC=${JSON.stringify(BDS_BLOC).replace(/</g, '\\u003c')};
 
   // ── Réception : lier le BC à un BL ──
   function expOpenReception(id){
@@ -1204,7 +1223,10 @@ export const pageServiceExpeditions = (
   async function expRetourBds(id){
     if(!(await appConfirm("Confirmer le retour du BDS <strong>"+id+"</strong> ? Les pieces sont revenues de sous-traitance."))) return;
     var today=new Date().toISOString().slice(0,10);
-    fetch('/api/production/bds/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({date_retour_effective:today,statut:'recu'})})
+    // ⚠ /api/EXPEDITIONS/... et non /api/production/... : le service est deduit du 1er
+    //   segment apres /api/, et le role logistique n'a que la LECTURE sur la production.
+    //   L'ancien appel etait refuse en silence pour ceux dont c'est le metier.
+    fetch('/api/expeditions/bds/'+encodeURIComponent(id)+'/retour',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date_retour_effective:today})})
       .then(function(r){return r.json();}).then(function(j){
         if(!j||j.ok===false){ pushNotif('err','fa-ban',(j&&j.error)||'Echec.'); return; }
         pushNotif('ok','fa-rotate-left','Retour <strong>'+id+'</strong> enregistre.',4500);
@@ -1213,9 +1235,13 @@ export const pageServiceExpeditions = (
   }
   // Départ en sous-traitance : horodate l'envoi ; la ligne passe des « à envoyer » aux retours attendus.
   async function expEnvoyerBds(id){
+    // La gamme d'abord : on n'expedie pas une piece dont l'operation precedente n'est
+    // pas soldee. Le serveur refuse de toute facon (409) ; ici on l'explique avant.
+    var bloc=EXP_BDS_BLOC[id];
+    if(bloc){ pushNotif('err','fa-lock','Envoi impossible : '+bloc+'.',6000); return; }
     if(!(await appConfirm("Confirmer l envoi du BDS <strong>"+id+"</strong> chez le sous-traitant ?"))) return;
     var today=new Date().toISOString().slice(0,10);
-    fetch('/api/production/bds/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({date_envoi:today,statut:'envoye'})})
+    fetch('/api/expeditions/bds/'+encodeURIComponent(id)+'/envoyer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date_envoi:today})})
       .then(function(r){return r.json();}).then(function(j){
         if(!j||j.ok===false){ pushNotif('err','fa-ban',(j&&j.error)||'Echec.'); return; }
         pushNotif('ok','fa-paper-plane','BDS <strong>'+id+'</strong> parti en sous-traitance.',4500);
