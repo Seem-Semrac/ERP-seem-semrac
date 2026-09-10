@@ -178,6 +178,8 @@ export const pageServiceBE = (
   const CMDS_PREP = CMDS.filter(c => ['attente_prep','a_programmer'].includes(c.statut))
   // Preparations techniques REELLES (table preparations_techniques) : c'est ce que la
   // validation de prepa met a jour. Sert la liste des TRAITEES, sous celle a traiter.
+  const PREPS_A_FAIRE = (dbPreps ?? []).filter((p: any) => String(p.statut || '') !== 'faite')
+    .sort((a: any, b: any) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
   const PREPS_FAITES = (dbPreps ?? []).filter((p: any) => String(p.statut || '') === 'faite')
     .sort((a: any, b: any) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))
   const NOMS_PEND = NOMS.filter(n => n.statut !== 'valide')
@@ -999,39 +1001,39 @@ export const pageServiceBE = (
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
       <div style="font-size:1rem;font-weight:800;color:#111827;display:flex;align-items:center;gap:8px;">
         <i class="fas fa-cogs" style="color:#0891b2;"></i>Préparations techniques en attente
-        <span style="background:#cffafe;color:#0e7490;border-radius:999px;padding:1px 10px;font-size:.72rem;font-weight:800;">${CMDS_PREP.length}</span>
+        <span style="background:#cffafe;color:#0e7490;border-radius:999px;padding:1px 10px;font-size:.72rem;font-weight:800;">${PREPS_A_FAIRE.length}</span>
       </div>
       <input type="text" placeholder="Rechercher…" oninput="beFilter('be-tbl-prep',this.value)"
         style="border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-size:.8rem;background:#f8fafc;outline:none;width:200px;"/>
     </div>
     <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;">
-      ${CMDS_PREP.length === 0 ? emptyRow('Aucune préparation technique en attente') : `
+      ${PREPS_A_FAIRE.length === 0 ? emptyRow('Aucune préparation technique en attente') : `
       <div style="overflow-x:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:.8rem;" id="be-tbl-prep">
           <thead><tr style="background:#f8fafc;border-bottom:2px solid #f1f5f9;">
-            <th style="text-align:left;${TH}">N° CMD / Affaire</th>
-            <th style="text-align:left;${TH}">Client</th>
-            <th style="text-align:left;${TH}">Pièce(s)</th>
-            <th style="text-align:center;${TH}">Activité</th>
-            <th style="text-align:center;${TH}">Livraison</th>
-            <th style="text-align:center;${TH}">Statut</th>
+            <th style="text-align:left;${TH}">N° préparation</th>
+            <th style="text-align:left;${TH}">DT / Affaire</th>
+            <th style="text-align:left;${TH}">Pièce</th>
+            <th style="text-align:left;${TH}">Ce qui reste à préparer</th>
+            <th style="text-align:center;${TH}">Commande</th>
             <th style="text-align:center;${TH}">Action</th>
           </tr></thead>
           <tbody>
-            ${CMDS_PREP.map(cmd => `
+            ${PREPS_A_FAIRE.map((p: any) => {
+              const reste = [p.manque_plan ? 'Plan' : '', p.manque_code_cnc ? 'Programme CN (FAO)' : ''].filter(Boolean)
+              return `
             <tr style="border-bottom:1px solid #f9fafb;" onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">
-              <td style="${TD}"><div style="font-weight:700;color:#374151;">${escX(cmd.id)}</div><div style="font-size:.68rem;color:#9ca3af;">Aff. N°${escX(cmd.numAffaire)}</div></td>
-              <td style="${TD}font-weight:600;color:#374151;">${escX(cmd.client)}</td>
-              <td style="${TD}color:#6b7280;font-size:.78rem;">${(cmd.pieces||[]).map((x:any)=>escX(x)).join(', ')}</td>
-              <td style="${TD}text-align:center;font-size:.75rem;color:#374151;">${escX(cmd.activite)}</td>
-              <td style="${TD}text-align:center;font-size:.75rem;color:#6b7280;">${cmd.dateLiv}</td>
-              <td style="${TD}text-align:center;">${statutDTBadge(cmd.statut)}</td>
+              <td style="${TD}font-weight:700;color:#0891b2;font-size:.78rem;">${escX(p.id)}</td>
+              <td style="${TD}"><div style="font-weight:700;color:#374151;font-size:.78rem;">${escX(p.dt_ref ?? '—')}</div><div style="font-size:.68rem;color:#6366f1;">Aff. N°${escX(p.num_affaire ?? '—')}</div></td>
+              <td style="${TD}font-weight:600;color:#374151;">${escX(p.piece ?? p.code_ref_produit ?? '—')}</td>
+              <td style="${TD}color:#6b7280;font-size:.78rem;">${reste.length ? escX(reste.join(' + ')) : 'Préparation technique'}</td>
+              <td style="${TD}text-align:center;font-size:.75rem;color:#6b7280;">${escX(p.cmd_ref ?? '—')}</td>
               <td style="${TD}text-align:center;">
                 <a href="/be/preparation" style="padding:5px 12px;background:linear-gradient(135deg,#0891b2,#0e7490);color:white;border-radius:7px;font-size:.72rem;font-weight:700;text-decoration:none;">
                   <i class="fas fa-cogs" style="margin-right:4px;"></i>Préparer
                 </a>
               </td>
-            </tr>`).join('')}
+            </tr>`}).join('')}
           </tbody>
         </table>
       </div>`}
@@ -1213,7 +1215,7 @@ export const pageServiceBE = (
     tabs: [
       { id: 'noms',      label: 'Nomenclatures',    icon: 'fa-sitemap',          badge: NOMS_PEND.length + piecesToFaireTotal },
       { id: 'analyse',   label: 'Analyse DT',       icon: 'fa-drafting-compass', badge: DTS_BE.length },
-      { id: 'prep',      label: 'Préparations tech.', icon: 'fa-cogs',           badge: CMDS_PREP.length },
+      { id: 'prep',      label: 'Préparations tech.', icon: 'fa-cogs',           badge: PREPS_A_FAIRE.length },   // le badge suit la liste affichee
       { id: 'refs',      label: 'Références',        icon: 'fa-boxes',            badge: REFS_STOCK.length },
       { id: 'dashboard', label: 'Dashboard BE',     icon: 'fa-chart-bar' },
     ],
