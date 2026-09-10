@@ -7,6 +7,39 @@ export const APP_VERSION = 'v2.0 – SPEC-ERP-GPAO-V1.8'
 
 // Échappement HTML COMPLET (5 remplacements) — helper unique du dépôt (sûr en contenu texte ET en attribut).
 // Auparavant redéclaré à l'identique dans 15 pages service ; centralisé ici pour éviter toute dérive d'échappement.
+// ═══════════════════════════════════════════════════════════════
+// ANNULATION — le vocabulaire, en un seul endroit (lot L0, 10/09/2026)
+// ═══════════════════════════════════════════════════════════════
+// ⚠ DEUX ORTHOGRAPHES COEXISTENT dans le depot, et c'est irreversible sans
+//   reecrire l'historique : « annulee » (offres, commandes, DA, factures) et
+//   « annule » (BC, BDT, BDS, lots). TOUS les filtres existants testent une
+//   EGALITE STRICTE — ecrire la mauvaise forme rendrait la ligne invisible des
+//   ecrans qui excluent les annules, tout en la laissant comptee partout ailleurs.
+//
+// La regle est donc dissymetrique, et c'est voulu :
+//   · a l'ECRITURE  -> STATUT_ANNULE[table], la forme que cette table utilise deja ;
+//   · a la LECTURE  -> estAnnule(), qui accepte les deux.
+
+export const STATUT_ANNULE: Record<string, string> = {
+  offres:                  'annulee',
+  demandes_travaux:        'annulee',
+  commandes:               'annulee',
+  demandes_achat:          'annulee',
+  factures_client:         'annulee',
+  preparations_techniques: 'annulee',
+  lots:                    'annule',
+  bons_de_travail:         'annule',
+  bons_sous_traitance:     'annule',
+  bons_de_commande:        'annule',
+}
+
+/** Cette ligne est-elle annulee ? Accepte annule / annulee / annulé / Annulée. */
+export const estAnnule = (statut: any): boolean => /^annul/i.test(String(statut ?? '').trim())
+
+/** Pastille « Annule », a la charte du depot. `neutre` pour un annule archive. */
+export const badgeAnnule = (neutre = false): string =>
+  `<span style="background:${neutre ? '#f1f5f9' : '#fee2e2'};color:${neutre ? '#64748b' : '#b91c1c'};border-radius:999px;padding:2px 10px;font-size:.68rem;font-weight:700;white-space:nowrap;"><i class="fas fa-ban" style="margin-right:4px;"></i>Annul\u00e9</span>`
+
 export const escX = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 
 // ─── VALIDATION DIRECTION : rebouclage vers l'enregistrement d'origine ────────

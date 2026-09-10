@@ -2,6 +2,63 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-10 — Annulation de commande, lot L0 : les fondations
+
+Premier lot du plan `docs/etudes/plan-annulation-commande.md`. Aucune fonctionnalité
+visible encore — c'est le socle sur lequel les six lots suivants s'appuient.
+
+### Le vocabulaire, en un seul endroit
+
+Deux orthographes coexistent dans le dépôt, et c'est irréversible sans réécrire
+l'historique : **`annulee`** (offres, commandes, DA, factures) et **`annule`**
+(BC, BDT, BDS, lots). Tous les filtres existants testent une **égalité stricte** :
+écrire la mauvaise forme rendrait la ligne invisible des écrans qui excluent les
+annulés, tout en la laissant comptée partout ailleurs.
+
+La règle est donc **dissymétrique, volontairement** (`src/shared.ts`) :
+
+- à l'**écriture** → `STATUT_ANNULE[table]`, la forme que cette table utilise déjà ;
+- à la **lecture** → `estAnnule()`, qui accepte les deux.
+
+`estAnnule` éprouvé sur les formes réelles : `annule`, `annulee`, `annulé`,
+`Annulée`, `ANNULE`, `annulés` → vrai ; `a_faire`, `faite`, `recu`, vide, `null`
+→ faux ; et **`annuel` → faux**, le faux ami évident en français.
+
+### Traçabilité (migration 004)
+
+`annule_le`, `annule_par`, `annule_motif` et `annulation_ref` sur les **8 tables**
+du circuit, plus `motif_annulation` et `annulation_ref` sur `factures_client`.
+Une annulation arrête une production, immobilise de la matière et déclenche une
+refacturation : savoir qui, quand et pourquoi n'est pas un confort.
+
+**Purement additive** : que des `add column if not exists`, aucune donnée touchée,
+aucune contrainte posée. Les colonnes naissent `NULL` — une ligne jamais annulée
+reste identique à ce qu'elle était. Table absente → ignorée sans échouer.
+Appliquée et **relancée** sur le Docker : 9 tables équipées, seconde passe sans effet.
+
+### Deux défauts corrigés au passage
+
+**La prépa technique ne pouvait pas être annulée.** `POST /api/prepa-technique/:id/statut`
+appliquait une liste blanche `['a_faire','en_cours','faite']` avec repli **sur `faite`** :
+lui envoyer `annulee` marquait la préparation **FAITE**, en silence — et ouvrait la
+porte de production. L'annulation est désormais une valeur à part entière.
+
+**Deux badges étaient aveugles à l'annulation** (`prod.tsx`, `compta_service.tsx`) :
+un lot ou une facture annulé retombait sur le repli gris, indistinguable d'un statut
+inconnu. Ils affichent maintenant une pastille explicite.
+
+### Décisions métier actées
+
+Les sept questions ouvertes ont été tranchées par l'exploitant et sont consignées
+dans le plan (§4) : trois destinations pour la matière, marge appliquée au moment de
+l'annulation d'après le tableau de prix de l'offre, étape entamée due **en entier**,
+annulation partielle **par lot**, validation Direction, et sort de l'offre selon que
+l'annulation est totale ou partielle.
+
+⚠ **Reste à lever** : un commentaire du code affirme qu'un `CHECK` verrouille le
+statut des BC **en cloud**. La sonde ne porte que sur le Docker. À vérifier avant
+d'écrire `annule` sur un BC en production.
+
 ## 2026-09-10 — Prépa technique : le formulaire dit enfin la vérité sur les pièces jointes
 
 Trois reproches, rejoués un par un **sur la base Docker réelle**, avec le serveur branché dessus. Deux étaient des défauts, le troisième un malentendu que l'écran entretenait.

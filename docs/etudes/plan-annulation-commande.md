@@ -75,23 +75,30 @@ aujourd'hui « l'étape en cours »** : c'est à écrire.
 **Marge** : règle du dépôt, le **taux de marque**. Coefficient `k` source de vérité,
 `PV = CRU × k`, `taux = (k−1)/k`, `k = 1/(1−taux)`. ×2 → 50 %, ×2,5 → 60 %.
 
-## 4. Les décisions qui m'échappent
+## 4. Les décisions — ACTÉES le 10/09/2026
 
-Elles changent la conception ; je ne peux pas les prendre.
+| # | Question | Décision |
+|---|---|---|
+| 1 | Destination de la matière | **Trois choix au moment de l'annulation** : elle reste chez nous · elle est renvoyée au client · elle part au rebut. Elle est refacturée **dans les trois cas** — le client l'a fait acheter ; la destination n'est qu'une décision logistique. |
+| 2 | La marge | Appliquée **au moment de l'annulation**, dans le formulaire, **selon le tableau des offres de prix** (le coefficient de l'offre sert de valeur proposée). |
+| 3 | Le travail fait | **L'étape entière** est due dès qu'elle est commencée — pas de prorata. |
+| 4 | Annulation partielle | **Oui**, avec **choix du lot** concerné. |
+| 5 | Validation Direction | **Oui**, une case de validation. |
+| 6 | Sort de l'offre | Totalement annulée → l'offre passe **annulée**. Partiellement → elle **reste acceptée**, avec la **mention du nombre de lots supprimés**. |
+| 7 | BC fournisseur | **Non validé par le fournisseur** → le client ne paie **rien**. **Validé mais pas encore arrivé** → le choix se fait **au niveau du bon de commande, dans les Achats** : on pourra peut-être l'annuler, peut-être pas. Il faut donc **répondre à la question** depuis Achats. |
 
-1. **La matière refacturée part-elle chez le client, ou reste-t-elle en stock ?**
-   Si elle part, il faut un BL et une sortie de stock. Si elle reste, ce n'est pas
-   une vente de matière mais une **indemnité** — et le libellé de la facture change.
-2. **La marge sur la matière** : taux saisi à chaque annulation, ou valeur par défaut
-   paramétrable ? (Je pars sur un taux de marque, cohérent avec le reste de l'ERP.)
-3. **Le travail déjà fait** : facturé au **coût de revient** (temps × taux) ou au
-   **prix de vente au prorata** des étapes réalisées ?
-4. **L'étape en cours** : due **en entier** dès qu'elle est commencée, ou **au prorata**
-   du temps pointé ?
-5. **Annulation partielle** possible (une pièce sur trois), ou toujours toute la commande ?
-6. **Validation Direction** au-delà d'un montant ? (Le moteur `validations` existe.)
-7. **Que devient l'offre** ? Elle reste « acceptée » avec une commande annulée, ou
-   repasse dans un état propre ?
+### Le formulaire d'annulation, tel que décidé
+
+Déclenché depuis **« Annuler » sur une offre de travaux acceptée**. Il contient :
+
+1. le **choix du ou des lots** à annuler (tout, ou une partie) ;
+2. la **destination de la matière** — chez nous / renvoyée au client / rebut ;
+3. le **coût de revient actuel** de la commande, affiché ;
+4. la **marge à appliquer**, proposée d'après le tableau de prix de l'offre ;
+5. la **case de validation Direction**.
+
+Il produit une **facture client**, qui atterrit dans la liste des **factures à régler**
+en Comptabilité.
 
 ## 5. Le plan, en 7 lots
 
@@ -113,9 +120,15 @@ Câbler pour de vrai le bouton du Commercial sur une **offre acceptée** : simul
 confirmation → annulation. C'est le point d'entrée demandé.
 
 ### L3 — Le choix sur le bon de commande
-Dans *Achats › Bons de commande*, un bouton **« Annuler »** à côté de « Validée »,
-visible **tant que le fournisseur n'a pas accepté**. Après acceptation, l'annulation
-devient une négociation avec le fournisseur : plus de bouton, un message qui l'explique.
+Dans *Achats › Bons de commande*, un bouton **« Annuler »** à côté de « Validée ».
+Son sens dépend de l'état du BC — c'est la décision 7 :
+
+- **pas encore validé par le fournisseur** → annulation sèche, le client ne paie rien ;
+- **validé mais pas encore arrivé** → le bouton reste, mais il pose une **question** :
+  le fournisseur accepte-t-il d'annuler ? On enregistre la réponse. Tant qu'elle n'est
+  pas connue, le BC reste en cours ;
+- **déjà reçu** → plus d'annulation possible : la matière est là, elle part en
+  refacturation (L4).
 
 ### L4 — La facture d'annulation
 Deux composantes, selon l'avancement au moment de l'annulation :

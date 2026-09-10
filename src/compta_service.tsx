@@ -3,7 +3,7 @@
 // Spec : SPEC-ERP-GPAO-V1.8 / EN 9100:2018 / ISO 9001:2015
 // ══════════════════════════════════════════════════════════════
 
-import { escX, layout, serviceHeader, buildValDirMap, valDirBadge } from './shared'
+import { escX, layout, serviceHeader, buildValDirMap, valDirBadge, estAnnule, badgeAnnule } from './shared'
 import { brandBlockHTML, BRAND } from './brand'
 
 // Décisions Direction indexées par (ref_table, ref_id). Posé au début de pageServiceCompta
@@ -30,6 +30,8 @@ const ECRITURES_DEFAULT: EcritureComptable[] = []
 
 // ─── BADGE HELPERS ────────────────────────────────────────────
 function statutCliBadge(s: string): string {
+  // Une facture annulee tombait dans le repli et gonflait le « du » : elle se voit.
+  if (estAnnule(s)) return badgeAnnule(true)
   const map: Record<string, [string, string]> = {
     brouillon:          ['#6b7280','#f3f4f6'],
     envoyee:            ['#2563eb','#eff6ff'],

@@ -20,7 +20,7 @@ import {
   pageFournisseursST,
   pageReferencesPiecesACreer
 } from './listes'
-import { layout, pageHeader, afterBox, SIDEBAR_V2, APP_VERSION, computeNomCostForQty, computePosteRates, etapeDecomp, seemMark } from './shared'
+import { layout, pageHeader, afterBox, SIDEBAR_V2, APP_VERSION, computeNomCostForQty, computePosteRates, etapeDecomp, seemMark, STATUT_ANNULE, estAnnule } from './shared'
 import { brandBlockHTML, BRAND, BRAND_PRINT_CSS, SOCIETE } from './brand'
 import { buildXlsx } from './xlsx'
 import { computeRisqueChimique, computeExpositionSante, computeExpositionIncendie, computeExpositionEnv, normQuantiteChimique, SEIRICH_NIVEAUX, EXPO_PROCEDE_LBL, EXPO_FREQ_LBL, EXPO_PROT_LBL, EXPO_VOLAT_LBL, codeDechetDangereux, computeBilanGES, ISO14001_DIAGNOSTIC, ISO26000_QUESTIONS, computeEcmePV, ecmeTypeLabel as _ecmeTypeLabel, ecmeStatutLive as _ecmeStatutLive } from './qref'
@@ -9524,7 +9524,11 @@ app.post('/api/nomenclature/:id/prepa-validee', async (c) => {
 
 app.post('/api/prepa-technique/:id/statut', async (c) => {
   const b = await c.req.json().catch(() => ({} as any))
-  const st = ['a_faire', 'en_cours', 'faite'].includes(b.statut) ? b.statut : 'faite'
+  // ⚠ La liste blanche renvoyait TOUT le reste sur « faite » : envoyer « annulee »
+  //   marquait la preparation FAITE, en silence — et ouvrait la porte de production.
+  //   L'annulation est desormais une valeur a part entiere.
+  const st = ['a_faire', 'en_cours', 'faite', STATUT_ANNULE.preparations_techniques].includes(b.statut)
+    ? b.statut : 'faite'
   const { data, error } = await updatePreparationTechnique(c.req.param('id'), { statut: st })
   if (error) return c.json({ ok: false, error: error.message }, 400)
   return c.json({ ok: true, prepa: data })

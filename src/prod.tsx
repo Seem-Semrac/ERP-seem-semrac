@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════════════════════
 // PRODUCTION – Planning Gantt BDT/BST · Commandes · Lots · Dashboards
 // ══════════════════════════════════════════════════════════════
-import { escX, layout, serviceHeader, OPERATEURS as OPS_FB, BDT_DATA, SHIFTS, ABSENCES, MACHINES, computePosteRates } from './shared'
+import { escX, layout, serviceHeader, OPERATEURS as OPS_FB, BDT_DATA, SHIFTS, ABSENCES, MACHINES, computePosteRates, estAnnule, badgeAnnule } from './shared'
 import { LOGO_SVG, BRAND } from './brand'
 import type { BonDeTravail, Machine, Operateur, Lot, Commande, FournisseurSt } from './types'
 
@@ -44,6 +44,9 @@ const TD = (c: string) => `<td style="padding:8px 12px;font-size:.8rem;color:#37
 
 const STATUT_BADGE = (s: string) => {
   const m: Record<string,string> = { en_cours:'#ede9fe|#5b21b6', planifié:'#dbeafe|#1d4ed8', terminé:'#dcfce7|#166534', termine:'#dcfce7|#166534', retard:'#fef2f2|#b91c1c', sous_trait:'#e0e7ff|#3730a3', bloqué:'#fef2f2|#b91c1c', recu:'#fef9c3|#854d0e', programme:'#dbeafe|#1d4ed8', affecte:'#dbeafe|#1d4ed8', solde:'#dcfce7|#166534', a_programmer:'#f1f5f9|#475569', en_attente:'#f1f5f9|#475569', a_planifier:'#f1f5f9|#475569', planifie:'#dbeafe|#1d4ed8', envoye:'#fef9c3|#854d0e', st:'#e0e7ff|#3730a3' }
+  // Un statut d'annulation retombait sur le repli gris, indistinguable d'un statut
+  // inconnu : on le rend explicitement, quelle que soit son orthographe.
+  if (estAnnule(s)) return badgeAnnule()
   const [bg,co] = (m[s]||'#f1f5f9|#64748b').split('|')
   return `<span style="border-radius:999px;padding:2px 9px;font-size:.62rem;font-weight:700;background:${bg};color:${co};">${(s||'—').replace(/_/g,' ')}</span>`
 }
