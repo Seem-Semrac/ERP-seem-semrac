@@ -4984,6 +4984,40 @@ app.get('/be/preparation', async (c) => {
   (function(){
   var PREP = ${prepJson};
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  // Etat REEL des pieces jointes : le champ texte a cote ne prouve RIEN (on peut y taper
+  // un nom sans joindre de fichier). Seule la GED fait foi, on la relit donc a chaque rendu.
+  function prepMajFichiers(nomencId){
+    var zones = [];
+    var zPlan = document.getElementById('prep-plan-etat');
+    if(zPlan) zones.push({ el: zPlan, cat: 'plan_cao', ord: null });
+    document.querySelectorAll('[id^="prep-prog-etat-"]').forEach(function(z){
+      zones.push({ el: z, cat: 'programme_fao', ord: z.id.replace('prep-prog-etat-','') });
+    });
+    zones.forEach(function(z){ z.el.textContent = 'Lecture des pieces jointes...'; z.el.style.color = '#94a3b8'; });
+    fetch('/api/ged/nomenclature/'+encodeURIComponent(nomencId))
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        var docs = (j && j.ok && j.documents) ? j.documents : [];
+        zones.forEach(function(z){
+          var d = docs.filter(function(x){
+            if(String(x.categorie) !== z.cat) return false;
+            if(z.ord === null) return true;
+            return String(x.etape_ordre) === String(z.ord);
+          }).pop();
+          if(d){
+            z.el.innerHTML = '<i class="fas fa-paperclip" style="margin-right:4px;"></i>'
+              + esc(d.fichier_nom || 'fichier')
+              + ' \\u2014 <a href="/api/ged/file/' + esc(d.id) + '" target="_blank" rel="noopener" style="color:#6d28d9;font-weight:700;">ouvrir</a>';
+            z.el.style.color = '#16a34a';
+          } else {
+            z.el.innerHTML = '<i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>Aucun fichier joint \\u2014 le champ ci-dessus n\\'est qu\\'un libelle. Utilisez <strong>Parcourir</strong> pour joindre le document.';
+            z.el.style.color = '#b45309';
+          }
+        });
+      })
+      .catch(function(){ zones.forEach(function(z){ z.el.textContent = 'Pieces jointes illisibles (reseau).'; z.el.style.color = '#dc2626'; }); });
+  }
+
   function prepRender(){
     var sel=document.getElementById('prep-nom'); var id=sel?sel.value:'';
     var host=document.getElementById('prep-steps'); var save=document.getElementById('prep-save');
@@ -5026,6 +5060,7 @@ app.get('/be/preparation', async (c) => {
       +'</div>';
     if(save) save.style.display='';
     if(valider) valider.style.display='';
+    prepMajFichiers(id);
   }
   window.prepRender=prepRender;
   // Nom de fichier sans son extension : sert a pre-remplir le N° de plan / de programme.
@@ -5093,10 +5128,14 @@ app.get('/be/preparation', async (c) => {
           // Rien de valide = ce n'est PAS un succes : ou bien la reference ne correspond a
           // aucune preparation, ou bien elles etaient deja faites. On le dit, en orange.
           if(!j.validees){
-            var pourquoi = j.candidates
-              ? 'Les preparations de cette reference etaient deja marquees faites.'
-              : 'AUCUNE preparation ne porte la reference <strong>'+(j.reference||'')+'</strong> : verifiez que la nomenclature choisie est bien celle de la piece a preparer.';
-            if(window.pushNotif) pushNotif('warn','fa-triangle-exclamation','Rien n\\'a change. '+pourquoi, 10000);
+            if(j.candidates){
+              // Deja faite : ce n'est pas un echec. On emmene quand meme l'utilisateur
+              // dans la liste, sur la section « faites », pour qu'il la VOIE.
+              if(window.pushNotif) pushNotif('ok','fa-check-double','Plan et codes programme enregistres. Cette preparation etait deja marquee faite \\u2014 elle est dans la liste des preparations terminees.', 8000);
+              setTimeout(function(){ location.href='/be/preparations-tech#faites'; }, 1400);
+            } else {
+              if(window.pushNotif) pushNotif('warn','fa-triangle-exclamation','Rien n\\'a change. AUCUNE preparation ne porte la reference <strong>'+(j.reference||'')+'</strong> : verifiez que la nomenclature choisie est bien celle de la piece a preparer.', 12000);
+            }
             return;
           }
           var msg='Prepa <strong>'+(j.reference||'')+'</strong> validee \\u2014 '+j.validees+' ligne(s) passee(s) en « faite »';

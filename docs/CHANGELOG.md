@@ -2,6 +2,35 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-10 — Prépa technique : le formulaire dit enfin la vérité sur les pièces jointes
+
+Trois reproches, rejoués un par un **sur la base Docker réelle**, avec le serveur branché dessus. Deux étaient des défauts, le troisième un malentendu que l'écran entretenait.
+
+### « On ne peut pas ouvrir le doc chargé » — il n'y avait aucun doc
+
+Les champs « Fichier plan » et « Fichier programme » sont du **texte libre** : on peut y taper un nom sans rien joindre. C'est ce qui s'était passé (« lol » saisi à la main), et la GED était **vide** pour cette nomenclature. Il n'y avait donc rien à ouvrir — mais rien ne le disait, et le champ rempli laissait croire le contraire.
+
+Le formulaire relit désormais la **GED** à chaque affichage et écrit sous chaque champ ce qui est réellement attaché :
+
+- un document existe → son nom + un lien **ouvrir** ;
+- aucun document → en ambre, *« Aucun fichier joint — le champ ci-dessus n'est qu'un libellé. Utilisez **Parcourir** pour joindre le document. »*
+
+Le lien « ouvrir » n'existait qu'à l'instant de l'envoi, dans un message éphémère : au rechargement suivant il disparaissait. Il est maintenant reconstruit à chaque rendu.
+
+### « La validation ne passe pas la prépa dans les terminées » — elle y était déjà
+
+La prépa était **déjà `faite`** en base. La validation n'avait donc rien à faire : elle affichait un avertissement et **restait sur le formulaire**. Écran inchangé = « rien ne s'est passé ».
+
+Désormais ce cas emmène aussi vers la liste, sur la section « faites », avec un message qui le dit : *« cette préparation était déjà marquée faite — elle est dans la liste des préparations terminées »*. Seul le cas « aucune prépa ne porte cette référence » reste sur place, puisqu'il demande une correction.
+
+### « Je ne sais pas si les infos se déversent dans la nomenclature » — elles s'y déversent
+
+Vérifié : `POST /api/nomenclature/:id/programmes` répond `200` et les valeurs **reviennent à l'affichage suivant** (`num_plan`, `plan_fichier`, et par étape `programme` / `programme_fichier`). Ce sont les quatre champs du formulaire, aucun ne manque. Ce qui manquait, c'était de le montrer — c'est ce que fait désormais l'état des pièces jointes.
+
+### Vérification
+
+`tsc` propre · harnais **61 PASS / 0 FAIL** · `npm run build` · **cycle complet joué dans le navigateur contre la base Docker** : téléversement d'un fichier → `200`, le lien « ouvrir » apparaît, l'ouverture renvoie bien le contenu du fichier ; suppression → la zone repasse en avertissement ; puis validation depuis le formulaire → la page part sur `/be/preparations-tech#faites`, « à faire » est vide et la prépa est dans « faites ». Fichier de test supprimé après l'essai.
+
 ## 2026-09-10 — Expéditions remises au cordeau : chaque chose à un seul endroit
 
 « Les expéditions, ce n'est pas très lean. » Les mêmes commandes apparaissaient dans trois écrans à la fois, et l'onglet Réceptions hébergeait un acte d'achat.
