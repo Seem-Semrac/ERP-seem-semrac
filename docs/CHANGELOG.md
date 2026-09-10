@@ -2,6 +2,28 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-10 — Réception d'un BC : affaire et n° de BL repris tout seuls · Calendrier en premier onglet
+
+### Le n° d'affaire ne s'affichait jamais — et ce n'était pas un oubli d'ergonomie
+
+Le formulaire lisait `bc.affaire_id`. Or **les bons de commande portent leur affaire dans `num_affaire`** ; `affaire_id` est vide en base. Le champ restait donc systématiquement vide, et il fallait retaper à la main une information que le BC connaissait déjà — avec le risque de la saisir de travers.
+
+La projection envoyée à la page transporte maintenant `num_affaire`, et le formulaire le reprend (`num_affaire` puis repli sur `affaire_id`).
+
+### Le n° de BL est calculé par le serveur, avec la fonction qui l'attribuera vraiment
+
+Le champ était vide avec la mention « laisser vide = auto » : on ne savait pas ce qu'on allait obtenir. Le numéro proposé est désormais calculé au rendu par **`nextBlPourBc`** — exactement la fonction qu'appelle la réception. L'écran affiche donc ce qui sera enregistré, sans risque de divergence, et le BL suit le **numéro** du BC (pas son identifiant technique).
+
+**Les deux champs sont verrouillés quand la valeur vient du BC**, avec une infobulle qui dit d'où elle sort : les retaper ne pourrait que créer un écart. Ils restent saisissables quand le BC ne porte rien — vérifié : sur un BC sans affaire, le champ affaire reste vide et modifiable, tandis que le n° de BL est quand même proposé.
+
+### Calendrier en premier onglet
+
+C'est la vue d'ensemble de ce qui arrive et de ce qui part : c'est l'écran sur lequel on veut tomber en ouvrant le service. Ordre côté serveur **et** côté client, onglet actif au rendu et onglet par défaut au chargement — les quatre points de câblage, sinon l'onglet s'affiche en premier mais le panneau ouvert reste l'ancien.
+
+### Vérification
+
+`tsc --noEmit` propre · harnais **61 PASS / 0 FAIL** · `npm run build` · **essai dans le navigateur** : Calendrier premier et actif au chargement, panneau calendrier seul visible ; sur un BC avec affaire → `TESTP3` et `BL-TESTP3-01` pré-remplis et verrouillés, infobulles présentes ; sur un BC sans affaire → champ affaire vide et éditable, n° de BL proposé quand même.
+
 ## 2026-09-10 — Préparation technique : on sort de la prépa, et il y a enfin une liste « faites »
 
 Demande de l'exploitant : « quand on appuie sur la validation à l'intérieur de la prépa, on doit en sortir, les données doivent migrer dans la nomenclature associée, et passer dans une liste qui n'existe pas encore — préparations techniques faites. »

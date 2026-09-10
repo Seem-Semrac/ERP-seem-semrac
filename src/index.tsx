@@ -7600,6 +7600,10 @@ app.get('/expeditions/service', async (c) => {
     pv_id: b.pv_id || null,
     fournisseur_id: b.fournisseur_id || null,      // rattachement au référentiel fournisseurs (onglet Fournisseurs)
     num_affaire: b.num_affaire || null,           // pour ouvrir la fiche affaire au clic
+    // N° de BL qui sera attribue a la reception : calcule ICI avec la fonction qui
+    // l'attribuera pour de vrai (nextBlPourBc), pour que le formulaire affiche
+    // exactement ce qui sera enregistre. Le BL suit le NUMERO du BC, pas son id.
+    bl_propose: nextBlPourBc(b.num_bc || b.id, b.num_affaire || b.affaire_id, (blsAll as any[]).map((x: any) => x.id)),
     transporteur: b.transporteur || null,
     transporteur_ref: b.transporteur_ref || null,
   }))

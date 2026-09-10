@@ -855,7 +855,7 @@ export const pageServiceExpeditions = (
     .map((n: any) => ({ id: n.id, client: n.client_nom || '', piece: [n.ref_article, n.designation].filter(Boolean).join(' · ') || n.lot_ref || '',
       cmd: n.n_commande || '', qte: n.qte_retour_attendue ?? n.nb_pieces ?? null })))
     .replace(/</g, '\\u003c')
-  const BC_JSON = JSON.stringify((BCS as any[]).map((b: any) => ({ id:b.id, num_bc:b.num_bc||b.id, type:b.type, fournisseur:b.fournisseur||'', articles:b.articles||'', montant:b.montant||0, affaire_id:b.affaire_id||'', statut:b.statut, bl_id:b.bl_id||'', date_livraison_prevue:b.date_livraison_prevue||'' }))).replace(/</g, '\\u003c')   // sinon un '<' dans un libelle casse le <script>
+  const BC_JSON = JSON.stringify((BCS as any[]).map((b: any) => ({ id:b.id, num_bc:b.num_bc||b.id, type:b.type, fournisseur:b.fournisseur||'', articles:b.articles||'', montant:b.montant||0, affaire_id:b.affaire_id||'', num_affaire:b.num_affaire||'', bl_propose:b.bl_propose||'', statut:b.statut, bl_id:b.bl_id||'', date_livraison_prevue:b.date_livraison_prevue||'' }))).replace(/</g, '\\u003c')   // sinon un '<' dans un libelle casse le <script>
   // Données du planning des arrivées (côté client : détail au clic + changement de date)
   const PLAN_JSON = JSON.stringify((BCS as any[]).map((b: any) => ({
     id: b.id, num_bc: b.num_bc || b.id, type: (b.type === 'st' ? 'st' : 'fournisseur'), fournisseur: b.fournisseur || '—',
@@ -875,9 +875,11 @@ export const pageServiceExpeditions = (
   // Ordre logique du flux : on commande (BC) → on reçoit / on livre (BL)
   // Orchestration demandee : ce qui ARRIVE, ce qui PART, puis la vue calendrier + le jour.
   const TABS = [
+    // Le CALENDRIER en premier : c'est la vue d'ensemble de ce qui arrive et de ce qui
+    // part, donc l'ecran sur lequel on veut tomber en ouvrant le service (choix user).
+    ['calendrier', 'Calendrier',   'fa-calendar-days'],
     ['envois',     'Envois',       'fa-paper-plane'],
     ['receptions', 'Réceptions',   'fa-dolly'],
-    ['calendrier', 'Calendrier',   'fa-calendar-days'],
     ['fournisseurs','Fournisseurs', 'fa-industry'],
     ['dashboard',  'Dashboard',    'fa-tachometer-alt'],
   ] as const
@@ -900,7 +902,7 @@ export const pageServiceExpeditions = (
       })),
       switchFn: 'expShowTab',
       tabIdPrefix: 'exp-tab',
-      activeId: 'envois'
+      activeId: 'calendrier'
     })}
 
     <div style="padding:22px 30px;">
@@ -930,8 +932,8 @@ export const pageServiceExpeditions = (
         <input type="hidden" id="rec_bc_id"/>
         <div id="rec_info" style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:.8rem;color:#075985;"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          <div><label style="${FLBL}">N° BL interne</label><input id="rec_numbl" type="text" placeholder="laisser vide = auto" style="${FINP}"/></div>
-          <div><label style="${FLBL}">N° d'affaire</label><input id="rec_affaire" type="text" placeholder="AFF-2026-XXX" style="${FINP}"/></div>
+          <div><label style="${FLBL}">N° BL interne <span style="font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:0;">· repris du BC</span></label><input id="rec_numbl" type="text" placeholder="attribué automatiquement" style="${FINP}"/></div>
+          <div><label style="${FLBL}">N° d'affaire <span style="font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:0;">· repris du BC</span></label><input id="rec_affaire" type="text" placeholder="aucune affaire rattachée" style="${FINP}"/></div>
           <div><label style="${FLBL}">Transporteur</label>
             <select id="rec_transp" style="${FINP}"><option value="">— Choisir —</option><option>GLS</option><option>DHL</option><option>Chronopost</option><option>TNT</option><option>DPD</option><option>Geodis</option><option>Coursier</option><option>Enlèvement direct</option></select>
           </div>
@@ -1021,7 +1023,7 @@ export const pageServiceExpeditions = (
   </div>
 
   <script>
-  var EXP_TABS=['envois','receptions','calendrier','fournisseurs','dashboard'];
+  var EXP_TABS=['calendrier','envois','receptions','fournisseurs','dashboard'];
   var EXP_BC=${BC_JSON};
   var EXP_PLAN=${PLAN_JSON};
   var EXP_RETOURS=${RETOURS_JSON};
@@ -1034,8 +1036,23 @@ export const pageServiceExpeditions = (
     var bc=EXP_BC.find(function(b){return b.id===id;}); if(!bc) return;
     document.getElementById('rec_bc_id').value=id;
     document.getElementById('rec_info').innerHTML='<strong>'+(bc.num_bc||id)+'</strong> · '+(bc.fournisseur||'')+' · '+(bc.articles||'');
-    document.getElementById('rec_numbl').value='';
-    document.getElementById('rec_affaire').value=bc.affaire_id||'';
+    // Le N° de BL et le N° d'affaire viennent du bon de commande : on ne les redemande
+    // pas. Champs verrouilles quand la valeur est connue — les retaper ne pourrait que
+    // creer un ecart avec le BC. Ils restent saisissables si le BC ne porte rien.
+    var blProp = bc.bl_propose || '';
+    var affProp = bc.num_affaire || bc.affaire_id || '';
+    var cBl = document.getElementById('rec_numbl');
+    cBl.value = blProp;
+    cBl.readOnly = !!blProp;
+    cBl.title = blProp ? 'Numero derive du bon de commande ' + (bc.num_bc || bc.id) : '';
+    cBl.style.background = blProp ? '#f1f5f9' : '';
+    cBl.style.color = blProp ? '#475569' : '';
+    var cAff = document.getElementById('rec_affaire');
+    cAff.value = affProp;
+    cAff.readOnly = !!affProp;
+    cAff.title = affProp ? 'Affaire rattachee au bon de commande ' + (bc.num_bc || bc.id) : '';
+    cAff.style.background = affProp ? '#f1f5f9' : '';
+    cAff.style.color = affProp ? '#475569' : '';
     document.getElementById('rec_transp').value='';
     document.getElementById('rec_ref').value='';
     document.getElementById('rec_qte').value='';
@@ -1353,7 +1370,7 @@ export const pageServiceExpeditions = (
   });
 
   // Onglet initial : honore le hash (#bc, #bl, …) sinon Bons de Commande par défaut
-  (function(){ try{ var h=(location.hash||'').replace('#',''); expShowTab(EXP_TABS.indexOf(h)>=0?h:'envois'); }catch(e){} })();
+  (function(){ try{ var h=(location.hash||'').replace('#',''); expShowTab(EXP_TABS.indexOf(h)>=0?h:'calendrier'); }catch(e){} })();
   </script>
 
   <style>
