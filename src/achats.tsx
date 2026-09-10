@@ -566,7 +566,12 @@ export const pageServiceAchats = (
   const _RECU = ['recu', 'recu_total', 'recu_partiel', 'receptionne', 'controle', 'cloture']
   const BCS: any[] = (dbBcs ?? [])
     .filter((b: any) => String(b.statut || '') !== 'annule')
-    .map((b: any) => ({ ...b, recu: !!b.reception || !!b.bl_id || _RECU.includes(String(b.statut || '')) }))
+    .map((b: any) => {
+      const recu = !!b.reception || !!b.bl_id || _RECU.includes(String(b.statut || ''))
+      // La date se fige des que le fournisseur a valide : c'est son engagement.
+      // La reception fige aussi, mais elle arrive plus tard dans le circuit.
+      return { ...b, recu, dateFigee: !!b.accuse || recu, motifGel: b.accuse ? 'valid\u00e9e par le fournisseur' : 'r\u00e9ceptionn\u00e9e' }
+    })
   const BC_A_DATER = BCS.filter((b: any) => !b.prevue && !b.recu).length
 
   const rowBC = (b: any) => `
@@ -583,8 +588,13 @@ export const pageServiceAchats = (
           : '<span style="color:#cbd5e1;">\u00e0 planifier</span>'}</td>
       <td style="${TD}text-align:center;">${b.reception ? `<span style="font-weight:700;color:#15803d;">${frD(b.reception)}</span>` : '<span style="color:#cbd5e1;">\u2014</span>'}</td>
       <td style="${TD}text-align:center;">${bcStatutBadge(b.statut)}</td>
-      <td style="${TD}text-align:center;">${b.recu
-          ? `<span title="La marchandise est arriv\u00e9e : la date pr\u00e9vue est fig\u00e9e, c&#39;est elle qui mesure la ponctualit\u00e9 du fournisseur" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#f1f5f9;color:#94a3b8;border-radius:8px;font-size:.71rem;font-weight:700;white-space:nowrap;"><i class="fas fa-lock"></i>Fig\u00e9e</span>`
+      <td style="${TD}text-align:center;">${b.accuse
+          ? `<span title="Commande confirm\u00e9e par le fournisseur" style="background:#dcfce7;color:#166534;border-radius:999px;padding:2px 10px;font-size:.65rem;font-weight:800;white-space:nowrap;"><i class="fas fa-check" style="margin-right:4px;"></i>${frD(b.accuse)}</span>`
+          : (b.recu ? '<span style="color:#cbd5e1;">\u2014</span>'
+            : `<button onclick="achBcAccuse('${escX(b.id)}','${escX(b.num_bc)}')" title="Le fournisseur a confirm\u00e9 la commande" style="padding:5px 10px;background:#dcfce7;color:#15803d;border:none;border-radius:7px;font-size:.68rem;font-weight:700;cursor:pointer;white-space:nowrap;"><i class="fas fa-check" style="margin-right:4px;"></i>Valid\u00e9e</button>`
+              + `<button onclick="achBcRelancer('${escX(b.id)}','${escX(b.num_bc)}')" title="Noter une relance et r\u00e9\u00e9diter le bon de commande" style="margin-left:5px;padding:5px 10px;background:#fef3c7;color:#92400e;border:none;border-radius:7px;font-size:.68rem;font-weight:700;cursor:pointer;white-space:nowrap;"><i class="fas fa-rotate-right"></i></button>`)}</td>
+      <td style="${TD}text-align:center;">${b.dateFigee
+          ? `<span title="Commande ${escX(b.motifGel)} : la date pr\u00e9vue est fig\u00e9e, c&#39;est elle qui mesure la ponctualit\u00e9 du fournisseur" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#f1f5f9;color:#94a3b8;border-radius:8px;font-size:.71rem;font-weight:700;white-space:nowrap;"><i class="fas fa-lock"></i>Fig\u00e9e</span>`
           : `<button onclick="achOpenBcDate('${escX(b.id)}')" title="Changer la date d&#39;arriv\u00e9e pr\u00e9vue de ce bon de commande" style="padding:6px 12px;background:#e0f2fe;color:#0369a1;border:none;border-radius:8px;font-size:.71rem;font-weight:700;cursor:pointer;white-space:nowrap;"><i class="fas fa-calendar-day" style="margin-right:5px;"></i>Date d&#39;arriv\u00e9e</button>`}</td>
     </tr>`
 
@@ -612,9 +622,10 @@ export const pageServiceAchats = (
             <th style="text-align:center;${TH}">Arriv\u00e9e pr\u00e9vue</th>
             <th style="text-align:center;${TH}">Re\u00e7u le</th>
             <th style="text-align:center;${TH}">Statut</th>
+            <th style="text-align:center;${TH}">Validation fournisseur</th>
             <th style="text-align:center;${TH}">Date d&#39;arriv\u00e9e</th>
           </tr></thead>
-          <tbody>${BCS.length === 0 ? emptyRow(10, 'Aucun bon de commande') : BCS.map(rowBC).join('')}</tbody>
+          <tbody>${BCS.length === 0 ? emptyRow(11, 'Aucun bon de commande') : BCS.map(rowBC).join('')}</tbody>
         </table>
       </div>
     </div>
@@ -624,7 +635,8 @@ export const pageServiceAchats = (
   // aucun champ absent d'ici ne risque donc d'etre reecrit vide.
   const BC_MODAL_JSON = sjX(BCS.map((b: any) => ({
     id: b.id, num_bc: b.num_bc, type: b.type, fournisseur: b.fournisseur, articles: b.articles,
-    prevue: b.prevue || '', initiale: b.initiale || '', reception: b.reception || '', statut: b.statut, recu: !!b.recu,
+    prevue: b.prevue || '', initiale: b.initiale || '', reception: b.reception || '', statut: b.statut,
+    recu: !!b.recu, dateFigee: !!b.dateFigee, motifGel: b.motifGel || '', accuse: b.accuse || '',
   })))
 
   const ACH_TABS = [
@@ -1060,7 +1072,7 @@ export const pageServiceAchats = (
   function achOpenBcDate(id){
     var b=null; for(var i=0;i<ACH_BCS.length;i++){ if(ACH_BCS[i].id===id){ b=ACH_BCS[i]; break; } }
     if(!b){ pushNotif('err','fa-ban','Bon de commande introuvable : '+id); return; }
-    if(b.recu){ pushNotif('err','fa-lock','La commande '+b.num_bc+' est deja receptionnee : la date d arrivee prevue est figee. Elle sert a mesurer la ponctualite du fournisseur.',8000); return; }
+    if(b.dateFigee){ pushNotif('err','fa-lock','La commande '+b.num_bc+' est '+(b.motifGel||'figee')+' : la date d arrivee prevue ne se modifie plus. C est l engagement du fournisseur, il sert a mesurer sa ponctualite.',8000); return; }
     _achBcCur=b;
     document.getElementById('ach_bcdate_titre').textContent=b.num_bc;
     document.getElementById('ach_bcdate_sous').textContent=b.fournisseur+' \u00b7 '+(b.type==='st'?'Sous-traitant':'Fournisseur');
@@ -1075,6 +1087,30 @@ export const pageServiceAchats = (
     document.getElementById('ach-bcdate-overlay').style.display='flex';
   }
   function achFermerBcDate(){ var o=document.getElementById('ach-bcdate-overlay'); if(o) o.style.display='none'; }
+
+  // Validation fournisseur : c'est un acte d'ACHAT (le fournisseur confirme la commande),
+  // pas un acte d'expedition. Elle vivait a tort dans les Expeditions.
+  // ⚠ Elle FIGE la date d'arrivee prevue : le fournisseur s'engage dessus.
+  async function achBcAccuse(id, num){
+    if(!await appConfirm('Le fournisseur a-t-il confirme la commande '+num+' ?\\n\\nLa date d arrivee prevue sera FIGEE : c est desormais son engagement, elle ne pourra plus etre modifiee.')) return;
+    fetch('/api/bc/'+encodeURIComponent(id)+'/accuse',{method:'POST'})
+      .then(function(r){return r.json();})
+      .then(function(j){
+        if(!j||!j.ok){ pushNotif('err','fa-triangle-exclamation',(j&&j.error)||'Echec.',7000); return; }
+        pushNotif('ok','fa-check-circle','Commande '+num+' validee par le fournisseur. Date d arrivee figee, en attente de reception.',6000);
+        location.hash='bc'; setTimeout(function(){softReload();},800);
+      }).catch(function(){ pushNotif('err','fa-ban','Erreur reseau.'); });
+  }
+  function achBcRelancer(id, num){
+    fetch('/api/bc/'+encodeURIComponent(id)+'/relance',{method:'POST'})
+      .then(function(r){return r.json();})
+      .then(function(j){
+        if(!j||!j.ok){ pushNotif('err','fa-triangle-exclamation',(j&&j.error)||'Echec.',7000); return; }
+        window.open('/api/bc/'+encodeURIComponent(id)+'/pdf','_blank');
+        pushNotif('ok','fa-rotate-right','Relance notee pour '+num+'. Le bon de commande est reedite, a renvoyer au fournisseur.',6000);
+        location.hash='bc'; setTimeout(function(){softReload();},900);
+      }).catch(function(){ pushNotif('err','fa-ban','Erreur reseau.'); });
+  }
   function achSaveBcDate(){
     if(!_achBcCur) return;
     var d=document.getElementById('ach_bcdate_input').value;

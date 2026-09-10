@@ -2,7 +2,7 @@
 // EXPÉDITIONS – Service Expéditions unifié
 // Réceptions · Envois · Calendrier · Fournisseurs · Dashboard
 // ══════════════════════════════════════════════════════════════
-import { escX, layout, serviceHeader, demandeAchatModal, buildValDirMap, valDirBadge } from './shared'
+import { escX, layout, serviceHeader, demandeAchatModal, buildValDirMap } from './shared'
 import type { BonDeLivraison, BonDeCommande, Commande, DemandeAchat, FournisseurSt } from './types'
 
 
@@ -75,6 +75,11 @@ function kpiCard(icon: string, col: string, val: string|number, lbl: string, sub
 // Fail-soft : sans cette colonne, on retombe sur l'identifiant — qui EST déjà le bon
 // numéro pour tout BL créé depuis la nouvelle numérotation.
 const numBL = (b: any) => String(b?.num_bl || b?.id || '')
+
+// Une echeance est en retard si elle est ANTERIEURE au jour de la requete. Comparaison
+// sur les 10 premiers caracteres (AAAA-MM-JJ) : pas de Date, donc pas de fuseau qui
+// ferait basculer une echeance du soir dans la veille.
+const enRetardExp = (d: any, today: string) => !!d && String(d).slice(0, 10) < String(today)
 
 // ══════════════════════════════════════════════════════════════
 // PANEL 4 – DASHBOARD EXPÉDITIONS
@@ -289,8 +294,15 @@ const MVT_LOOK: Record<string, [string, string, string]> = {
 // ══════════════════════════════════════════════════════════════
 // ONGLET 1 — RÉCEPTIONS (ce qui arrive)
 // ══════════════════════════════════════════════════════════════
-function panelReceptions(bcs: any[], bcsAttendus: any[], receptions: any[], bds: any[], ncs: any[], blsRetour: any[], vdMap: Record<string, any>, hasAck: boolean, today: string) {
-  const enRetard = (d: any) => !!d && String(d).slice(0, 10) < today
+// ══════════════════════════════════════════════════════════════
+// ONGLET — RÉCEPTIONS : ce qui est DÉJÀ ARRIVÉ
+//   Trois familles : fournisseur, sous-traitance, retour client. Une ligne y entre au
+//   moment de la réception, et c'est de là qu'on remplit le PV de contrôle.
+//   ⚠ Les files « à réceptionner » ne sont plus ici : elles vivent dans le CALENDRIER
+//     (demande utilisateur du 10/09/2026). La validation fournisseur, elle, est passée
+//     dans Achats › Bons de commande : c'est un acte d'achat, pas d'expédition.
+// ══════════════════════════════════════════════════════════════
+function panelReceptions(bcs: any[], _bcsAttendus: any[], receptions: any[], bds: any[], _ncs: any[], blsRetour: any[], _vdMap: Record<string, any>, _hasAck: boolean, today: string) {
   const tr = (cells: string[]) => `<tr style="border-bottom:1px solid #f8fafc;">${cells.join('')}</tr>`
   const vide = (n: number, txt: string) => `<tr><td colspan="${n}" style="text-align:center;padding:22px;color:#9ca3af;font-size:.8rem;">${txt}</td></tr>`
   const card = (titre: string, icone: string, coul: string, cpt: number, sous: string, corps: string) => `
@@ -302,196 +314,146 @@ function panelReceptions(bcs: any[], bcsAttendus: any[], receptions: any[], bds:
       </div>
       <div style="overflow-x:auto;">${corps}</div>
     </div>`
+  const H = (cols: string[]) => `<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#fafafa;">${cols.map(c => c.startsWith('#') ? THC(c.slice(1)) : TH(c)).join('')}</tr></thead><tbody>`
 
-  // 1. Fournisseurs & sous-traitants attendus (le cœur : bouton Réceptionner)
-  const rowsAtt = (bcsAttendus || []).map((b: any) => {
-    const d = b.date_livraison_prevue
-    return tr([
-      TD(`<div style="font-weight:700;color:${AMB};">${escX(b.num_bc ?? b.id)}</div><div style="font-size:.65rem;color:#94a3b8;">${b.type === 'st' ? 'Sous-traitant' : 'Fournisseur'}</div>`),
-      TD(escX(b.fournisseur ?? '—')),
-      TD(`<span style="font-size:.75rem;color:#475569;">${escX(b.articles ?? '—')}</span>`),
-      // Date d'arrivée MODIFIABLE ici comme au planning : même route, donc même gel de la
-      // 1ʳᵉ date prévue (`date_livraison_initiale`) — la ponctualité (OTD) reste honnête quel
-      // que soit l'endroit où l'utilisateur a cliqué.
-      TDC(`<button onclick="expOpenArrivee('${escX(b.id)}')" title="Modifier la date d'arrivée prévue" style="background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:6px;font:inherit;">`
-        + (d ? `<span style="font-weight:700;color:${enRetard(d) ? '#b91c1c' : '#334155'};">${_frDate(d)}</span>${enRetard(d) ? '<div style="font-size:.62rem;color:#b91c1c;font-weight:700;">en retard</div>' : ''}` : '<span style="color:#cbd5e1;">à planifier</span>')
-        + `<i class="fas fa-pen" style="margin-left:6px;font-size:.6rem;color:#cbd5e1;"></i></button>`),
-      TDC(bcStatutBadge(b.statut)),
-      TDC(`<button onclick="expOpenReception('${escX(b.id)}')" style="background:#0ea5e9;color:white;border:none;border-radius:7px;padding:5px 12px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-dolly"></i> Réceptionner</button>
-           <button onclick="bcPdf('${escX(b.id)}')" style="margin-left:5px;background:#f5f3ff;color:#6d28d9;border:none;border-radius:7px;padding:5px 9px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-file-pdf"></i></button>`),
-    ])
-  }).join('')
+  // Fournisseur ou sous-traitant ? La réponse est portée par le BC d'origine.
+  const typeParBc: Record<string, string> = {}
+  ;(bcs || []).forEach((b: any) => { typeParBc[String(b.id)] = String(b.type || 'fournisseur') })
+  const estSt = (b: any) => typeParBc[String(b.bc_id ?? '')] === 'st'
 
-  // 2. Retours de sous-traitance attendus (vrais BDS)
-  // Un BDS pas encore parti n'est pas « attendu au retour » : sans cette exclusion il figurait
-  // à la fois dans « À envoyer en sous-traitance » (Envois) et ici — le même bon, deux fois.
-  const bdsAtt = (bds || []).filter((s: any) => !['recu', 'termine', 'cloture', 'annule'].includes(String(s.statut))
-    && !['a_envoyer', 'a_planifier', 'planifie'].includes(String(s.statut))
-    && !s.date_retour_effective && (s.date_retour_prevue || s.date_envoi))
-  const rowsBds = bdsAtt.map((s: any) => tr([
+  const ligneRecue = (b: any, couleur: string) => tr([
+    TD(`<div style="font-weight:700;color:${couleur};">${escX(numBL(b))}</div><div style="font-size:.65rem;color:#94a3b8;">${escX(b.bc_id ?? b.cmd_id ?? '')}</div>`),
+    TD(escX(b.client_nom ?? b.fournisseur_nom ?? '—')),
+    TD(`<span style="font-size:.75rem;color:#475569;">${escX(b.piece ?? b.operation ?? '—')}</span>`),
+    TDC(`<span style="font-weight:700;">${_frDate(b.date_bl)}</span>`),
+    TDC(`<span style="font-weight:700;">${b.qte ?? '—'}</span>`),
+    TDC(b.bc_id
+      ? `<button onclick="expOpenPV('${escX(b.bc_id)}')" title="Remplir le PV de contrôle de cette réception" style="background:#fef2f2;color:#b91c1c;border:none;border-radius:7px;padding:5px 10px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-clipboard-check" style="margin-right:4px;"></i>PV de contrôle</button>`
+      : '<span style="color:#cbd5e1;font-size:.7rem;">—</span>'),
+  ])
+
+  const parDate = (a: any, b: any) => String(b.date_bl || '').localeCompare(String(a.date_bl || ''))
+  const recFourn = (receptions || []).filter((b: any) => !estSt(b)).sort(parDate)
+  const recSt    = (receptions || []).filter((b: any) => estSt(b)).sort(parDate)
+  const recCli   = [...(blsRetour || [])].sort(parDate)
+
+  // Retours de sous-traitance déjà rentrés : ils n'ont pas de BL, on lit le BDS lui-même.
+  const bdsRevenus = (bds || []).filter((s: any) => ['recu', 'termine', 'cloture'].includes(String(s.statut || '')))
+  const rowsBdsRevenus = bdsRevenus.map((s: any) => tr([
     TD(`<div style="font-weight:700;color:#5b21b6;">${escX(s.id)}</div><div style="font-size:.65rem;color:#94a3b8;">${escX(s.lot_ref ?? s.cmd_ref ?? '')}</div>`),
     TD(escX(s.sous_traitant_nom ?? s.sous_traitant_id ?? '—')),
     TD(`<span style="font-size:.75rem;color:#475569;">${escX([s.operation, s.piece].filter(Boolean).join(' · ') || '—')}</span>`),
-    TDC(s.date_retour_prevue ? `<span style="font-weight:700;color:${enRetard(s.date_retour_prevue) ? '#b91c1c' : '#334155'};">${_frDate(s.date_retour_prevue)}</span>` : '<span style="color:#cbd5e1;">—</span>'),
-    TDC(`<span style="font-size:.72rem;color:#64748b;">${escX(s.statut ?? '')}</span>`),
-    TDC(`<button onclick="expRetourBds('${escX(s.id)}')" style="background:#8b5cf6;color:white;border:none;border-radius:7px;padding:5px 12px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-rotate-left"></i> Retour reçu</button>`),
+    TDC(`<span style="font-weight:700;">${_frDate(s.date_retour ?? s.date_retour_prevu)}</span>`),
+    TDC(`<span style="font-weight:700;">${s.qte ?? '—'}</span>`),
+    TDC(s.bc_id
+      ? `<button onclick="expOpenPV('${escX(s.bc_id)}')" title="Remplir le PV de contrôle de ce retour" style="background:#fef2f2;color:#b91c1c;border:none;border-radius:7px;padding:5px 10px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-clipboard-check" style="margin-right:4px;"></i>PV de contrôle</button>`
+      : '<span style="color:#cbd5e1;font-size:.7rem;">—</span>'),
   ])).join('')
 
-  // 3. Retours clients annoncés par la Qualité (NC avec retour attendu)
-  const retAtt = (ncs || []).filter((n: any) => n.retour_attendu === true && String(n.retour_statut || 'attendu') === 'attendu')
-  const rowsRet = retAtt.map((n: any) => tr([
-    TD(`<div style="font-weight:700;color:#b91c1c;">${escX(n.id)}</div><div style="font-size:.65rem;color:#94a3b8;">NC ${escX(n.gravite ?? '')}</div>`),
-    TD(escX(n.client_nom ?? '—')),
-    TD(`<span style="font-size:.75rem;color:#475569;">${escX([n.ref_article, n.designation].filter(Boolean).join(' · ') || n.lot_ref || '—')}</span>`),
-    TDC(n.n_commande ? `<span style="font-family:monospace;font-size:.7rem;color:#334155;">${escX(n.n_commande)}</span>` : '<span style="color:#cbd5e1;">—</span>'),
-    TDC(n.date_retour_prevue ? `<span style="font-weight:700;color:${enRetard(n.date_retour_prevue) ? '#b91c1c' : '#334155'};">${_frDate(n.date_retour_prevue)}</span>` : '<span style="color:#cbd5e1;">—</span>'),
-    TDC(`<span style="font-weight:700;">${n.qte_retour_attendue ?? n.nb_pieces ?? '—'}</span>`),
-    TDC(`<button onclick="expOpenRetourClient('${escX(n.id)}')" style="background:#ef4444;color:white;border:none;border-radius:7px;padding:5px 12px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-box-open"></i> Enregistrer l'arrivée</button>`),
-  ])).join('')
-
-  // 4. Arrivées enregistrées (BL de réception + BL de retour client) — enfin alimenté
-  const recAll = [...(receptions || []).map((b: any) => ({ ...b, _t: 'Réception fournisseur/ST' })), ...(blsRetour || []).map((b: any) => ({ ...b, _t: 'Retour client' }))]
-    .sort((a, b) => String(b.date_bl || '').localeCompare(String(a.date_bl || '')))
-  const rowsRec = recAll.map((b: any) => tr([
-    TD(`<div style="font-weight:700;color:#0369a1;">${escX(numBL(b))}</div><div style="font-size:.65rem;color:#94a3b8;">${escX(b._t)}</div>`),
-    TD(escX(b.client_nom ?? '—')),
-    TD(`<span style="font-size:.75rem;color:#475569;">${escX(b.piece ?? '—')}</span>`),
-    TDC(`<span style="font-weight:700;">${_frDate(b.date_bl)}</span>`),
-    TDC(`<span style="font-weight:700;">${b.qte ?? '—'}</span>`),
-    TDC(b.bc_id ? `<button onclick="expOpenPV('${escX(b.bc_id)}')" style="background:#fef2f2;color:#b91c1c;border:none;border-radius:7px;padding:5px 10px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-clipboard-check"></i> PV</button>` : '<span style="color:#cbd5e1;font-size:.7rem;">—</span>'),
-  ])).join('')
-
-  // 5. BC en attente de validation fournisseur (amont de l'arrivée)
-  const bcVal = (bcs || []).filter((b: any) => hasAck && ['en_attente', 'envoye', 'confirme', 'brouillon'].includes(String(b.statut)) && !b.accuse_fournisseur_le)
-  const rowsVal = bcVal.map((b: any) => tr([
-    TD(`<div style="font-weight:700;color:${AMB};">${escX(b.num_bc ?? b.id)}</div>${valDirBadge(vdMap, 'bons_de_commande', b.id)}`),
-    TD(escX(b.fournisseur ?? '—')),
-    TD(`<span style="font-size:.75rem;color:#475569;">${escX(b.articles ?? '—')}</span>`),
-    TDC(`<span style="font-size:.72rem;color:#64748b;">${_frDate(b.date_bc)}</span>`),
-    TDC(`<button onclick="expOpenArrivee('${escX(b.id)}')" title="Modifier la date d'arrivée prévue" style="background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:6px;font:inherit;">`
-      + (b.date_livraison_prevue ? `<span style="font-weight:700;color:${enRetard(b.date_livraison_prevue) ? '#b91c1c' : '#334155'};">${_frDate(b.date_livraison_prevue)}</span>` : '<span style="color:#cbd5e1;">à planifier</span>')
-      + `<i class="fas fa-pen" style="margin-left:6px;font-size:.6rem;color:#cbd5e1;"></i></button>`),
-    TDC(`<button onclick="bcAccuse('${escX(b.id)}')" style="background:#dcfce7;color:#15803d;border:none;border-radius:7px;padding:5px 11px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-check"></i> Validé</button>
-         <button onclick="bcRelancer('${escX(b.id)}')" style="margin-left:5px;background:#fef3c7;color:#92400e;border:none;border-radius:7px;padding:5px 11px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-rotate-right"></i> Relancer</button>`),
-  ])).join('')
-
-  const H = (cols: string[]) => `<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#fafafa;">${cols.map(c => c.startsWith('#') ? THC(c.slice(1)) : TH(c)).join('')}</tr></thead><tbody>`
-
-  // ⚠ Il y avait ici une carte « Autres commandes — date modifiable » (commandes déjà reçues
-  //   ou proforma en attente de paiement). Elle a été RETIRÉE : sa seule action visible était
-  //   un bouton qui téléchargeait le PDF du bon de commande — on croyait corriger une date,
-  //   on récupérait un document. Le crayon, lui, se perdait dans la cellule.
-  //   Le changement de date d'arrivée vit désormais dans **Achats › Bons de commande**, sur
-  //   un bouton explicite, et cette liste-là ne filtre rien : les commandes reçues et les
-  //   proforma y sont, ce qui referme le trou que cette carte bouchait maladroitement.
+  const COLS = ['N° BL', 'Fournisseur / Client', 'Pièce / Articles', '#Reçu le', '#Qté', '#Contrôle']
 
   return `
   <div id="exp-panel-receptions" style="display:none;">
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 16px;margin-bottom:18px;font-size:.8rem;color:#1d4ed8;">
-      <i class="fas fa-dolly" style="margin-right:7px;"></i><strong>Tout ce qui arrive</strong> — commandes fournisseurs et sous-traitants, retours de sous-traitance, et retours clients annoncés par la Qualité. Enregistrer une arrivée met à jour le stock, le calendrier et l'OTD.
+      <i class="fas fa-clipboard-check" style="margin-right:7px;"></i><strong>Ce qui est arrivé</strong> — une ligne entre ici au moment de la réception, et c'est d'ici qu'on remplit le <strong>PV de contrôle</strong>. Ce qui reste attendu est dans l'onglet <strong>Calendrier</strong>.
     </div>
 
-    ${card('À réceptionner — fournisseurs &amp; sous-traitants', 'fa-truck-ramp-box', '#0ea5e9', (bcsAttendus || []).length, 'commandes validées, en attente du colis',
-      H(['N° BC', 'Fournisseur / ST', 'Articles', '#Arrivée prévue', '#Statut', '#Action']) + (rowsAtt || vide(6, 'Aucune commande en attente de réception')) + '</tbody></table>')}
+    ${card('Fournisseur', 'fa-truck-ramp-box', '#0ea5e9', recFourn.length, 'matière et fournitures réceptionnées',
+      H(COLS) + (recFourn.map((b: any) => ligneRecue(b, '#0369a1')).join('') || vide(6, 'Aucune réception fournisseur')) + '</tbody></table>')}
 
-    ${card('Retours de sous-traitance attendus', 'fa-rotate-left', '#8b5cf6', bdsAtt.length, 'pièces parties en sous-traitance, à récupérer',
-      H(['N° BDS', 'Sous-traitant', 'Opération / Pièce', '#Retour prévu', '#Statut', '#Action']) + (rowsBds || vide(6, 'Aucun retour de sous-traitance attendu')) + '</tbody></table>')}
+    ${card('Sous-traitance', 'fa-rotate-left', '#8b5cf6', recSt.length + bdsRevenus.length, 'pièces revenues de sous-traitance',
+      H(COLS) + (recSt.map((b: any) => ligneRecue(b, '#5b21b6')).join('') + rowsBdsRevenus || vide(6, 'Aucun retour de sous-traitance')) + '</tbody></table>')}
 
-    ${card('Retours clients attendus', 'fa-box-open', '#ef4444', retAtt.length, 'déclarés en Qualité sur une non-conformité client',
-      H(['N° NC', 'Client', 'Pièce', '#Commande', '#Retour prévu', '#Qté', '#Action']) + (rowsRet || vide(7, 'Aucun retour client annoncé — la Qualité déclare le retour sur la non-conformité')) + '</tbody></table>')}
-
-    ${bcVal.length ? card('En attente de validation fournisseur', 'fa-hourglass-half', '#f59e0b', bcVal.length, 'commandes envoyées, pas encore confirmées',
-      H(['N° BC', 'Fournisseur', 'Articles', '#Émis le', '#Arrivée prévue', '#Action']) + rowsVal + '</tbody></table>') : ''}
-
-    ${card('Arrivées enregistrées', 'fa-clipboard-check', '#16a34a', recAll.length, 'historique des réceptions et retours reçus',
-      H(['N° BL', 'Fournisseur / Client', 'Pièce / Articles', '#Reçu le', '#Qté', '#Contrôle']) + (rowsRec || vide(6, 'Aucune arrivée enregistrée')) + '</tbody></table>')}
+    ${card('Retour client', 'fa-box-open', '#ef4444', recCli.length, 'pièces renvoyées par un client (non-conformité)',
+      H(COLS) + (recCli.map((b: any) => ligneRecue(b, '#b91c1c')).join('') || vide(6, 'Aucun retour client reçu')) + '</tbody></table>')}
   </div>`
 }
 
 // ══════════════════════════════════════════════════════════════
-// ONGLET 2 — ENVOIS (ce qui part)
+// ONGLET — ENVOIS : ce qu'on aura à faire partir
+//   Volontairement PROSPECTIF : on liste les commandes EN COURS (au minimum passées en
+//   programmation) pour voir venir la charge d'expédition, en deux familles — ce qui part
+//   chez le CLIENT, et ce qui part en SOUS-TRAITANCE.
+//   ⚠ Les files « à envoyer aujourd'hui » ne sont plus ici : elles vivent dans le
+//     CALENDRIER, qui est l'écran des échéances (demande utilisateur du 10/09/2026).
 // ══════════════════════════════════════════════════════════════
 function panelEnvois(bds: any[], blsClient: any[], cmds: any[], qualiteBloque: (c: any) => string | null, today: string) {
   const tr = (cells: string[]) => `<tr style="border-bottom:1px solid #f8fafc;">${cells.join('')}</tr>`
   const vide = (n: number, txt: string) => `<tr><td colspan="${n}" style="text-align:center;padding:22px;color:#9ca3af;font-size:.8rem;">${txt}</td></tr>`
-  const card = (titre: string, icone: string, coul: string, cpt: number, sous: string, corps: string, action = '') => `
+  const card = (titre: string, icone: string, coul: string, cpt: number, sous: string, corps: string) => `
     <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;margin-bottom:18px;border-top:3px solid ${coul};">
       <div style="padding:12px 18px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <span style="font-weight:800;color:#111827;font-size:.9rem;"><i class="fas ${icone}" style="color:${coul};margin-right:7px;"></i>${titre}</span>
         <span style="background:${coul}1a;color:${coul};border-radius:999px;padding:1px 9px;font-size:.68rem;font-weight:800;">${cpt}</span>
         <span style="font-size:.7rem;color:#94a3b8;">${sous}</span>
-        ${action ? `<span style="margin-left:auto;">${action}</span>` : ''}
       </div>
       <div style="overflow-x:auto;">${corps}</div>
     </div>`
   const H = (cols: string[]) => `<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#fafafa;">${cols.map(c => c.startsWith('#') ? THC(c.slice(1)) : TH(c)).join('')}</tr></thead><tbody>`
 
-  // 1. Sous-traitance à envoyer (vrais BDS)
-  const bdsOut = (bds || []).filter((s: any) => ['a_envoyer', 'a_planifier', 'planifie'].includes(String(s.statut)))
-  const rowsBds = bdsOut.map((s: any) => tr([
+  // « Au minimum en programmation » : on écarte ce qui n'est pas encore lancé (nomenclature
+  // en attente, brouillon) et ce qui est sorti du circuit (livrée, annulée).
+  const HORS_COURS = ['livree', 'livre', 'annulee', 'annule', 'en_attente_nomenclature', 'brouillon']
+  const cmdsEnCours = (cmds || []).filter((c: any) => !HORS_COURS.includes(String(c.statut || '')))
+
+  // Un BL déjà préparé signale que l'expédition est engagée : on le montre sur la ligne.
+  const blParCmd: Record<string, any> = {}
+  ;(blsClient || []).forEach((b: any) => {
+    if (String(b.statut || '') === 'annule') return
+    const k = String(b.cmd_id ?? b.cmd_ref ?? '')
+    if (k && !blParCmd[k]) blParCmd[k] = b
+  })
+
+  const rowsClient = cmdsEnCours.map((c: any) => {
+    const bloc = qualiteBloque(c)
+    const tot = Number(c.bdt_total) || 0
+    const fait = Number(c.bdt_soldes) || 0
+    const pct = tot ? Math.round((fait / tot) * 100) : 0
+    const bl = blParCmd[String(c.id)] || blParCmd[String(c.num_affaire ?? '')]
+    const prete = tot > 0 && fait === tot
+    return tr([
+      TD(`<div style="font-weight:700;color:#111827;">${escX(c.num_affaire ?? c.id)}</div>${bl ? `<div style="font-size:.64rem;color:#0369a1;">BL ${escX(numBL(bl))}</div>` : ''}`),
+      TD(escX(c.client_nom ?? '—')),
+      TD(`<span style="font-size:.75rem;color:#475569;">${escX(c.piece ?? c.designation ?? '—')}</span>`),
+      TDC(tot
+        ? `<div style="display:flex;align-items:center;gap:6px;justify-content:center;"><div style="width:56px;height:6px;background:#f1f5f9;border-radius:999px;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${pct === 100 ? '#22c55e' : '#0ea5e9'};"></div></div><span style="font-size:.68rem;font-weight:700;color:#64748b;">${fait}/${tot}</span></div>`
+        : '<span style="color:#cbd5e1;font-size:.7rem;">pas de BDT</span>'),
+      TDC(`<span style="font-size:.72rem;color:${enRetardExp(c.date_liv ?? c.date_livraison, today) ? '#b91c1c' : '#64748b'};font-weight:${enRetardExp(c.date_liv ?? c.date_livraison, today) ? '700' : '400'};">${_frDate(c.date_liv ?? c.date_livraison)}</span>`),
+      TDC(bloc
+        ? `<span style="background:#fee2e2;color:#b91c1c;border-radius:999px;padding:2px 9px;font-size:.66rem;font-weight:700;"><i class="fas fa-lock" style="margin-right:4px;"></i>${escX(bloc)}</span>`
+        : prete
+          ? '<span style="background:#dcfce7;color:#15803d;border-radius:999px;padding:2px 9px;font-size:.66rem;font-weight:700;">Prête à expédier</span>'
+          : '<span style="background:#e0f2fe;color:#0369a1;border-radius:999px;padding:2px 9px;font-size:.66rem;font-weight:700;">En production</span>'),
+    ])
+  }).join('')
+
+  // Sous-traitance : tout ce qui n'est pas encore revenu est « à venir » côté envoi.
+  const bdsEnCours = (bds || []).filter((s: any) => !['recu', 'termine', 'cloture', 'annule'].includes(String(s.statut || '')))
+  const rowsSt = bdsEnCours.map((s: any) => tr([
     TD(`<div style="font-weight:700;color:#3730a3;">${escX(s.id)}</div><div style="font-size:.65rem;color:#94a3b8;">${escX(s.lot_ref ?? s.cmd_ref ?? '')}</div>`),
     TD(escX(s.sous_traitant_nom ?? s.sous_traitant_id ?? '— à affecter')),
     TD(`<span style="font-size:.75rem;color:#475569;">${escX([s.operation, s.piece].filter(Boolean).join(' · ') || '—')}</span>`),
     TDC(`<span style="font-weight:700;">${s.qte ?? '—'}</span>`),
-    TDC(s.date_envoi ? `<span style="font-weight:700;color:${String(s.date_envoi).slice(0, 10) < today ? '#b91c1c' : '#334155'};">${_frDate(s.date_envoi)}</span>` : '<span style="color:#cbd5e1;">à planifier</span>'),
-    TDC(`<button onclick="expEnvoyerBds('${escX(s.id)}')" style="background:#6366f1;color:white;border:none;border-radius:7px;padding:5px 12px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-paper-plane"></i> Envoyer</button>`),
+    TDC(s.date_envoi
+      ? `<span style="font-weight:700;color:${enRetardExp(s.date_envoi, today) ? '#b91c1c' : '#334155'};">${_frDate(s.date_envoi)}</span>`
+      : '<span style="color:#cbd5e1;">à planifier</span>'),
+    TDC(blStatutBadge(s.statut)),
   ])).join('')
-
-  // 2. BL clients à expédier
-  const blOut = (blsClient || []).filter((b: any) => ['a_envoyer', 'prepare'].includes(String(b.statut)))
-  const rowsBl = blOut.map((b: any) => tr([
-    TD(`<div style="font-weight:700;color:#15803d;">${escX(numBL(b))}</div><div style="font-size:.65rem;color:#94a3b8;">${escX(b.cmd_id ?? '')}</div>`),
-    TD(escX(b.client_nom ?? '—')),
-    TD(`<span style="font-size:.75rem;color:#475569;">${escX(b.piece ?? '—')}</span>`),
-    TDC(`<span style="font-weight:700;">${b.qte ?? '—'}</span>`),
-    TDC(`<span style="font-size:.72rem;color:#64748b;">${escX(b.transport ?? '—')}</span>`),
-    TDC(blStatutBadge(b.statut)),
-  ])).join('')
-
-  // 3. Commandes clients prêtes à expédier (production soldée) + celles bloquées qualité
-  const cmdsOuv = (cmds || []).filter((c: any) => !['livree', 'annulee'].includes(String(c.statut)))
-  // Une commande dont le BL est deja prepare figure dans la carte « Bons de livraison a envoyer » :
-  // la laisser ici affichait la meme expedition deux fois, et invitait a creer un SECOND BL.
-  const cmdAvecBl = new Set((blsClient || [])
-    .filter((b: any) => String(b.statut || '') !== 'annule')
-    .map((b: any) => String(b.cmd_id ?? b.cmd_ref ?? '')).filter(Boolean))
-  const pretes = cmdsOuv.filter((c: any) => Number(c.bdt_total) > 0 && Number(c.bdt_soldes) === Number(c.bdt_total)
-    && !cmdAvecBl.has(String(c.id)) && !cmdAvecBl.has(String(c.num_affaire ?? '')))
-  const rowsCmd = pretes.map((c: any) => {
-    const bloc = qualiteBloque(c)
-    return tr([
-      TD(`<div style="font-weight:700;color:#111827;">${escX(c.num_affaire ?? c.id)}</div>`),
-      TD(escX(c.client_nom ?? '—')),
-      TD(`<span style="font-size:.75rem;color:#475569;">${escX(c.piece ?? c.designation ?? '—')}</span>`),
-      TDC(`<span style="font-size:.72rem;color:#64748b;">${_frDate(c.date_liv ?? c.date_livraison)}</span>`),
-      TDC(bloc
-        ? `<span style="background:#fee2e2;color:#b91c1c;border-radius:999px;padding:2px 9px;font-size:.66rem;font-weight:700;"><i class="fas fa-lock" style="margin-right:4px;"></i>${escX(bloc)}</span>`
-        : `<span style="background:#dcfce7;color:#15803d;border-radius:999px;padding:2px 9px;font-size:.66rem;font-weight:700;">Prête à expédier</span>`),
-    ])
-  }).join('')
-
-  const btnNouveauBL = `<button onclick="expOpenModal('bl')" style="padding:7px 15px;background:linear-gradient(135deg,${AMB},${AMB_D});color:white;border:none;border-radius:9px;font-size:.78rem;font-weight:700;cursor:pointer;"><i class="fas fa-plus" style="margin-right:5px;"></i>Nouveau BL client</button>`
 
   return `
   <div id="exp-panel-envois" style="display:none;">
-    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 16px;margin-bottom:18px;font-size:.8rem;color:#15803d;">
-      <i class="fas fa-paper-plane" style="margin-right:7px;"></i><strong>Tout ce qui part</strong> — pièces envoyées en sous-traitance et livraisons clients. Un BL client ne peut être créé que si la porte qualité est levée (NC bloquante ou quarantaine).
+    <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:10px 16px;margin-bottom:18px;font-size:.8rem;color:#047857;">
+      <i class="fas fa-paper-plane" style="margin-right:7px;"></i><strong>Ce qui va partir</strong> — les commandes en cours, dès qu'elles sont passées en programmation, pour voir venir la charge d'expédition. Les échéances du jour et de la semaine sont dans l'onglet <strong>Calendrier</strong>.
     </div>
 
-    ${card('Commandes prêtes à expédier', 'fa-boxes-packing', '#16a34a', pretes.length, 'production soldée — créez le BL client',
-      H(['Affaire', 'Client', 'Pièce', '#Livraison prévue', '#État']) + (rowsCmd || vide(5, 'Aucune commande prête à expédier')) + '</tbody></table>', btnNouveauBL)}
+    ${card('Client', 'fa-truck-fast', '#16a34a', cmdsEnCours.length, 'commandes en cours — ce qu\'on aura à livrer',
+      H(['N° affaire', 'Client', 'Pièce', '#Avancement', '#Livraison prévue', '#État']) + (rowsClient || vide(6, 'Aucune commande en cours')) + '</tbody></table>')}
 
-    ${card('Bons de livraison à envoyer', 'fa-truck-fast', '#22c55e', blOut.length, 'BL préparés, en attente de départ',
-      H(['N° BL', 'Client', 'Pièce', '#Qté', '#Transport', '#Statut']) + (rowsBl || vide(6, 'Aucun BL pret a partir')) + '</tbody></table>')}
-
-    ${card('À envoyer en sous-traitance', 'fa-industry', '#6366f1', bdsOut.length, 'bons de sous-traitance à expédier chez le prestataire',
-      H(['N° BDS', 'Sous-traitant', 'Opération / Pièce', '#Qté', '#Envoi prévu', '#Action']) + (rowsBds || vide(6, 'Aucun envoi en sous-traitance en attente')) + '</tbody></table>')}
+    ${card('Sous-traitance', 'fa-arrow-right-arrow-left', '#4f46e5', bdsEnCours.length, 'pièces à faire partir chez un sous-traitant',
+      H(['N° BDS', 'Sous-traitant', 'Opération / Pièce', '#Qté', '#Envoi prévu', '#Statut']) + (rowsSt || vide(6, 'Aucune sous-traitance en cours')) + '</tbody></table>')}
   </div>`
 }
 
-// ══════════════════════════════════════════════════════════════
-// ONGLET 3 — CALENDRIER (arrivées + départs) + détail du jour
-// ══════════════════════════════════════════════════════════════
 function panelCalendrier(mvts: Mvt[], today: string) {
   const dISO = (s: string) => new Date(String(s).slice(0, 10) + 'T00:00:00Z')
   const isoOf = (d: Date) => d.toISOString().slice(0, 10)
@@ -856,15 +818,6 @@ export const pageServiceExpeditions = (
       cmd: n.n_commande || '', qte: n.qte_retour_attendue ?? n.nb_pieces ?? null })))
     .replace(/</g, '\\u003c')
   const BC_JSON = JSON.stringify((BCS as any[]).map((b: any) => ({ id:b.id, num_bc:b.num_bc||b.id, type:b.type, fournisseur:b.fournisseur||'', articles:b.articles||'', montant:b.montant||0, affaire_id:b.affaire_id||'', num_affaire:b.num_affaire||'', bl_propose:b.bl_propose||'', statut:b.statut, bl_id:b.bl_id||'', date_livraison_prevue:b.date_livraison_prevue||'' }))).replace(/</g, '\\u003c')   // sinon un '<' dans un libelle casse le <script>
-  // Données du planning des arrivées (côté client : détail au clic + changement de date)
-  const PLAN_JSON = JSON.stringify((BCS as any[]).map((b: any) => ({
-    id: b.id, num_bc: b.num_bc || b.id, type: (b.type === 'st' ? 'st' : 'fournisseur'), fournisseur: b.fournisseur || '—',
-    articles: b.articles || '—', montant: Number(b.montant || 0) || 0, statut: b.statut || 'en_attente',
-    prevue: b.date_livraison_prevue ? String(b.date_livraison_prevue).slice(0, 10) : '',
-    initiale: b.date_livraison_initiale ? String(b.date_livraison_initiale).slice(0, 10) : '',
-    reception: b.date_reception_reelle ? String(b.date_reception_reelle).slice(0, 10) : '',
-    bl_id: b.bl_id || '', qte_commandee: b.qte_commandee ?? null, qte_recue: b.qte_recue ?? null,
-  }))).replace(/</g, '\\u003c')
   // Lots & commandes (pour le BL partiel) : SEULS les lots LIBÉRÉS (contrôle qualité final passé) sont expédiables.
   const LOTS_EXP = (dbLots ?? []).filter((l:any) => l.statut === 'libere')
   const LOTS_JSON = JSON.stringify((LOTS_EXP as any[]).map((l:any) => ({ id:l.id, cmd_id:l.cmd_id||'', client:l.client_nom||'', piece:l.piece||'', qte:l.qte!=null?l.qte:null })))
@@ -892,7 +845,7 @@ export const pageServiceExpeditions = (
       color: AMB,
       darkBg: '#451a03',
       title: 'Service Expéditions',
-      subtitle: 'Sabine · Réceptions · Envois · Calendrier · Fournisseurs · OTD · EN 9100:2018',
+      subtitle: 'Sabine · Calendrier · Envois · Réceptions · Fournisseurs · OTD · EN 9100:2018',
       tabs: TABS.map(([id,lbl,ic]) => ({
         id, label: lbl, icon: ic,
         badge: id === 'receptions' ? (MOUVEMENTS.filter(m => m.sens === 'in' && !m.fait).length || undefined)
@@ -1012,22 +965,11 @@ export const pageServiceExpeditions = (
   </div>
 
   <!-- MODAL PLANNING — détail d'une arrivée : BC (+ BL si reçu) + changement de date -->
-  <div id="exp-arrivee-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:white;border-radius:16px;max-width:520px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;">
-      <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,${AMB},${AMB_D});">
-        <div style="font-weight:800;color:white;font-size:.95rem;"><i class="fas fa-calendar-week" style="margin-right:8px;"></i>Arrivée — BC &amp; BL</div>
-        <button onclick="expCloseArrivee()" style="color:rgba(255,255,255,.85);background:none;border:none;font-size:1.2rem;cursor:pointer;"><i class="fas fa-times"></i></button>
-      </div>
-      <div id="arr_modal_content" style="padding:20px;"></div>
-    </div>
-  </div>
 
   <script>
   var EXP_TABS=['calendrier','envois','receptions','fournisseurs','dashboard'];
   var EXP_BC=${BC_JSON};
-  var EXP_PLAN=${PLAN_JSON};
   var EXP_RETOURS=${RETOURS_JSON};
-  var _arrCur=null;
   var EXP_LOTS=${LOTS_JSON};
   var EXP_CMDS=${CMDS_JSON};
 
@@ -1304,70 +1246,7 @@ export const pageServiceExpeditions = (
         setTimeout(function(){ location.hash='receptions'; softReload(); },900);
       }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur reseau.'); });
   }
-  function bcPdf(id){ window.open('/api/bc/'+id+'/pdf','_blank'); }
-  function bcAccuse(id){
-    fetch('/api/bc/'+id+'/accuse',{method:'POST'}).then(function(r){return r.json();}).then(function(j){
-      if(j.ok){ pushNotif('ok','fa-check-circle','Commande validee par le fournisseur -> en attente de reception.'); setTimeout(function(){softReload();},700); }
-      else pushNotif('err','fa-triangle-exclamation', j.error||'Echec.', 7000);
-    }).catch(function(){ pushNotif('err','fa-ban','Erreur reseau.'); });
-  }
-  function bcRelancer(id){
-    fetch('/api/bc/'+id+'/relance',{method:'POST'}).then(function(r){return r.json();}).then(function(j){
-      if(j.ok){ window.open('/api/bc/'+id+'/pdf','_blank'); pushNotif('ok','fa-rotate-right','Relance notee. PDF regenere a renvoyer au fournisseur.'); setTimeout(function(){softReload();},900); }
-      else pushNotif('err','fa-triangle-exclamation', j.error||'Echec.', 7000);
-    }).catch(function(){ pushNotif('err','fa-ban','Erreur reseau.'); });
-  }
 
-  // ── Changement de la date d'arrivée prévue d'un bon de commande ──
-  function expOpenArrivee(id){
-    var b=null; for(var i=0;i<EXP_PLAN.length;i++){ if(EXP_PLAN[i].id===id){ b=EXP_PLAN[i]; break; } }
-    if(!b) return; _arrCur=b;
-    // Memes signaux que le verrou serveur bcDejaRecu (src/index.tsx) : il manquait ici
-    // le statut 'receptionne' et la date de reception reelle.
-    var recu=(!!b.reception||!!b.bl_id||['recu','recu_total','recu_partiel','receptionne','controle','cloture'].indexOf(String(b.statut||''))>=0);
-    var slip=b.initiale&&b.prevue&&b.initiale!==b.prevue;
-    var lbl='display:block;font-size:.66rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;';
-    var inp='width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 10px;font-size:.85rem;background:#f8fafc;box-sizing:border-box;color:#374151;';
-    var h='';
-    h+='<div style="font-weight:800;font-size:1.05rem;color:#111827;margin-bottom:2px;">'+b.num_bc+'</div>';
-    h+='<div style="font-size:.82rem;color:#475569;margin-bottom:12px;">'+b.fournisseur+' \\u00b7 '+(b.type==='st'?'Sous-traitant':'Fournisseur')+'</div>';
-    h+='<div style="background:#f8fafc;border:1px solid #f1f5f9;border-radius:10px;padding:10px 12px;font-size:.8rem;color:#334155;margin-bottom:14px;">'+b.articles+(b.montant?' \\u00b7 <b>'+b.montant.toLocaleString('fr-FR')+' \\u20ac</b>':'')+(b.qte_commandee!=null?' \\u00b7 '+(b.qte_recue!=null?b.qte_recue:0)+'/'+b.qte_commandee+' recu':'')+'</div>';
-    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
-    h+='<div><label style="'+lbl+'">Date d\\'arrivee prevue</label><input id="arr_date" type="date" value="'+(b.prevue||'')+'"'+(recu?' disabled':'')+' style="'+inp+(recu?'background:#f1f5f9;color:#94a3b8;':'')+'"/></div>';
-    h+='<div><label style="'+lbl+'">'+(recu?'Arrivee reelle':'Statut')+'</label><div style="'+inp+'background:#fff;">'+(recu?(b.reception||'recu'):b.statut)+'</div></div>';
-    h+='</div>';
-    if(slip) h+='<div style="font-size:.7rem;color:#b45309;margin-top:8px;"><i class="fas fa-clock-rotate-left"></i> Date repoussee \\u2014 1re date prevue <b>'+b.initiale+'</b> gardee pour l\\'OTD.</div>';
-    h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;align-items:center;">';
-    // Ni PDF ni navigation ici : on est venu changer une date, rien d'autre.
-    // (Le bouton « BL » qui ouvrait un onglet supprime vidait la page — il est devenu un simple rappel.)
-    if(b.bl_id) h+='<div style="font-size:.72rem;color:#0e7490;font-weight:700;"><i class="fas fa-receipt"></i> Recu \u2014 BL '+b.bl_id+'</div>';
-    // Marchandise arrivee => la date prevue est figee : c'est elle qui mesure la ponctualite
-    // du fournisseur. Le serveur refuse de toute facon (409) ; ici on explique plutot que
-    // de laisser cliquer un bouton voue au refus.
-    if(recu) h+='<div style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:.72rem;color:#94a3b8;font-weight:700;"><i class="fas fa-lock"></i> Date figee depuis la reception</div>';
-    else h+='<button onclick="expSaveArriveeDate()" style="margin-left:auto;padding:8px 13px;background:linear-gradient(135deg,${AMB},${AMB_D});color:#fff;border:none;border-radius:8px;font-weight:700;font-size:.8rem;cursor:pointer;"><i class="fas fa-calendar-check"></i> Enregistrer la date</button>';
-    h+='</div>';
-    document.getElementById('arr_modal_content').innerHTML=h;
-    document.getElementById('exp-arrivee-overlay').style.display='flex';
-  }
-  function expCloseArrivee(){ var o=document.getElementById('exp-arrivee-overlay'); if(o) o.style.display='none'; }
-  function expSaveArriveeDate(){
-    if(!_arrCur) return;
-    var d=document.getElementById('arr_date').value;
-    if(!d){ pushNotif('err','fa-exclamation-circle','Choisissez une date.'); return; }
-    fetch('/api/expeditions/bc/'+encodeURIComponent(_arrCur.id)+'/date-arrivee',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:d})})
-      .then(function(r){return r.json();}).then(function(j){
-        if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Echec.'); return; }
-        expCloseArrivee();
-        pushNotif('ok','fa-calendar-check','Date d\\'arrivee mise a jour'+(j.date_livraison_initiale?' \\u00b7 1re date gardee pour l\\'OTD':'')+'.',5000);
-        setTimeout(function(){ softReload(); },700);   // on reste sur l'onglet en cours
-      }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur reseau.'); });
-  }
-  // Fermeture de la modale au clic sur le fond.
-  document.addEventListener('click',function(e){
-    var ov=document.getElementById('exp-arrivee-overlay');
-    if(e.target===ov) expCloseArrivee();
-  });
 
   // Onglet initial : honore le hash (#bc, #bl, …) sinon Bons de Commande par défaut
   (function(){ try{ var h=(location.hash||'').replace('#',''); expShowTab(EXP_TABS.indexOf(h)>=0?h:'calendrier'); }catch(e){} })();

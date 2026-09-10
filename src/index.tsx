@@ -2669,6 +2669,19 @@ const majDateArriveeBc = async (c: any) => {
   //   une prevision : c'est une promesse dont on connait deja le resultat. La reecrire
   //   permettrait de rattraper apres coup un retard fournisseur — precisement ce que l'OTD
   //   mesure. Le verrou vit ICI, pas seulement dans l'ecran : les boutons se contournent.
+  // ⚠ DEUX MOTIFS DE GEL, dans cet ordre de survenue :
+  //   1. le fournisseur a VALIDE la commande : la date est son engagement, la rouvrir
+  //      effacerait ce sur quoi il s'est engage ;
+  //   2. la marchandise est ARRIVEE : le resultat est connu, la reecrire maquillerait
+  //      un retard — c'est precisement ce que l'OTD mesure.
+  if ((bc as any).accuse_fournisseur_le) {
+    return c.json({
+      ok: false,
+      error: 'La commande ' + ((bc as any).num_bc || id) + ' a ete validee par le fournisseur le '
+        + String((bc as any).accuse_fournisseur_le).slice(0, 10)
+        + ' : la date d\'arrivee prevue est figee. C\'est l\'engagement du fournisseur — elle ne se corrige plus.',
+    }, 409)
+  }
   if (bcDejaRecu(bc)) {
     return c.json({
       ok: false,

@@ -2,6 +2,48 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-10 — Expéditions remises au cordeau : chaque chose à un seul endroit
+
+« Les expéditions, ce n'est pas très lean. » Les mêmes commandes apparaissaient dans trois écrans à la fois, et l'onglet Réceptions hébergeait un acte d'achat.
+
+### Une règle simple : l'attendu vit dans le Calendrier, et nulle part ailleurs
+
+Le calendrier catégorisait déjà correctement (fournisseur, retour ST, retour client / vers ST, client). Ce sont les **files d'attente dupliquées dans les autres onglets** qui ont été retirées : « À réceptionner », « Retours de sous-traitance attendus », « Retours clients attendus ».
+
+### Envois — prospectif, deux catégories
+
+Les **commandes en cours**, dès qu'elles sont passées en programmation, pour voir venir la charge d'expédition :
+
+- **Client** — n° d'affaire, client, pièce, **avancement** (barre BDT soldés / total), livraison prévue (en rouge si dépassée), et l'état réel : *En production*, *Prête à expédier*, ou le **blocage qualité** qui la retient.
+- **Sous-traitance** — ce qui doit partir chez un sous-traitant.
+
+Sont écartées les commandes pas encore lancées (nomenclature en attente, brouillon) et celles sorties du circuit (livrée, annulée).
+
+### Réceptions — ce qui est arrivé, trois catégories
+
+**Fournisseur**, **Sous-traitance**, **Retour client**. Une ligne y entre au moment de la réception, et c'est de là qu'on remplit le **PV de contrôle** — bouton explicite sur chaque ligne, au lieu d'un « PV » elliptique. Le tri fournisseur / sous-traitant se fait sur le **type du bon de commande d'origine**, pas sur une heuristique de libellé.
+
+### La validation fournisseur déménage aux Achats
+
+Confirmer qu'un fournisseur a accepté la commande est un acte d'**achat**, pas d'expédition. La colonne **« Validation fournisseur »** apparaît dans *Achats › Bons de commande* : bouton **Validée** (avec confirmation, qui prévient du gel), bouton **Relancer** (réédite le BC), et la date de confirmation une fois posée.
+
+### ⚠ Nouvelle règle : la validation fournisseur FIGE la date d'arrivée
+
+Plus stricte que le gel à la réception posé le matin même. Deux motifs, dans leur ordre de survenue :
+
+1. **le fournisseur a validé** — la date est son engagement, la rouvrir l'effacerait ;
+2. **la marchandise est arrivée** — le résultat est connu, la réécrire maquillerait un retard.
+
+Le refus vit **dans le serveur**, sur les deux routes, avec un message qui nomme le motif et sa date.
+
+### Code devenu orphelin, retiré dans la foulée
+
+La modale de changement de date des Expéditions (le geste vit désormais aux Achats), ses données `PLAN_JSON`/`EXP_PLAN`, `bcAccuse`, `bcRelancer`, `bcPdf` et l'import `valDirBadge` : plus aucun bouton ne les atteignait. **83 lignes.**
+
+### Vérification
+
+`tsc --noEmit` propre · harnais **61 PASS / 0 FAIL** · `npm run build` · **essai dans le navigateur** : Envois affiche bien *Client* + *Sous-traitance*, Réceptions *Fournisseur* + *Sous-traitance* + *Retour client* avec le bouton PV, et la colonne *Validation fournisseur* est en place aux Achats. **Règle de gel prouvée de bout en bout** sur un BC de test : changement de date avant validation → `200` ; validation fournisseur → `200` ; changement de date après → **`409`** « validee par le fournisseur le 2026-09-10 … elle ne se corrige plus ».
+
 ## 2026-09-10 — Réception d'un BC : affaire et n° de BL repris tout seuls · Calendrier en premier onglet
 
 ### Le n° d'affaire ne s'affichait jamais — et ce n'était pas un oubli d'ergonomie
