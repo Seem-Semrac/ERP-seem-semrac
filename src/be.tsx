@@ -104,6 +104,7 @@ export const pageServiceBE = (
   dbProduits?: any[],
   dbBeUsers?: any[],
   dbOffres?: Offre[],
+  dbPreps?: any[],
 ) => {
   const BE_USERS = dbBeUsers ?? []
   const DTS  = dbDts  ? dbDts.map(mapDT)   : []
@@ -175,6 +176,10 @@ export const pageServiceBE = (
   ;(OFFS as any[]).forEach((o: any) => { if (o && o.dt_ref) OFF_BY_DT[String(o.dt_ref)] = o })
   const offAcceptedBE = (o: any) => !!o && ['acceptee', 'validee', 'signed', 'signee'].includes(String(o.statut))
   const CMDS_PREP = CMDS.filter(c => ['attente_prep','a_programmer'].includes(c.statut))
+  // Preparations techniques REELLES (table preparations_techniques) : c'est ce que la
+  // validation de prepa met a jour. Sert la liste des TRAITEES, sous celle a traiter.
+  const PREPS_FAITES = (dbPreps ?? []).filter((p: any) => String(p.statut || '') === 'faite')
+    .sort((a: any, b: any) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))
   const NOMS_PEND = NOMS.filter(n => n.statut !== 'valide')
 
   // Map ref_interne (lowercase) → num_nom validé pour le même num_affaire (pour status par pièce)
@@ -1030,6 +1035,41 @@ export const pageServiceBE = (
           </tbody>
         </table>
       </div>`}
+    </div>
+
+    <!-- Les preparations techniques DEJA TRAITEES, juste sous celles a traiter.
+         Source : la table preparations_techniques (statut « faite »), c'est-a-dire
+         ce que la validation de prepa met a jour. -->
+    <div style="margin-top:26px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+        <div style="font-size:1rem;font-weight:800;color:#111827;display:flex;align-items:center;gap:8px;">
+          <i class="fas fa-check-double" style="color:#16a34a;"></i>Préparations techniques traitées
+          <span style="background:#dcfce7;color:#166534;border-radius:999px;padding:1px 10px;font-size:.72rem;font-weight:800;">${PREPS_FAITES.length}</span>
+        </div>
+        <span style="font-size:.72rem;color:#9ca3af;font-weight:600;">· plan et codes programme enregistrés dans la nomenclature · la porte production du lot est ouverte</span>
+      </div>
+      <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+          <thead><tr style="background:#f0fdf4;border-bottom:2px solid #dcfce7;">
+            ${['N° préparation', 'DT / Affaire', 'Pièce', 'Ce qui a été préparé', 'Terminée le']
+              .map((t, i) => `<th style="text-align:${i >= 4 ? 'center' : 'left'};padding:10px 14px;color:#166534;font-size:.68rem;text-transform:uppercase;font-weight:700;">${t}</th>`).join('')}
+          </tr></thead>
+          <tbody>
+            ${PREPS_FAITES.length === 0
+              ? `<tr><td colspan="5" style="padding:34px;text-align:center;color:#9ca3af;font-size:.82rem;"><i class="fas fa-inbox" style="font-size:1.6rem;display:block;margin-bottom:6px;"></i>Aucune préparation terminée pour le moment.</td></tr>`
+              : PREPS_FAITES.map((p: any) => {
+                  const manques = [p.manque_plan ? 'Plan' : '', p.manque_code_cnc ? 'Programme CN (FAO)' : ''].filter(Boolean)
+                  return `<tr style="border-bottom:1px solid #f9fafb;">
+                    <td style="padding:10px 14px;font-weight:700;color:#0891b2;font-size:.78rem;">${escX(p.id)}</td>
+                    <td style="padding:10px 14px;"><div style="font-weight:700;color:#374151;font-size:.78rem;">${escX(p.dt_ref ?? '—')}</div><div style="font-size:.68rem;color:#6366f1;">Affaire N° ${escX(p.num_affaire ?? '—')}</div></td>
+                    <td style="padding:10px 14px;color:#374151;font-weight:600;">${escX(p.piece ?? p.code_ref_produit ?? '—')}</td>
+                    <td style="padding:10px 14px;color:#475569;font-size:.78rem;">${manques.length ? escX(manques.join(' + ')) : 'Préparation technique'}</td>
+                    <td style="padding:10px 14px;text-align:center;color:#6b7280;font-size:.78rem;">${escX(String(p.updated_at ?? '').slice(0, 10) || '—')}</td>
+                  </tr>`
+                }).join('')}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>`
 

@@ -18,7 +18,7 @@ import {
   pageDTListe, pageOffresListe, pageCmdListe, pageDAListe,
   pageNCListe, pageBLListe, pageBDTListe, pageLOTListe,
   pageFournisseursST,
-  pageReferencesPiecesACreer, pagePreparationsTechniques
+  pageReferencesPiecesACreer
 } from './listes'
 import { layout, pageHeader, afterBox, SIDEBAR_V2, APP_VERSION, computeNomCostForQty, computePosteRates, etapeDecomp, seemMark } from './shared'
 import { brandBlockHTML, BRAND, BRAND_PRINT_CSS, SOCIETE } from './brand'
@@ -3117,7 +3117,8 @@ app.get('/be/service', async (c) => {
     activite: p.activite, fournisseur_nom: p.fournisseur_nom || '', prix: p.prix,
     derniere_date: lastDate[p.reference] || p.date_prix || null,
   }))
-  return c.html(pageServiceBE(dts, cmds, noms, refs, refsStock, produits as any[], beUsers, offres as any[]))
+  const _preps = await getPreparationsTechniques().catch(() => [] as any[])
+  return c.html(pageServiceBE(dts, cmds, noms, refs, refsStock, produits as any[], beUsers, offres as any[], _preps))
 })
 
 // — Prix courant d'une référence chez un fournisseur (rafraîchissement live nomenclature) —
@@ -5132,7 +5133,7 @@ app.get('/be/preparation', async (c) => {
               // Deja faite : ce n'est pas un echec. On emmene quand meme l'utilisateur
               // dans la liste, sur la section « faites », pour qu'il la VOIE.
               if(window.pushNotif) pushNotif('ok','fa-check-double','Plan et codes programme enregistres. Cette preparation etait deja marquee faite \\u2014 elle est dans la liste des preparations terminees.', 8000);
-              setTimeout(function(){ location.href='/be/preparations-tech#faites'; }, 1400);
+              setTimeout(function(){ location.href='/be/service#prep'; }, 1400);
             } else {
               if(window.pushNotif) pushNotif('warn','fa-triangle-exclamation','Rien n\\'a change. AUCUNE preparation ne porte la reference <strong>'+(j.reference||'')+'</strong> : verifiez que la nomenclature choisie est bien celle de la piece a preparer.', 12000);
             }
@@ -5144,7 +5145,7 @@ app.get('/be/preparation', async (c) => {
           if(window.pushNotif) pushNotif('ok','fa-check-double', msg, 8000);
           // On SORT de la prepa : elle est faite, il n'y a plus rien a y saisir.
           // Retour a la liste, ancre sur la section « faites » ou la ligne vient d'arriver.
-          setTimeout(function(){ location.href='/be/preparations-tech#faites'; }, 1200);
+          setTimeout(function(){ location.href='/be/service#prep'; }, 1200);
         })
         .catch(function(){ relacher(); if(window.pushNotif) pushNotif('err','fa-times','Erreur reseau.',4000); });
     });
@@ -5165,6 +5166,12 @@ app.get('/be/preparation', async (c) => {
       }).catch(function(){ if(apres) apres(false); if(window.pushNotif) pushNotif('err','fa-times','Erreur réseau.',4000); });
   }
   window.prepSave=prepSave; window.prepValider=prepValider;
+  // ⚠ INDISPENSABLE : tout ce script est enferme dans une IIFE, alors que le markup
+  //   genere plus haut appelle ces fonctions depuis des ATTRIBUTS INLINE
+  //   (onchange="prepChoisirPlan(this)"). Un handler inline ne resout QUE le global :
+  //   sans ces deux lignes, le navigateur leve un ReferenceError qu'il AVALE, et le
+  //   fichier choisi n'est JAMAIS envoye — sans le moindre message d'erreur.
+  window.prepChoisirPlan=prepChoisirPlan; window.prepChoisirProgramme=prepChoisirProgramme;
   })();
   </script>`
   return c.html(layout('Préparation Technique', content, 'be-prep'))
@@ -9465,20 +9472,7 @@ app.get('/rh/conge-liste',           (c) => c.redirect('/rh/service', 301))
 app.get('/commercial/avoirs-liste',  async (c) => { const credits = await getCredits(); return c.html(pageAvoirsCommercial(credits)) })
 app.get('/achats/fournisseurs-st',   async (c) => { const fsts = await getFournisseursSt(); return c.html(pageFournisseursST(fsts)) })
 app.get('/commercial/references-pieces', (c) => c.html(pageReferencesPiecesACreer()))
-// La page a besoin des nomenclatures (site), des lots (rattachement) et des DT (site de repli).
-// Tout est fail-soft : sans ces données la page s'affiche comme avant, site et lot en « — ».
-const _pagePrepaTech = async () => {
-  const [preps, noms, lots, dts] = await Promise.all([
-    getPreparationsTechniques().catch(() => [] as any[]),
-    getNomenclatures().catch(() => [] as any[]),
-    getLots().catch(() => [] as any[]),
-    getDemandesTravaux().catch(() => [] as any[]),
-  ])
-  return pagePreparationsTechniques(preps as any[], { noms: noms as any[], lots: lots as any[], dts: dts as any[] })
-}
-app.get('/commercial/preparations-tech', async (c) => c.html(await _pagePrepaTech()))
 app.get('/be/references-pieces',         (c) => c.html(pageReferencesPiecesACreer()))
-app.get('/be/preparations-tech',         async (c) => c.html(await _pagePrepaTech()))
 // Marquer une préparation technique comme faite/en cours (depuis la liste)
 // Valide la préparation technique d'une NOMENCLATURE : marque « faite » toutes les lignes
 // de preparations_techniques portant la même référence produit. C'est l'une des deux portes
