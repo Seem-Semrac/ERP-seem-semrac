@@ -5387,7 +5387,18 @@ app.get('/production/service', async (c) => {
   //    restent invisibles ici tant que DA→BC→BL/réception + prépa ne sont pas faits.
   //    (matiere_ok !== false : les BDT hérités à matiere_ok null restent visibles.)
   const bdtsPrets = filtrerBdtsPrets(bdts as any[], prepRows as any[])
-  return c.html(pageServiceProd(bdtsPrets, machines, ops, lots, cmds, sousTraitants, processes, bds, bcStById, stock, presences, absences, mouvements, affByDate, congesOperateursPend, postes, machinesOpex))
+  // ⚠ Les BDT retenus par la goulotte DISPARAISSAIENT sans explication : la raison etait
+  //   calculee par bdtBlocage() puis jetee. On la remonte, sinon l'atelier voit une page
+  //   vide et croit que l'ERP a perdu ses ordres de travail.
+  const bdtsBloques = (bdts as any[])
+    .map((b: any) => ({ bdt: b, raison: bdtBlocage(b, prepRows as any[]) }))
+    .filter((x) => !!x.raison)
+    .map((x) => ({
+      id: String(x.bdt.id ?? ''), piece: String(x.bdt.piece ?? ''), operation: String(x.bdt.operation ?? ''),
+      lot_ref: String(x.bdt.lot_ref ?? x.bdt.lot_id ?? ''), num_affaire: String(x.bdt.num_affaire ?? ''),
+      cmd_ref: String(x.bdt.cmd_ref ?? ''), raison: x.raison as string,
+    }))
+  return c.html(pageServiceProd(bdtsPrets, machines, ops, lots, cmds, sousTraitants, processes, bds, bcStById, stock, presences, absences, mouvements, affByDate, congesOperateursPend, postes, machinesOpex, bdtsBloques))
 })
 
 // ─── PLANNING UNIFIÉ (Gantt Usine BDT + Gantt Sous-Traitance BDS) ───

@@ -1218,6 +1218,7 @@ export const pageServiceProd = (
   dbCongesOps?:  any[],
   dbPostes?:     any[],
   dbMachinesOpex?: any[],
+  dbBdtsBloques?: { id: string; piece: string; operation: string; lot_ref: string; num_affaire: string; cmd_ref: string; raison: string }[],
 ) => {
   const TODAY = new Date().toISOString().slice(0,10)
   const POSTES: any[] = (dbPostes ?? []).map((p:any) => ({ id:p.id, nom:p.nom, code:p.code||'', activite:p.activite||'', couleur:p.couleur||'#6366f1', ordre:p.ordre??100, statut:p.statut||'actif', taux_horaire_manuel:(p.taux_horaire_manuel ?? null) }))
@@ -1628,6 +1629,36 @@ ${serviceHeader({
       <button onclick="openBdtModal()" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:linear-gradient(135deg,#f97316,#ea580c);color:white;border-radius:10px;font-size:.8rem;font-weight:700;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(234,88,12,.3);"><i class="fas fa-plus"></i> Nouveau BDT</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:14px;" id="statsBar"></div>
+    <!-- CE QUI RETIENT DES BDT HORS DU PLANNING.
+         Sans cette carte, un BDT bloque disparait purement et simplement : la porte
+         de production (matiere recue + prepa faite) est invisible, et l'atelier
+         croit a une perte de donnees. On dit ce qui manque, ordre par ordre. -->
+    ${(dbBdtsBloques ?? []).length ? `
+    <div class="card" style="padding:14px 16px;border-radius:14px;margin-bottom:14px;border-left:4px solid #f59e0b;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <span style="font-weight:700;color:#1e293b;font-size:.82rem;"><i class="fas fa-lock" style="color:#f59e0b;margin-right:6px;"></i>Ordres de travail retenus hors du planning</span>
+        <span style="background:#fef3c7;color:#92400e;font-size:.65rem;font-weight:700;padding:1px 8px;border-radius:999px;">${(dbBdtsBloques ?? []).length}</span>
+        <span style="font-size:.66rem;color:#94a3b8;">ils entreront au planning d\u2019eux-m\u00eames d\u00e8s que la cause sera lev\u00e9e</span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:.76rem;">
+          <thead><tr style="background:#fffbeb;">
+            ${['N\u00b0 BDT','Affaire / Lot','Pi\u00e8ce','Op\u00e9ration','Ce qui le retient']
+              .map((t) => `<th style="text-align:left;padding:7px 10px;color:#92400e;font-size:.62rem;text-transform:uppercase;font-weight:700;">${t}</th>`).join('')}
+          </tr></thead>
+          <tbody>
+            ${(dbBdtsBloques ?? []).map((b) => `<tr style="border-bottom:1px solid #fef3c7;">
+              <td style="padding:7px 10px;font-weight:700;color:#0891b2;">${escX(b.id)}</td>
+              <td style="padding:7px 10px;color:#475569;">${escX(b.num_affaire || b.cmd_ref)}${b.lot_ref ? `<div style="font-size:.64rem;color:#0d9488;font-family:monospace;">${escX(b.lot_ref)}</div>` : ''}</td>
+              <td style="padding:7px 10px;color:#374151;font-weight:600;">${escX(b.piece)}</td>
+              <td style="padding:7px 10px;color:#6b7280;">${escX(b.operation)}</td>
+              <td style="padding:7px 10px;"><span style="background:#fef3c7;color:#92400e;border-radius:999px;padding:2px 10px;font-size:.66rem;font-weight:700;">${escX(b.raison)}</span></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>` : ''}
+
     <!-- GOULOTTE : BDT à classer AU-DESSUS du planning (pleine largeur) -->
     <div id="pendingDropZone" class="card" style="padding:14px 16px;border-radius:14px;transition:outline .12s;margin-bottom:14px;" ondragover="onPendingOver(event)" ondragleave="onPendingLeave(event)" ondrop="onPendingDrop(event)">
       <div style="margin-bottom:10px;">
