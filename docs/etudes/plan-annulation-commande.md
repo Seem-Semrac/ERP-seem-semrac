@@ -87,6 +87,34 @@ aujourd'hui « l'étape en cours »** : c'est à écrire.
 | 6 | Sort de l'offre | Totalement annulée → l'offre passe **annulée**. Partiellement → elle **reste acceptée**, avec la **mention du nombre de lots supprimés**. |
 | 7 | BC fournisseur | **Non validé par le fournisseur** → le client ne paie **rien**. **Validé mais pas encore arrivé** → le choix se fait **au niveau du bon de commande, dans les Achats** : on pourra peut-être l'annuler, peut-être pas. Il faut donc **répondre à la question** depuis Achats. |
 
+### Ce que le client doit, selon l'état du bon de commande
+
+C'est la règle de chiffrage, et elle ne dépend que d'une chose : **a-t-on réussi à
+se dégager de l'engagement fournisseur ?**
+
+| État du BC au moment de l'annulation | Le client doit |
+|---|---|
+| Pas encore validé par le fournisseur | **0** — on annule le BC, rien n'a été engagé |
+| Validé, en route — **le fournisseur accepte** d'annuler | **0** |
+| Validé, en route — **le fournisseur refuse** | **matière + marge** |
+| Déjà reçu | **matière + marge** |
+
+Le chiffrage n'est donc **connu qu'après** la réponse du fournisseur, pour les BC
+partis mais pas arrivés. Tant qu'elle manque, le montant reste **provisoire** — la
+simulation doit le dire, et la facture ne peut pas être émise sur cette part.
+
+### La préparation technique
+
+| État de la prépa | Ce qu'on en fait |
+|---|---|
+| **À faire** | Elle **disparaît** — il n'y a plus rien à préparer |
+| **Déjà faite** | **Rien.** La gamme est rentrée et sauvegardée : c'est autant de gagné si la pièce revient un jour |
+
+ℹ *Choix d'implémentation à valider* : « disparaît » sera obtenu par un **statut
+annulé filtré de toutes les listes**, et non par une suppression de ligne. À l'écran
+le résultat est identique, mais on garde la trace de ce qui a été annulé — ce qui
+est le propre d'une annulation. Dites-le si vous voulez une suppression sèche.
+
 ### Le formulaire d'annulation, tel que décidé
 
 Déclenché depuis **« Annuler » sur une offre de travaux acceptée**. Il contient :
