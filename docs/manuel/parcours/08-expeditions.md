@@ -63,7 +63,7 @@ Sur cet écran, vous renseignez :
 - **N° réf. livraison transporteur** — le numéro de suivi ou du bon de transport.
 - **Quantité reçue** — le nombre d'articles réellement reçus.
 
-**➡️ Ensuite :** la réception est validée et le lot passe en « Commandes réceptionnées ». Vous devez **enchaîner avec le PV de contrôle** (étape suivante) avant de libérer la marchandise.
+**➡️ Ensuite :** la réception est enregistrée et apparaît dans l'onglet Réceptions avec la mention « PV à faire ». **Rien n'entre encore en stock** : enchaînez avec le **PV de contrôle** (étape suivante) — seul un PV conforme fait entrer le contenu en stock.
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/expeditions.md).
 

@@ -302,7 +302,7 @@ const MVT_LOOK: Record<string, [string, string, string]> = {
 //     (demande utilisateur du 10/09/2026). La validation fournisseur, elle, est passée
 //     dans Achats › Bons de commande : c'est un acte d'achat, pas d'expédition.
 // ══════════════════════════════════════════════════════════════
-function panelReceptions(bcs: any[], _bcsAttendus: any[], receptions: any[], bds: any[], _ncs: any[], blsRetour: any[], _vdMap: Record<string, any>, _hasAck: boolean, today: string) {
+function panelReceptions(bcs: any[], _bcsAttendus: any[], receptions: any[], bds: any[], _ncs: any[], blsRetour: any[], _vdMap: Record<string, any>, _hasAck: boolean, today: string, pvParBl: Record<string, any> = {}) {
   const tr = (cells: string[]) => `<tr style="border-bottom:1px solid #f8fafc;">${cells.join('')}</tr>`
   const vide = (n: number, txt: string) => `<tr><td colspan="${n}" style="text-align:center;padding:22px;color:#9ca3af;font-size:.8rem;">${txt}</td></tr>`
   const card = (titre: string, icone: string, coul: string, cpt: number, sous: string, corps: string) => `
@@ -321,15 +321,23 @@ function panelReceptions(bcs: any[], _bcsAttendus: any[], receptions: any[], bds
   ;(bcs || []).forEach((b: any) => { typeParBc[String(b.id)] = String(b.type || 'fournisseur') })
   const estSt = (b: any) => typeParBc[String(b.bc_id ?? '')] === 'st'
 
+  // L'état du contrôle de la réception : c'est lui qui décide si le contenu est en stock.
+  const etatPV = (b: any): string => {
+    if (!b.bc_id) return '<span style="color:#cbd5e1;font-size:.7rem;">—</span>'
+    const pv = pvParBl[String(b.id)]
+    if (!pv) return `<button onclick="expOpenPV('${escX(b.bc_id)}','${escX(b.id)}')" title="Faire le PV de contrôle : le contenu n’entre en stock qu’au PV conforme" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:7px;padding:5px 10px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-hourglass-half" style="margin-right:4px;"></i>PV à faire</button>`
+    return String(pv.decision || '') === 'libere'
+      ? `<span title="PV conforme : le contenu est entré en stock" style="background:#dcfce7;color:#15803d;border-radius:999px;padding:2px 10px;font-size:.66rem;font-weight:700;white-space:nowrap;"><i class="fas fa-check" style="margin-right:4px;"></i>Conforme · ${escX(pv.num_pv || '')}</span>`
+      : `<span title="PV non conforme : rien n’est entré en stock" style="background:#fee2e2;color:#b91c1c;border-radius:999px;padding:2px 10px;font-size:.66rem;font-weight:700;white-space:nowrap;"><i class="fas fa-ban" style="margin-right:4px;"></i>Non conforme · ${escX(pv.num_pv || '')}</span>`
+  }
+
   const ligneRecue = (b: any, couleur: string) => tr([
     TD(`<div style="font-weight:700;color:${couleur};">${escX(numBL(b))}</div><div style="font-size:.65rem;color:#94a3b8;">${escX(b.bc_id ?? b.cmd_id ?? '')}</div>`),
     TD(escX(b.client_nom ?? b.fournisseur_nom ?? '—')),
     TD(`<span style="font-size:.75rem;color:#475569;">${escX(b.piece ?? b.operation ?? '—')}</span>`),
     TDC(`<span style="font-weight:700;">${_frDate(b.date_bl)}</span>`),
     TDC(`<span style="font-weight:700;">${b.qte ?? '—'}</span>`),
-    TDC(b.bc_id
-      ? `<button onclick="expOpenPV('${escX(b.bc_id)}')" title="Remplir le PV de contrôle de cette réception" style="background:#fef2f2;color:#b91c1c;border:none;border-radius:7px;padding:5px 10px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-clipboard-check" style="margin-right:4px;"></i>PV de contrôle</button>`
-      : '<span style="color:#cbd5e1;font-size:.7rem;">—</span>'),
+    TDC(etatPV(b)),
   ])
 
   const parDate = (a: any, b: any) => String(b.date_bl || '').localeCompare(String(a.date_bl || ''))
@@ -355,7 +363,7 @@ function panelReceptions(bcs: any[], _bcsAttendus: any[], receptions: any[], bds
   return `
   <div id="exp-panel-receptions" style="display:none;">
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 16px;margin-bottom:18px;font-size:.8rem;color:#1d4ed8;">
-      <i class="fas fa-clipboard-check" style="margin-right:7px;"></i><strong>Ce qui est arrivé</strong> — une ligne entre ici au moment de la réception, et c'est d'ici qu'on remplit le <strong>PV de contrôle</strong>. Ce qui reste attendu est dans l'onglet <strong>Calendrier</strong>.
+      <i class="fas fa-clipboard-check" style="margin-right:7px;"></i><strong>Ce qui est arrivé</strong> — une ligne entre ici au moment de la réception, et c'est d'ici qu'on remplit le <strong>PV de contrôle</strong>. Le contenu n'entre en stock qu'au <strong>PV conforme</strong>. Ce qui reste attendu est dans l'onglet <strong>Calendrier</strong>.
     </div>
 
     ${card('Fournisseur', 'fa-truck-ramp-box', '#0ea5e9', recFourn.length, 'matière et fournitures réceptionnées',
@@ -784,7 +792,7 @@ export const pageServiceExpeditions = (
   dbQuar?:  any[],
   dbValidations?: any[],
   dbHasAck?: boolean,   // la colonne bons_de_commande.accuse_fournisseur_le existe-t-elle (gate validation fournisseur) ?
-  extra: { bds?: any[]; today?: string; fournisseurs?: any[]; bdsBlocages?: Record<string, string> } = {},   // BDS réels (bons_sous_traitance) + date du jour calculée par requête
+  extra: { bds?: any[]; today?: string; fournisseurs?: any[]; bdsBlocages?: Record<string, string>; pvs?: any[] } = {},   // BDS réels (bons_sous_traitance) + date du jour calculée par requête
 ) => {
   const TODAY_REQ = extra.today || TODAY          // ⚠ le TODAY du module est figé au chargement (isolate réutilisée)
   const FOURNS = extra.fournisseurs ?? []   // référentiel fournisseurs (onglet Fournisseurs)
@@ -793,6 +801,10 @@ export const pageServiceExpeditions = (
   // serveur avec la fonction qui refusera vraiment l'envoi (src/gamme.ts). On n'expédie pas
   // une pièce dont l'opération précédente n'est pas soldée.
   const BDS_BLOC: Record<string, string> = extra.bdsBlocages ?? {}
+  // État du PV de CHAQUE réception (clé : n° de BL). Le stock n'entre qu'au PV conforme :
+  // l'écran doit dire, ligne par ligne, où en est le contrôle.
+  const PV_PAR_BL: Record<string, any> = {}
+  ;(extra.pvs ?? []).forEach((p: any) => { if (p && p.bl_id && String(p.type_controle || '') === 'reception') PV_PAR_BL[String(p.bl_id)] = p })
   const VD_MAP = buildValDirMap(dbValidations || [])   // décisions Direction par (ref_table, ref_id)
   // Un BL annulé n'est ni une arrivée ni un départ : écarté des 3 onglets et du calendrier.
   const allBLs = (dbBLs ?? [...BL_CLIENTS_DEFAULT, ...BST_DEFAULT]).filter((b: any) => String(b.statut || '') !== 'annule')
@@ -877,7 +889,7 @@ export const pageServiceExpeditions = (
 
     <div style="padding:22px 30px;">
       ${panelEnvois(BDS, BLS, CMDS, qualiteBloque, TODAY_REQ, BDS_BLOC)}
-      ${panelReceptions(BCS, BCS_A_RECEVOIR, BLS_RECEPTION, BDS, dbNcs ?? [], BLS_RETOUR, VD_MAP, !!dbHasAck, TODAY_REQ)}
+      ${panelReceptions(BCS, BCS_A_RECEVOIR, BLS_RECEPTION, BDS, dbNcs ?? [], BLS_RETOUR, VD_MAP, !!dbHasAck, TODAY_REQ, PV_PAR_BL)}
       ${panelCalendrier(MOUVEMENTS, TODAY_REQ, BDS_BLOC)}
       ${panelFournisseurs(FOURNS, BCS, allBLs)}
       ${panelDashboard(BLS, BSTS, BCS, CMDS)}
@@ -908,7 +920,7 @@ export const pageServiceExpeditions = (
             <select id="rec_transp" style="${FINP}"><option value="">— Choisir —</option><option>GLS</option><option>DHL</option><option>Chronopost</option><option>TNT</option><option>DPD</option><option>Geodis</option><option>Coursier</option><option>Enlèvement direct</option></select>
           </div>
           <div><label style="${FLBL}">N° réf. livraison transporteur</label><input id="rec_ref" type="text" placeholder="Tracking / BL transporteur" style="${FINP}"/></div>
-          <div><label style="${FLBL}">Quantité reçue</label><input id="rec_qte" type="number" placeholder="0" style="${FINP}"/></div>
+          <div><label style="${FLBL}">Quantité reçue</label><input id="rec_qte" type="number" step="any" min="0" placeholder="0" style="${FINP}"/></div>
         </div>
       </div>
       <div style="padding:14px 22px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;">
@@ -927,6 +939,7 @@ export const pageServiceExpeditions = (
       </div>
       <div style="padding:22px;">
         <input type="hidden" id="pv_bc_id"/>
+        <input type="hidden" id="pv_bl_id"/>
         <div id="pv_info" style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:.8rem;color:#991b1b;"></div>
         <div style="display:grid;grid-template-columns:1fr;gap:12px;">
           <div>
@@ -1022,20 +1035,23 @@ export const pageServiceExpeditions = (
   function expCloseRecep(){ document.getElementById('exp-recep-overlay').style.display='none'; }
   function expSubmitRecep(){
     var id=document.getElementById('rec_bc_id').value;
-    var payload={ num_bl:document.getElementById('rec_numbl').value.trim(), affaire_id:document.getElementById('rec_affaire').value.trim(), transporteur:document.getElementById('rec_transp').value, transporteur_ref:document.getElementById('rec_ref').value.trim(), qte:parseInt(document.getElementById('rec_qte').value)||0 };
+    var payload={ num_bl:document.getElementById('rec_numbl').value.trim(), affaire_id:document.getElementById('rec_affaire').value.trim(), transporteur:document.getElementById('rec_transp').value, transporteur_ref:document.getElementById('rec_ref').value.trim(), qte:parseFloat(String(document.getElementById('rec_qte').value).replace(',','.'))||0 };
     if(!payload.transporteur){ pushNotif('err','fa-exclamation-circle','Indiquez le transporteur.'); return; }
     fetch('/api/expeditions/bc/'+encodeURIComponent(id)+'/receptionner',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
       .then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Réception échouée.'); return; }
-        expCloseRecep(); pushNotif('ok','fa-truck-loading','Colis reçu · BL <strong>'+j.bl_id+'</strong> créé (entrée stock). Passez au PV de contrôle (onglet BC).',6500); setTimeout(function(){location.hash='receptions';softReload();},900);
+        expCloseRecep(); pushNotif('ok','fa-truck-loading','Colis reçu · BL <strong>'+j.bl_id+'</strong> créé. Faites maintenant le PV de contrôle (onglet Réceptions) : le contenu n’entre en stock qu’au PV conforme.',9000); setTimeout(function(){location.hash='receptions';softReload();},900);
       }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
   }
 
   // ── PV de contrôle réception ──
-  function expOpenPV(id){
+  function expOpenPV(id, blId){
     var bc=EXP_BC.find(function(b){return b.id===id;}); if(!bc) return;
     document.getElementById('pv_bc_id').value=id;
-    document.getElementById('pv_info').innerHTML='<strong>'+(bc.num_bc||id)+'</strong> · '+(bc.fournisseur||'')+' · '+(bc.articles||'')+(bc.bl_id?' · BL '+bc.bl_id:'');
+    // Le PV vise la réception de la ligne cliquée, pas le dernier BL du bon de commande.
+    var bl=blId||bc.bl_id||'';
+    document.getElementById('pv_bl_id').value=bl;
+    document.getElementById('pv_info').innerHTML='<strong>'+(bc.num_bc||id)+'</strong> · '+(bc.fournisseur||'')+' · '+(bc.articles||'')+(bl?' · BL '+bl:'')+'<div style="margin-top:4px;font-size:.72rem;color:#92400e;">Le contenu n’entre en stock qu’au PV conforme.</div>';
     var ok=document.querySelector('input[name=pv_res][value=ok]'); if(ok) ok.checked=true;
     document.getElementById('pv_obs').value='';
     expPVToggle();
@@ -1047,19 +1063,27 @@ export const pageServiceExpeditions = (
     var anom=sel&&sel.value==='anomalie';
     document.getElementById('pv_anom_box').style.display=anom?'block':'none';
   }
+  var _pvEnCours=false;   // un double-clic sur « Valider le PV » ne doit rien envoyer deux fois
   function expSubmitPV(){
+    if(_pvEnCours) return;
     var id=document.getElementById('pv_bc_id').value;
     var sel=document.querySelector('input[name=pv_res]:checked');
     var anomalie=sel&&sel.value==='anomalie';
-    var payload={ anomalie:anomalie, observations:document.getElementById('pv_obs').value.trim()||null, operateur:document.getElementById('pv_op').value.trim()||'Expéditions', gravite:document.getElementById('pv_gravite').value, quarantaine:document.getElementById('pv_quarantaine').checked };
+    var payload={ anomalie:anomalie, observations:document.getElementById('pv_obs').value.trim()||null, operateur:document.getElementById('pv_op').value.trim()||'Expéditions', gravite:document.getElementById('pv_gravite').value, quarantaine:document.getElementById('pv_quarantaine').checked, bl_id:document.getElementById('pv_bl_id').value||null };
+    _pvEnCours=true;
     fetch('/api/expeditions/bc/'+encodeURIComponent(id)+'/pv',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
       .then(function(r){return r.json();}).then(function(j){
+        _pvEnCours=false;
         if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'PV échoué.'); return; }
         expClosePV();
         if(j.anomalie){ pushNotif('warn','fa-exclamation-triangle','PV <strong>'+j.pv_id+'</strong> · anomalie → NC '+(j.nc_id||'')+(j.quarantaine_id?' + quarantaine':'')+' créée en Qualité.',7000); }
-        else { pushNotif('ok','fa-clipboard-check','PV <strong>'+j.pv_id+'</strong> conforme → libéré en Qualité (statut OK).',6000); }
+        else {
+          var st=j.stock||null;
+          var enStock = !st ? '' : (st.entre ? ' · <strong>'+st.qte+'</strong> entré(s) en stock ('+(st.article||'')+')' : ' · stock NON crédité : '+(st.raison||'raison inconnue'));
+          pushNotif(st&&!st.entre?'warn':'ok','fa-clipboard-check','PV <strong>'+j.pv_id+'</strong> conforme'+enStock+'.',9000);
+        }
         setTimeout(function(){location.hash='receptions';softReload();},1100);
-      }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
+      }).catch(function(){ _pvEnCours=false; pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
   }
 
   function expShowTab(id){

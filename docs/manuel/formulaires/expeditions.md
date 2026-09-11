@@ -62,13 +62,13 @@
 | N° d'affaire | texte | Non | Numéro d'affaire à relier à cette réception (pré-rempli si connu). | AFF-2026-XXX |
 | Transporteur | liste déroulante (GLS, DHL, Chronopost, TNT, DPD, Geodis, Coursier, Enlèvement direct) | Oui | Qui a livré la marchandise. « Enlèvement direct » = récupéré sur place. | Geodis |
 | N° réf. livraison transporteur | texte | Non | Numéro de suivi ou du bon du transporteur. | Tracking 1Z999AA10 |
-| Quantité reçue | nombre | Non | Nombre d'articles effectivement reçus. | 200 |
+| Quantité reçue | nombre (décimales acceptées) | Non | Quantité effectivement reçue ; c'est elle qui entrera en stock au PV conforme. | 200 |
 
-⚠️ **Attention :** Le transporteur est obligatoire ; sans lui, la réception ne peut pas être validée. Après validation, vous devez enchaîner avec le PV de contrôle.
+⚠️ **Attention :** Le transporteur est obligatoire ; sans lui, la réception ne peut pas être validée. Après validation, vous devez enchaîner avec le PV de contrôle. **Rien n'entre en stock à la réception** : le contenu n'entre en stock qu'au PV conforme.
 
 ## PV de contrôle à réception
 **Quand l'utiliser :** Après avoir réceptionné une commande, pour attester du contrôle des pièces reçues (conforme ou anomalie) avant de les libérer en Qualité.
-**Où le trouver :** Onglet « Bons de Commande », dans la liste « Commandes réceptionnées », bouton « PV de contrôle » sur la ligne concernée.
+**Où le trouver :** Onglet « Réceptions », colonne « Contrôle » : bouton « PV à faire » sur la ligne de la réception concernée. Un seul PV par réception. Conforme : le contenu entre en stock. Non conforme : non-conformité + quarantaine, rien en stock.
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|

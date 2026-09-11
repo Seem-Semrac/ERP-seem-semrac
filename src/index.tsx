@@ -75,7 +75,7 @@ import {
   resolveAffaireId,
   getFournisseurs, getSousTraitantsAll, createFournisseur, createSousTraitant, updateFournisseur, updateSousTraitant, deleteFournisseur, deleteSousTraitant, computeOtd, getFournisseurScorecard,
   createMachine, updateMachine, deleteMachine, getPresences, upsertPresence, getLot, updateLot, lotHasLibCols, updateStockArticle, createArticleStock,
-  createMouvementStock, createFactureClient, updateFactureClient, genEcritureVente, genEcritureAchat, genEcritureReglement,
+  createMouvementStock, mouvementEntreeExiste, createFactureClient, updateFactureClient, genEcritureVente, genEcritureAchat, genEcritureReglement,
   getOperateursSalaries,
   getSalaries, getSalarie, getDroitsSalaries, createSalarie, updateSalarie, deleteSalarie, getMachinesOpex, upsertMachineOpexAchat, claimBcOpexGreffe,
   getControlesCotes, createControleCote, deleteControleCote,
@@ -2493,6 +2493,65 @@ app.get('/api/be/noms-signature', async (c) => {
   return c.json({ ok: true, sig: (noms as any[]).length + ':' + valide + ':' + maxU })
 })
 
+// ── ENTRÉE EN STOCK D'UNE RÉCEPTION — seulement au PV CONFORME (règle du 11/09/2026) ─────
+// « On reçoit, ensuite on doit faire le PV de contrôle, et il faut qu'il soit fait et conforme
+//   pour que le contenu rentre en stock. » Avant, le stock était crédité dès la réception : une
+//   matière encore non contrôlée — voire refusée au contrôle — était déjà comptée disponible.
+//   · quantité = celle du BL de réception (une réception partielle = un BL = un PV) ;
+//   · BC machine exclu (il va à l'OPEX) ; sous-traitance exclue (pas un achat de stock) ;
+//   · IDEMPOTENT : un mouvement d'entrée de même motif déjà présent ⇒ rien. Si cette vérification
+//     échoue, on NE crédite PAS — un crédit manqué se voit, un crédit double ne se voit pas.
+//   Même format de motif qu'avant, pour reconnaître les réceptions déjà créditées par l'ancien code.
+async function entrerStockReception(bc: any, bl: any): Promise<{ entre: boolean; qte: number; article: string | null; raison: string | null }> {
+  const typeBc = String(bc?.type_bc || '')
+  if (/machine/i.test(String(bc?.categorie || ''))) return { entre: false, qte: 0, article: null, raison: 'achat machine (il va à l’OPEX)' }
+  if (typeBc === 'st' || typeBc === 'sous_traitant') return { entre: false, qte: 0, article: null, raison: 'sous-traitance : pas d’entrée en stock' }
+  const qte = Number(bl?.qte) || 0
+  if (qte <= 0) return { entre: false, qte: 0, article: null, raison: 'quantité reçue nulle sur le BL' }
+  // La référence de la ligne du BC prime sur le libellé libre (même appariement qu'avant).
+  const lignes = Array.isArray(bc?.lignes) ? bc.lignes : []
+  const refLigne = lignes.length ? String(lignes[0]?.reference || '').trim() : ''
+  const refBc = String(bc?.ref_stock || refLigne || bc?.articles || '').toLowerCase().trim()
+  const stockRows = await getStockReel().catch(() => [] as any[])
+  const art: any = (stockRows as any[]).find(s => refBc && String(s?.reference || '').toLowerCase().trim() === refBc)
+    || (stockRows as any[]).find(s => refBc && String(s?.designation || '').toLowerCase().trim() === refBc)
+    || (stockRows as any[]).find(s => refBc && String(s?.designation || '').toLowerCase().includes(refBc))
+  if (!art) return { entre: false, qte, article: null, raison: 'article introuvable en stock (réf. « ' + refBc + ' »)' }
+  const libelle = String(art.designation || art.reference || '')
+  const motif = 'Réception BC ' + String(bc.id) + ' · BL ' + String(bl.id)
+  const deja = await mouvementEntreeExiste(motif)
+  if (deja.error) return { entre: false, qte, article: libelle, raison: 'vérification anti-doublon impossible, stock non crédité (' + deja.error + ')' }
+  if (deja.existe) return { entre: false, qte, article: libelle, raison: 'déjà entré en stock' }
+  const avant = Number(art.stock_actuel) || 0
+  const { error: eMvt } = await createMouvementStock({ type: 'entree', article_id: art.id, article_nom: libelle, quantite: qte, quantite_avant: avant, quantite_apres: avant + qte, date_mvt: TODAY_ISO(), motif, categorie: bc?.categorie || 'matiere', bc_id: String(bc.id) } as any)
+  if (eMvt) return { entre: false, qte, article: libelle, raison: 'mouvement de stock refusé : ' + eMvt.message }
+  const { error: eStk } = await updateStockArticle(String(art.id), { stock_actuel: avant + qte })
+  if (eStk) return { entre: false, qte, article: libelle, raison: 'mouvement écrit mais quantité en stock non mise à jour : ' + eStk.message }
+  return { entre: true, qte, article: libelle, raison: null }
+}
+
+// ── PORTE MATIÈRE — matiere_ok des BDT d'une affaire, ouverte au PV CONFORME ────────────────
+// Elle s'ouvrait à la RÉCEPTION : la fiche affaire disait « matière OK » pour une matière encore
+// en quarantaine. Une affaire est « matière OK » quand TOUS ses BC matière sont CONTRÔLÉS.
+async function ouvrirPorteMatiere(bc: any): Promise<number> {
+  const affaires = bcAffaires(bc)
+  if (!affaires.length) return 0
+  const estMatBc = (b: any) => !['sous_traitant', 'st'].includes(String(b?.type_bc || '')) && !/machine/i.test(String(b?.categorie || ''))
+  const estControle = (b: any) => ['controle', 'cloture'].includes(String(b?.statut || ''))
+  const [allBcs, bdts] = await Promise.all([getBonsDeCommande().catch(() => [] as any[]), getBonsDeTravail().catch(() => [] as any[])])
+  let n = 0
+  for (const aff of affaires) {
+    const mats = (allBcs as any[]).filter(b => bcAffaires(b).includes(aff) && estMatBc(b))
+    if (!mats.length || !mats.every(estControle)) continue
+    for (const b of (bdts as any[])) {
+      if (String(b.num_affaire) !== aff || b.matiere_ok === true) continue
+      const r: any = await updateBDT(String(b.id), { matiere_ok: true }).catch(() => ({ error: true }))
+      if (!r?.error) n++
+    }
+  }
+  return n
+}
+
 app.post('/api/expeditions/bc/:id/receptionner', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json().catch(() => ({} as any))
@@ -2538,34 +2597,8 @@ app.post('/api/expeditions/bc/:id/receptionner', async (c) => {
       }
     }
   }
-  // ── RÉCEPTION MATIÈRE → STOCK (entrée) : sans ça prix_achat/quantité restent à 0 → coût matière faux.
-  //   BC 'machine' exclu (va à l'OPEX). Idempotent par bc_id (pas de double crédit sur double-clic/ré-réception).
-  if (String((bc as any).categorie || '') !== 'machine') {
-    try {
-      const qteBl = Number(body.qte ?? (bc as any).qte_commandee ?? 0) || 0
-      if (qteBl > 0) {
-        const [stockRows, mvtsRows] = await Promise.all([getStockReel().catch(() => [] as any[]), getMouvementsStock().catch(() => [] as any[])])
-        // La référence portée par la ligne du BC prime sur le libellé libre : sans elle,
-        // l'appariement au stock retombait sur `articles` et ratait dès que le libellé différait.
-        // (`ref_stock` n'existe pas en base — lecture conservée par prudence, elle vaut undefined.)
-        const _lgBc = Array.isArray((bc as any).lignes) ? (bc as any).lignes : []
-        const _refLigne = _lgBc.length ? String((_lgBc[0] as any).reference || '').trim() : ''
-        const refBc = String((bc as any).ref_stock || _refLigne || (bc as any).articles || '').toLowerCase().trim()
-        const art = (stockRows as any[]).find(s => refBc && String((s as any).reference || '').toLowerCase().trim() === refBc)
-          || (stockRows as any[]).find(s => refBc && String((s as any).designation || '').toLowerCase().trim() === refBc)
-          || (stockRows as any[]).find(s => refBc && String((s as any).designation || '').toLowerCase().includes(refBc))
-        // Idempotence par BL (chaque réception = un BL) : les réceptions partielles successives créditent chacune leur qté ;
-        //   seul un REJEU du même BL (même num_bl) est neutralisé (anti double-clic).
-        const motifEntree = 'Réception BC ' + id + ' · BL ' + blId
-        const dejaEntree = (mvtsRows as any[]).some(m => String((m as any).motif || '') === motifEntree && String((m as any).type || '') === 'entree')
-        if (art && !dejaEntree) {
-          const avant = Number((art as any).stock_actuel) || 0
-          await createMouvementStock({ type: 'entree', article_id: (art as any).id, article_nom: (art as any).designation || (art as any).reference, quantite: qteBl, quantite_avant: avant, quantite_apres: avant + qteBl, date_mvt: TODAY_ISO(), motif: motifEntree, categorie: (bc as any).categorie || 'matiere', bc_id: id } as any).catch(() => {})
-          await updateStockArticle(String((art as any).id), { stock_actuel: avant + qteBl }).catch(() => {})
-        }
-      }
-    } catch {}
-  }
+  // ⚠ PLUS D'ENTRÉE EN STOCK ICI (11/09/2026) : le contenu n'entre en stock qu'au PV de contrôle
+  //   CONFORME (entrerStockReception, appelée par /pv). Une réception n'est pas un contrôle.
   // Réception TOTALE requise : cumul reçu vs commandé → recu_total (sinon recu_partiel). Qté commandée inconnue ⇒ recu_total (compat).
   const qteCmd = Number((bc as any).qte_commandee ?? (bc as any).qte ?? 0) || 0
   const qteRecueCumul = (Number((bc as any).qte_recue) || 0) + (Number(body.qte) || 0)
@@ -2577,27 +2610,9 @@ app.post('/api/expeditions/bc/:id/receptionner', async (c) => {
   // Date d'arrivée RÉELLE (1ʳᵉ réception) → planning + OTD. Update SÉPARÉ & fail-soft :
   //   si la colonne n'existe pas encore (pré-migration cloud), l'échec est ignoré sans casser la réception.
   if (!(bc as any).date_reception_reelle) await updateBonDeCommande(id, { date_reception_reelle: TODAY_ISO() } as any).catch(() => {})
-  // PORTE MATIÈRE : matiere_ok des BDT de l'affaire cochée SEULEMENT quand TOUS les BC matière/accessoire
-  //   de l'affaire sont reçus en TOTALITÉ (recu_total) — plus au premier partiel.
-  let bdtDebloques = 0
-  // Un BC issu d'une FUSION sert plusieurs affaires : on ouvre la porte matière de chacune.
-  const affairesBc = bcAffaires(bc)
-  if (affairesBc.length) {
-    try {
-      const estMatBc = (b: any) => String((b as any).type_bc || '') !== 'sous_traitant' && !/machine/i.test(String((b as any).categorie || ''))
-      const estTotal = (b: any) => ['recu_total', 'controle', 'cloture'].includes(String((b as any).statut || ''))
-      const [allBcs, bdts] = await Promise.all([getBonsDeCommande().catch(() => [] as any[]), getBonsDeTravail().catch(() => [] as any[])])
-      for (const aff of affairesBc) {
-        const affMatBcs = (allBcs as any[]).filter(b => bcAffaires(b).includes(aff) && estMatBc(b))
-        const allTotal = affMatBcs.length > 0 && affMatBcs.every(b => String(b.id) === id ? statutBc === 'recu_total' : estTotal(b))
-        if (!allTotal) continue
-        for (const b of (bdts as any[])) {
-          if (String(b.num_affaire) === aff && b.matiere_ok !== true) { await updateBDT(String(b.id), { matiere_ok: true }).catch(() => {}); bdtDebloques++ }
-        }
-      }
-    } catch {}
-  }
-  return c.json({ ok: true, bl_id: blId, opex_greffe: opexGreffe, bdt_debloques: bdtDebloques })
+  // ⚠ PORTE MATIÈRE déplacée au PV conforme (ouvrirPorteMatiere) : une matière reçue mais pas
+  //   encore contrôlée n'est pas une matière disponible.
+  return c.json({ ok: true, bl_id: blId, opex_greffe: opexGreffe, pv_requis: true })
 })
 
 // ─── RÉCEPTION D'UN RETOUR CLIENT (annoncé par la Qualité sur une non-conformité) ───
@@ -2714,7 +2729,23 @@ app.post('/api/expeditions/bc/:id/pv', async (c) => {
   const bc = await getBonDeCommande(id)
   if (!bc) return c.json({ ok: false, error: 'BC introuvable' }, 404)
   const anomalie = !!body.anomalie
+  const typeBc = String((bc as any).type_bc || '')
+  const estSt = typeBc === 'st' || typeBc === 'sous_traitant'
+  // Le PV porte sur UNE réception, donc sur UN BL : celui de la ligne cliquée. Avant, il visait
+  // toujours le DERNIER BL du BC, même ouvert depuis une réception plus ancienne.
+  const bls = await getBonsDeLivraison().catch(() => [] as any[])
+  const blsRecep = (bls as any[]).filter(b => String(b.bc_id || '') === String(id) && String(b.type_bl || '') === 'reception' && !b.nc_id)
+  const blVise = String(body.bl_id || '').trim() || String((bc as any).bl_id || '').trim()
+  const bl: any = blsRecep.find(b => String(b.id) === blVise) || null
+  // Un retour de sous-traitance n'a pas de BL : son PV reste possible, sans entrée en stock.
+  if (!bl && !estSt) return c.json({ ok: false, error: 'Aucune réception enregistrée pour ce bon de commande : réceptionnez d’abord le colis, puis faites le PV.' }, 409)
   const pvs = await getPVControles().catch(() => [] as any[])
+  // UN PV PAR RÉCEPTION. Sans ce contrôle, chaque nouvelle soumission créait un PV, une NC et une
+  // quarantaine de plus — et, désormais, créditerait le stock une seconde fois.
+  if (bl) {
+    const existant = (pvs as any[]).find(p => String(p.bl_id || '') === String(bl.id) && String(p.type_controle || '') === 'reception')
+    if (existant) return c.json({ ok: false, error: 'Le PV de cette réception est déjà établi (' + (existant.num_pv || existant.id) + ').', pv_id: existant.num_pv || null }, 409)
+  }
   const numPv = nextSeqId('PV', (pvs as any[]).map(p => p.num_pv))
   const controleur = await resolveSigner(c, body, 'Expéditions')
   const obs = [controleur ? `Contrôleur : ${controleur}` : '', body.observations || ''].filter(Boolean).join(' — ') || null
@@ -2724,7 +2755,7 @@ app.post('/api/expeditions/bc/:id/pv', async (c) => {
     operateur_id: null,  // FK salaries : on garde le nom du contrôleur dans les observations
     type_controle: 'reception',
     type_lien: 'livraison',
-    bl_id: bc.bl_id || null,
+    bl_id: bl ? bl.id : ((bc as any).bl_id || null),
     bc_id: id,
     piece: bc.articles || null,
     client_nom: bc.fournisseur_nom || null,
@@ -2735,28 +2766,34 @@ app.post('/api/expeditions/bc/:id/pv', async (c) => {
     anomalie,
     nc_ouverte: anomalie,
   }
-  const { data: pv, error } = await createPVControle(pvPayload)
+  const { error } = await createPVControle(pvPayload)
   if (error) return c.json({ ok: false, error: error.message }, 400)
   let ncId: string | null = null
   let quarantaineId: string | null = null
+  let stock: any = null
+  let bdtDebloques = 0
+  let statutBc = String((bc as any).statut || '')
+  const lotRef = bl ? String(bl.id) : ((bc as any).bl_id || null)
   if (anomalie) {
+    // NON CONFORME : rien n'entre en stock. La matière reste bloquée tant que la Qualité n'a pas statué.
     const ncs = await getNCs().catch(() => [] as any[])
     ncId = nextSeqId('NC', (ncs as any[]).map(n => n.id))
-    await createNonConformiteRow({
+    const rNc: any = await createNonConformiteRow({
       id: ncId,
       date_nc: TODAY_ISO(),
       type_nc: 'reception fournisseur',
       gravite: body.gravite || 'Majeure',
       statut: 'ouverte',
-      lot_ref: bc.bl_id || bc.articles || null,
+      lot_ref: lotRef || bc.articles || null,
       client_nom: bc.fournisseur_nom || null,
       operation: 'Contrôle réception',
       detecteur: controleur,
       affaire_id: bc.affaire_id || null,
-    }).catch(() => {})
+    }).catch(() => ({ error: true }))
+    if (rNc?.error) ncId = null   // l'échec était avalé et un n° de NC inexistant renvoyé quand même
     if (body.quarantaine) {
       const { data: q } = await createQuarantaine({
-        lot_id: bc.bl_id || null,
+        lot_id: lotRef,
         piece: bc.articles || null,
         client_nom: bc.fournisseur_nom || null,
         date_mise_quarantaine: TODAY_ISO(),
@@ -2767,9 +2804,24 @@ app.post('/api/expeditions/bc/:id/pv', async (c) => {
       } as any).catch(() => ({ data: null } as any))
       quarantaineId = (q as any)?.id || null
     }
+    // ⚠ Le statut du BC n'est plus écrasé par 'recu' : il gardait la trace de la réception
+    //   (recu_partiel / recu_total) et bloquait l'ouverture de la porte matière.
+    await updateBonDeCommande(id, { pv_id: numPv } as any).catch(() => {})
+  } else {
+    // CONFORME : le contenu du BL entre en stock (idempotent).
+    if (bl) stock = await entrerStockReception(bc, bl)
+    // Le BC est CONTRÔLÉ quand il est reçu en totalité ET que chacune de ses réceptions a un PV conforme.
+    const blsLibres = new Set<string>((pvs as any[]).filter(p => String(p.type_controle || '') === 'reception' && String(p.decision || '') === 'libere').map(p => String(p.bl_id || '')))
+    if (bl) blsLibres.add(String(bl.id))
+    const toutesControlees = blsRecep.length > 0 && blsRecep.every(b => blsLibres.has(String(b.id)))
+    const recuTotal = ['recu_total', 'controle', 'cloture'].includes(statutBc)
+    const patchBc: any = { pv_id: numPv }
+    if (recuTotal && toutesControlees && statutBc !== 'cloture') { patchBc.statut = 'controle'; statutBc = 'controle' }
+    await updateBonDeCommande(id, patchBc).catch(() => {})
+    // Porte matière : elle ne s'ouvre qu'ici, quand le BC vient d'être entièrement contrôlé.
+    if (statutBc === 'controle') bdtDebloques = await ouvrirPorteMatiere(bc).catch(() => 0)
   }
-  await updateBonDeCommande(id, { statut: 'recu', pv_id: numPv }).catch(() => {})  // contrôlé, PV parti en Qualité
-  return c.json({ ok: true, pv_id: numPv, nc_id: ncId, quarantaine_id: quarantaineId, anomalie })
+  return c.json({ ok: true, pv_id: numPv, nc_id: ncId, quarantaine_id: quarantaineId, anomalie, stock, bc_statut: statutBc, bdt_debloques: bdtDebloques })
 })
 
 // ─── API : BL client partiel (lots cochés + qté) → décrément lots + facture partielle ───
@@ -7708,12 +7760,13 @@ app.get('/expeditions/service', async (c) => {
   //   désespérément vide alors que la base en contenait. On charge donc TOUS les BL.
   //   Idem pour les vrais bons de sous-traitance (table bons_sous_traitance), que la page
   //   n'avait jamais : l'onglet ST n'affichait que du décor.
-  const [blsAll, bds, bcs, cmds, das, fst, lots, ncs, quar, hasAck, fourns, bdtsExp] = await Promise.all([
+  const [blsAll, bds, bcs, cmds, das, fst, lots, ncs, quar, hasAck, fourns, bdtsExp, pvsExp] = await Promise.all([
     getBonsDeLivraison(), getPlanningBDS().catch(() => [] as any[]),
     getBonsDeCommande(), getCommandes(), getDemandesAchat(), getFournisseursSt(), getLots(),
     getNonConformites().catch(() => [] as any[]), getQuarantaines().catch(() => [] as any[]),
     bcHasAckColumn().catch(() => false), getFournisseurs().catch(() => [] as any[]),
     getBonsDeTravail().catch(() => [] as any[]),   // pour la porte d'envoi des BST (gamme du lot)
+    getPVControles().catch(() => [] as any[]),     // état du PV de chaque réception (onglet Réceptions)
   ])
   // Pour CHAQUE BST : l'opération de gamme qui le retient encore, s'il y en a une.
   // Calculé ici, une fois, avec la fonction qui refusera vraiment l'envoi côté serveur.
@@ -7752,7 +7805,7 @@ app.get('/expeditions/service', async (c) => {
   }))
   const validations = await getValidations().catch(() => [])
   return c.html(pageServiceExpeditions(blsAll as any, bcsView as any, cmds, das, fst, lots, ncs as any, quar as any, validations as any, hasAck,
-    { bds: bds as any[], today: TODAY_ISO(), fournisseurs: fourns as any[], bdsBlocages }))   // BDS réels + date du jour calculée PAR REQUÊTE (le TODAY du module dérive) + référentiel fournisseurs (onglet Fournisseurs)
+    { bds: bds as any[], today: TODAY_ISO(), fournisseurs: fourns as any[], bdsBlocages, pvs: pvsExp as any[] }))   // BDS réels + date du jour calculée PAR REQUÊTE (le TODAY du module dérive) + référentiel fournisseurs (onglet Fournisseurs)
 })
 
 // ══════════════════════════════════════════════════════════════

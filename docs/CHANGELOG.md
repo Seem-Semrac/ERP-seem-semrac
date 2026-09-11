@@ -2,6 +2,33 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-11 — Réception : le stock attend le PV de contrôle conforme
+
+*« On reçoit, ensuite on doit faire le PV de contrôle, et il faut qu'il soit fait et conforme
+pour que le contenu rentre en stock. »*
+
+Le stock était crédité **dès la réception**, avant tout contrôle. Le crédit a quitté
+`/receptionner` pour le **PV conforme** (`entrerStockReception`), avec la quantité du BL. Un PV
+non conforme ouvre NC et quarantaine et ne crédite rien.
+
+Trois défauts corrigés au passage :
+
+- **un PV pouvait être soumis N fois** (N PV, N NC, N quarantaines) : désormais un seul PV par
+  réception, le second renvoie 409 ;
+- **le PV visait toujours le dernier BL du BC**, même ouvert depuis une réception plus ancienne :
+  il vise maintenant le BL de la ligne cliquée ;
+- **le PV écrasait le statut du BC par `recu`**, ce qui le sortait des « totaux » et bloquait la
+  porte matière des autres BC de l'affaire. Le BC passe `controle` quand toutes ses réceptions ont
+  un PV conforme, et la porte matière ne s'ouvre qu'à ce moment.
+
+L'anti-doublon du crédit utilise une requête ciblée : la liste des 200 derniers mouvements ne
+voyait pas les anciens. L'onglet Réceptions affiche l'état de chaque réception (« PV à faire »,
+« Conforme · PV-x », « Non conforme · PV-x »), et la quantité reçue accepte les décimales.
+
+Vérifié sur Docker avec un jeu `-TEST-` (supprimé) : réception → stock inchangé ; PV conforme
+→ +10 et BC contrôlé ; PV en double → 409 ; PV sans réception → 409 ; non conforme → rien en stock ;
+réception partielle 4 puis 6,5 → +4 puis +6,5. **Aucune migration.** `tsc` propre, harnais 60/0.
+
 ## 2026-09-11 — Nomenclatures : une fiche validée reste validée, et le plan s'ouvre
 
 Deux défauts signalés, **reproduits avant d'être corrigés**.

@@ -1944,6 +1944,15 @@ export async function createMouvementStock(payload: Partial<MouvementStock>) {
   return { data, error }
 }
 
+// Un mouvement d'ENTRÉE de ce motif existe-t-il déjà ? Requête CIBLÉE : getMouvementsStock()
+// ne rend que les 200 derniers mouvements, un doublon plus ancien lui échappait. Rend l'erreur,
+// car supabase-js ne lève jamais : une lecture en échec ne doit pas passer pour « aucun mouvement ».
+export async function mouvementEntreeExiste(motif: string): Promise<{ existe: boolean; error: string | null }> {
+  const { data, error } = await supabase.from('mouvements_stock').select('id').eq('motif', motif).eq('type', 'entree').limit(1)
+  if (error) return { existe: false, error: error.message }
+  return { existe: (data ?? []).length > 0, error: null }
+}
+
 // ─── MAINTENANCE (GMAO) ───────────────────────────────────────
 
 export async function getOrdresMaintenance(): Promise<OrdreMaintenance[]> {

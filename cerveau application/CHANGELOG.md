@@ -2,6 +2,9 @@
 
 > Une ligne par évolution du wiki. Le plus récent en haut. Tenu à jour à **chaque étape** qui touche l'application.
 
+## 2026-09-11 — Réception : le stock attend le PV conforme
+- [Backend](02-backend.md) — crédit de stock déplacé de `/receptionner` vers le **PV conforme** (`entrerStockReception`, quantité du BL, anti-doublon par requête ciblée `mouvementEntreeExiste` — la liste des 200 derniers mouvements ne voyait pas les anciens) ; **un PV par réception** (409) ; le PV vise le BL de la ligne cliquée ; le BC n'est plus écrasé par `recu` et passe `controle` quand toutes ses réceptions ont un PV conforme ; porte matière (`ouvrirPorteMatiere`) ouverte au PV conforme, plus à la réception. [Frontend](01-frontend.md) — onglet Réceptions : état par BL (PV à faire / Conforme / Non conforme), quantité décimale, messages corrigés. [DB & API REST](03-db-et-api-rest.md) — aucune migration. Vérifié sur jeu `-TEST-` (supprimé).
+
 ## 2026-09-11 — Nomenclatures : une fiche validée reste validée, le plan s'ouvre
 - [Frontend](01-frontend.md) — `nomSave` : une nomenclature **déjà validée reste `valide`** à l'enregistrement (les deux boutons « Enregistrer » envoyaient `en_cours` et la dévalidaient en silence : elle quittait la liste des faites ET la cascade de production). Lien **« Ouvrir le plan »** sous le champ *Nom du fichier CAO* (`nomRenderLienPlan`) — le nom était du texte inerte, le fichier dans la zone GED plus bas. [Backend](02-backend.md) — **garde-fou serveur** dans `PUT /api/nomenclature/:id` : un statut ≠ `valide` reçu sur une fiche `valide` est ramené à `valide` (vieux onglets), sauf `{ devalider: true }` explicite ; lecture en échec ⇒ statut non touché. `GET /api/ged/file/:id` inchangé : il servait déjà le fichier (vérifié authentifié). [DB & API REST](03-db-et-api-rest.md) — aucune migration. Reproduit AVANT correction sur des fiches `-TEST-` (supprimées). Harnais 60/0.
 

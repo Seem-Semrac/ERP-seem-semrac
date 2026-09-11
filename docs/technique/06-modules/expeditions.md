@@ -5,6 +5,50 @@
 - **Accès (RBAC)** : écriture — expéditions, stock (logistique) · lecture — commercial, achats, production
 <!-- /auto -->
 
+## Réception → PV de contrôle → stock (11/09/2026)
+
+> « On reçoit, ensuite on doit faire le PV de contrôle, et il faut qu'il soit fait et conforme
+> pour que le contenu rentre en stock. »
+
+**Le stock n'est plus crédité à la réception.** `POST /api/expeditions/bc/:id/receptionner` crée le
+BL de réception et met à jour le BC (`recu_partiel` / `recu_total`, `qte_recue`, date réelle), puis
+répond `pv_requis: true` — sans toucher au stock ni à la porte matière. Seul l'OPEX d'un achat
+machine reste greffé à la réception.
+
+**Le crédit se fait au PV conforme** (`POST /api/expeditions/bc/:id/pv`, helper `entrerStockReception`) :
+
+- un PV porte sur **une réception, donc un BL** : l'écran envoie le `bl_id` de la ligne cliquée
+  (repli sur le dernier BL du BC). Avant, le PV visait toujours le dernier BL ;
+- **un seul PV par réception** : un second renvoie 409. Sans ce contrôle, chaque soumission créait
+  un PV, une NC et une quarantaine de plus — et créditerait désormais le stock deux fois ;
+- **conforme** → le contenu du BL entre en stock, **quantité du BL** (décimales acceptées). Idempotent
+  par le motif `Réception BC <id> · BL <bl>`, vérifié par une **requête ciblée**
+  (`mouvementEntreeExiste`) : la liste des 200 derniers mouvements ne voyait pas les anciens. Si
+  cette vérification échoue, **rien n'est crédité** — un crédit manqué se voit, un double non ;
+- **non conforme** → NC et quarantaine rattachées au BL, **rien en stock** ;
+- BC machine exclu (OPEX) ; sous-traitance exclue (pas un achat de stock). Un retour de
+  sous-traitance, qui n'a pas de BL, peut recevoir un PV, sans entrée en stock.
+
+**Statut du BC.** Il n'est plus écrasé par `recu` au PV — ce `recu` sortait le BC de la liste des
+« totaux » et bloquait l'ouverture de la porte matière pour les autres BC de l'affaire. Il passe
+**`controle`** quand il est reçu en totalité **et** que chacune de ses réceptions a un PV conforme.
+
+**Porte matière** (`ouvrirPorteMatiere`) : `matiere_ok` des BDT d'une affaire s'ouvre **au PV
+conforme**, quand tous les BC matière de l'affaire sont `controle` ou `cloture`. Elle s'ouvrait à la
+réception : une matière en quarantaine était déclarée disponible.
+
+**Écran.** L'onglet Réceptions affiche l'état de chaque BL : **« PV à faire »** (bouton),
+**« Conforme · PV-x »**, **« Non conforme · PV-x »**. Le message de réception ne promet plus
+d'« entrée stock ».
+
+Vérifié sur Docker, jeu `-TEST-` supprimé ensuite : réception → stock inchangé ; PV conforme → +10,
+BC `controle`, `matiere_ok` ouvert ; PV en double → 409 ; PV sans réception → 409 ; non conforme →
+NC + quarantaine, stock inchangé ; réception partielle 4 puis 6,5 → +4 puis +6,5, BC `controle` au
+second PV seulement.
+
+⚠ **Hors de la règle, à trancher** : une matière non conforme, mise en quarantaine puis **libérée**
+(dérogation), n'entre pas en stock automatiquement.
+
 ## La porte d'envoi d'un BST (10/09/2026)
 
 > « Pour envoyer le BST au sous-traitant, il faut que le BDT juste avant soit soldé. »

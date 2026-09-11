@@ -113,7 +113,8 @@
       <li><b>Sous-traitance</b> — les pièces revenues de chez un prestataire.</li>
       <li><b>Retour client</b> — les retours arrivés, rattachés à leur non-conformité.</li>
     </ul>
-    <p>Chaque ligne porte un bouton <b>« PV de contrôle »</b> : c'est le contrôle de réception, et il se remplit ici, au moment où l'on a la pièce en main.</p>
+    <p>La colonne <b>Contrôle</b> dit où en est chaque réception : <span class="b b-mut">PV à faire</span> (un bouton, qui ouvre le PV), <span class="b b-ok">Conforme · PV-x</span> ou <span class="b b-crit">Non conforme · PV-x</span>. Le PV se remplit ici, au moment où l'on a la pièce en main.</p>
+    <div class="warn"><b>Le stock attend le PV.</b> Une réception n'entre <b>pas</b> en stock : le contenu n'y entre qu'au <b>PV conforme</b>, avec la quantité reçue. Un PV non conforme ouvre une non-conformité et met le lot en quarantaine — rien n'entre en stock. Chaque réception n'a <b>qu'un seul</b> PV : il ne se refait pas.</div>
     <div class="note"><b>Ce qui n'est <em>plus</em> ici.</b> Les commandes <b>à réceptionner</b> sont dans le <b>Calendrier</b> — c'est une action, elle vit avec les autres actions du jour. Et la <b>validation d'une commande par le fournisseur</b> se fait désormais dans <b>Achats → onglet « Bons de commande »</b> : c'est l'acheteur qui suit l'accusé de réception de son fournisseur, pas l'expéditionnaire.</div>
     <figure class="shot">
       <img src="../../assets/expeditions-receptions.png" alt="Capture de l'onglet Réceptions" loading="lazy">
@@ -126,7 +127,7 @@
       <li>Repérez la ligne du bon de commande et cliquez <b>« Traiter »</b>. Le <b>n° d'affaire</b> et le <b>n° de bon de livraison</b> sont <b>déjà remplis</b> — ils viennent du bon de commande, il n'y a pas à les ressaisir.</li>
       <li>Vérifiez la <b>quantité reçue</b> : elle peut être inférieure à la quantité commandée (réception partielle), le BC reste alors ouvert pour le solde.</li>
       <li>Renseignez le <b>transporteur</b> et la référence de transport si le colis en porte une — c'est ce qui alimentera la colonne Transporteur de l'historique fournisseur.</li>
-      <li>Enregistrez : un <b>bon de livraison de réception</b> est créé et rattaché au BC, la date d'arrivée réelle est posée, et la ligne bascule dans « Arrivées enregistrées ».</li>
+      <li>Enregistrez : un <b>bon de livraison de réception</b> est créé et rattaché au BC, la date d'arrivée réelle est posée, et la ligne apparaît dans l'onglet Réceptions avec la mention <b>« PV à faire »</b>. <b>Rien n'entre encore en stock</b> : faites le PV de contrôle.</li>
     </ol>
     <figure class="shot">
       <img src="../../assets/form-expeditions-reception.png" alt="Fenêtre d'enregistrement d'une réception" loading="lazy">
