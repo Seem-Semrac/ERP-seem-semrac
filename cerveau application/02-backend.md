@@ -38,6 +38,7 @@ Aujourd'hui : **Cloudflare Pages** (runtime « edge » Workers). Le code lit ses
 
 ## Les grands flux métier (câblés dans le backend)
 - **BE** : DT → **analyse BE** (`/be/analyse` déverse la nomenclature : CRU, **couverture matière/stock/seuils**, gamme identique à la nomenclature — étapes verrouillées + étapes glissables, exigences = DT, plan client ouvrable, upload GED `analyse_dt`) → **offre** (brouillon) → planning ; **répertoire réfs clients** (réf interne ↔ client ↔ réf client ↔ plan). Une **DT mixte Seem/Semrac** s'analyse en **2 volets** (un par site, chaque pièce individuelle) ; l'**offre fusionnée** n'est créée qu'aux deux volets terminés (`POST /api/dt/:id/analyse` param `site`, avancement dans la méta `sites`, sans migration).
+- **Traçabilité EN 9100** : toute écriture sur une nomenclature **validée** (fiche, gamme, fournitures, prépa technique, GED, nouvel indice, suppression) ajoute une entrée à `nomenclature_journal` — auteur tiré de la session, écarts avant → après calculés par `src/nomenclature_journal.ts` ; sans la table, la sauvegarde passe et la réponse dit `journal: false`.
 - **Commercial** : offre (les **avoirs client en cours** s'affichent en **déduction → net**) → **commande** (les avoirs sont **décomptés à l'acceptation**, plus ancien d'abord → `partiel`/`cloture`) → BL (partiels) → **facture** (PDF).
 - **Retour client** : NC → avoir (AV-) *ou* commande prioritaire (CMDP-) → « Lancer la production ».
 - **Achats** : DA → BC → réception (BL) → PV → NC/quarantaine.

@@ -4557,4 +4557,114 @@ alter table public.non_conformites add column if not exists bl_retour_id        
 alter table public.non_conformites add column if not exists date_retour_reelle  text;
 alter table public.bons_de_livraison add column if not exists nc_id text;
 
+-- Journal EN 9100 des nomenclatures validees (= migration 006) : en ajout seul, sans FK.
+create table if not exists public.nomenclature_journal (
+  id               text primary key default gen_random_uuid()::text,
+  created_at       timestamptz not null default now(),
+  nomenclature_id  text not null,
+  groupe           text,
+  code_ref_produit text,
+  num_nom          text,
+  indice           text,
+  entite           text,
+  evenement        text not null,
+  statut_avant     text,
+  statut_apres     text,
+  auteur_id        text,
+  auteur_matricule text,
+  auteur_nom       text not null,
+  auteur_role      text,
+  auteur_source    text not null,
+  route            text,
+  motif            text,
+  changements      jsonb not null default '[]'::jsonb,
+  instantane_avant jsonb,
+  lie_a            text
+);
+
+create index if not exists idx_nomj_nom    on public.nomenclature_journal (nomenclature_id, created_at desc);
+create index if not exists idx_nomj_groupe on public.nomenclature_journal (groupe, created_at desc);
+
+alter table public.nomenclature_journal enable row level security;
+drop policy if exists nomj_lecture on public.nomenclature_journal;
+drop policy if exists nomj_ajout   on public.nomenclature_journal;
+create policy nomj_lecture on public.nomenclature_journal for select to anon, authenticated using (true);
+create policy nomj_ajout   on public.nomenclature_journal for insert to anon, authenticated with check (true);
+
+revoke all on table public.nomenclature_journal from anon, authenticated;
+grant select, insert on table public.nomenclature_journal to anon, authenticated;
+
+create or replace function public.nomenclature_journal_horodatage() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if current_user in ('anon', 'authenticated', 'service_role') or new.created_at is null then
+    new.created_at := now();
+  end if;
+  if new.id is null then new.id := gen_random_uuid()::text; end if;
+  return new;
+end
+$$;
+drop trigger if exists trg_nomj_horodatage on public.nomenclature_journal;
+create trigger trg_nomj_horodatage before insert on public.nomenclature_journal
+  for each row execute function public.nomenclature_journal_horodatage();
+
+create or replace function public.nomenclature_journal_immuable() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  raise exception 'nomenclature_journal : journal EN 9100 en ajout seul, modification et effacement interdits';
+end
+$$;
+drop trigger if exists trg_nomj_immuable on public.nomenclature_journal;
+create trigger trg_nomj_immuable before update or delete on public.nomenclature_journal
+  for each row execute function public.nomenclature_journal_immuable();
+drop trigger if exists trg_nomj_immuable_vidage on public.nomenclature_journal;
+create trigger trg_nomj_immuable_vidage before truncate on public.nomenclature_journal for each statement execute function public.nomenclature_journal_immuable();
+alter table public.nomenclature_journal enable always trigger trg_nomj_immuable;
+alter table public.nomenclature_journal enable always trigger trg_nomj_immuable_vidage;
+
+-- Identifiant genere par defaut sur les colonnes id qui n'en ont pas (= migration 007).
+do $$
+declare
+  r record;
+  n int := 0;
+  m int := 0;
+  seq text;
+begin
+  for r in
+    select c.table_name
+      from information_schema.columns c
+      join information_schema.tables t
+        on t.table_schema = c.table_schema and t.table_name = c.table_name and t.table_type = 'BASE TABLE'
+     where c.table_schema = 'public'
+       and c.column_name = 'id'
+       and c.data_type = 'text'
+       and c.column_default is null
+     order by c.table_name
+  loop
+    execute format('alter table public.%I alter column id set default gen_random_uuid()::text', r.table_name);
+    n := n + 1;
+  end loop;
+
+  for r in
+    select c.table_name
+      from information_schema.columns c
+      join information_schema.tables t
+        on t.table_schema = c.table_schema and t.table_name = c.table_name and t.table_type = 'BASE TABLE'
+     where c.table_schema = 'public'
+       and c.column_name = 'id'
+       and c.data_type in ('smallint', 'integer', 'bigint', 'numeric')
+       and c.column_default is null
+     order by c.table_name
+  loop
+    seq := format('%s_id_seq', r.table_name);
+    execute format('create sequence if not exists public.%I', seq);
+    execute format('select setval(%L, coalesce((select max(id)::bigint from public.%I), 0) + 1, false)', format('public.%I', seq), r.table_name);
+    execute format('alter table public.%I alter column id set default nextval(%L)', r.table_name, format('public.%I', seq));
+    execute format('grant usage, select on sequence public.%I to anon, authenticated, service_role', seq);
+    m := m + 1;
+  end loop;
+  raise notice '007 : identifiant par defaut pose sur % table(s) texte et % table(s) numerique(s).', n, m;
+end
+$$;
+
 notify pgrst, 'reload schema';

@@ -30,7 +30,9 @@ const fs = await import('node:fs')
 
 const H = { apikey: KEY, Authorization: 'Bearer ' + KEY }
 // Tables internes / trop volumineuses / non pertinentes en dev.
-const SKIP = new Set(['schema_migrations', 'spatial_ref_sys'])
+// nomenclature_journal : journal EN 9100 en ajout seul, PROPRE à chaque base — jamais recopié
+// (le DELETE du miroir y serait refusé, et les entrées d'une autre base s'y mêleraient à jamais).
+const SKIP = new Set(['schema_migrations', 'spatial_ref_sys', 'nomenclature_journal'])
 
 const qid = (s) => '"' + String(s).replace(/"/g, '""') + '"'
 const lit = (v, type) => {

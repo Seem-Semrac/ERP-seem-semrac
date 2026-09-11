@@ -15,7 +15,7 @@ PostgreSQL (Supabase), exposée en REST par PostgREST. Les définitions de table
 - **Avoirs appliqués à l'offre** : affichés en déduction (net) sur `/commercial/offre` ; le `solde` n'est **décompté qu'à l'acceptation** (`POST /api/offre/:id/accepter`, plus ancien d'abord → statut `partiel`/`cloture`).
 
 ### Bureau d'études / Nomenclatures
-`nomenclatures` (indices A/B/C, `prix_revient_unitaire` = matière+MO+machine), `fournitures_nomenclature` (composants matière), `etapes_production` (gamme : temps MO/machine, sous-traitance), `be_refs`, `ref_prix_historique` (source rfq/manuel/import), `produits_fournisseurs` (catalogue).
+`nomenclatures` (indices A/B/C, `prix_revient_unitaire` = matière+MO+machine), `fournitures_nomenclature` (composants matière), `etapes_production` (gamme : temps MO/machine, sous-traitance), `be_refs`, `ref_prix_historique` (source rfq/manuel/import), `produits_fournisseurs` (catalogue), **`nomenclature_journal`** (journal EN 9100 des nomenclatures validées, **en ajout seul** — déclencheurs contre modification, effacement et vidage, heure imposée par la base, droits lecture + ajout, aucune clé étrangère : il survit à la fiche ; migration Docker 006, cloud `cloud-5`).
 
 ### Achats / Fournisseurs
 `fournisseurs`, `sous_traitants`, `demandes_prix` (RFQ = source de vérité des prix), `demandes_achat` (DA), `bons_commande` (BC), `factures_fournisseur`.
@@ -65,6 +65,10 @@ Relevés eau/bains, balancelles (via tables production/oas + relevés) — un ba
 
 ## Migrations
 Toute évolution passe par le skill `erp-db` : DDL via Management API + PAT, `notify pgrst, 'reload schema';`, SQL archivé dans `scripts_import/<sujet>_schema.sql`, doc régénérée (`gen_db_ref.py`) + `03-base-de-donnees.md` mis à jour.
+
+**Docker / VM** : `docker/db/migrations/NNN-*.sql`, joués par le conteneur `erp-migrate` à chaque `erp-docker.sh maj` (règles : `docker/db/migrations/README.md`). Le **cloud** n'a pas ce mécanisme : son équivalent se joue à la main, `docker/db/cloud/cloud-N-*.sql` (index et état dans `docker/db/cloud/README.md`).
+- **006** `nomenclature_journal` (journal EN 9100) — cloud : `cloud-5`.
+- **007** identifiant généré par défaut : la base née de `schema.sql` avait 50 colonnes `id text NOT NULL` **sans défaut** ; toute insertion sans id y échouait (créer une nomenclature, un nouvel indice, l'entrée de stock d'une nouvelle référence…). `gen_random_uuid()::text` posé **uniquement** là où aucun défaut n'existe. Pas d'équivalent cloud : il génère déjà ses identifiants.
 
 ## Hygiène de la base — diagnostics Supabase et parité cloud ⟷ Docker
 

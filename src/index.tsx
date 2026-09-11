@@ -12,6 +12,8 @@ import {
 } from './dashboards'
 import { parseFilter } from './dash_filter'
 import { blocagesEnvoiBds, bdsEnvoiBlocage, cleLot } from './gamme'
+import { diffNomenclature, diffFournitures } from './nomenclature_journal'
+import type { Changement } from './nomenclature_journal'
 import { pageAffectation, pageCompetences, pageHoraires } from './affectation'
 import { pageStock, pageStockAlertes } from './stock'
 import { pageFinancesCouts, pageFinancesTaux, pageFinancesMachines, pageFinancesImputations } from './finances'
@@ -49,7 +51,7 @@ import {
   getEmployes, getCertifications, getCompetences, upsertCompetence, getPointages, createPointage, updatePointage,
   getFacturesClient, getFacturesFournisseur, getEcrituresComptables,
   createFactureFournisseur, updateFactureFournisseur, getFactureFournisseur,
-  getNomenclatures, getNomenclature, createNomenclature, updateNomenclature, deleteNomenclature, upsertFournitures, getFournitures,
+  getNomenclatures, getNomenclatureStricte, getFournituresStrictes, journaliserNomenclature, getJournalNomenclature, journalExiste, groupeDepuisJournal, supprimerNomenclatureStricte, getReferenceClientStricte, getReferencesClientsStricte, getNomenclature, createNomenclature, updateNomenclature, deleteNomenclature, upsertFournitures, getFournitures,
   getReferencesClients, upsertReferenceClient, deleteReferenceClient, getClientProduits, getClientsProduitsAll,
   getEditLock, upsertEditLock, deleteEditLock, getActiveEditLocks,
   createDemandeTravaux, updateDemandeTravaux,
@@ -667,17 +669,22 @@ app.get('/api/dt/:id', async (c) => {
 
 // Synchronise le répertoire references_clients depuis les pièces d'une DT (réf interne + client/réf client).
 // Appelé à la création, à l'édition ET à la validation d'une DT → le répertoire est toujours à jour.
-async function syncDtReferences(dt: any) {
+// Une ligne rattachée à une nomenclature SUIVIE (EN 9100) : son changement est tracé comme depuis
+// le formulaire nomenclature — c'est le même dossier de définition (plan client, indice).
+async function syncDtReferences(c: any, dt: any, route: string): Promise<ResultatJournal> {
   const pieces = Array.isArray(dt?.pieces_detail) ? dt.pieces_detail : []
+  const res: ResultatJournal[] = []
   for (const p of pieces) {
     const codeInt = String(p?.ref_interne || '').trim()
     if (!codeInt || (!p.ref_client && !dt.client_id)) continue
-    await upsertReferenceClient({
+    const r = await upsertRefClientTrace(c, {
       code_ref_interne: codeInt, client_id: dt.client_id || null, client_nom: dt.client_nom || null,
       ref_client: p.ref_client || null, num_plan: p.nom_plan || null,
       entite: p.activite || dt.activite || null,
-    }).catch(() => {})
+    }, route).catch(() => null)
+    if (r) res.push(r.jr)
   }
+  return pireJournal(...res)
 }
 
 // Création d'une DT — numérotation auto basée sur l'année
@@ -718,8 +725,8 @@ app.post('/api/dt', async (c) => {
   }
   const { data, error } = await createDemandeTravaux(payload)
   if (error || !data) return c.json({ ok: false, error: error?.message ?? 'Création DT impossible' }, 400)
-  await syncDtReferences(data).catch(() => {})
-  return c.json({ ok: true, id: data.id, num_affaire: data.num_affaire, dt: data })
+  const jrDt = await syncDtReferences(c, data, 'POST /api/dt').catch(() => ({ journal: null, raison: null } as ResultatJournal))
+  return c.json({ ok: true, id: data.id, num_affaire: data.num_affaire, dt: data, journal: jrDt.journal, journal_raison: jrDt.raison })
 })
 
 // Mise à jour d'une DT (pièces, infos, statut)
@@ -756,8 +763,8 @@ app.put('/api/dt/:id', async (c) => {
   }
   const { data, error } = await updateDemandeTravaux(id, payload)
   if (error || !data) return c.json({ ok: false, error: error?.message ?? 'Mise à jour DT impossible' }, 400)
-  await syncDtReferences(data).catch(() => {})
-  return c.json({ ok: true, id: data.id, dt: data })
+  const jrDt = await syncDtReferences(c, data, 'PUT /api/dt/:id').catch(() => ({ journal: null, raison: null } as ResultatJournal))
+  return c.json({ ok: true, id: data.id, dt: data, journal: jrDt.journal, journal_raison: jrDt.raison })
 })
 
 // ─── RÉPERTOIRE RÉFÉRENCES CLIENTS (réf interne ↔ client ↔ réf client ↔ plan) ───
@@ -781,14 +788,19 @@ app.post('/api/references-clients', async (c) => {
     entite: b.entite || null,
   }
   if (!payload.code_ref_interne) return c.json({ ok: false, error: 'Réf interne requise.' }, 400)
-  const { data, error } = await upsertReferenceClient(payload)
+  const { data, error, jr } = await upsertRefClientTrace(c, payload, 'POST /api/references-clients', payload.nomenclature_id)
   if (error || !data) return c.json({ ok: false, error: (error && error.message) || 'Échec.' }, 400)
-  return c.json({ ok: true, ref: data })
+  return c.json({ ok: true, ref: data, journal: jr.journal, journal_raison: jr.raison })
 })
 app.delete('/api/references-clients/:id', async (c) => {
-  const { error } = await deleteReferenceClient(c.req.param('id'))
+  const id = c.req.param('id')
+  const lecR = await getReferenceClientStricte(id)
+  const { error } = await deleteReferenceClient(id)
   if (error) return c.json({ ok: false, error: error.message }, 400)
-  return c.json({ ok: true })
+  let jr: ResultatJournal = { journal: null, raison: null }
+  if (lecR.error) jr = { journal: false, raison: 'lecture de la référence impossible — ' + lecR.error }
+  else if (lecR.data) jr = await tracerRefClient(c, lecR.data, null, 'DELETE /api/references-clients/:id', c.req.query('nomenclature_id') || null)
+  return c.json({ ok: true, journal: jr.journal, journal_raison: jr.raison })
 })
 
 // ─── API OFFRE — workflow simple "envoyer/valider" ──────────────
@@ -1360,9 +1372,10 @@ app.post('/api/dt/:id/valider', async (c) => {
   const nextStatut = piecesNeedingNom.length > 0 ? 'en_attente_nomenclature' : 'en_attente_be'
   const { data, error } = await updateDemandeTravaux(id, { statut: nextStatut })
   if (error || !data) return c.json({ ok: false, error: error?.message ?? 'Validation impossible' }, 400)
-  await syncDtReferences(dt).catch(() => {})   // alimente le répertoire réf interne ↔ client ↔ réf client ↔ plan
+  const jrDt = await syncDtReferences(c, dt, 'POST /api/dt/:id/valider').catch(() => ({ journal: null, raison: null } as ResultatJournal))   // alimente le répertoire réf interne ↔ client ↔ réf client ↔ plan
   return c.json({
     ok: true,
+    journal: jrDt.journal, journal_raison: jrDt.raison,
     id: data.id,
     statut: data.statut,
     requires_nomenclature: piecesNeedingNom.length > 0,
@@ -3554,6 +3567,24 @@ app.get('/api/be/refs', async (c) => {
 })
 
 // Lecture des fournitures (matière + accessoires) d'une nomenclature pour le rechargement du formulaire BE
+// Journal EN 9100 d'une nomenclature (portée « fiche » ou « groupe » = toutes ses révisions).
+// Fonctionne même si la fiche a été supprimée : le journal porte lui-même son groupe.
+app.get('/api/nomenclature/:id/journal', async (c) => {
+  const id = c.req.param('id')
+  const portee = c.req.query('portee') === 'groupe' ? 'groupe' : 'fiche'
+  let groupe: string | null = null
+  if (portee === 'groupe') {
+    const lec = await getNomenclatureStricte(id)
+    if (lec.error) return c.json({ ok: false, error: 'Lecture de la nomenclature impossible : ' + lec.error }, 500)
+    // Fiche supprimée : le journal porte lui-même son groupe.
+    groupe = lec.data ? String(lec.data.version_groupe || lec.data.id) : await groupeDepuisJournal(id)
+  }
+  const r = await getJournalNomenclature(id, portee, groupe)
+  c.header('Cache-Control', 'no-store')
+  if (r.error && r.disponible) return c.json({ ok: false, error: r.error }, 500)
+  return c.json({ ok: true, disponible: r.disponible, entrees: r.rows, tronque: r.tronque })
+})
+
 app.get('/api/nomenclature/:id/fournitures', async (c) => {
   const id = c.req.param('id')
   const rows = await getFournitures(id).catch(() => [])
@@ -3898,7 +3929,16 @@ app.post('/api/ged/upload', async (c) => {
     uploaded_par: user?.nom || user?.mat || null,
   })
   if (error) { try { await removeGedFile(path) } catch {} ; return c.json({ ok: false, error: error.message }, 400) }
-  return c.json({ ok: true, document: data })
+  // Un plan ou un programme joint à une nomenclature suivie modifie son dossier de définition.
+  // « Est-ce une nomenclature ? » se décide sur la CIBLE (pas de préfixe « XX: », pas une DT
+  // d'analyse), jamais sur le champ de formulaire utilisé.
+  let jr: ResultatJournal = { journal: null, raison: null }
+  if (!nomenclatureId.includes(':') && categorie !== 'analyse_dt') {
+    const lecN = await getNomenclatureStricte(nomenclatureId)
+    if (lecN.error) jr = { journal: false, raison: 'lecture de la nomenclature impossible — ' + lecN.error }
+    else if (lecN.data) jr = await tracerSiSuivi(c, lecN.data, { evenement: 'document_ajoute', route: 'POST /api/ged/upload', statutAvant: lecN.data.statut, statutApres: lecN.data.statut, changements: [{ bloc: 'document', champ: categorie + (etape_ordre != null ? ' (étape ' + etape_ordre + ')' : ''), avant: null, apres: fichierNom }] })
+  }
+  return c.json({ ok: true, document: data, journal: jr.journal, journal_raison: jr.raison })
 })
 app.get('/api/ged/nomenclature/:id', async (c) => {
   return c.json({ ok: true, documents: await getDocumentsForNom(c.req.param('id')) })
@@ -3936,9 +3976,19 @@ app.get('/api/ged/file/:id', async (c) => {
 app.delete('/api/ged/:id', async (c) => {
   const doc = await getDocument(c.req.param('id'))
   if (!doc) return c.json({ ok: false, error: 'Introuvable' }, 404)
-  await softDeleteDocument(doc.id)
+  // Déjà retiré (double clic, deux onglets) : rien à refaire, rien à tracer une seconde fois.
+  if (doc.actif === false) return c.json({ ok: true, deja_retire: true, journal: null, journal_raison: null })
+  const sd = await softDeleteDocument(doc.id)
+  if (sd.error) return c.json({ ok: false, error: 'Retrait du document impossible : ' + (sd.error.message || String(sd.error)) }, 400)
   try { await removeGedFile(doc.storage_path) } catch { /* best-effort */ }
-  return c.json({ ok: true })
+  // Retirer un plan ou un programme d'une nomenclature suivie se trace aussi (« BC:… » = autre objet).
+  let jr: ResultatJournal = { journal: null, raison: null }
+  if (doc.nomenclature_id && !String(doc.nomenclature_id).includes(':') && doc.categorie !== 'analyse_dt') {
+    const lecN = await getNomenclatureStricte(String(doc.nomenclature_id))
+    if (lecN.error) jr = { journal: false, raison: 'lecture de la nomenclature impossible — ' + lecN.error }
+    else if (lecN.data) jr = await tracerSiSuivi(c, lecN.data, { evenement: 'document_retire', route: 'DELETE /api/ged/:id', statutAvant: lecN.data.statut, statutApres: lecN.data.statut, changements: [{ bloc: 'document', champ: String(doc.categorie || 'document'), avant: doc.fichier_nom || doc.id, apres: null }] })
+  }
+  return c.json({ ok: true, journal: jr.journal, journal_raison: jr.raison })
 })
 
 // ══ Maquette bâtiment : page + plans + marqueurs ══
@@ -4070,6 +4120,102 @@ async function syncFournituresToCatalogue(fournitures: any[], entite: string) {
   }
 }
 
+// ── JOURNAL EN 9100 des nomenclatures VALIDÉES (11/09/2026) ─────────────────────────────────
+// « Pour l'EN 9100, je veux pouvoir tracer dans les logs toutes les modifications effectuées sur
+//   une nomenclature déjà validée. » Table append-only nomenclature_journal (migration 006).
+// L'auteur vient TOUJOURS de la session, jamais du corps de la requête (anti-usurpation, même
+// précédent que resolveSigner). Compte de secours et mode sans authentification sont signalés.
+type AuteurJournal = { id: string | null; matricule: string | null; nom: string; role: string | null; source: 'session' | 'bootstrap' | 'auth_off' }
+function auteurDe(c: any): AuteurJournal {
+  const u: any = c.get('user')
+  if (!u) return { id: null, matricule: null, nom: 'inconnu (authentification désactivée)', role: null, source: 'auth_off' }
+  // Compte de secours : son matricule est la moitié de son identifiant de connexion — il n'entre
+  // jamais dans un journal ineffaçable, lisible de tout le BE. L'id et la source suffisent.
+  if (String(u.sub) === 'BOOTSTRAP') return { id: 'BOOTSTRAP', matricule: null, nom: 'Compte de secours', role: u.role ? String(u.role) : null, source: 'bootstrap' }
+  return { id: u.sub != null ? String(u.sub) : null, matricule: u.mat != null ? String(u.mat) : null, nom: String(u.nom || u.mat || 'inconnu'), role: u.role ? String(u.role) : null, source: 'session' }
+}
+type ResultatJournal = { journal: boolean | null; raison: string | null }
+// Écrit une entrée — toujours APRÈS une écriture réussie. Le journal ne bloque pas la sauvegarde
+// (cloud sans migration), mais la réponse le dit et l'écran l'affiche en orange.
+async function tracerNomenclature(c: any, e: { evenement: string; route: string; fiche: any; statutAvant?: string | null; statutApres?: string | null; changements?: any[]; instantane?: any; lieA?: string | null; motif?: string | null; forcer?: boolean }): Promise<ResultatJournal> {
+  const ch = e.changements || []
+  if (!ch.length && !e.forcer) return { journal: null, raison: null }   // rien à tracer
+  const f = e.fiche || {}
+  const a = auteurDe(c)
+  const r = await journaliserNomenclature({
+    nomenclature_id: String(f.id), groupe: String(f.version_groupe || f.id),
+    code_ref_produit: f.code_ref_produit ?? null, num_nom: f.num_nom ?? null, indice: f.indice ?? null, entite: f.entite ?? null,
+    evenement: e.evenement, statut_avant: e.statutAvant ?? null, statut_apres: e.statutApres ?? null,
+    auteur_id: a.id, auteur_matricule: a.matricule, auteur_nom: a.nom, auteur_role: a.role, auteur_source: a.source,
+    route: e.route, motif: e.motif ?? null, changements: ch, instantane_avant: e.instantane ?? null, lie_a: e.lieA ?? null,
+  })
+  return r.ok ? { journal: true, raison: null } : { journal: false, raison: r.raison + (r.error ? ' — ' + r.error : '') }
+}
+// Une fiche est SUIVIE dès sa validation — et le reste après une dévalidation : ce qui est modifié
+// entre une dévalidation et une revalidation est tracé aussi (sinon « dévalider, modifier,
+// revalider » ferait une modification sans trace).
+async function suiviEN9100(fiche: any): Promise<boolean | null> {
+  if (!fiche) return false
+  if (fiche.statut === 'valide') return true
+  const j = await journalExiste(String(fiche.id))
+  return j.error ? null : j.existe
+}
+// Suivi INDÉTERMINÉ (journal illisible alors que sa table existe) : on ne sait pas s'il fallait
+// tracer — la réponse le dit (orange à l'écran), jamais « rien à tracer ».
+const indetermine = (): ResultatJournal => ({ journal: false, raison: 'suivi EN 9100 indéterminé — lecture du journal impossible' })
+// Trace un événement SI la fiche est suivie.
+async function tracerSiSuivi(c: any, fiche: any, e: any): Promise<ResultatJournal> {
+  const s = await suiviEN9100(fiche)
+  if (s === null) return indetermine()
+  if (!s) return { journal: null, raison: null }
+  return tracerNomenclature(c, { ...e, fiche })
+}
+// La définition qui vient d'être VALIDÉE (fiche + fournitures) : référence de départ, gardée dans
+// l'entrée « validation » pour rester reconstituable même si une trace manque ensuite.
+async function instantaneValide(fiche: any) {
+  const f = await getFournituresStrictes(String(fiche.id))
+  return { etat_valide: true, nomenclature: fiche, fournitures: f.error ? null : (f.data || []), fournitures_erreur: f.error || null }
+}
+// Le plus mauvais de plusieurs résultats : un seul journal non écrit suffit à prévenir l'écran.
+const pireJournal = (...r: ResultatJournal[]): ResultatJournal => r.find((x) => x.journal === false) || r.find((x) => x.journal === true) || { journal: null, raison: null }
+// Fournitures illisibles : on le DIT dans l'entrée, plutôt que d'écrire « aucune fourniture ».
+const fournIllisibles = (e: string): Changement => ({ bloc: 'fourniture', champ: 'fournitures', avant: null, apres: 'lecture impossible (' + e + ')' })
+// Référence client d'une fiche suivie (répertoire réf. interne ↔ client ↔ réf. client ↔ plan
+// client, édité dans le formulaire) : elle fait partie de son dossier de définition.
+async function tracerRefClient(c: any, avant: any, apres: any, route: string, nomIdContexte?: string | null, note?: any): Promise<ResultatJournal> {
+  // La trace va à la fiche EN COURS D'ÉDITION (contexte) ET à celle que la ligne désigne, si elles
+  // diffèrent : la ligne peut encore pointer vers une révision antérieure, voire supprimée.
+  const ids = Array.from(new Set([nomIdContexte, apres && apres.nomenclature_id, avant && avant.nomenclature_id].map((x) => String(x || '').trim()).filter(Boolean)))
+  if (!ids.length) return { journal: null, raison: null }
+  const quoi = (r: any) => (r ? [r.client_nom || r.client_id || '?', r.ref_client, r.num_plan].filter(Boolean).join(' / ') : null)
+  const ch: any[] = []
+  if (!avant) ch.push({ bloc: 'reference_client', champ: 'référence client ajoutée', avant: null, apres: quoi(apres), detail: apres })
+  else if (!apres) ch.push({ bloc: 'reference_client', champ: 'référence client retirée', avant: quoi(avant), apres: null, detail: avant })
+  else for (const k of ['client_nom', 'client_id', 'ref_client', 'num_plan', 'plan_doc_id']) if (String(avant[k] ?? '') !== String(apres[k] ?? '')) ch.push({ bloc: 'reference_client', champ: 'référence client · ' + k, avant: avant[k] ?? null, apres: apres[k] ?? null })
+  if (note) ch.push(note)
+  const res: ResultatJournal[] = []
+  for (const nomId of ids) {
+    const lecN = await getNomenclatureStricte(nomId)
+    if (lecN.error) { res.push({ journal: false, raison: 'lecture de la nomenclature impossible — ' + lecN.error }); continue }
+    if (!lecN.data) continue
+    res.push(await tracerSiSuivi(c, lecN.data, { evenement: 'reference_client', route, statutAvant: lecN.data.statut, statutApres: lecN.data.statut, changements: ch }))
+  }
+  return pireJournal(...res)
+}
+// Upsert d'une référence client + sa trace EN 9100 — pour le formulaire nomenclature ET les DT.
+// L'état avant est lu STRICTEMENT : une panne de lecture ferait sinon passer une mise à jour pour
+// un ajout, et l'ancienne valeur serait perdue.
+async function upsertRefClientTrace(c: any, payload: any, route: string, nomIdContexte?: string | null): Promise<{ data: any; error: any; jr: ResultatJournal }> {
+  const lecRefs = await getReferencesClientsStricte(String(payload.code_ref_interne || ''))
+  const { data, error } = await upsertReferenceClient(payload)
+  if (error || !data) return { data: null, error: error || { message: 'Échec.' }, jr: { journal: null, raison: null } }
+  const avantRef = (lecRefs.data || []).find((r: any) => String(r.id) === String(data.id)) || null
+  const note = lecRefs.error ? { bloc: 'reference_client', champ: 'état avant illisible', avant: null, apres: lecRefs.error } : null
+  let jr = await tracerRefClient(c, avantRef, data, route, nomIdContexte, note)
+  if (lecRefs.error && jr.journal !== null) jr = pireJournal(jr, { journal: false, raison: 'état avant de la référence illisible — ' + lecRefs.error })
+  return { data, error: null, jr }
+}
+
 app.post('/api/nomenclature', async (c) => {
   const payload = await c.req.json()
   // strip client-side id + temps calculés côté client (non colonnes) ; etapes_production est désormais persisté (colonne jsonb)
@@ -4097,9 +4243,24 @@ app.post('/api/nomenclature', async (c) => {
     if (_draft) {
       const { data, error } = await updateNomenclature(_draft.id, nomPayload)
       if (error || !data) return c.json({ ok: false, error: error?.message ?? 'Erreur mise à jour brouillon' })
+      // Un brouillon écrasé AU STATUT VALIDÉ, c'est une validation : le journal démarre ici. Un
+      // brouillon déjà suivi (validé puis dévalidé) voit ses modifications tracées aussi.
+      const suiviDraft = data.statut === 'valide' ? true : await suiviEN9100(_draft)
+      const fDraftAvant = (suiviDraft && fournitures) ? await getFournituresStrictes(_draft.id) : { data: [] as any[], error: null as string | null }
       if (fournitures) await upsertFournitures(_draft.id, fournitures)
       await syncFournituresToCatalogue(fournitures, nomPayload.entite)
-      return c.json({ ok: true, id: _draft.id, num_nom: data.num_nom ?? nomPayload.num_nom, updated: true })
+      let jrDraft: ResultatJournal = { journal: null, raison: null }
+      if (suiviDraft) {
+        const fDraftApres = fournitures ? await getFournituresStrictes(_draft.id) : { data: [] as any[], error: null as string | null }
+        const chDraft: any[] = diffNomenclature(_draft, data, Object.keys(nomPayload))
+        if (fournitures) {
+          if (fDraftAvant.error || fDraftApres.error) chDraft.push(fournIllisibles(String(fDraftAvant.error || fDraftApres.error)))
+          else chDraft.push(...diffFournitures(fDraftAvant.data || [], fDraftApres.data || []))
+        }
+        const evDraft = data.statut === 'valide' ? 'validation' : 'modification'
+        jrDraft = await tracerNomenclature(c, { evenement: evDraft, route: 'POST /api/nomenclature', fiche: data, statutAvant: _draft.statut || 'brouillon', statutApres: data.statut, changements: chDraft, instantane: evDraft === 'validation' ? await instantaneValide(data) : null, forcer: evDraft === 'validation' })
+      } else if (suiviDraft === null) jrDraft = indetermine()
+      return c.json({ ok: true, id: _draft.id, num_nom: data.num_nom ?? nomPayload.num_nom, statut: data.statut, updated: true, journal: jrDraft.journal, journal_raison: jrDraft.raison })
     }
     if (_valide) {
       return c.json({ ok: false, error: 'Une nomenclature validée existe déjà pour la réf ' + _code + ' à l\'indice ' + _indice + '. Créez une révision (nouvel indice) plutôt qu\'un doublon.' }, 409)
@@ -4108,6 +4269,12 @@ app.post('/api/nomenclature', async (c) => {
   const { data, error } = await createNomenclature(nomPayload)
   if (error || !data) return c.json({ ok: false, error: error?.message ?? 'Erreur creation nomenclature' })
   if (fournitures?.length) await upsertFournitures(data.id, fournitures)
+  // Une fiche qui naît VALIDÉE ouvre son journal : c'est la référence de départ.
+  let journalCreation: ResultatJournal = { journal: null, raison: null }
+  if (data.statut === 'valide') {
+    const fCree = await getFournituresStrictes(String(data.id))
+    journalCreation = await tracerNomenclature(c, { evenement: 'creation', route: 'POST /api/nomenclature', fiche: data, statutApres: 'valide', changements: diffNomenclature(null, data).concat(fCree.error ? [fournIllisibles(fCree.error)] : diffFournitures([], fCree.data || [])), forcer: true })
+  }
   await syncFournituresToCatalogue(fournitures, nomPayload.entite)   // point 9 : réf BE → catalogue fournisseur
   // Chaînage : si créée directement comme validée, vérifier les DT liées
   if (data.statut === 'valide' && data.num_affaire) {
@@ -4129,7 +4296,7 @@ app.post('/api/nomenclature', async (c) => {
       }
     } catch { /* ignore */ }
   }
-  return c.json({ ok: true, id: data.id, num_nom: data.num_nom ?? nomPayload.num_nom })
+  return c.json({ ok: true, id: data.id, num_nom: data.num_nom ?? nomPayload.num_nom, statut: data.statut, journal: journalCreation.journal, journal_raison: journalCreation.raison })
 })
 
 app.put('/api/nomenclature/:id', async (c) => {
@@ -4137,6 +4304,12 @@ app.put('/api/nomenclature/:id', async (c) => {
   const payload = await c.req.json()
   // strip temps calculés côté client (non colonnes) ; etapes_production est persisté (colonne jsonb)
   const { fournitures, temps_reglage_total_min: _tr, temps_unitaire_total_min: _tu, devalider: _devalider, ...nomPayload } = payload
+  // L'état AVANT, lu strictement : il sert au garde-fou de validation ET au journal EN 9100.
+  const lecAvant = await getNomenclatureStricte(id)
+  const avant: any = lecAvant.data
+  // Sans l'état avant, on ne peut ni garder le statut validé ni tracer : on refuse plutôt que
+  // d'enregistrer une modification sans trace (même règle que la suppression).
+  if (lecAvant.error) return c.json({ ok: false, error: 'Lecture de la nomenclature impossible : enregistrement refusé pour garantir la traçabilité EN 9100 (' + lecAvant.error + '). Réessayez.' }, 503)
   // ⚠ GARDE-FOU (11/09/2026) : une nomenclature VALIDÉE ne repasse jamais « en cours »
   //   parce qu'on l'a simplement ré-enregistrée. Les deux boutons « Enregistrer » du
   //   formulaire envoyaient statut='en_cours' : corriger une nomenclature validée la
@@ -4146,14 +4319,41 @@ app.put('/api/nomenclature/:id', async (c) => {
   //   resté ouvert sur l'ancienne page enverrait encore 'en_cours' : c'est donc le serveur
   //   qui tranche. Seul un appel explicite { devalider: true } peut retirer la validation.
   if (nomPayload.statut !== undefined && nomPayload.statut !== 'valide' && _devalider !== true) {
-    const actuelle = await getNomenclature(id)
-    if (!actuelle) delete nomPayload.statut            // lecture en échec : on ne touche pas au statut
-    else if (actuelle.statut === 'valide') nomPayload.statut = 'valide'
+    if (lecAvant.error || !avant) delete nomPayload.statut            // lecture en échec : on ne touche pas au statut
+    else if (avant.statut === 'valide') nomPayload.statut = 'valide'
   }
+  // Le journal s'applique aux fiches validées, à l'acte de validation lui-même (référence de
+  // départ), et aux fiches validées puis dévalidées (déjà présentes au journal).
+  // Suivi indéterminé (journal illisible) : on enregistre, et la réponse le dit.
+  const suiviAvant: boolean | null = !avant ? false : ((avant.statut === 'valide' || nomPayload.statut === 'valide') ? true : await suiviEN9100(avant))
+  const concerne = suiviAvant === true
+  const fournAvant = (concerne && fournitures) ? await getFournituresStrictes(id) : { data: [] as any[], error: null as string | null }
   const { data, error } = await updateNomenclature(id, nomPayload)
   if (error || !data) return c.json({ ok: false, error: error?.message ?? 'Erreur mise à jour nomenclature' })
-  if (fournitures) await upsertFournitures(id, fournitures)
+  const rFourn: any = fournitures ? await upsertFournitures(id, fournitures) : null
   await syncFournituresToCatalogue(fournitures, nomPayload.entite)   // point 9 : réf BE → catalogue fournisseur
+  // ── Journal EN 9100 ──
+  let jr: ResultatJournal = { journal: null, raison: null }
+  if (concerne) {
+    const evenement = avant.statut === 'valide' ? (data.statut === 'valide' ? 'modification' : 'devalidation') : (data.statut === 'valide' ? 'validation' : 'modification')
+    const ch: any[] = diffNomenclature(avant, data, Object.keys(nomPayload))
+    if (fournitures) {
+      // Les fournitures sont remplacées en bloc (effacement puis insertion) : si l'insertion échoue,
+      // la fiche a PERDU ses fournitures — le journal doit le montrer. On compare la base AVANT à la
+      // base APRÈS (relue), jamais au corps de la requête : c'est ce qui est réellement enregistré.
+      const fournApres = await getFournituresStrictes(id)
+      if (rFourn?.error) ch.push({ bloc: 'fourniture', champ: 'ÉCHEC d’écriture des fournitures', avant: (fournAvant.data || []).length + ' ligne(s)', apres: (fournApres.data || []).length + ' ligne(s) — ' + String(rFourn.error.message || rFourn.error) })
+      else if (fournAvant.error || fournApres.error) ch.push({ bloc: 'fourniture', champ: 'fournitures', avant: fournAvant.error ? 'lecture impossible (' + fournAvant.error + ')' : (fournAvant.data || []).length + ' ligne(s)', apres: fournApres.error ? 'lecture impossible (' + fournApres.error + ')' : (fournApres.data || []).length + ' ligne(s)' })
+      else ch.push(...diffFournitures(fournAvant.data || [], fournApres.data || []))
+    }
+    // Dévalidation : la définition VALIDÉE telle qu'elle était ; validation : celle qui vient de l'être.
+    let instantane: any = null
+    if (evenement === 'devalidation') {
+      const fSnap = fournitures ? fournAvant : await getFournituresStrictes(id)
+      instantane = { nomenclature: avant, fournitures: fSnap.error ? null : (fSnap.data || []), fournitures_erreur: fSnap.error || null }
+    } else if (evenement === 'validation') instantane = await instantaneValide(data)
+    jr = await tracerNomenclature(c, { evenement, route: 'PUT /api/nomenclature/:id', fiche: data, statutAvant: avant.statut, statutApres: data.statut, changements: ch, instantane, forcer: evenement !== 'modification' })
+  } else if (suiviAvant === null) jr = indetermine()
   // Chaînage automatique : si la nomenclature est validée et liée à une DT en attente,
   // on vérifie si toutes les pièces de la DT ont leur nomenclature validée → bascule en analyse BE
   if (data.statut === 'valide' && data.num_affaire) {
@@ -4175,7 +4375,7 @@ app.put('/api/nomenclature/:id', async (c) => {
       }
     } catch { /* on n'échoue pas la requête nomenclature pour ça */ }
   }
-  return c.json({ ok: true, id, num_nom: data.num_nom })
+  return c.json({ ok: true, id, num_nom: data.num_nom, statut: data.statut, journal: jr.journal, journal_raison: jr.raison })
 })
 
 // ─── Préparation technique : saisie des codes programme CN par étape (merge dans etapes_production) ───
@@ -4202,7 +4402,11 @@ app.post('/api/nomenclature/:id/programmes', async (c) => {
   if ('plan_fichier' in b) patch.plan_fichier = b.plan_fichier ? String(b.plan_fichier) : null
   const { error } = await updateNomenclature(id, patch as any)
   if (error) return c.json({ ok: false, error: error.message }, 400)
-  return c.json({ ok: true, count: n })
+  // La préparation technique écrit dans la nomenclature (programmes CN, plan) : sur une fiche
+  // validée, c'est une modification de son dossier de définition — elle se trace.
+  let jr: ResultatJournal = { journal: null, raison: null }
+  jr = await tracerSiSuivi(c, nom, { evenement: 'prepa_technique', route: 'POST /api/nomenclature/:id/programmes', fiche: nom, statutAvant: nom.statut, statutApres: nom.statut, changements: diffNomenclature(nom, { ...nom, ...patch }, Object.keys(patch)) })
+  return c.json({ ok: true, count: n, journal: jr.journal, journal_raison: jr.raison })
 })
 
 // Crée une nouvelle révision (indice A→B→C…) d'une nomenclature : l'ancienne version est conservée,
@@ -4238,14 +4442,53 @@ app.post('/api/nomenclature/:id/nouvel-indice', async (c) => {
       await upsertFournitures(data.id, cloned)
     }
   }
-  return c.json({ ok: true, data, indice: nextIndice, num_nom: data.num_nom })
+  // Une révision d'une fiche VALIDÉE se trace des deux côtés : sur l'ancienne (« nouvel indice »)
+  // et sur la nouvelle (« création », avec son écart par rapport à l'ancienne).
+  let jr: ResultatJournal = { journal: null, raison: null }
+  const suiviBase = await suiviEN9100(base)
+  if (suiviBase || data.statut === 'valide') {
+    const [fBase, fNew] = await Promise.all([getFournituresStrictes(id), getFournituresStrictes(String(data.id))])
+    const j1 = await tracerNomenclature(c, { evenement: 'nouvel_indice', route: 'POST /api/nomenclature/:id/nouvel-indice', fiche: base, statutAvant: base.statut, statutApres: base.statut, changements: [{ bloc: 'fiche', champ: 'révision créée', avant: base.indice || 'A', apres: nextIndice }], lieA: String(data.id), forcer: true })
+    const j2 = await tracerNomenclature(c, { evenement: 'creation', route: 'POST /api/nomenclature/:id/nouvel-indice', fiche: data, statutApres: data.statut, changements: diffNomenclature(base, data).concat((fBase.error || fNew.error) ? [fournIllisibles(String(fBase.error || fNew.error))] : diffFournitures(fBase.data || [], fNew.data || [])), lieA: String(base.id), forcer: true })
+    jr = pireJournal(j1, j2)
+  } else if (suiviBase === null) jr = indetermine()
+  return c.json({ ok: true, data, indice: nextIndice, num_nom: data.num_nom, journal: jr.journal, journal_raison: jr.raison })
 })
 
 app.delete('/api/nomenclature/:id', async (c) => {
   const id = c.req.param('id')
-  const { error } = await deleteNomenclature(id)
-  if (error) return c.json({ ok: false, error: error.message })
-  return c.json({ ok: true })
+  // Supprimer une fiche suivie efface son dossier de définition : le journal en garde un
+  // instantané complet (fiche + fournitures), écrit AVANT l'effacement — il survit à la fiche
+  // (aucune clé étrangère). Toute lecture en échec, ou un journal en échec (table présente),
+  // REFUSE la suppression : on ne supprime pas une fiche validée sans trace.
+  const lec = await getNomenclatureStricte(id)
+  if (lec.error) return c.json({ ok: false, error: 'Lecture de la nomenclature impossible : suppression refusée pour garantir la traçabilité (' + lec.error + ').' }, 503)
+  const avant: any = lec.data
+  if (!avant) return c.json({ ok: true, deja_supprimee: true, journal: null, journal_raison: null })
+  let jr: ResultatJournal = { journal: null, raison: null }
+  const suiviSup = await suiviEN9100(avant)
+  if (suiviSup === null) return c.json({ ok: false, error: 'Lecture du journal EN 9100 impossible : suppression refusée pour garantir la traçabilité. Réessayez.' }, 503)
+  if (suiviSup) {
+    const fAvant = await getFournituresStrictes(id)
+    if (fAvant.error) return c.json({ ok: false, error: 'Lecture des fournitures impossible : suppression refusée pour garantir la traçabilité (' + fAvant.error + ').' }, 503)
+    jr = await tracerNomenclature(c, { evenement: 'suppression', route: 'DELETE /api/nomenclature/:id', fiche: avant, statutAvant: avant.statut, statutApres: null, changements: [{ bloc: 'fiche', champ: 'fiche supprimée', avant: String(avant.num_nom || avant.id) + ' ind. ' + String(avant.indice || 'A'), apres: null }], instantane: { nomenclature: avant, fournitures: fAvant.data || [] }, forcer: true })
+    // Table absente (cloud avant cloud-5) : rien à protéger, la suppression suit — l'écran le dit.
+    if (jr.journal === false && !String(jr.raison || '').startsWith('table_absente')) return c.json({ ok: false, error: 'Journal EN 9100 en échec : suppression refusée pour garantir la traçabilité (' + jr.raison + ').' }, 503)
+  }
+  const sup = await supprimerNomenclatureStricte(id)
+  if (!sup.error && !sup.n) {
+    // Rien effacé : si la fiche n'existe plus, une autre demande l'a supprimée entre-temps (double
+    // clic, deux onglets) — sa trace est au journal, ce n'est pas un échec.
+    const re = await getNomenclatureStricte(id)
+    if (!re.error && !re.data) return c.json({ ok: true, deja_supprimee: true, journal: jr.journal, journal_raison: jr.raison })
+  }
+  if (sup.error || !sup.n) {
+    const motif = sup.error || 'aucune ligne supprimée'
+    // Le journal n'accepte que des ajouts : l'échec s'inscrit par une seconde entrée.
+    if (jr.journal === true) await tracerNomenclature(c, { evenement: 'suppression_echouee', route: 'DELETE /api/nomenclature/:id', fiche: avant, statutAvant: avant.statut, statutApres: avant.statut, changements: [{ bloc: 'fiche', champ: 'suppression annulée', avant: null, apres: motif }], forcer: true })
+    return c.json({ ok: false, error: sup.error ? sup.error : 'La nomenclature n’a pas été supprimée (aucune ligne effacée).' }, sup.error ? 400 : 409)
+  }
+  return c.json({ ok: true, journal: jr.journal, journal_raison: jr.raison })
 })
 
 app.get('/be/analyse', async (c) => {
@@ -5153,6 +5396,7 @@ app.get('/be/preparation', async (c) => {
       .then(function(j){
         if(!j||!j.ok){ if(etat){ etat.textContent='Echec : '+((j&&j.error)||'envoi impossible'); etat.style.color='#dc2626'; } return false; }
         if(etat){ etat.innerHTML='<i class="fas fa-check" style="margin-right:4px;"></i>Fichier joint — <a href="/api/ged/file/'+j.document.id+'" target="_blank" rel="noopener" style="color:#6d28d9;font-weight:700;">ouvrir</a>'; etat.style.color='#16a34a'; }
+        if(j.journal===false&&window.pushNotif) pushNotif('warn','fa-clipboard-list','Fichier joint, mais le journal EN 9100 n’a pas pu l’écrire : '+String(j.journal_raison||'').replace(/[<>]/g,'')+'.',9000);
         return true;
       })
       .catch(function(){ if(etat){ etat.textContent='Echec reseau.'; etat.style.color='#dc2626'; } return false; });
@@ -5201,7 +5445,7 @@ app.get('/be/preparation', async (c) => {
               // Deja faite : ce n'est pas un echec. On emmene quand meme l'utilisateur
               // dans la liste, sur la section « faites », pour qu'il la VOIE.
               if(window.pushNotif) pushNotif('ok','fa-check-double','Plan et codes programme enregistres. Cette preparation etait deja marquee faite \\u2014 elle est dans la liste des preparations terminees.', 8000);
-              setTimeout(function(){ location.href='/be/service#prep'; }, 1400);
+              setTimeout(function(){ location.href='/be/service#prep'; }, prepJournalKo ? 6000 : 1400);
             } else {
               if(window.pushNotif) pushNotif('warn','fa-triangle-exclamation','Rien n\\'a change. AUCUNE preparation ne porte la reference <strong>'+(j.reference||'')+'</strong> : verifiez que la nomenclature choisie est bien celle de la piece a preparer.', 12000);
             }
@@ -5213,12 +5457,13 @@ app.get('/be/preparation', async (c) => {
           if(window.pushNotif) pushNotif('ok','fa-check-double', msg, 8000);
           // On SORT de la prepa : elle est faite, il n'y a plus rien a y saisir.
           // Retour a la liste, ancre sur la section « faites » ou la ligne vient d'arriver.
-          setTimeout(function(){ location.href='/be/service#prep'; }, 1200);
+          setTimeout(function(){ location.href='/be/service#prep'; }, prepJournalKo ? 6000 : 1200);
         })
         .catch(function(){ relacher(); if(window.pushNotif) pushNotif('err','fa-times','Erreur reseau.',4000); });
     });
   }
 
+  var prepJournalKo=false;   // journal EN 9100 non écrit : laisser le temps de lire l'avertissement avant de quitter la page
   function prepSave(apres){
     var sel=document.getElementById('prep-nom'); var id=sel?sel.value:''; if(!id){ if(apres) apres(false); return; }
     var progs={};
@@ -5228,7 +5473,7 @@ app.get('/be/preparation', async (c) => {
     var planFic=(document.getElementById('prep-plan_fichier')||{}).value||'';
     fetch('/api/nomenclature/'+encodeURIComponent(id)+'/programmes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({programmes:arr, num_plan:numPlan, plan_fichier:planFic})})
       .then(function(r){return r.json();}).then(function(j){
-        if(j&&j.ok){ if(apres) apres(true); if(window.pushNotif) pushNotif('ok','fa-save','Prépa enregistrée — plan + '+j.count+' code(s) programme, imprimés sur l\\'OF.',4500);
+        if(j&&j.ok){ prepJournalKo=(j.journal===false); if(prepJournalKo&&window.pushNotif) pushNotif('warn','fa-clipboard-list','Prépa enregistrée, mais le journal EN 9100 n’a pas pu la tracer : '+String(j.journal_raison||'').replace(/[<>]/g,'')+'.',9000); if(apres) apres(true); if(window.pushNotif) pushNotif('ok','fa-save','Prépa enregistrée — plan + '+j.count+' code(s) programme, imprimés sur l\\'OF.',4500);
           var nom=(PREP||[]).find(function(x){return String(x.id)===String(id);}); if(nom){ nom.num_plan=numPlan; nom.plan_fichier=planFic; nom.steps.forEach(function(s){ var p=progs[String(s.ordre)]; if(p){ s.programme=p.programme||''; s.programme_fichier=p.programme_fichier||''; } }); }
         } else { if(apres) apres(false); if(window.pushNotif) pushNotif('err','fa-ban',(j&&j.error)||'Enregistrement échoué.',4500); }
       }).catch(function(){ if(apres) apres(false); if(window.pushNotif) pushNotif('err','fa-times','Erreur réseau.',4000); });

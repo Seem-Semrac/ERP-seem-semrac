@@ -19,6 +19,7 @@ Toutes les données vivent dans une base **PostgreSQL** gérée par **Supabase**
 - **Tables métier historiques** : `clients`, `commandes`, `nomenclatures`, `stock`, `lots`, `bdt`, `factures_client`, `factures_fournisseur`, `demandes_travaux`, `bons_sous_traitance`, `non_conformites`… (créées avant/pendant l'exploitation).
 - **28 schémas SQL versionnés** dans [`scripts_import/`](../scripts_import/) — la **source de vérité** rejouable ailleurs. Ex. : `references_clients`, `plans_batiment`, `plan_marqueurs`, `plans_controle`, `kpi_objectifs`, `mouvements_perissables`, `documents` (GED), et **14 tables `hse_*`** (DUER, EPI, chimie, ATEX, formations…).
 - **Storage** : un bucket privé **`ged`** pour les fichiers (plans, CAO, FDS), ouverts via `/api/ged/file/:id`.
+- **Journal EN 9100 des nomenclatures** : `nomenclature_journal`, **en ajout seul** (déclencheurs `always` contre UPDATE, DELETE et vidage — seul le propriétaire peut les désactiver ; heure imposée par un déclencheur `before insert` aux écritures de l'API, gardée à la restauration d'une sauvegarde ; droits lecture + ajout ; pas de FK → il survit à la fiche). Docker : migration 006 ; cloud : `docker/db/cloud/cloud-5-nomenclature-journal.sql`. ⚠ `docker/scripts/migrate.sh` refuse le mot-clé de vidage, sauf la clause déclarée `before truncate on`, et toute concaténation de chaînes littérales.
 
 ## Conventions & pièges (mémoriser)
 - **Identifiants texte lisibles** : `CL-4116097` (client), `DT-2026-0001`, `AV-2026-XX`… (pas des UUID partout).
@@ -31,6 +32,7 @@ Toutes les données vivent dans une base **PostgreSQL** gérée par **Supabase**
 - **`documents.categorie`** inclut **`analyse_dt`** (docs d'analyse rattachés à une DT : `nomenclature_id` = id de la DT, chemin `DT-…/analyse_dt/…` dans le bucket `ged`).
 - **Avoirs (`credits`)** : décomptés **à l'acceptation** de l'offre (`solde` → `partiel`/`cloture`) ; jamais consommés par une offre non gagnée.
 - **Sondes REST** : header `User-Agent: Mozilla/5.0` **obligatoire**.
+- **Docker : `id` sans défaut** — la base née de `schema.sql` n'avait aucun défaut sur 50 colonnes `id text` : une insertion sans id y échouait alors qu'elle passe en cloud. Migration **007** (`gen_random_uuid()::text`, seulement là où il n'y a aucun défaut).
 
 Tout ceci est outillé par le skill [`erp-db`](../.claude/skills/erp-db/SKILL.md).
 

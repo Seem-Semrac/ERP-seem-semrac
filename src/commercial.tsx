@@ -3934,7 +3934,8 @@ export const pageServiceCommercial = (
       var data = await res.json();
       if(!data.ok){ pushNotif('err','fa-times','Erreur: '+(data.error||'inconnu'),5000); return; }
       pushNotif('ok','fa-check-circle','DT '+data.id+' créée — '+payload.activite+' / '+payload.type_dt+'.',6000);
-      setTimeout(function(){ window.location.replace('/commercial/service?'+Date.now()+'#dt'); }, 800);
+      if(data.journal===false) pushNotif('warn','fa-clipboard-list','Références client mises à jour, mais le journal EN 9100 n’a pas pu les tracer : '+String(data.journal_raison||'').replace(/[<>]/g,'')+'.',9000);
+      setTimeout(function(){ window.location.replace('/commercial/service?'+Date.now()+'#dt'); }, data.journal===false?6000:800);
     } catch(e){
       pushNotif('err','fa-times','Erreur réseau: '+e.message,5000);
     }
@@ -3953,7 +3954,8 @@ export const pageServiceCommercial = (
         ? 'DT '+id+' validée → '+(data.pieces_to_nomenclature||[]).length+' nomenclature(s) à créer côté BE avant analyse.'
         : 'DT '+id+' validée → directement envoyée à l\\'analyse DT du BE.';
       pushNotif('ok','fa-check-circle', msg, 6000);
-      setTimeout(function(){ window.location.replace('/commercial/service?'+Date.now()+'#dt'); }, 1000);
+      if(data.journal===false) pushNotif('warn','fa-clipboard-list','Références client mises à jour, mais le journal EN 9100 n’a pas pu les tracer : '+String(data.journal_raison||'').replace(/[<>]/g,'')+'.',9000);
+      setTimeout(function(){ window.location.replace('/commercial/service?'+Date.now()+'#dt'); }, data.journal===false?6000:1000);
     } catch(e){
       pushNotif('err','fa-times','Erreur réseau: '+e.message,5000);
     }
@@ -4030,10 +4032,11 @@ export const pageServiceCommercial = (
       var data = await res.json();
       if(!data.ok){ pushNotif('err','fa-times','Erreur: '+(data.error||'inconnu'),5000); return; }
       pushNotif('ok','fa-check-circle','DT '+id+' modifiée. Les modifications sont propagées à l\\'analyse BE.',6000);
+      if(data.journal===false) pushNotif('warn','fa-clipboard-list','Références client mises à jour, mais le journal EN 9100 n’a pas pu les tracer : '+String(data.journal_raison||'').replace(/[<>]/g,'')+'.',9000);
       ErpLock.release('dt:'+id);
       var m = document.getElementById('svcDtEditModal');
       if(m) m.style.display='none';
-      setTimeout(function(){ window.location.replace('/commercial/service?'+Date.now()+'#dt'); }, 800);
+      setTimeout(function(){ window.location.replace('/commercial/service?'+Date.now()+'#dt'); }, data.journal===false?6000:800);
     } catch(e){
       pushNotif('err','fa-times','Erreur réseau: '+e.message,5000);
     }

@@ -2055,6 +2055,75 @@ export async function deleteNomenclature(id: string) {
   return { error }
 }
 
+// ─── JOURNAL EN 9100 DES NOMENCLATURES (11/09/2026) ─────────────────────────────────────
+// Lectures STRICTES : elles rendent l'erreur au lieu de la cacher. supabase-js ne lève jamais ;
+// sans ça, une panne de lecture serait journalisée comme « tout a été ajouté ».
+export async function getNomenclatureStricte(id: string): Promise<{ data: any | null; error: string | null }> {
+  const { data, error } = await supabase.from('nomenclatures').select('*').eq('id', id).maybeSingle()
+  return { data: data ?? null, error: error ? error.message : null }
+}
+export async function getFournituresStrictes(id: string): Promise<{ data: any[] | null; error: string | null }> {
+  const { data, error } = await supabase.from('fournitures_nomenclature').select('*').eq('nomenclature_id', id).order('created_at')
+  return { data: error ? null : (data ?? []), error: error ? error.message : null }
+}
+// Table absente (cloud tant que cloud-5 n'est pas joué) ≠ échec d'écriture : l'écran le dit.
+// Seules les erreurs qui désignent la TABLE comptent : une colonne inconnue (PGRST204, 42703) est
+// un échec — sinon une suppression serait acceptée sans trace au lieu d'être refusée.
+const _journalAbsent = (e: any) => {
+  if (!e) return false
+  if (e.code === '42P01' || e.code === 'PGRST205') return true
+  const m = String(e.message || '')
+  return /nomenclature_journal/.test(m) && !/column/i.test(m) && /(relation .*does not exist|could not find the table)/i.test(m)
+}
+// Ajout d'une entrée (table APPEND-ONLY, migration 006). INSERT seulement : le droit UPDATE est
+// révoqué, un upsert échouerait. L'id est généré ici, comme createDocument.
+export async function journaliserNomenclature(entree: Record<string, any>): Promise<{ ok: true; id: string } | { ok: false; raison: 'table_absente' | 'echec'; error?: string }> {
+  const id = crypto.randomUUID()
+  const { error } = await supabase.from('nomenclature_journal').insert({ id, ...entree })
+  if (!error) return { ok: true, id }
+  return { ok: false, raison: _journalAbsent(error) ? 'table_absente' : 'echec', error: error.message }
+}
+// Lecture. Portée « groupe » = toutes les révisions de la pièce ; fonctionne même si la fiche a été
+// supprimée, puisque le journal porte lui-même son groupe.
+export async function getJournalNomenclature(id: string, portee: 'fiche' | 'groupe', groupe: string | null): Promise<{ rows: any[]; disponible: boolean; error: string | null; tronque: boolean }> {
+  const LIMITE = 500
+  let q: any = supabase.from('nomenclature_journal').select('*').order('created_at', { ascending: false }).limit(LIMITE + 1)
+  const qv = (s: string) => String(s).replace(/["\\,()]/g, '')   // valeurs citées dans le filtre or() de PostgREST
+  q = (portee === 'groupe' && groupe) ? q.or('groupe.eq."' + qv(groupe) + '",nomenclature_id.eq."' + qv(id) + '"') : q.eq('nomenclature_id', id)
+  const { data, error } = await q
+  if (error) return { rows: [], disponible: !_journalAbsent(error), error: error.message, tronque: false }
+  const rows = data ?? []
+  return { rows: rows.slice(0, LIMITE), disponible: true, error: null, tronque: rows.length > LIMITE }
+}
+// Fiche déjà tracée (validée, puis peut-être dévalidée) : son journal a au moins une entrée.
+// Table absente → { existe: false }. Autre échec → error : le suivi est INDÉTERMINÉ, jamais
+// « pas suivie » (ce serait laisser passer une modification sans trace).
+export async function journalExiste(nomenclatureId: string): Promise<{ existe: boolean; error: string | null }> {
+  const { data, error } = await supabase.from('nomenclature_journal').select('id').eq('nomenclature_id', nomenclatureId).limit(1)
+  if (error) return _journalAbsent(error) ? { existe: false, error: null } : { existe: false, error: error.message }
+  return { existe: !!(data && data.length), error: null }
+}
+// Groupe de révisions d'une fiche SUPPRIMÉE, lu dans son propre journal.
+export async function groupeDepuisJournal(nomenclatureId: string): Promise<string | null> {
+  const { data, error } = await supabase.from('nomenclature_journal').select('groupe').eq('nomenclature_id', nomenclatureId).order('created_at', { ascending: false }).limit(1)
+  return (!error && data && data[0] && data[0].groupe) ? String(data[0].groupe) : null
+}
+// Suppression VÉRIFIÉE : rend le nombre de lignes réellement effacées. Un DELETE filtré (RLS)
+// répond sans erreur ; seul le relevé des lignes supprimées dit ce qui s'est passé.
+export async function supprimerNomenclatureStricte(id: string): Promise<{ n: number; error: string | null }> {
+  const { data, error } = await supabase.from('nomenclatures').delete().eq('id', id).select('id')
+  return { n: error ? 0 : (data ?? []).length, error: error ? error.message : null }
+}
+// Lignes du répertoire d'une réf. interne, lues STRICTEMENT (état avant d'une trace EN 9100).
+export async function getReferencesClientsStricte(code: string): Promise<{ data: any[] | null; error: string | null }> {
+  const { data, error } = await supabase.from('references_clients').select('*').ilike('code_ref_interne', String(code))
+  return { data: error ? null : (data ?? []), error: error ? error.message : null }
+}
+export async function getReferenceClientStricte(id: string): Promise<{ data: any | null; error: string | null }> {
+  const { data, error } = await supabase.from('references_clients').select('*').eq('id', id).maybeSingle()
+  return { data: data ?? null, error: error ? error.message : null }
+}
+
 export async function getFournitures(nomenclatureId: string): Promise<FournitureNomenclature[]> {
   const { data } = await supabase.from('fournitures_nomenclature').select('*').eq('nomenclature_id', nomenclatureId).order('created_at')
   return data ?? []

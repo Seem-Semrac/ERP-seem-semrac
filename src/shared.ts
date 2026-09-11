@@ -866,14 +866,15 @@ function bulkConfirm(){
   document.getElementById('bulk-modal').style.display='none';
   if(!base||!ids.length) return;
   if(window.pushNotif) pushNotif('ok','fa-hourglass-half','Suppression de '+ids.length+'…',1500);
-  var done=0,failed=0;
+  var done=0,failed=0,nontrace=0,raison='';
   Promise.all(ids.map(function(id){
     return fetch(base+encodeURIComponent(id),{method:'DELETE'})
-      .then(function(r){ return r.ok?(r.json().catch(function(){return {ok:true};})):{ok:false}; })
-      .then(function(j){ if(j&&j.ok!==false) done++; else failed++; })
+      .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ j=j||{}; if(!r.ok) j.ok=false; return j; }); })
+      .then(function(j){ if(j&&j.ok!==false){ done++; if(j.journal===false) nontrace++; } else { failed++; if(j&&j.error&&!raison) raison=String(j.error).replace(/[<>]/g,''); } })
       .catch(function(){ failed++; });
   })).then(function(){
-    if(window.pushNotif) pushNotif(failed?'warn':'ok', failed?'fa-triangle-exclamation':'fa-check', done+' supprimé(s)'+(failed?(' · '+failed+' échec(s) — élément(s) référencé(s) ?'):''), 5500);
+    if(window.pushNotif) pushNotif(failed?'warn':'ok', failed?'fa-triangle-exclamation':'fa-check', done+' supprimé(s)'+(failed?(' · '+failed+' échec(s) — '+(raison||'élément(s) référencé(s) ?')):''), 5500);
+    if(nontrace&&window.pushNotif) pushNotif('warn','fa-clipboard-list',nontrace+' suppression(s) non tracée(s) au journal EN 9100 — prévenez l’administrateur.',9000);
     setTimeout(function(){ softReload(); }, 950);
   });
 }

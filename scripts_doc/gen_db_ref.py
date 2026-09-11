@@ -16,7 +16,7 @@ H = {"apikey": KEY, "Authorization": "Bearer " + KEY, "User-Agent": "Mozilla/5.0
 # Tables connues par domaine (source : 03-base-de-donnees.md). Ajouter ici toute nouvelle table.
 DOMAINES = [
     ("Commercial", ["clients", "demandes_travaux", "offres", "credits", "commandes_prioritaires", "demandes_site", "interlocuteurs"]),
-    ("BE / Nomenclatures", ["nomenclatures", "fournitures_nomenclature", "etapes_production", "be_refs", "ref_prix_historique", "produits_fournisseurs"]),
+    ("BE / Nomenclatures", ["nomenclatures", "fournitures_nomenclature", "nomenclature_journal", "etapes_production", "be_refs", "ref_prix_historique", "produits_fournisseurs"]),
     ("Achats / Fournisseurs", ["fournisseurs", "sous_traitants", "demandes_prix", "demandes_achat", "bons_commande", "factures_fournisseur"]),
     ("Production", ["commandes", "lots", "bons_de_travail", "bons_sous_traitance", "machines", "machines_opex", "shifts", "absences", "presences", "affectations_poste", "process_atelier"]),
     ("Qualite", ["non_conformites", "pv_controles", "quarantaines", "rapports_8d", "derogations", "actions_correctives", "plans_controle", "controles_cotes", "ecme", "produits_perissables", "mouvements_perissables"]),

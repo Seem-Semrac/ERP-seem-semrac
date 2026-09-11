@@ -825,6 +825,18 @@ export const pageServiceBE = (
             <div id="nom-f-id" style="display:none;"></div>
           </div>
 
+          <!-- Journal EN 9100 : toutes les modifications d'une nomenclature validée -->
+          <div id="nom-journal-card" style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);padding:18px 20px;margin-top:14px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+              <div style="font-size:.72rem;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;"><i class="fas fa-clipboard-list" style="color:#8b5cf6;margin-right:6px;"></i>Journal des modifications · EN 9100</div>
+              <select id="nom-journal-portee" onchange="nomJournalLoad()" style="margin-left:auto;border:1.5px solid #e2e8f0;border-radius:7px;padding:3px 6px;font-size:.7rem;background:#f8fafc;">
+                <option value="fiche">Cette révision</option>
+                <option value="groupe">Toutes les révisions</option>
+              </select>
+            </div>
+            <div id="nom-journal-list" style="font-size:.74rem;color:#475569;"><div style="color:#94a3b8;">Aucun historique avant le premier enregistrement.</div></div>
+          </div>
+
         </div>
       </div>
     </div>
@@ -1346,6 +1358,42 @@ export const pageServiceBE = (
         +'</div>';
     }).join('');
   }
+  // ── Journal EN 9100 de la nomenclature ouverte ──
+  var NOM_JOURNAL_LIB={creation:'Création',validation:'Validation',modification:'Modification',devalidation:'Dévalidation',prepa_technique:'Préparation technique',nouvel_indice:'Nouvel indice',suppression:'Suppression',suppression_echouee:'Suppression annulée',document_ajoute:'Document ajouté',document_retire:'Document retiré',reference_client:'Référence client'};
+  var NOM_JOURNAL_SEQ=0;
+  function nomJournalEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function nomJournalTxt(v){ return (v==null||v==='')?'':((typeof v==='object')?JSON.stringify(v):String(v)); }
+  // Valeur affichée : coupée AUTOUR de la première différence avec l'autre côté (deux textes longs
+  // qui ne diffèrent qu'à la fin s'afficheraient sinon identiques) ; la valeur entière est au survol.
+  function nomJournalVal(v,autre){ if(v==null||v==='') return '<span style="color:#cbd5e1;">∅</span>'; var s=nomJournalTxt(v), o=nomJournalTxt(autre), d=0; while(d<s.length&&d<o.length&&s.charAt(d)===o.charAt(d)) d++; var deb=Math.max(0,Math.min(d-30,s.length-90)); var vu=s.length>90?((deb>0?'…':'')+s.slice(deb,deb+90)+(deb+90<s.length?'…':'')):s; return '<span title="'+nomJournalEsc(s)+'">'+nomJournalEsc(vu)+'</span>'; }
+  function nomJournalLoad(){
+    var el=document.getElementById('nom-journal-list'); if(!el) return;
+    var tok=++NOM_JOURNAL_SEQ;
+    if(!nomCurrentId){ el.innerHTML='<div style="color:#94a3b8;">Aucun historique avant le premier enregistrement.</div>'; return; }
+    var idDemande=nomCurrentId;
+    var portee=(document.getElementById('nom-journal-portee')||{}).value||'fiche';
+    fetch('/api/nomenclature/'+encodeURIComponent(idDemande)+'/journal?portee='+portee,{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
+      // Réponse périmée (une autre fiche est ouverte, ou une autre portée choisie entre-temps) : ignorée.
+      if(tok!==NOM_JOURNAL_SEQ||idDemande!==nomCurrentId) return;
+      if(!j||!j.ok){ el.innerHTML='<div style="color:#b91c1c;">Journal illisible : '+nomJournalEsc((j&&j.error)||'erreur')+'</div>'; return; }
+      if(!j.disponible){ el.innerHTML='<div style="color:#b45309;"><i class="fas fa-triangle-exclamation" style="margin-right:5px;"></i>Journal indisponible : sa table n’existe pas encore sur cette base (script cloud-5).</div>'; return; }
+      var e=j.entrees||[];
+      if(!e.length){ el.innerHTML='<div style="color:#94a3b8;">Aucune modification tracée. Le journal commence à la validation de la nomenclature.</div>'; return; }
+      el.innerHTML=(j.tronque?'<div style="color:#b45309;margin-bottom:8px;"><i class="fas fa-triangle-exclamation" style="margin-right:5px;"></i>Les 500 dernières entrées sont affichées : l’historique complet est conservé en base.</div>':'')+e.map(function(x){
+        var ch=x.changements||[]; var d=new Date(x.created_at); var quand=isNaN(d.getTime())?'':d.toLocaleString('fr-FR');
+        return '<div style="border-left:3px solid #ddd6fe;padding:6px 10px;margin-bottom:8px;">'
+          +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><strong style="color:#5b21b6;">'+nomJournalEsc(NOM_JOURNAL_LIB[x.evenement]||x.evenement)+'</strong>'
+          +'<span style="color:#94a3b8;">'+nomJournalEsc(quand)+'</span>'
+          +'<span>· '+nomJournalEsc(x.auteur_nom||'?')+(x.auteur_matricule?' ('+nomJournalEsc(x.auteur_matricule)+')':'')+'</span>'
+          +(x.indice?'<span style="background:#f5f3ff;color:#6d28d9;border-radius:999px;padding:0 7px;font-size:.66rem;">ind. '+nomJournalEsc(x.indice)+'</span>':'')
+          +(x.auteur_source&&x.auteur_source!=='session'?'<span style="color:#b45309;font-size:.66rem;">'+(x.auteur_source==='bootstrap'?'compte de secours':'sans authentification')+'</span>':'')
+          +'</div>'
+          +(ch.length?'<ul style="margin:4px 0 0 16px;padding:0;">'+ch.map(function(c){ return '<li>'+nomJournalEsc(c.champ)+' : '+nomJournalVal(c.avant,c.apres)+' → '+nomJournalVal(c.apres,c.avant)+(c.detail?' <i class="fas fa-circle-info" style="color:#a78bfa;cursor:help;" title="'+nomJournalEsc(JSON.stringify(c.detail))+'"></i>':'')+'</li>'; }).join('')+'</ul>':'')
+          +(x.motif?'<div style="color:#64748b;">Motif : '+nomJournalEsc(x.motif)+'</div>':'')
+          +'</div>';
+      }).join('');
+    }).catch(function(){ if(tok===NOM_JOURNAL_SEQ) el.innerHTML='<div style="color:#b91c1c;">Journal : erreur réseau.</div>'; });
+  }
   function gedRenderAll(){ gedRenderZone('plan_client'); gedRenderZone('plan_cao'); nomRenderFaoList(); nomRenderLienPlan(); }
   // Le nom du plan s'affiche dans le bloc Identification (champ Nom du fichier CAO), mais ce
   // champ n'est que du texte : on cherchait le plan la ou il est ecrit, sans pouvoir l'ouvrir.
@@ -1391,11 +1439,15 @@ export const pageServiceBE = (
       if(!j||!j.ok){ if(typeof pushNotif==='function') pushNotif('err','fa-times',(j&&j.error)||'Échec.'); return; }
       ['rc-client','rc-refclient','rc-numplan'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
       nomRefsClientsLoad(code);
+      nomJournalLoad();
+      if(j.journal===false&&typeof pushNotif==='function') pushNotif('warn','fa-clipboard-list','Référence enregistrée, mais le journal EN 9100 n’a pas pu l’écrire : '+String(j.journal_raison||'').replace(/[<>]/g,'')+'.',9000);
     }).catch(function(){});
   }
   function nomRefClientDel(id){
-    fetch('/api/references-clients/'+encodeURIComponent(id),{method:'DELETE'}).then(function(r){return r.json();}).then(function(){
+    fetch('/api/references-clients/'+encodeURIComponent(id)+'?nomenclature_id='+encodeURIComponent(nomCurrentId||''),{method:'DELETE'}).then(function(r){return r.json();}).then(function(j){
       nomRefsClientsLoad(((document.getElementById('nom-f-code')||{}).value)||'');
+      nomJournalLoad();
+      if(j&&j.journal===false&&typeof pushNotif==='function') pushNotif('warn','fa-clipboard-list','Référence retirée, mais le journal EN 9100 n’a pas pu l’écrire : '+String(j.journal_raison||'').replace(/[<>]/g,'')+'.',9000);
     }).catch(function(){});
   }
 
@@ -1408,11 +1460,11 @@ export const pageServiceBE = (
     if(etapeOrdre!=null) fd.append('etape_ordre',String(etapeOrdre));
     beNotif('info','fa-upload','Envoi de '+f.name+'…');
     fetch('/api/ged/upload',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
-      if(j&&j.ok){ inp.value=''; if(cat==='plan_cao'){ var pf=document.getElementById('nom-f-planfic'); if(pf&&!pf.value&&j.document)pf.value=j.document.fichier_nom; } gedLoad(); beNotif('ok','fa-check','Fichier joint.'); }
+      if(j&&j.ok){ inp.value=''; if(cat==='plan_cao'){ var pf=document.getElementById('nom-f-planfic'); if(pf&&!pf.value&&j.document)pf.value=j.document.fichier_nom; } gedLoad(); nomJournalLoad(); beNotif('ok','fa-check','Fichier joint.'); if(j.journal===false) beNotif('warn','fa-clipboard-list','Fichier joint, mais le journal EN 9100 n’a pas pu l’écrire : '+String(j.journal_raison||'').replace(/[<>]/g,'')+'.'); }
       else beNotif('err','fa-times',(j&&j.error)||'Echec de l envoi.');
     }).catch(function(){ beNotif('err','fa-times','Erreur reseau.'); });
   }
-  async function gedDelete(id){ if(!await appConfirm('Supprimer ce fichier ?'))return; fetch('/api/ged/'+id,{method:'DELETE'}).then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ gedLoad(); beNotif('ok','fa-check','Fichier supprimé.'); } else beNotif('err','fa-times',(j&&j.error)||'Echec.'); }).catch(function(){ beNotif('err','fa-times','Erreur reseau.'); }); }
+  async function gedDelete(id){ if(!await appConfirm('Supprimer ce fichier ?'))return; fetch('/api/ged/'+id,{method:'DELETE'}).then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ gedLoad(); nomJournalLoad(); beNotif('ok','fa-check','Fichier supprimé.'); if(j.journal===false) beNotif('warn','fa-clipboard-list','Fichier supprimé, mais le journal EN 9100 n’a pas pu l’écrire : '+String(j.journal_raison||'').replace(/[<>]/g,'')+'.'); } else beNotif('err','fa-times',(j&&j.error)||'Echec.'); }).catch(function(){ beNotif('err','fa-times','Erreur reseau.'); }); }
   // (Point 10 retiré : la création machine/process se fait en Production → « Postes & Process ». La gamme ne fait que CHOISIR.)
   // ── Point 8 : créer fournisseur/ST + entrée catalogue depuis le BE ──
   function beFournTypeChange(){ var t=document.getElementById('befn-type').value; document.getElementById('befn-prest-wrap').style.display=(t==='sous_traitant')?'':'none'; }
@@ -1561,7 +1613,8 @@ export const pageServiceBE = (
       if(data.ok){
         var num = (data.data && data.data.num_nom) || data.num_nom || '';
         pushNotif('ok','fa-code-branch', (num?num+' — ':'') + 'Nouvel indice '+data.indice+' créé (révision '+nomCurrentIndice+' conservée).', 4500);
-        setTimeout(function(){ window.location.replace('/be/service?'+Date.now()+'#noms'); }, 1000);
+        if (data.journal === false) pushNotif('warn','fa-clipboard-list','Révision créée, mais le journal EN 9100 n’a pas pu la tracer : '+String(data.journal_raison||'').replace(/[<>]/g,'')+'.',9000);
+        setTimeout(function(){ window.location.replace('/be/service?'+Date.now()+'#noms'); }, data.journal === false ? 6000 : 1000);
       } else { pushNotif('err','fa-ban', 'Erreur : '+(data.error||'inconnue')); }
     }catch(e){ pushNotif('err','fa-exclamation-circle','Erreur réseau : '+e.message); }
   }
@@ -1597,7 +1650,8 @@ export const pageServiceBE = (
       .then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Création de l\\'indice échouée.'); return; }
         pushNotif('ok','fa-code-branch','Nouvel indice '+(j.indice||'')+' créé (révision précédente conservée).',4500);
-        setTimeout(function(){ window.location.replace('/be/service?'+Date.now()+'#noms'); },900);
+        if(j.journal===false) pushNotif('warn','fa-clipboard-list','Révision créée, mais le journal EN 9100 n’a pas pu la tracer : '+String(j.journal_raison||'').replace(/[<>]/g,'')+'.',9000);
+        setTimeout(function(){ window.location.replace('/be/service?'+Date.now()+'#noms'); },j.journal===false?6000:900);
       }).catch(function(){ pushNotif('err','fa-times','Erreur réseau.'); });
   }
   // Filtre Seem / Semrac d'une liste de nomenclatures
@@ -1698,6 +1752,7 @@ export const pageServiceBE = (
   function nomNewForm() {
     nomCurrentId = null;
     GED_DOCS = []; gedRefreshUi(); gedRenderAll();   // GED : nouvelle nomenclature → zones masquées jusqu'à enregistrement
+    nomJournalLoad();                                 // journal : rien avant le premier enregistrement
     nomCurrentStatut = 'brouillon';
     nomCurrentIndice = 'A';
     nomCurrentGroupe = null;
@@ -1763,6 +1818,7 @@ export const pageServiceBE = (
   function nomOpenFormReal(nom) {
     nomCurrentId = nom.id || null;
     gedRefreshUi(); gedLoad();   // GED : charge les documents rattachés à cette nomenclature
+    nomJournalLoad();            // journal EN 9100 de cette fiche
     nomRefsClientsLoad(nom.code_ref_produit || nom.num_nom || '');   // répertoire clients de cette pièce
     nomCurrentStatut = nom.statut || 'brouillon';
     nomCurrentIndice = nom.indice || 'A';
@@ -2654,10 +2710,16 @@ export const pageServiceBE = (
         // l'impression que le bouton ne fonctionnait pas.
         if (data.id) nomCurrentId = data.id;
         if (data.indice) nomCurrentIndice = data.indice;
-        nomCurrentStatut = statutEffectif;
+        // Statut RÉEL renvoyé par le serveur (une fiche validée entre-temps le reste côté serveur) :
+        // c'est lui qui choisit le message, le badge et les enregistrements suivants.
+        nomCurrentStatut = data.statut || statutEffectif;
+        if (statut !== 'valide' && nomCurrentStatut === 'valide') dejaValidee = true;
         if (statut === 'valide') {
           pushNotif('ok','fa-check-circle', (num ? num+' — ' : '') + 'Nomenclature validée — elle rejoint la liste des nomenclatures faites.', 4500);
-          setTimeout(function(){ window.location.replace('/be/service?' + Date.now() + '#noms'); }, 900);
+          // Journal EN 9100 en échec : on laisse le temps de LIRE l'avertissement avant de quitter la page.
+          var _delai = 900;
+          if (data.journal === false) { pushNotif('warn','fa-clipboard-list','Validation enregistrée, mais le journal EN 9100 n’a pas pu la tracer : '+String(data.journal_raison||'').replace(/[<>]/g,'')+'.',9000); _delai = 6000; }
+          setTimeout(function(){ window.location.replace('/be/service?' + Date.now() + '#noms'); }, _delai);
           return;
         }
         if (dejaValidee) {
@@ -2665,15 +2727,19 @@ export const pageServiceBE = (
           var _bv = document.getElementById('nom-form-statut-badge');
           if (_bv) _bv.innerHTML = '<span style="background:#dcfce7;color:#15803d;border-radius:999px;padding:2px 10px;font-size:.68rem;font-weight:800;">Validée</span>';
           if (typeof gedRefreshUi === 'function') gedRefreshUi();
+          if (data.journal === false) pushNotif('warn','fa-clipboard-list','Modification enregistrée, mais le journal EN 9100 n’a pas pu l’écrire : '+String(data.journal_raison||'').replace(/[<>]/g,'')+'.',9000);
+          if (typeof nomJournalLoad === 'function') nomJournalLoad();
           return;
         }
         // Enregistrement simple : on RESTE dans la nomenclature, la progression est sauvegardée
         // et la nomenclature demeure dans « à faire ».
         if (nouvelIndice && data.indice) pushNotif('ok','fa-code-branch', (num ? num+' — ' : '') + 'Nouvel indice '+data.indice+' créé (révision conservée).', 4500);
         else pushNotif('ok','fa-save', (num ? num+' — ' : '') + 'Progression enregistrée. Vous restez sur la nomenclature.', 3500);
+        if (data.journal === false) pushNotif('warn','fa-clipboard-list','Modification enregistrée, mais le journal EN 9100 n’a pas pu l’écrire : '+String(data.journal_raison||'').replace(/[<>]/g,'')+'.',9000);
         var _b = document.getElementById('nom-form-statut-badge');
         if (_b) _b.innerHTML = '<span style="background:#dbeafe;color:#1d4ed8;border-radius:999px;padding:2px 10px;font-size:.68rem;font-weight:800;">Enregistrée · à valider</span>';
         if (typeof gedRefreshUi === 'function') gedRefreshUi();   // les pièces jointes deviennent possibles dès qu'un id existe
+        if (typeof nomJournalLoad === 'function') nomJournalLoad();
       } else {
         pushNotif('err','fa-ban', data.error || 'Enregistrement refusé.', 8000);
       }
@@ -2694,6 +2760,7 @@ export const pageServiceBE = (
         return;
       }
       pushNotif('ok','fa-trash','Nomenclature ' + num + ' supprimée.', 4000);
+      if (data.journal === false) pushNotif('warn','fa-clipboard-list','Nomenclature supprimée, mais le journal EN 9100 n’a pas pu tracer la suppression : '+String(data.journal_raison||'').replace(/[<>]/g,'')+'.',9000);
       // Retire uniquement la ligne concernée
       var row = document.querySelector('tr[data-nom-row="' + id + '"]');
       if (row) row.remove();

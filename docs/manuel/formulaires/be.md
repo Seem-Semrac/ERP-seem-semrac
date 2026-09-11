@@ -101,6 +101,19 @@ Les cases à choisir sont dans l'ordre : **1) Type → 2) Poste → 3) Process**
 
 ⚠️ **Attention :** Il faut d'abord enregistrer la nomenclature en brouillon, puis la rouvrir, pour pouvoir joindre des fichiers.
 
+## Éditeur de nomenclature — Journal des modifications (EN 9100)
+**Quand l'utiliser :** Pour savoir qui a modifié une nomenclature validée, quand, et ce qui a changé (exigence de traçabilité EN 9100).
+**Où le trouver :** Éditeur de nomenclature, sous l'encadré « Validation » : carte « Journal des modifications · EN 9100 ».
+
+| Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
+|---|---|---|---|---|
+| Portée | liste | Non | « Cette révision » (l'indice ouvert) ou « Toutes les révisions » (tous les indices de la pièce). | Toutes les révisions |
+
+Chaque entrée affiche l'événement (Création, Validation, Modification, Dévalidation, Préparation technique, Nouvel indice, Document ajouté / retiré, Référence client, Suppression), la date et l'heure, l'auteur (nom et matricule du compte connecté), l'indice, puis la liste des changements « champ : avant → après ». Survolez une valeur pour la lire en entier ; survolez un élément ajouté ou retiré pour voir sa définition complète.
+
+💡 **Astuce :** Rien à saisir : le journal se remplit tout seul à chaque enregistrement d'une nomenclature validée. Un ré-enregistrement sans changement n'ajoute rien.
+⚠️ **Attention :** Le journal ne se modifie pas et ne s'efface pas. Un message orange « le journal EN 9100 n'a pas pu… » signifie que la modification est enregistrée mais pas tracée : prévenez l'administrateur. Un message « refusé pour garantir la traçabilité » signifie que rien n'a été enregistré ni supprimé : réessayez un instant plus tard.
+
 ## Créer une machine ou un process d'atelier
 > **Ce n'est plus dans le Bureau d'Études.** Les boutons « + Machine » et « + Process » au-dessus de la gamme ont été **retirés**. Machines et process se créent (et se rattachent à un poste) **uniquement dans le service Production → onglet « Postes & Process »**. Dans la gamme du BE, vous ne faites que **choisir** un poste puis un de ses process. Si le process voulu n'existe pas encore, demandez à la Production de le créer et de le rattacher au bon poste.
 

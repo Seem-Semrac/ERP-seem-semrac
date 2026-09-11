@@ -46,6 +46,8 @@ h={'apikey':KEY,'Authorization':'Bearer '+KEY,'User-Agent':'Mozilla/5.0'}
 ## 5. Nettoyage (OBLIGATOIRE)
 Toute donnée créée par un test (préfixe conseillé : `-TEST-`) doit être supprimée par DELETE REST à la fin. Ne jamais laisser de données de test en base — c'est la base de production.
 
+⚠ **Exception : `nomenclature_journal`** (journal EN 9100) est **en ajout seul** — un DELETE REST y est refusé, et rien ne l'efface. Un test qui valide, modifie ou supprime une nomenclature **validée** doit tourner contre le **Docker** (`SUPABASE_URL=http://127.0.0.1:8000`), jamais contre le cloud, puis purger ses entrées en superutilisateur (procédure : `docs/technique/02-exploitation-runbook.md`).
+
 ## Règles
 - Jamais de commit si une étape est rouge.
 - Ne PAS inventer de données de démo pour « faire joli » — interdit dans ce projet.

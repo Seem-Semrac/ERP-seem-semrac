@@ -5,7 +5,7 @@
 #          doublons (ref,phase) -> MAX ; homme/machine via process.requiert_machine (sinon homme) ;
 #          statut nomenclature = en_cours ; libelles non reconnus conserves sans process_id ;
 #          ignorer lignes Total/Sous-total + pointeurs 'VOIR GAMME SUIVANTE'.
-import openpyxl, re, sys, json, unicodedata, urllib.request
+import openpyxl, re, sys, json, unicodedata, urllib.request, urllib.error
 
 SUPABASE_URL = 'https://vyqgrasezpyqjwvijwvv.supabase.co'
 ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5cWdyYXNlenB5cWp3dmlqd3Z2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwNTE4MTcsImV4cCI6MjA5MzYyNzgxN30.Optt1QD-Ai3Xm8mk4f8fsvKry9-L2SlTBNB9KgVG3ls'
@@ -68,8 +68,25 @@ def match_process(libelle, site):
     return best if bestscore >= 1 else None
 
 # --- nomenclatures existantes (anti-doublon) ---
-existing = rest('GET', 'nomenclatures', None, '?select=id,entite,code_ref_produit')
+def tout(path, select):
+    # Lecture PAGINEE : PostgREST plafonne chaque reponse (1000 lignes par defaut).
+    out, off = [], 0
+    while True:
+        page = rest('GET', path, None, '?select=' + select + '&order=id&limit=1000&offset=' + str(off))
+        out += page
+        if len(page) < 1000: return out
+        off += 1000
+existing = tout('nomenclatures', 'id,entite,code_ref_produit,statut')
 exmap = {(n.get('entite'), str(n.get('code_ref_produit') or '').strip()): n['id'] for n in existing}
+# Une nomenclature SUIVIE au journal EN 9100 (validee, ou validee puis devalidee, ou revision d'une
+# validee) n'est JAMAIS reecrite par l'import : il la devaliderait et remplacerait sa gamme en
+# passant par la base directement, donc hors du journal. Nouvel indice via l'ERP.
+try:
+    suivies_ids = {j.get('nomenclature_id') for j in tout('nomenclature_journal', 'nomenclature_id')}
+except urllib.error.HTTPError as e:
+    if e.code != 404: raise           # table absente (cloud avant cloud-5) : seules les validees comptent
+    suivies_ids = set()
+valides = {(n.get('entite'), str(n.get('code_ref_produit') or '').strip()) for n in existing if n.get('statut') == 'valide' or n.get('id') in suivies_ids}
 
 rep = {'create': 0, 'update': 0, 'ignored': 0, 'errors': [], 'unmatched': {}, 'samples': [], 'by_site': {}}
 
@@ -146,6 +163,9 @@ for path, site in FILES:
                    'description': d['desig'] or None, 'statut': 'en_cours', 'indice': 'A',
                    'type_nom': 'standard', 'etapes_production': etapes}
         key = (site, refs_)
+        if key in valides:
+            rep['valide_ignoree'] = rep.get('valide_ignoree', 0) + 1
+            continue
         if key in exmap:
             rep['update'] += 1
             if not DRY_RUN:
@@ -162,6 +182,7 @@ for path, site in FILES:
 print('================ RAPPORT IMPORT NOMENCLATURES ================')
 print('MODE :', 'DRY-RUN (aucune ecriture)' if DRY_RUN else '*** APPLY (ecriture reelle) ***')
 print('Nomenclatures par site :', rep['by_site'])
+print('Suivies EN 9100 ignorees (validees ou deja au journal, jamais reecrites) :', rep.get('valide_ignoree', 0))
 print('Creations :', rep['create'], '| Mises a jour :', rep['update'], '| Lignes ignorees :', rep['ignored'], '| Reglages fusionnes au process aval :', rep.get('reglage_merged', 0))
 print('Erreurs :', len(rep['errors']))
 for e in rep['errors'][:10]: print('   ERR', e)

@@ -2,6 +2,64 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-11 — Nomenclatures validées : journal EN 9100 de toutes les modifications
+
+*« Pour l'EN 9100, je veux pouvoir tracer dans les logs toutes les modifications effectuées sur
+une nomenclature déjà validée. »*
+
+Nouvelle table **`nomenclature_journal`**, **en ajout seul, garanti par la base** : déclencheurs contre
+la modification, l'effacement et le vidage (superutilisateur compris), heure imposée par la base (pas
+d'entrée antidatée), aucune clé étrangère — le journal survit à la fiche. Une entrée par événement :
+création validée, validation, modification, dévalidation (avec instantané de la définition validée),
+préparation technique, nouvel indice (des deux côtés), plan ou programme joint ou retiré, référence
+client, suppression (instantané complet écrit **avant** l'effacement). L'auteur est **tiré de la
+session** ; chaque changement porte sa valeur **avant → après**. Une fiche validée puis dévalidée
+**reste suivie**.
+
+Les écarts sont calculés par un module pur, `src/nomenclature_journal.ts`, entre la base avant et la
+base après (relue), en comparant **toutes** les colonnes et toutes les clés d'étape. Un
+ré-enregistrement à l'identique n'écrit rien ; une étape insérée donne un seul ajout ; deux étapes
+identiques ne s'échangent pas ; un élément retiré garde sa définition complète. Carte **« Journal des
+modifications · EN 9100 »** dans le formulaire, lecture par `GET /api/nomenclature/:id/journal`.
+
+**Sûreté** : un enregistrement dont l'état « avant » est illisible est refusé (503) ; une suppression
+est refusée si la fiche, ses fournitures ou le journal ne peuvent être lus ou écrits. **Base sans la
+table** (cloud tant que `cloud-5` n'est pas joué) : tout passe, la réponse dit `journal: false` et
+chaque écran appelant l'affiche en orange. L'import des nomenclatures ignore désormais les fiches
+validées, et le miroir cloud → local ne recopie jamais le journal.
+
+**Deux revues adverses multi-agents** : la première a confirmé 10 défauts — dont le changement de
+sous-traitant d'une étape non tracé, les minutes d'une gamme importée jamais comparées, la
+suppression journalisée *après* l'effacement, l'enregistrement sans trace si la lecture échouait — et
+une vingtaine de défauts secondaires ; tous sont corrigés. La seconde a vérifié les correctifs et
+trouvé 7 autres défauts — un faux « réordonnancement » quand on supprime une étape puis en ajoute
+une en fin de gamme, des références client modifiées par une DT sans trace, une restauration de
+sauvegarde qui aurait remis toutes les heures du journal à l'heure de la restauration, un
+enregistrement simple qui taisait l'échec du journal — ; tous corrigés aussi.
+
+**Trouvé par la seconde revue — les migrations ne pouvaient pas s'appliquer sur la VM.** L'image
+Supabase crée les tables ERP au nom de `supabase_admin` (initialisation depuis `schema.sql`) et
+rétrograde `postgres` ; or le conteneur `erp-migrate` se connectait en `postgres`. Toute migration qui
+modifie une table échouait donc sur la VM (« must be owner of table … ») et était retentée à chaque
+démarrage — très probablement **002 à 005** depuis leur livraison. Le lanceur se connecte désormais en
+`supabase_admin` : au prochain `erp-docker.sh maj`, les migrations en attente s'appliquent (après la
+sauvegarde automatique). Son contrôle des mots-clés dangereux admet une exception déclarée
+(`before truncate on`, qui interdit le vidage) et refuse toute concaténation de chaînes littérales.
+
+**Trouvé en testant — créer une nomenclature était impossible sur Docker / VM.** La base née de
+`schema.sql` avait 50 colonnes `id text NOT NULL` **sans valeur par défaut** : toute insertion sans
+id échouait (« null value in column "id" ») — créer une nomenclature, un nouvel indice, l'entrée de
+stock d'une nouvelle référence. Migration **007** : `default gen_random_uuid()::text`, posé uniquement
+sur les colonnes texte qui n'ont aucun défaut, et une séquence (reprise au-delà du plus grand id)
+pour les identifiants numériques — `mouvements_perissables`. Sans risque par construction : une insertion qui fournit son
+id n'est pas concernée, et une qui n'en fournit pas échouait. Le cloud génère déjà ses identifiants :
+pas de script cloud.
+
+Migrations **006** (journal) et **007** (identifiants), reportées dans `db/seed/schema.sql` ; cloud :
+**`cloud-5-nomenclature-journal.sql`**. Vérifié sur Docker avec des jeux `-TEST-` (supprimés, comptages
+identiques avant et après) : 63 contrôles de bout en bout, 8 avec authentification et 50 tests du module pur. `tsc` propre,
+harnais 60/0.
+
 ## 2026-09-11 — Planning : un BDT n'est sur le planning que s'il y a été posé
 
 *« Quand les BDT sont à programmer ils ne doivent pas apparaître dans le planning : ils sont
