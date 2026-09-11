@@ -2473,6 +2473,13 @@ export async function updateBDT(id: string, patch: Record<string, any>) {
   return { data, error }
 }
 
+// Retrait d'un BDT : sert au RETOUR ARRIÈRE d'une séparation qui échoue en cours de route.
+// Rend l'erreur (supabase-js ne lève jamais).
+export async function supprimerBDTRow(id: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.from('bons_de_travail').delete().eq('id', id)
+  return { error: error ? error.message : null }
+}
+
 export async function createBDTRow(payload: Record<string, any>) {
   const { data, error } = await supabase.from('bons_de_travail').insert(payload).select().single()
   return { data, error }

@@ -56,7 +56,7 @@ import {
   createOffre, updateOffre, deleteOffre, createCommande, updateCommande, recomputeCmdAvancement, recomputeCmdCout, getCommandeDetail, getLotDetail, getAffaireDetail,
   getBeRefs, getDashboardData,
   getPlanningOperateurs, getPlanningBDTs, getPlanningBDS, getSousTraitants, getShifts, getAbsences, getSalariesActifs,
-  updateBDT, createBDTRow, updateBDS, createBDSRow,
+  updateBDT, createBDTRow, supprimerBDTRow, updateBDS, createBDSRow,
   createNonConformiteRow, updateNonConformite, ncHasRetourCols, ncEstClose, ncEstBloquante, ncRattacheeAffaire, ncHasExtCols, ncHasResponsable,
   createCredit, updateCredit, deleteCredit, getCreditsEnCoursForClient, getCommandesPrioritaires, createCommandePrioritaire, updateCommandePrioritaire, createLot,
   getDerogations, createDerogation, updateDerogation,
@@ -936,7 +936,7 @@ async function cascadeLotsBdtBst(dt: any, cmdId: string, byCode: Record<string, 
       } else {
         bdtNum++
         if (bdtKey.has(k)) continue
-        await createBDTRow({ id: fmtBonId('BDT', year, aff, pieceNum, bdtNum), num_affaire: aff, cmd_ref: cmdId, lot_ref: lotRef, client_nom: client, piece: p.ref_interne || ref, operation: op, machine_id: e.machine_id || null, process_id: e.process_id || null, seq, duree: dureeH, temps_alloue: dureeH, statut: 'programme', priorite: prio, activite: act, oas_avant: oasAvant, oas_apres: oasApres, matiere_ok: false }).then((r: any) => { if (r && !r.error) nb++ }).catch(() => {})
+        await createBDTRow({ id: fmtBonId('BDT', year, aff, pieceNum, bdtNum), num_affaire: aff, cmd_ref: cmdId, lot_ref: lotRef, client_nom: client, piece: p.ref_interne || ref, operation: op, machine_id: e.machine_id || null, process_id: e.process_id || null, seq, duree: dureeH, temps_alloue: dureeH, statut: 'a_programmer', priorite: prio, activite: act, oas_avant: oasAvant, oas_apres: oasApres, matiere_ok: false }).then((r: any) => { if (r && !r.error) nb++ }).catch(() => {})
       }
     }
   }
@@ -3857,7 +3857,7 @@ app.post('/api/be/analyse-dt/:id/generer-bdt', async (c) => {
       } else {
         bdtNum++
         if (bdtKey.has(k)) { skipped++; continue }
-        await createBDTRow({ id: fmtBonId('BDT', yr, aff, zz, bdtNum), num_affaire: aff, cmd_ref: aff, lot_ref: lotRef, client_nom: client, piece: p.ref_interne || ref, operation: op, machine_id: e.machine_id || null, process_id: e.process_id || null, seq, duree: dureeH, temps_alloue: dureeH, statut: 'programme', priorite: prio, activite: act, oas_avant: oasAvant, oas_apres: oasApres }).catch(() => {})
+        await createBDTRow({ id: fmtBonId('BDT', yr, aff, zz, bdtNum), num_affaire: aff, cmd_ref: aff, lot_ref: lotRef, client_nom: client, piece: p.ref_interne || ref, operation: op, machine_id: e.machine_id || null, process_id: e.process_id || null, seq, duree: dureeH, temps_alloue: dureeH, statut: 'a_programmer', priorite: prio, activite: act, oas_avant: oasAvant, oas_apres: oasApres }).catch(() => {})
         nb++
       }
     }
@@ -5495,7 +5495,8 @@ app.post('/api/production/bdts', async (c) => {
   if (!payload.operation) payload.operation = '—'
   if (payload.duree == null) payload.duree = 1
   if (!payload.priorite) payload.priorite = 'normal'
-  if (!payload.statut) payload.statut = 'programme'
+  // Programmé = posé sur le planning (process + jour) ; sinon, direction la goulotte.
+  if (!payload.statut) payload.statut = (payload.process_id && payload.date_prevue) ? 'programme' : 'a_programmer'
   if (payload.temps_alloue == null) payload.temps_alloue = payload.duree
   const { data, error } = await createBDTRow(payload)
   if (error) return c.json({ ok: false, error: error.message })
@@ -5892,14 +5893,27 @@ app.post('/api/production/bdt/:id/affecter', async (c) => {
   const procs = await getProcessAtelier().catch(() => []) as any[]
   const proc = procs.find((p: any) => String(p.id) === String(procId))
   if (!proc) return c.json({ ok: false, error: 'Process introuvable' })
+  // Un BDT reçu ou soldé est en cours d'exécution ou terminé : il ne se replanifie plus.
+  const cur: any = ((await getBonsDeTravail().catch(() => [] as any[])) as any[]).find((b: any) => String(b.id) === String(id))
+  if (!cur) return c.json({ ok: false, error: 'BDT introuvable.' }, 404)
+  if (['recu', 'solde'].includes(String(cur.statut || ''))) return c.json({ ok: false, error: 'BDT déjà ' + (cur.statut === 'solde' ? 'soldé' : 'reçu') + ' : il ne se replanifie plus.' }, 409)
   const patch: Record<string, any> = { process_id: procId, statut: 'programme' }
-  if (proc.requiert_machine && proc.machine_id) patch.machine_id = proc.machine_id
+  // La machine suit le process : un process sans machine REMET machine_id à vide (la charge
+  // machine restait faussée par l'affectation précédente).
+  patch.machine_id = (proc.requiert_machine && proc.machine_id) ? proc.machine_id : null
   if (proc.activite && proc.activite !== 'both') patch.activite = proc.activite
-  // Heure de début précise (issue du glisser-déposer sur le Gantt)
+  // Heure de début précise (glisser-déposer sur le Gantt, au quart d'heure)
   if (body.debut != null && !isNaN(Number(body.debut))) patch.debut = Math.round(Number(body.debut) * 100) / 100
-  // Jour de programmation → le Gantt n'affiche que les BDT du jour sélectionné
-  if (body.date_prevue) patch.date_prevue = String(body.date_prevue)
-  const { data, error } = await updateBDT(id, patch)
+  // Programmer, c'est poser sur un JOUR : le Gantt n'affiche que les BDT du jour sélectionné.
+  patch.date_prevue = String(body.date_prevue || TODAY_ISO())
+  let { data, error } = await updateBDT(id, patch)
+  // ⚠ bons_de_travail.debut était un ENTIER : tout dépôt à h15, h30 ou h45 échouait
+  //   (« Affectation échouée »). La migration 005 le passe en décimal ; tant qu'elle n'est pas
+  //   jouée (cloud), on retombe sur l'heure pleine plutôt que d'échouer.
+  if (error && patch.debut != null && /integer/i.test(String(error.message || ''))) {
+    patch.debut = Math.round(Number(patch.debut))
+    ;({ data, error } = await updateBDT(id, patch))
+  }
   if (error) return c.json({ ok: false, error: error.message })
   return c.json({ ok: true, data })
 })
@@ -5907,7 +5921,12 @@ app.post('/api/production/bdt/:id/affecter', async (c) => {
 // Déprogrammer un BDT : retour dans la file « en attente de programmation »
 app.post('/api/production/bdt/:id/deprogrammer', async (c) => {
   const id = c.req.param('id')
-  const { data, error } = await updateBDT(id, { process_id: null, machine_id: null, statut: 'a_programmer', date_prevue: null })
+  const cur: any = ((await getBonsDeTravail().catch(() => [] as any[])) as any[]).find((b: any) => String(b.id) === String(id))
+  if (!cur) return c.json({ ok: false, error: 'BDT introuvable.' }, 404)
+  // Un BDT reçu (en cours à l'atelier) ou soldé ne retourne pas dans la goulotte.
+  if (['recu', 'solde'].includes(String(cur.statut || ''))) return c.json({ ok: false, error: 'BDT déjà ' + (cur.statut === 'solde' ? 'soldé' : 'reçu') + ' : déprogrammation impossible.' }, 409)
+  // Retour COMPLET en goulotte : plus de poste, plus de jour, plus d'heure, plus d'opérateur.
+  const { data, error } = await updateBDT(id, { process_id: null, machine_id: null, statut: 'a_programmer', date_prevue: null, debut: null, operateur_id: null })
   if (error) return c.json({ ok: false, error: error.message })
   return c.json({ ok: true, data })
 })
@@ -5922,33 +5941,62 @@ app.post('/api/production/bdt/:id/separer', async (c) => {
   const b = (bdts as any[]).find((x: any) => String(x.id) === String(id))
   if (!b) return c.json({ ok: false, error: 'BDT introuvable.' }, 404)
   if (['recu', 'solde'].includes(String(b.statut)) || b.temps_reel != null) return c.json({ ok: false, error: 'BDT déjà démarré ou soldé — non fractionnable.' }, 400)
+  if (/^annul/i.test(String(b.statut || ''))) return c.json({ ok: false, error: 'BDT annulé — non fractionnable.' }, 400)
   const total = Number(b.duree ?? b.temps_alloue ?? 0) || 0
   if (total <= 0) return c.json({ ok: false, error: 'BDT sans durée — rien à fractionner.' }, 400)
   let parts: number[] = Array.isArray(body.parts) ? body.parts.map((x: any) => Number(x)).filter((x: number) => Number.isFinite(x) && x > 0) : []
   const n = Math.max(2, Math.min(12, Number(body.n) || parts.length || 2))
   if (parts.length < 2) parts = Array.from({ length: n }, () => total / n)
+  if (parts.length > 12) parts = parts.slice(0, 12)
   const sum = parts.reduce((s, x) => s + x, 0) || 1
-  parts = parts.map((x) => x * total / sum)   // normalise → somme = durée d'origine (aucune matière perdue)
+  parts = parts.map((x) => x * total / sum)   // normalise → somme = durée d'origine (aucune heure perdue)
   const r4 = (x: number) => Math.round(x * 10000) / 10000
   const tAll = Number(b.temps_alloue ?? total) || 0
-  const tMach = Number(b.temps_machine_alloue ?? 0) || 0
+  const tMach = b.temps_machine_alloue == null ? null : (Number(b.temps_machine_alloue) || 0)
   const frac = (d: number) => total > 0 ? d / total : 1 / parts.length
-  // 1) réduire l'original au 1er morceau (garde sa place et son id)
-  const { error: eUpd } = await updateBDT(id, { duree: r4(parts[0]), temps_alloue: r4(tAll * frac(parts[0])), temps_machine_alloue: r4(tMach * frac(parts[0])) })
-  if (eUpd) return c.json({ ok: false, error: eUpd.message }, 400)
-  // 2) créer les morceaux 2..N
-  const COPY = ['num_affaire', 'cmd_id', 'cmd_ref', 'lot_id', 'lot_ref', 'client_nom', 'activite', 'piece', 'operation', 'machine_id', 'process_id', 'poste_id', 'priorite', 'prioritaire', 'matiere_ok', 'pv_requis', 'oas_avant', 'oas_apres', 'seq', 'date_echeance']
+  // Numérotation depuis la RACINE : re-séparer un BDT (ou un morceau) prend le suffixe libre
+  // suivant. Avant, « -M2 » était recalculé à chaque fois : la 2ᵉ séparation heurtait la clé
+  // primaire, ne créait rien, et rognait quand même l'original.
+  const racine = String(id).replace(/-M\d+$/, '')
+  let k = 1
+  for (const x of (bdts as any[]).map((y: any) => String(y.id))) {
+    const m = /-M(\d+)$/.exec(x)
+    if (m && x.slice(0, x.length - m[0].length) === racine) k = Math.max(k, Number(m[1]))
+  }
+  // Les morceaux vont dans la GOULOTTE : ni poste, ni machine, ni jour, ni heure. Avant, ils
+  // naissaient « programmés » avec le process de l'original et tombaient sur le planning du
+  // jour réel à 6 h.
+  const COPY = ['num_affaire', 'cmd_id', 'cmd_ref', 'lot_id', 'lot_ref', 'client_nom', 'activite', 'piece', 'operation', 'priorite', 'prioritaire', 'matiere_ok', 'pv_requis', 'oas_avant', 'oas_apres', 'seq', 'date_echeance']
+  // 1) CRÉER les morceaux d'abord. Au moindre échec, on retire ce qui a été créé et on s'arrête
+  //    SANS avoir touché l'original. Avant, l'original était réduit en premier et les échecs
+  //    d'insertion avalés : des heures disparaissaient.
   const created: string[] = []
   for (let i = 1; i < parts.length; i++) {
-    const payload: any = { id: `${id}-M${i + 1}`, statut: 'programme', operateur_id: null, debut: null, date_prevue: null }
+    k++
+    const payload: any = { id: `${racine}-M${k}`, statut: 'a_programmer', operateur_id: null, debut: null, date_prevue: null }
+    for (const col of ['process_id', 'machine_id', 'poste_id']) if (col in b) payload[col] = null
     for (const col of COPY) if (b[col] != null) payload[col] = b[col]
-    payload.duree = r4(parts[i]); payload.temps_alloue = r4(tAll * frac(parts[i])); payload.temps_machine_alloue = r4(tMach * frac(parts[i]))
+    payload.duree = r4(parts[i]); payload.temps_alloue = r4(tAll * frac(parts[i]))
+    if (tMach != null) payload.temps_machine_alloue = r4(tMach * frac(parts[i]))
     const { error } = await createBDTRow(payload)
-    if (!error) created.push(payload.id)
+    if (error) {
+      for (const cid of created) await supprimerBDTRow(cid).catch(() => {})
+      return c.json({ ok: false, error: 'Création du morceau ' + payload.id + ' refusée : ' + error.message + '. Rien n’a été modifié.' }, 400)
+    }
+    created.push(payload.id)
+  }
+  // 2) Réduire l'original au 1ᵉʳ morceau : il garde sa place, son statut et son id.
+  const patchOrig: any = { duree: r4(parts[0]), temps_alloue: r4(tAll * frac(parts[0])) }
+  if (tMach != null) patchOrig.temps_machine_alloue = r4(tMach * frac(parts[0]))
+  const { error: eUpd } = await updateBDT(id, patchOrig)
+  if (eUpd) {
+    for (const cid of created) await supprimerBDTRow(cid).catch(() => {})
+    return c.json({ ok: false, error: 'Réduction de l’original refusée : ' + eUpd.message + '. Les morceaux ont été retirés.' }, 400)
   }
   return c.json({ ok: true, count: created.length + 1, created })
 })
 
+// Nom complet d'un opérateur (réception / soldage d'un BDT, historiques).
 const opFullName = (op: any) => [op.prenom, op.nom].filter(Boolean).join(' ') || op.nom || op.matricule || op.id
 
 app.post('/api/production/bdt/:id/recu', async (c) => {
@@ -5960,7 +6008,15 @@ app.post('/api/production/bdt/:id/recu', async (c) => {
   //    qu'une fois le lot ENTIÈREMENT passé à l'OAS (qté traitée via balancelles ≥ qté lot). ──
   const allBdtG = await getBonsDeTravail().catch(() => [] as any[])
   const curB: any = (allBdtG as any[]).find(b => String(b.id) === String(id))
-  if (curB && curB.oas_avant) {
+  if (!curB) return c.json({ ok: false, error: 'BDT introuvable.' }, 404)
+  // On ne reçoit qu'un BDT PROGRAMMÉ — posé sur le planning (poste + jour). Un BDT de la goulotte,
+  // déjà reçu ou soldé ne se reçoit pas. Avant, aucun contrôle côté serveur : un appel direct
+  // aurait fait repasser « reçu » un BDT soldé.
+  if (!['programme', 'affecte'].includes(String(curB.statut || '')) || !curB.process_id || !curB.date_prevue) {
+    const st = String(curB.statut || '')
+    return c.json({ ok: false, error: st === 'recu' ? 'BDT déjà reçu.' : st === 'solde' ? 'BDT déjà soldé.' : 'Programmez d’abord ce BDT : glissez-le de la goulotte sur le planning.' }, 409)
+  }
+  if (curB.oas_avant) {
     const [bals, lotsAll] = await Promise.all([getBalancelles().catch(() => [] as any[]), getLots().catch(() => [] as any[])])
     const lotId = String(curB.lot_id || curB.lot_ref || '')
     const lot: any = (lotsAll as any[]).find(l => String(l.id) === lotId)
@@ -5976,7 +6032,9 @@ app.post('/api/production/bdt/:id/recu', async (c) => {
       return c.json({ ok: false, error: `Étape après OAS : le lot doit d'abord passer entièrement à l'OAS (traité ${traite}/${qteLot}). Recevable une fois l'OAS terminée.` })
     }
   }
-  const hhmm = new Date().toTimeString().slice(0, 5)
+  // Heure LOCALE de l'atelier (Europe/Paris). Le serveur tourne en UTC alors que l'heure de fin
+  // vient du navigateur : le temps réel était majoré de 2 h en heure d'été.
+  const hhmm = new Date().toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' }).replace(/\s*h\s*/, ':')
   const { data, error } = await updateBDT(id, { statut: 'recu', debut_reel: hhmm, operateur_id: op.id })
   if (error) return c.json({ ok: false, error: error.message })
   const nom = opFullName(op)
@@ -6710,15 +6768,13 @@ app.post('/api/production/sortie-matiere', async (c) => {
 })
 
 // PRODUCTION SERVICE (nouvelles pages)
-app.get('/production/gantt-bdt', async (c) => {
-  const [bdts, machines, ops, procs, postes, prepRows] = await Promise.all([
-    getBonsDeTravail(), getMachines(), getOperateurs(),
-    getProcessAtelier().catch(() => []), getPostes().catch(() => []), getPreparationsTechniques().catch(() => [])
-  ])
-  // Comme /production/service : aucun BDT n'est retiré du planning (règle du 10/09/2026).
-  // `prepRows` reste chargé — il sert aux avertissements de la page de service.
-  void prepRows
-  return c.html(pageGanttBDT(bdts as any[], machines, ops, procs as any, postes as any))
+app.get('/production/gantt-bdt', (c) => {
+  // ⚠ Ancien planning, aux règles différentes (goulotte = « sans opérateur », double-clic =
+  //   soldage). « Voir au planning » depuis la fiche lot y menait encore : on atterrissait sur un
+  //   planning qui ne se comportait pas comme le vrai. Une seule page de planning désormais, et
+  //   on y porte le BDT à montrer.
+  const fb = c.req.query('focusBdt')
+  return c.redirect('/production/service' + (fb ? '?focusBdt=' + encodeURIComponent(fb) : ''), 302)
 })
 app.get('/production/gantt-bst', async (c) => {
   const [lots, fournisseurs] = await Promise.all([getLots(), getFournisseursSt()])
@@ -9038,13 +9094,13 @@ app.post('/api/commandes-p/:id/lancer', async (c) => {
       } else {
         const bid = 'BDTP-' + key + '-1-' + i
         const dur = Math.max(0.5, +(((Number(e.temps_unitaire_min || e.temps_mo_min || 30)) * (qte || 1)) / 60).toFixed(2))
-        await createBDTRow({ id: bid, num_affaire: raw || null, cmd_ref: cmdId, lot_ref: lotId, client_nom: client, piece, operation: op, seq: i, duree: dur, temps_alloue: dur, statut: 'programme', priorite: 'critique', activite: 'Seem', prioritaire: true } as any).catch(() => ({}))
+        await createBDTRow({ id: bid, num_affaire: raw || null, cmd_ref: cmdId, lot_ref: lotId, client_nom: client, piece, operation: op, seq: i, duree: dur, temps_alloue: dur, statut: 'a_programmer', priorite: 'critique', activite: 'Seem', prioritaire: true } as any).catch(() => ({}))
         bdt.push(bid)
       }
     }
   } else {
     const bid = 'BDTP-' + key + '-1-1'
-    await createBDTRow({ id: bid, num_affaire: raw || null, cmd_ref: cmdId, lot_ref: lotId, client_nom: client, piece, operation: 'Refabrication (retour client)', seq: 1, duree: 1, temps_alloue: 1, statut: 'programme', priorite: 'critique', activite: 'Seem', prioritaire: true } as any).catch(() => ({}))
+    await createBDTRow({ id: bid, num_affaire: raw || null, cmd_ref: cmdId, lot_ref: lotId, client_nom: client, piece, operation: 'Refabrication (retour client)', seq: 1, duree: 1, temps_alloue: 1, statut: 'a_programmer', priorite: 'critique', activite: 'Seem', prioritaire: true } as any).catch(() => ({}))
     bdt.push(bid)
   }
   await updateCommandePrioritaire(id, { statut: 'traitee', cmd_id: cmdId })

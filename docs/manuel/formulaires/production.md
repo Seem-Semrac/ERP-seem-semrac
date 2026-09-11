@@ -28,7 +28,7 @@
 
 ## Réceptionner le BDT (démarrage d'opération)
 **Quand l'utiliser :** Quand l'opérateur commence réellement le travail : cela fait passer le BDT de « Programmé » à « Reçu / En cours » et enregistre l'heure de début.
-**Où le trouver :** Sur le planning production, clic droit sur une barre de BDT → « Passer à Reçu », ce qui ouvre cette fenêtre de vérification.
+**Où le trouver :** Sur le planning production, **double-clic sur la barre** d'un BDT programmé (ou clic droit → « Réceptionner (Reçu) »). Un BDT encore dans la goulotte doit d'abord être glissé sur le planning.
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
@@ -39,7 +39,7 @@
 
 ## Soldage BDT (clôture d'opération)
 **Quand l'utiliser :** Quand l'opération est terminée. On clôture le BDT, ce qui calcule automatiquement le temps réellement passé.
-**Où le trouver :** Sur le planning, double-clic sur une barre de BDT (ou clic droit → « Solder le BDT »). Le BDT doit d'abord être au statut « Reçu ».
+**Où le trouver :** Sur le planning, clic droit sur la barre → « Solder le BDT ». Le BDT doit d'abord être au statut « Reçu ».
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
@@ -83,7 +83,7 @@
 
 ## Déclaration de sortie matière
 **Quand l'utiliser :** Pour enregistrer la consommation de matière, de fournitures ou de consommables machine sur un lot pendant la production.
-**Où le trouver :** Sur le planning production, double-clic sur une barre de BDT → fenêtre « Déclaration de sortie matière ».
+**Où le trouver :** Sur le planning production, double-clic sur la barre d'un BDT **déjà reçu** → fenêtre « Déclaration de sortie matière ». Sur un BDT seulement programmé, le double-clic ouvre d'abord la réception.
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|

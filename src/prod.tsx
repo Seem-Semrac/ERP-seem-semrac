@@ -1664,7 +1664,7 @@ ${serviceHeader({
     <div id="pendingDropZone" class="card" style="padding:14px 16px;border-radius:14px;transition:outline .12s;margin-bottom:14px;" ondragover="onPendingOver(event)" ondragleave="onPendingLeave(event)" ondrop="onPendingDrop(event)">
       <div style="margin-bottom:10px;">
         <div style="font-weight:700;color:#1e293b;font-size:.82rem;display:flex;align-items:center;gap:6px;"><i class="fas fa-inbox" style="color:#f97316;"></i> BDT à classer / en attente de programmation<span id="cntPend" style="background:#ffedd5;color:#c2410c;font-size:.65rem;font-weight:700;padding:1px 7px;border-radius:999px;margin-left:auto;">0</span></div>
-        <div style="font-size:.62rem;color:#94a3b8;margin-top:3px;">Triés par échéance · chemin critique · Glisser une carte sur un process du planning ci-dessous, ou déposer ici pour déprogrammer</div>
+        <div style="font-size:.62rem;color:#94a3b8;margin-top:3px;">Triés par échéance · chemin critique · Glisser une carte sur le planning pour la programmer · déposer ici une barre du planning pour la déprogrammer · <i class="fas fa-scissors"></i> pour séparer</div>
       </div>
       <div id="pendingList" style="overflow-y:auto;max-height:240px;display:flex;flex-wrap:wrap;gap:8px;margin:0 -4px;padding:4px;"></div>
     </div>
@@ -2761,6 +2761,13 @@ var filtAct='all', filtType='all', filtAffaire='', dragId=null, _grabDX=0, solda
 var DAY_START=5,DAY_END=23,TOTAL_H=18,PX_H=50,LANE_W=TOTAL_H*50,SNAP=0.25;
 // Un BDT s'affiche le jour de sa date prévue ; sans date prévue → rattaché au jour réel (à programmer)
 function bdtOnDay(b){ return (b.datePrevue || TODAY_REAL) === currentDate; }
+// UN BDT EST DANS LA GOULOTTE tant qu'il n'a pas ete POSE sur le planning (11/09/2026).
+// « Quand les BDT sont a programmer ils ne doivent pas apparaitre dans le planning : ils sont
+//   programmes quand on les passe de la goulotte au planning. » Avant, l'appartenance se lisait
+//   sur le process : un BDT dont l'operation portait le nom d'un process etait rattache d'office
+//   a un poste et pose a 6 h sur le jour courant, A LA FOIS dans la goulotte et sur le planning.
+//   Programme = pose (process + jour), jamais par defaut.
+function enGoulotte(b){ var s=String(b.statut||''); if(s==='st'||b.op==='ST'||s==='recu'||s==='solde'||/^annul/.test(s)) return false; return s==='a_programmer'||!s||b.process==='pending'||!b.datePrevue; }
 // Plage horaire (colonne) d'un opérateur selon sa présence du jour : matin / apmidi / soir / absent
 function opShiftCol(opId){ var g=presGet(opId,currentDate); if(!g.shift||g.shift==='absent') return 'absent'; if(g.shift==='matin') return 'matin'; if(g.shift==='soir') return 'soir'; return 'apmidi'; }
 function opPresent(opId){ var g=presGet(opId,currentDate); return !!(g.shift&&g.shift!=='absent'); }
@@ -2960,6 +2967,9 @@ function updateFocusBanner(){
 }
 // focusLot contient desormais l ID DU BDT focalise (et non la cle du lot).
 function focusBdtLot(bdtId){ var b=BDTS.find(function(x){return x.id===bdtId;}); if(!b) return; focusLot=(focusLot===bdtId)?null:bdtId; updateFocusBanner(); buildGantt(); }
+// Arrivee depuis un lien « Voir au planning » (?focusBdt=...) : on se place sur le jour du BDT,
+// ou on le selectionne dans la goulotte s'il n'est pas encore programme.
+window.addEventListener('load',function(){ try{ var fb=new URLSearchParams(location.search).get('focusBdt'); if(!fb) return; var b=BDTS.find(function(x){return String(x.id)===String(fb);}); if(!b) return; if(enGoulotte(b)){ selectPendBdt(b.id); return; } if(b.datePrevue&&b.datePrevue!==currentDate){ currentDate=b.datePrevue; var pd=document.getElementById('planDate'); if(pd) pd.value=currentDate; buildAll(); } focusBdtLot(b.id); }catch(e){} });
 function clearFocusLot(){ focusLot=null; updateFocusBanner(); buildGantt(); }
 // Guide visuel de dépôt (ligne + heure cible) pendant le glisser
 function showDropGuide(lane,e){ var rect=lane.getBoundingClientRect(); var t=snapTime(lane,e); var g=document.getElementById('dropGuide'); if(!g){ g=document.createElement('div'); g.id='dropGuide'; g.style.cssText='position:fixed;width:2px;background:#f59e0b;z-index:60;pointer-events:none;box-shadow:0 0 8px #f59e0b;'; document.body.appendChild(g); } var px=rect.left+(t-DAY_START)*PX_H; g.style.left=px+'px'; g.style.top=rect.top+'px'; g.style.height=rect.height+'px'; g.style.display='block'; var lbl=document.getElementById('dropGuideLbl'); if(!lbl){ lbl=document.createElement('div'); lbl.id='dropGuideLbl'; lbl.style.cssText='position:fixed;background:#f59e0b;color:white;font-size:.62rem;font-weight:800;padding:1px 6px;border-radius:4px;z-index:61;pointer-events:none;white-space:nowrap;'; document.body.appendChild(lbl); } lbl.textContent=fmtHour(t); lbl.style.left=(px+4)+'px'; lbl.style.top=(rect.top-16)+'px'; lbl.style.display='block'; }
@@ -3063,7 +3073,7 @@ function buildGantt(){
   var postes=(typeof POSTES_JS!=='undefined'?POSTES_JS:[]).filter(function(po){ return po.statut!=='inactif' && !isOasPoste(po) && (filtAct==='all'||po.activite===filtAct||po.activite==='both') && (!_focusSet||_focusSet[String(po.id)]); }).slice().sort(function(a,b){ return (Number(a.ordre)||100)-(Number(b.ordre)||100); });
   if(postes.length===0){ body.innerHTML='<div style="text-align:center;padding:40px;color:#94a3b8;font-size:.82rem;"><i class="fas fa-cubes-stacked" style="font-size:2rem;display:block;margin-bottom:8px;opacity:.3;"></i>Aucun poste. Créez-en dans Production › Machines &amp; postes.</div>'; return; }
   postes.forEach(function(poste){
-    var bdtsP=BDTS.filter(function(b){ return String(posteOfBdt(b))===String(poste.id) && bdtOnDay(b); });
+    var bdtsP=BDTS.filter(function(b){ return !enGoulotte(b) && String(posteOfBdt(b))===String(poste.id) && bdtOnDay(b); });
     var actColor=poste.activite==='Semrac'?'#ec4899':poste.activite==='both'?'#8b5cf6':'#3b82f6';
     var procN=PROCESS.filter(function(p){ return String(p.poste_id||'')===String(poste.id) && !isOasProc(p); }).length;
     var machN=(typeof MACH_DATA!=='undefined'?MACH_DATA:[]).filter(function(m){ return String(m.poste_id||'')===String(poste.id); }).length;
@@ -3097,9 +3107,10 @@ function makeBdtBar(bdt){
     el.addEventListener('dragend',function(){ clearHighlight(); hideDropGuide(); dragId=null; _grabDX=0; });
   }
   el.addEventListener('mouseenter',function(e){ showTT(e,bdt); }); el.addEventListener('mousemove',moveTT); el.addEventListener('mouseleave',hideTT);
-  // Double-clic = déclaration de sortie matière liée au BDT. Clic droit = menu (Réceptionner / Solder).
+  // 1er double-clic = RECEVOIR le BDT (matricule + PIN, il passe « reçu ») ; ensuite le
+  // double-clic ouvre la déclaration de sortie matière. Clic droit = menu.
   el.addEventListener('click',function(e){ e.stopPropagation(); if(el._clkT) return; el._clkT=setTimeout(function(){ el._clkT=null; focusBdtLot(bdt.id); },230); });
-  el.addEventListener('dblclick',function(){ if(el._clkT){ clearTimeout(el._clkT); el._clkT=null; } openSortieMatiere(bdt); });
+  el.addEventListener('dblclick',function(){ if(el._clkT){ clearTimeout(el._clkT); el._clkT=null; } if(bdt.statut==='programme'||bdt.statut==='affecte') openRecuModal(bdt.id); else openSortieMatiere(bdt); });
   el.addEventListener('contextmenu',function(e){ e.preventDefault(); openStatutMenu(e,bdt); });
   if(filtAffaire){ if(affaireMatch(bdt)){ el.style.outline='2px solid #f59e0b'; el.style.zIndex='15'; } else { el.style.opacity='0.18'; } }
   return el;
@@ -3134,7 +3145,7 @@ function openRecuModal(bdtId){
   recuBdtId=bdtId; var bdt=BDTS.find(function(b){return b.id===bdtId;}); if(!bdt) return;
   if(bdt.statut==='recu'){ pushNotif('info','fa-info-circle','BDT déjà reçu.'); return; }
   if(bdt.statut==='solde'){ pushNotif('info','fa-info-circle','BDT déjà soldé.'); return; }
-  if(bdt.process==='pending'){ pushNotif('warn','fa-exclamation-triangle','Affectez ce BDT à un process avant de le réceptionner.'); return; }
+  if(enGoulotte(bdt)){ pushNotif('warn','fa-exclamation-triangle','Programmez ce BDT avant de le recevoir : glissez-le de la goulotte sur le planning.'); return; }
   var proc=PROCESS.find(function(p){return p.id===bdt.process;});
   document.getElementById('recuInfo').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.78rem;"><div><span style="color:#94a3b8;">BDT : </span><strong>'+bdt.id+'</strong></div><div><span style="color:#94a3b8;">Opération : </span>'+bdt.operation+'</div><div><span style="color:#94a3b8;">Process : </span>'+(proc?proc.nom:'—')+'</div><div><span style="color:#94a3b8;">Client : </span>'+bdt.client+'</div></div>';
   document.getElementById('r_matricule').value=''; document.getElementById('r_pin').value='';
@@ -3188,7 +3199,7 @@ function confirmerSoldage(){
 function affectBDT(bdtId,procId,debut){
   var bdt=BDTS.find(function(b){return b.id===bdtId;}); if(!bdt) return;
   var proc=PROCESS.find(function(p){return p.id===procId;}); if(!proc) return;
-  if(bdt.statut==='solde'){ pushNotif('err','fa-ban','BDT déjà soldé — réaffectation impossible.'); return; }
+  if(bdt.statut==='solde'||bdt.statut==='recu'){ pushNotif('err','fa-ban','BDT déjà '+(bdt.statut==='solde'?'soldé':'reçu')+' : il ne se replanifie plus.'); return; }
   if(!(proc.activite==='both'||proc.activite===bdt.activite)){ pushNotif('err','fa-ban','Incompatibilité activité : process '+proc.nom+' ('+proc.activite+') ≠ BDT '+bdt.activite); return; }
   var hasD=(debut!=null&&!isNaN(debut)); if(hasD) debut=Math.round(debut*100)/100;
   var body={process_id:procId, date_prevue:currentDate}; if(hasD) body.debut=debut;
@@ -3202,28 +3213,28 @@ function affectBDT(bdtId,procId,debut){
 function deprogramBDT(bdtId){
   var bdt=BDTS.find(function(b){return b.id===bdtId;}); if(!bdt) return;
   if(bdt.statut==='recu'||bdt.statut==='solde'){ pushNotif('warn','fa-exclamation-triangle','BDT déjà '+(bdt.statut==='solde'?'soldé':'reçu')+' — déprogrammation impossible.'); return; }
-  if(bdt.process==='pending'){ return; }
+  if(enGoulotte(bdt)){ return; }
   fetch('/api/production/bdt/'+encodeURIComponent(bdtId)+'/deprogrammer',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
     .then(function(r){return r.json();}).then(function(j){
       if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Déprogrammation échouée.'); return; }
-      bdt.process='pending'; bdt.machineId=null; bdt.statut='a_programmer';
+      bdt.process='pending'; bdt.machineId=null; bdt.statut='a_programmer'; bdt.datePrevue=null;
       buildAll(); pushNotif('ok','fa-undo','BDT <strong>'+bdtId+'</strong> déprogrammé → retour en file d\\'attente.');
     }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
 function onPendingOver(e){ e.preventDefault(); if(e.dataTransfer) e.dataTransfer.dropEffect='move'; var z=document.getElementById('pendingDropZone'); if(z) z.style.outline='2px dashed #f97316'; hideDropGuide(); }
 function onPendingLeave(e){ var z=document.getElementById('pendingDropZone'); if(z) z.style.outline=''; }
-function onPendingDrop(e){ e.preventDefault(); var z=document.getElementById('pendingDropZone'); if(z) z.style.outline=''; if(dragId){ var b=BDTS.find(function(x){return x.id===dragId;}); if(b&&b.process!=='pending') deprogramBDT(dragId); } dragId=null; _grabDX=0; clearHighlight(); }
+function onPendingDrop(e){ e.preventDefault(); var z=document.getElementById('pendingDropZone'); if(z) z.style.outline=''; if(dragId){ var b=BDTS.find(function(x){return x.id===dragId;}); if(b&&!enGoulotte(b)) deprogramBDT(dragId); } dragId=null; _grabDX=0; clearHighlight(); }
 function onPendDragStart(e,el){ dragId=el.dataset.bdtid; _grabDX=0; if(e.dataTransfer){ e.dataTransfer.setData('text/plain',dragId); e.dataTransfer.effectAllowed='move'; } var b=BDTS.find(function(x){return x.id===dragId;}); if(b) highlightLot(lotKey(b)); }
 function onPendDragEnd(){ clearHighlight(); hideDropGuide(); dragId=null; _grabDX=0; }
 function buildStats(){
   var procs=PROCESS.filter(function(p){ return procMatchesAct(p)&&procMatchesType(p); });
   var procIds=procs.map(function(p){return p.id;});
-  var inView=BDTS.filter(function(b){ return procIds.indexOf(b.process)>=0; });
+  var inView=BDTS.filter(function(b){ return !enGoulotte(b) && procIds.indexOf(b.process)>=0; });
   var prog=inView.filter(function(b){return b.statut==='programme'||b.statut==='affecte';}).length;
   var recu=inView.filter(function(b){return b.statut==='recu';}).length;
   var solde=inView.filter(function(b){return b.statut==='solde';}).length;
   var nc=inView.filter(function(b){return b.statut==='solde'&&b.resultat==='nc';}).length;
-  var pend=BDTS.filter(function(b){return b.process==='pending'&&b.statut!=='st'&&b.op!=='ST';}).length;
+  var pend=BDTS.filter(function(b){return enGoulotte(b);}).length;
   var st=BDTS.filter(function(b){return b.statut==='st'||b.op==='ST';}).length;
   var items=[{icon:'fa-clipboard-list',val:prog,label:'Programmés',color:'#3b82f6'},{icon:'fa-play-circle',val:recu,label:'Reçus',color:'#f59e0b'},{icon:'fa-check-double',val:solde,label:'Soldés',color:'#22c55e'},{icon:'fa-exclamation-triangle',val:nc,label:'Soldés NC',color:'#ef4444'},{icon:'fa-inbox',val:pend,label:'En attente',color:'#f97316'},{icon:'fa-industry',val:st,label:'Sous-trait.',color:'#6366f1'},{icon:'fa-sitemap',val:procs.length,label:'Process',color:'#10b981'}];
   var sb=document.getElementById('statsBar'); if(sb) sb.innerHTML=items.map(function(s){return '<div class="stat-pill"><i class="fas '+s.icon+'" style="color:'+s.color+';font-size:.9rem;"></i><div style="font-size:1.2rem;font-weight:900;color:#1e293b;margin:2px 0;">'+s.val+'</div><div style="font-size:.62rem;color:#94a3b8;">'+s.label+'</div></div>';}).join('');
@@ -3251,7 +3262,7 @@ function presView(which){
   if(bc) bc.classList.toggle('active',which==='conges');
 }
 function buildPending(){
-  var p=BDTS.filter(function(b){return b.process==='pending'&&b.statut!=='st'&&b.op!=='ST'&&(filtAct==='all'||b.activite===filtAct)&&affaireMatch(b);}); p.sort(pendSort); document.getElementById('cntPend').textContent=p.length;
+  var p=BDTS.filter(function(b){return enGoulotte(b)&&(filtAct==='all'||b.activite===filtAct)&&affaireMatch(b);}); p.sort(pendSort); document.getElementById('cntPend').textContent=p.length;
   document.getElementById('pendingList').innerHTML=p.length?p.map(function(b){
     var col=lotColorOf(b); var lotLabel=b.lotId||b.numAffaire||'—';
     return '<div class="pending-card'+(String(b.id)===String(selBdtId)?' sel':'')+'" draggable="true" data-bdtid="'+b.id+'" data-lot="'+lotKey(b)+'" ondragstart="onPendDragStart(event,this)" ondragend="onPendDragEnd()" onclick="selectPendBdt(\\''+b.id+'\\')" ondblclick="openCmdMere(\\''+(b.cmdId||b.numAffaire||b.lotId||'')+'\\')" title="Double-clic : ouvrir la commande mère" id="pend-'+b.id+'">'
@@ -3265,7 +3276,9 @@ function buildPending(){
           +(b.seq!=null?'<span style="color:#94a3b8;">Op.'+b.seq+'</span>':'')
           +(b.dateEcheance?'<span style="color:#ef4444;font-weight:600;"><i class="fas fa-flag-checkered" style="margin-right:3px;"></i>'+b.dateEcheance+'</span>':'')
         +'</div>'
-      +'</div></div>';
+      +'</div>'
+      +'<button type="button" onclick="event.stopPropagation();splitBdt(\\''+b.id+'\\')" ondblclick="event.stopPropagation()" title="Séparer ce BDT en morceaux" style="flex-shrink:0;align-self:center;background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe;border-radius:7px;padding:4px 7px;cursor:pointer;font-size:.72rem;"><i class="fas fa-scissors"></i></button>'
+      +'</div>';
   }).join(''):(filtAffaire?'<div style="text-align:center;padding:20px;color:#d1d5db;font-size:.75rem;"><i class="fas fa-search" style="display:block;font-size:1.5rem;margin-bottom:4px;"></i>Aucun BDT en attente pour « '+filtAffaire+' »</div>':'<div style="text-align:center;padding:20px;color:#d1d5db;font-size:.75rem;"><i class="fas fa-check-circle" style="display:block;font-size:1.5rem;margin-bottom:4px;"></i>Tous les BDT sont affectés</div>');
 }
 function buildST(){
@@ -3277,7 +3290,7 @@ function populateSTOps(){
   var cont=document.getElementById('stOpsList'); if(cont) cont.innerHTML=OPS_ST_OPS.map(function(op){return '<span style="background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd;border-radius:999px;padding:2px 8px;font-size:.65rem;">'+op+'</span>';}).join('');
   var sel=document.getElementById('st_op'); if(sel) sel.innerHTML=OPS_ST_OPS.map(function(op){return '<option>'+op+'</option>';}).join('');
 }
-function showTT(e,bdt){ var proc=PROCESS.find(function(p){return p.id===bdt.process;}); var tt=document.getElementById('ganttTT'); tt.style.display='block'; tt.innerHTML='<div style="font-weight:700;font-size:.85rem;margin-bottom:4px;">'+bdt.id+'</div><div style="color:#93c5fd;font-size:.72rem;margin-bottom:8px;">'+bdt.operation+' · '+bdt.activite+'</div><div style="font-size:.72rem;line-height:1.6;"><div><span style="opacity:.6;">Client : </span>'+bdt.client+'</div><div><span style="opacity:.6;">Pièce : </span>'+bdt.piece+'</div><div><span style="opacity:.6;">Durée : </span>'+bdt.tempsAlloue+'h</div><div><span style="opacity:.6;">Process : </span>'+(proc?proc.nom:'—')+'</div><div><span style="opacity:.6;">Statut : </span><strong style="color:'+bdtColor(bdt)+';">'+bdtStatutLabel(bdt)+'</strong></div>'+(bdt.oxydation?'<div><span style="opacity:.6;">Oxydation : </span>'+oxyBox(bdt.oxydation)+(bdt.oxydation==='noire'?'noire (carré noir)':'incolore (carré blanc)')+'</div>':'')+'<div style="margin-top:4px;color:#fde68a;font-size:.65rem;">Dbl-clic = étape suivante · Clic droit = Reçu / Solder</div></div>'; moveTT(e); }
+function showTT(e,bdt){ var proc=PROCESS.find(function(p){return p.id===bdt.process;}); var tt=document.getElementById('ganttTT'); tt.style.display='block'; tt.innerHTML='<div style="font-weight:700;font-size:.85rem;margin-bottom:4px;">'+bdt.id+'</div><div style="color:#93c5fd;font-size:.72rem;margin-bottom:8px;">'+bdt.operation+' · '+bdt.activite+'</div><div style="font-size:.72rem;line-height:1.6;"><div><span style="opacity:.6;">Client : </span>'+bdt.client+'</div><div><span style="opacity:.6;">Pièce : </span>'+bdt.piece+'</div><div><span style="opacity:.6;">Durée : </span>'+bdt.tempsAlloue+'h</div><div><span style="opacity:.6;">Process : </span>'+(proc?proc.nom:'—')+'</div><div><span style="opacity:.6;">Statut : </span><strong style="color:'+bdtColor(bdt)+';">'+bdtStatutLabel(bdt)+'</strong></div>'+(bdt.oxydation?'<div><span style="opacity:.6;">Oxydation : </span>'+oxyBox(bdt.oxydation)+(bdt.oxydation==='noire'?'noire (carré noir)':'incolore (carré blanc)')+'</div>':'')+'<div style="margin-top:4px;color:#fde68a;font-size:.65rem;">Double-clic : recevoir (matricule + PIN), puis sortie matière · Clic droit : menu</div></div>'; moveTT(e); }
 function moveTT(e){ var tt=document.getElementById('ganttTT'); if(tt){tt.style.left=(e.clientX+16)+'px'; tt.style.top=(e.clientY+10)+'px';} }
 function hideTT(){ var tt=document.getElementById('ganttTT'); if(tt) tt.style.display='none'; }
 function closeModal(id){ var el=document.getElementById(id); if(el) el.style.display='none'; }
@@ -3292,6 +3305,7 @@ function createBDT(){
   if(!cmd||!client||!op||!piece){ pushNotif('err','fa-exclamation-circle','Champs obligatoires manquants.'); return; }
   var statut=procId==='pending'?'a_programmer':'programme';
   var payload={num_affaire:cmd,client_nom:client,operation:op,piece:piece,duree:duree,debut:debut,priorite:prio,statut:statut,activite:act,temps_alloue:duree};
+  if(statut==='programme') payload.date_prevue=currentDate;   // programme = pose sur le jour affiche, sinon il repartirait en goulotte
   var pr=null; if(procId!=='pending'){ pr=PROCESS.find(function(p){return p.id===procId;}); payload.process_id=procId; if(pr&&pr.machine_id) payload.machine_id=pr.machine_id; }
   fetch('/api/production/bdts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json();}).then(function(j){
@@ -3873,7 +3887,7 @@ function splitSave(){
   var url='/api/production/bdt/'+encodeURIComponent(_splitBdt.id)+'/separer';
   fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({parts:parts})})
     .then(function(r){return r.json();}).then(function(j){
-      if(j&&j.ok){ var m=document.getElementById('splitModal'); if(m) m.style.display='none'; pushNotif('ok','fa-scissors','BDT séparé en '+j.count+' morceaux — les nouveaux sont à programmer.',4500); setTimeout(function(){ softReload(); },700); }
+      if(j&&j.ok){ var m=document.getElementById('splitModal'); if(m) m.style.display='none'; pushNotif('ok','fa-scissors','BDT séparé en '+j.count+' morceaux — les nouveaux sont dans la goulotte, à programmer.',4500); setTimeout(function(){ softReload(); },700); }
       else pushNotif('err','fa-ban',(j&&j.error)||'Fractionnement échoué.',4500);
     }).catch(function(){ pushNotif('err','fa-times','Erreur réseau.',4000); });
 }

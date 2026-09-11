@@ -39,6 +39,44 @@ reste une question distincte de « peut-on le *programmer* ? ».
 exige que l'opération précédente de la gamme soit soldée. Voir
 [Expéditions](expeditions.md#la-porte-denvoi-dun-bst-10092026) et `src/gamme.ts`.
 
+## Goulotte, programmation, réception (11/09/2026)
+
+**Un BDT n'est sur le planning que s'il est POSÉ.** `enGoulotte(b)` (script de `pageServiceProd`) :
+statut `a_programmer`, pas de process, ou **pas de jour prévu** ⇒ goulotte. Avant, l'appartenance
+se lisait sur le process : `posteOfBdt` retrouvait un poste par le libellé de l'opération et
+`bdtOnDay` rattachait un BDT sans date au jour courant. Un BDT « à programmer » s'affichait donc **à
+la fois** dans la goulotte et sur le Gantt, à 6 h. Gantt, goulotte, statistiques et réception
+utilisent désormais ce seul critère.
+
+- Les créateurs de BDT — cascade d'acceptation, `generer-bdt`, commandes prioritaires, défaut de
+  `POST /api/production/bdts` — écrivent **`a_programmer`**. Le process de la gamme reste une suggestion.
+- **Programmer** (`/affecter`) = process + **jour** (toujours écrit) + heure. 409 sur un BDT reçu ou
+  soldé. `machine_id` suit le process, et revient à vide si le process n'a pas de machine.
+- **`debut` passe en décimal** (migration **005** ; `cloud-4` pour le cloud). La colonne était un
+  **entier** : tout dépôt à h15, h30 ou h45 échouait avec « Affectation échouée ». Tant que
+  `cloud-4` n'est pas joué, le serveur arrondit à l'heure pleine au lieu d'échouer.
+- **Déprogrammer** (`/deprogrammer`) = retour complet : process, machine, jour, heure et opérateur à
+  vide. 409 sur un BDT reçu ou soldé.
+- **Double-clic sur une barre** : programmée → **réception** (matricule + PIN) ; reçue → **sortie
+  matière**. `/recu` refuse (409) un BDT non programmé, déjà reçu ou soldé, et note l'heure de
+  **Paris** — le serveur tourne en UTC, et le temps réel était majoré de 2 h en été.
+- **Séparer** : bouton ciseaux sur chaque carte de goulotte, en plus du clic droit. `/separer` crée
+  les morceaux **d'abord** (retour arrière `supprimerBDTRow` au moindre échec) et ne réduit
+  l'original **qu'ensuite**. Les morceaux vont en goulotte, sans process ni jour. Le suffixe se
+  calcule depuis la racine : `-M2`, `-M3`… sans collision de clé, et un morceau re-séparé ne donne
+  plus `-M2-M2`. Avant, l'original était réduit en premier et les échecs d'insertion avalés.
+- **Porte des BST** (`src/gamme.ts`) : un BDT « reçu » (commencé) **n'est pas soldé** ; seul un BDS
+  « reçu » (revenu) l'est. L'étape précédente n'est soldée que si **tous ses morceaux** (même
+  `seq`) le sont.
+- `/production/gantt-bdt`, l'ancien planning aux règles différentes, **redirige** vers
+  `/production/service?focusBdt=…`, qui se place sur le BDT.
+
+Vérifié sur Docker, jeu `-TEST-` supprimé ensuite : programmation à 7 h 15 enregistrée 7,25 ;
+réception refusée hors planning, acceptée au PIN à l'heure locale ; replanification et
+déprogrammation d'un BDT reçu refusées ; trois séparations successives → -M2, -M3, -M4, total des
+heures conservé. Au navigateur, les 4 BDT de l'affaire 0001 ont quitté le Gantt pour la goulotte.
+`gamme.ts` : 9 cas vérifiés.
+
 ## Mission
 <!-- auto:mission -->
 Planning Gantt BDT/BST, présence opérateurs, commandes & lots, process ateliers.

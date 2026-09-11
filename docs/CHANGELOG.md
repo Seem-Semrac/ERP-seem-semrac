@@ -2,6 +2,41 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-11 — Planning : un BDT n'est sur le planning que s'il y a été posé
+
+*« Quand les BDT sont à programmer ils ne doivent pas apparaître dans le planning : ils sont
+programmés quand on les passe de la goulotte au planning. »*
+
+**Pourquoi des BDT s'étaient « placés tout seuls ».** L'appartenance au Gantt se lisait sur le
+process, avec un repli sur le libellé de l'opération, et un BDT sans date était rattaché au jour
+courant à 6 h. Depuis le 10/09 aucun BDT n'est plus filtré côté serveur : 3 des 4 BDT de l'affaire
+0001 étaient à la fois dans la goulotte et sur le planning. De plus, la cascade créait les BDT
+directement « programmés ». Désormais un BDT n'est sur le planning que s'il y a été **posé**
+(process + jour), et tous les BDT naissent **à programmer**.
+
+**Programmer au quart d'heure** : `bons_de_travail.debut` était un **entier**, et tout dépôt à h15,
+h30 ou h45 échouait (« Affectation échouée »). Migration **005** (jouée seule sur la VM) et
+`cloud-4` pour le cloud ; sans elle, le serveur arrondit à l'heure pleine au lieu d'échouer.
+
+**Double-clic** : sur un BDT programmé, il ouvre la **réception** (matricule + PIN) ; sur un BDT reçu,
+la **sortie matière**. Le serveur refuse de recevoir un BDT non programmé, déjà reçu ou soldé. L'heure
+de réception est celle de Paris : le serveur, en UTC, majorait le temps réel de 2 h en été.
+
+**Déprogrammer** : retour complet en goulotte ; refusé pour un BDT reçu ou soldé.
+
+**Séparer** : depuis la goulotte (bouton ciseaux). Trois défauts corrigés :
+- les morceaux naissaient « programmés » et tombaient sur le planning à 6 h ;
+- l'original était rogné **avant** la création des morceaux, avec des échecs avalés ;
+- une 2ᵉ séparation réutilisait `-M2` et heurtait la clé primaire.
+
+Les morceaux vont maintenant en goulotte, sont créés d'abord (avec retour arrière en cas
+d'échec), et numérotés depuis la racine.
+
+**Porte des BST** : un BDT « reçu » (juste démarré) ne compte plus comme soldé, et tous les morceaux
+d'une étape doivent être soldés. L'ancien planning `/production/gantt-bdt` redirige vers le vrai.
+
+Vérifié sur Docker avec un jeu `-TEST-` (supprimé) et au navigateur. `tsc` propre, harnais 60/0.
+
 ## 2026-09-11 — Réception : le stock attend le PV de contrôle conforme
 
 *« On reçoit, ensuite on doit faire le PV de contrôle, et il faut qu'il soit fait et conforme

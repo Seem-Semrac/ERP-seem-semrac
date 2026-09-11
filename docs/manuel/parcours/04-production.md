@@ -31,7 +31,7 @@ Sur cet écran, vous renseignez :
 
 ## Étape 2 — Réceptionner le BDT (démarrage de l'opération)
 **⬅️ Avant :** Le BDT est programmé sur le planning. L'opérateur arrive à son poste et commence réellement le travail.
-**📝 Ici, vous :** faites passer le BDT de « Programmé » à « Reçu / En cours » ; l'heure de début est enregistrée automatiquement.
+**📝 Ici, vous :** faites passer le BDT de « Programmé » à « Reçu / En cours » ; l'heure de début est enregistrée automatiquement. Sur le planning, **double-cliquez sur la barre** du BDT, puis saisissez votre matricule et votre code PIN.
 
 ![Planning Gantt de la production avec les BDT affectés aux opérateurs](../../assets/production-service.png)
 
@@ -47,7 +47,7 @@ Depuis le planning, clic droit sur la barre du BDT → « Passer à Reçu ». Un
 **⬅️ Avant :** L'opération est en cours. L'opérateur prélève de la matière, des fournitures ou un consommable machine pour fabriquer.
 **📝 Ici, vous :** enregistrez ce qui est sorti du stock pour ce lot, afin de suivre la consommation et le coût.
 
-Sur le planning, double-clic sur la barre du BDT → fenêtre « Déclaration de sortie matière ». Vous renseignez :
+Sur le planning, double-clic sur la barre du BDT **reçu** → fenêtre « Déclaration de sortie matière ». Vous renseignez :
 - **Type de sortie** — Matière, Fourniture ou Consommable machine. « Consommable machine » fait apparaître le choix de la machine.
 - **Article (stock)** — l'article précis prélevé du stock.
 - **Quantité** — la quantité sortie (les décimales sont autorisées). **Toujours obligatoire.**
@@ -62,7 +62,7 @@ Sur le planning, double-clic sur la barre du BDT → fenêtre « Déclaration de
 **⬅️ Avant :** L'opération est terminée. Le BDT est au statut « Reçu » et son heure de début est connue.
 **📝 Ici, vous :** clôturez le BDT ; le temps réellement passé est calculé automatiquement.
 
-Sur le planning, double-clic sur la barre (ou clic droit → « Solder le BDT »). Vous renseignez :
+Sur le planning, clic droit sur la barre → « Solder le BDT ». Vous renseignez :
 - **Heure de fin réelle** — pré-remplie à l'heure actuelle. Combinée à l'heure de début, elle donne le **temps réel** sans calcul de votre part.
 - **Résultat** — Conforme / Reprise partielle / Non-conformité. « Non-conformité » crée **automatiquement une fiche NC** envoyée à la Qualité.
 - **Quantité produite** — le nombre de pièces réellement fabriquées.

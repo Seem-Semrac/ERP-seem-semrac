@@ -13,6 +13,7 @@ dans **Supabase Studio → SQL Editor**.
 | `cloud-1-renumerotation.sql` | **à faire** — équivalent des migrations 002 + 003 | additif + réécrit les **numéros affichés** (`num_bc`, `num_bl`) ; les `id` ne bougent pas · idempotent |
 | `cloud-2-nettoyage-donnees-test.sql` | **à faire** — retire les jeux d'essai `TEST` | ⚠ **DESTRUCTIF**. Jouer l'ÉTAPE 1 seule, lire ce qu'elle liste, ne passer à l'ÉTAPE 2 que si tout est bien du test |
 | `cloud-3-annulation-tracabilite.sql` | **pas urgent** — équivalent de la migration 004 | purement additif (`add column if not exists`) · idempotent |
+| `cloud-4-bdt-debut-numerique.sql` | **à faire** — équivalent de la migration 005 | passe `bons_de_travail.debut` d'entier à décimal (aucune perte). Sans lui, un BDT déposé au quart d'heure est arrondi à l'heure pleine |
 
 ## Pourquoi `cloud-3` n'est pas urgent
 

@@ -37,8 +37,13 @@ const estAnnulee = (op: any) => /^annul/i.test(txt(op?.statut))
 export function opSoldee(op: any): boolean {
   if (!op) return false
   if (txt(op.date_retour_effective)) return true
-  return ['solde', 'soldé', 'termine', 'terminé', 'cloture', 'clôture', 'recu', 'reçu', 'fini']
-    .includes(txt(op.statut).toLowerCase())
+  const s = txt(op.statut).toLowerCase()
+  // « reçu » n'a pas le même sens selon la table : un BDS « reçu » est REVENU du sous-traitant
+  // (fini), un BDT « reçu » vient seulement d'être PRIS par l'opérateur (commencé). Le compter
+  // comme soldé laissait partir un BST dès que le BDT précédent était démarré.
+  const estBds = ('sous_traitant_id' in op) || ('date_retour_prevue' in op) || ('date_envoi' in op)
+  if (estBds && (s === 'recu' || s === 'reçu')) return true
+  return ['solde', 'soldé', 'termine', 'terminé', 'cloture', 'clôture', 'fini'].includes(s)
 }
 
 /** La gamme du lot, dans l'ordre : `seq` d'abord, puis l'identifiant pour départager. */
@@ -54,8 +59,18 @@ export function etapePrecedente(cible: any, opsDuLot: any[]): any | null {
   const tri = gammeDuLot(opsDuLot)
   const i = tri.findIndex((o) => txt(o?.id) === txt(cible?.id))
   if (i < 0) return null
-  for (let j = i - 1; j >= 0; j--) if (!estAnnulee(tri[j])) return tri[j]
-  return null
+  const seqDe = (o: any) => (o?.seq == null ? null : nb(o.seq))
+  const sc = seqDe(cible)
+  // Les MORCEAUX d'un BDT séparé partagent le même seq : ce sont des frères, pas des étapes
+  // précédentes. On remonte jusqu'à la première étape de seq différent…
+  let j = i - 1
+  while (j >= 0 && (estAnnulee(tri[j]) || (sc != null && seqDe(tri[j]) === sc))) j--
+  if (j < 0) return null
+  const sp = seqDe(tri[j])
+  if (sp == null) return tri[j]
+  // … et cette étape n'est soldée que si TOUS ses morceaux le sont : on rend le premier non soldé.
+  const groupe = tri.filter((o) => !estAnnulee(o) && seqDe(o) === sp)
+  return groupe.find((o) => !opSoldee(o)) || groupe[groupe.length - 1]
 }
 
 /**

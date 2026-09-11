@@ -55,7 +55,7 @@
     <ul class="points">
       <li><b>Barre d'outils</b> : sélecteur de date avec flèches ‹ › (jour précédent / suivant), filtres d'activité et de type de process (voir sous-onglets ci-dessous), légende des couleurs, champ de recherche « N° d'affaire… » et bouton orange <b>« Nouveau BDT »</b>. Un bouton <b>« Demande d'achat »</b> (borne opérateur au matricule + PIN) est disponible dans le bandeau du service.</li>
       <li><b>7 tuiles de statistiques</b> : Programmés, Reçus, Soldés, Soldés NC, En attente, Sous-trait., Process.</li>
-      <li><b>Goulotte « BDT à classer / en attente de programmation »</b> au-dessus du planning : les cartes y sont triées par échéance client puis par chemin critique (séquence des opérations du lot). Chaque carte porte la couleur de son lot, la pièce, la durée, l'activité et l'échéance. On peut aussi y <em>redéposer</em> une barre du planning pour la déprogrammer.</li>
+      <li><b>Goulotte « BDT à classer / en attente de programmation »</b> au-dessus du planning : les cartes y sont triées par échéance client puis par chemin critique (séquence des opérations du lot). Chaque carte porte la couleur de son lot, la pièce, la durée, l'activité et l'échéance. On peut aussi y <em>redéposer</em> une barre du planning pour la déprogrammer. Un BDT <b>n'apparaît sur le planning qu'une fois programmé</b> : tant qu'il est « à programmer », il reste dans la goulotte. Chaque carte porte un bouton <b>ciseaux</b> pour le séparer.</li>
       <li><b>Le Gantt</b> : lignes = postes de travail (avec le nombre de process et de machines du poste), colonnes = heures de 5&nbsp;h à 23&nbsp;h. Chaque barre BDT est colorée selon son statut et porte un liseré gauche à la <b>couleur de son lot</b> — la même couleur que sur le planning BST, pour suivre un lot d'un planning à l'autre. Dans la colonne de gauche, chaque poste offre trois sous-cases <b>Matin / Ap-m / Soir</b> qui reçoivent les opérateurs affectés.</li>
       <li><b>« Affectation des ressources aux postes »</b> : les opérateurs du jour classés en quatre colonnes (Matin, Après-midi, Soir, Absent). On glisse une carte — ou on la sélectionne au clic — vers une sous-case de process du planning.</li>
     </ul>
@@ -77,11 +77,12 @@
       <li>Choisissez la date en haut à gauche (le planning affiche les BDT prévus ce jour-là).</li>
       <li>Prenez une carte dans la goulotte <b>« BDT à classer »</b> et glissez-la sur la ligne du poste : un guide vertical orange indique l'heure de dépôt (arrondie au quart d'heure). Vous pouvez aussi <em>cliquer</em> la carte puis cliquer le poste.</li>
       <li>L'ERP vérifie qu'un process du poste est compatible (même activité Seem/Semrac que le BDT) ; sinon le dépôt est refusé avec un message. Si c'est bon, le BDT passe <span class="b b-info">programmé</span> à la date et l'heure choisies.</li>
-      <li>Pour déplacer un BDT déjà programmé, glissez sa barre sur un autre poste ou un autre horaire. Pour le remettre en attente : clic droit → <b>« Déprogrammer (retour en attente) »</b>, ou glissez la barre dans la goulotte.</li>
+      <li>Pour déplacer un BDT déjà programmé, glissez sa barre sur un autre poste ou un autre horaire. Pour le remettre en attente : clic droit → <b>« Déprogrammer (retour en attente) »</b>, ou glissez la barre dans la goulotte. Un BDT déjà reçu ne se déplace et ne se déprogramme plus.</li>
     </ol>
     <p><b>Réceptionner puis solder un BDT (traçabilité opérateur au PIN) :</b></p>
     <ol class="steps">
-      <li>Quand l'opérateur démarre l'opération : clic droit sur la barre → <b>« Réceptionner (Reçu) »</b>. La modale demande le <b>matricule</b> et le <b>code PIN</b> de l'opérateur ; l'heure de début réelle est enregistrée et la barre passe en jaune.</li>
+      <li>Quand l'opérateur démarre l'opération : <b>double-cliquez sur la barre</b> du BDT programmé (ou clic droit → <b>« Réceptionner (Reçu) »</b>). La modale demande le <b>matricule</b> et le <b>code PIN</b> de l'opérateur ; l'heure de début réelle est enregistrée et la barre passe en jaune.</li>
+      <li>Une fois le BDT reçu, le <b>double-clic</b> sur sa barre ouvre la <b>déclaration de sortie matière</b>.</li>
       <li>À la fin : clic droit → <b>« Solder le BDT »</b>. Saisissez l'heure de fin réelle, le résultat (✅ Conforme, ⚠️ Reprise partielle, ❌ Non-conformité), d'éventuelles observations, puis le matricule + PIN de l'opérateur.</li>
       <li>Si le résultat est « Non-conformité », un champ <b>Gravité</b> apparaît (Mineure / Majeure / Critique / Bloquante). La fiche NC part automatiquement à la Qualité ; une gravité <b>Critique</b> ou <b>Bloquante</b> bloque l'expédition de l'affaire jusqu'à traitement ou dérogation.</li>
       <li>Le temps réel est calculé et comparé au temps alloué — il alimente le journal des temps et les indicateurs (TRS, écarts).</li>
@@ -111,7 +112,7 @@
     <div class="note"><b>Bon à savoir — les étapes sous-traitées :</b> la gamme d'un lot mélange des opérations faites à l'atelier (BDT) et des opérations confiées à un prestataire (BST/BDS). Si l'étape d'avant ou d'après est <b>sous-traitée</b>, elle est nommée dans le bandeau sous la forme <b>« ST &lt;nom du sous-traitant&gt; »</b> — mais elle n'ajoute évidemment <b>aucune ligne</b> au planning des postes, puisqu'elle ne se fait pas dans l'atelier. Le comptage des étapes (« etape 2/4 ») tient bien compte des deux, internes et sous-traitées.</div>
 
     <h3>Fractionner un BDT (Séparer)</h3>
-    <p>Un BDT long peut être découpé en plusieurs morceaux à répartir sur plusieurs jours ou postes : clic droit sur la barre → <b>« Séparer en morceaux »</b> (disponible tant que le BDT n'est ni reçu ni soldé).</p>
+    <p>Un BDT long peut être découpé en plusieurs morceaux à répartir sur plusieurs jours ou postes : bouton <b>ciseaux</b> sur sa carte dans la goulotte, ou clic droit sur sa barre → <b>« Séparer en morceaux »</b> (disponible tant que le BDT n'est ni reçu ni soldé). Les morceaux arrivent <b>dans la goulotte</b>, à programmer, et la somme de leurs durées est toujours égale à la durée d'origine.</p>
     <ol class="steps">
       <li>La modale affiche la durée totale du BDT. Choisissez le <b>nombre de morceaux</b> (2 à 12) — « Répartir également » égalise les durées.</li>
       <li>Ajustez librement la durée de chaque morceau ; la somme est contrôlée en direct. Si elle diffère de la durée d'origine, la répartition est ajustée au prorata à l'enregistrement.</li>

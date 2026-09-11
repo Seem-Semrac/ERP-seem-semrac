@@ -26,7 +26,7 @@
 -- Types déduits des valeurs réelles du cloud ; cout_reel et avancement sont typés
 -- numériques d'après leur usage dans le code (Number(...) et pourcentage arrondi).
 alter table public.bons_de_travail add column if not exists client_nom          text;
-alter table public.bons_de_travail add column if not exists debut               integer;
+alter table public.bons_de_travail add column if not exists debut               numeric;
 alter table public.bons_de_travail add column if not exists priorite            text;
 alter table public.bons_de_travail add column if not exists baseline            text;
 alter table public.bons_de_travail add column if not exists pv_requis           boolean;
