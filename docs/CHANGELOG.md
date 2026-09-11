@@ -2,6 +2,37 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-11 — Nomenclatures : une fiche validée reste validée, et le plan s'ouvre
+
+Deux défauts signalés, **reproduits avant d'être corrigés**.
+
+### « Une nomenclature validée qu'on modifie ne s'enregistre pas »
+
+Elle s'enregistrait — et se **dévalidait**. Les deux boutons « Enregistrer » du
+formulaire envoient `nomSave('en_cours')`, et le serveur écrivait ce statut tel quel.
+Reproduit en base sur une fiche `-TEST-` : `valide` / « note initiale » devenait
+`en_cours` / « note modifiée », et la liste « Standards » perdait une pièce. Vu de
+l'utilisateur, la modification avait disparu. En réalité c'était pire : la fiche sortait
+de la cascade de production, qui ne lit que les nomenclatures `valide`.
+
+Correction à deux étages. Le **client** garde le statut `valide` d'une fiche déjà validée.
+Le **serveur** l'impose de toute façon (`PUT /api/nomenclature/:id`) — un onglet resté ouvert
+sur l'ancienne page enverrait encore `en_cours`. Seul `{ devalider: true }` retire la
+validation ; si la lecture du statut courant échoue, le statut n'est pas touché.
+
+Vérifié : un envoi `en_cours` « vieil onglet » laisse la fiche `valide` avec sa note ; un
+envoi avec `devalider: true` la repasse bien `en_cours`.
+
+### « Le plan chargé dans une nomenclature n'est pas consultable »
+
+Le serveur servait parfaitement le fichier : HTTP 200, `application/pdf`, 156 392 octets,
+vérifié sur le serveur de test **et** sur l'app Docker authentifiée. Le défaut était à
+l'écran : le nom du plan s'affiche dans le champ *Nom du fichier CAO*, un simple champ texte,
+alors que le lien vivait dans la zone GED plus bas. Un lien **« Ouvrir le plan »** est
+désormais posé sous ce champ ; si l'ERP n'a que le nom sans le fichier, un message le dit.
+
+**Aucune migration.** `tsc` propre, harnais 60/0.
+
 ## 2026-09-10 — Programmer n'est pas produire : le planning ne cache plus rien, et le BST attend son tour
 
 Règle métier arrêtée ce jour : *« Les BDT et BST (ou BDS) d'un lot doivent être tous

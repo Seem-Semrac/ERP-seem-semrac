@@ -96,7 +96,7 @@
           <tr><td>Code produit</td><td>Texte</td><td>Non</td><td>Par défaut égal au N° de nomenclature.</td></tr>
           <tr><td>Description produit</td><td>Texte</td><td>Non</td><td>Désignation complète du produit.</td></tr>
           <tr><td>N° de plan</td><td>Texte (ex. PL-138001 ind. A)</td><td>Non</td><td>Référence du plan de la pièce.</td></tr>
-          <tr><td>Nom du fichier CAO</td><td>Texte (ex. PL-138001_A.pdf)</td><td>Non</td><td>Se remplit seul si vous joignez le plan CAO en GED.</td></tr>
+          <tr><td>Nom du fichier CAO</td><td>Texte (ex. PL-138001_A.pdf)</td><td>Non</td><td>Se remplit seul si vous joignez le plan CAO en GED. Le lien <b>« Ouvrir le plan »</b>, juste en dessous, affiche le fichier.</td></tr>
           <tr><td>Masse pour 1 pc (g)</td><td>Nombre</td><td>Non</td><td>Saisie en <b>grammes</b> (stockée en kg côté base).</td></tr>
           <tr><td>Dimensions pour 1 pc</td><td>Texte (ex. 150 × 80 × 20 mm)</td><td>Non</td><td>Encombrement de la pièce.</td></tr>
           <tr><td>Surface totale pour 1 pc (mm²)</td><td>Nombre</td><td>Non</td><td>Surface développée : sert au calcul de charge des balancelles OAS.</td></tr>
@@ -106,6 +106,8 @@
       </table>
     </div>
     <p>Sous l'identification, deux blocs complètent la fiche : <b>« Clients &amp; réfs de cette pièce »</b> (le répertoire réf interne ↔ réf client ↔ plan, alimenté automatiquement par les DT validées, avec ajout manuel possible) et <b>« Documents (GED) »</b> pour joindre le plan client, le plan CAO et les programmes FAO par étape machine.</p>
+    <div class="note"><b>Corriger une nomenclature validée.</b> Ouvrez-la depuis la liste des nomenclatures faites, modifiez, puis cliquez <b>« Enregistrer »</b> : les modifications sont enregistrées et la nomenclature <b>reste validée</b> — elle ne repasse pas « en cours » et reste disponible pour la production. Pour une modification de fond (gamme, matière) que vous voulez tracer, préférez <b>« Incrémenter l’indice »</b> : l’ERP crée une révision et conserve l’ancienne.</div>
+    <div class="note"><b>Consulter le plan.</b> Dès qu’un plan est joint — depuis la nomenclature ou depuis la préparation technique —, le lien <b>« Ouvrir le plan »</b> apparaît sous le champ <i>Nom du fichier CAO</i> et affiche le fichier dans un nouvel onglet. Si l’ERP n’a que le nom du fichier, sans le fichier lui-même, un message orange vous le signale : joignez-le dans la zone <i>Plan CAO</i>.</div>
     <figure class="shot">
       <img src="../../assets/form-be-nomenclature.png" alt="Capture du formulaire de nomenclature" loading="lazy">
       <figcaption><b>Formulaire nomenclature</b> — à gauche identification + fournitures (matière / accessoires), à droite la gamme en millièmes d'heure et le prix de revient calculé automatiquement.</figcaption>

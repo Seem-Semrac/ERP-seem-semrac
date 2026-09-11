@@ -51,6 +51,15 @@ Les informations saisies (n° de plan, fichier, codes programme par étape) sont
 
 **Préparation technique (`/be/preparation`)** : le plan et les programmes CN se chargent par un **bouton « Parcourir »** (sélecteur de fichier), plus par saisie du nom. Le fichier part en GED — `categorie: plan_cao` pour le plan, `programme_fao` + `etape_ordre` pour un programme —, rattaché à la **nomenclature**, ce qui lève `manque_plan` / `manque_code_cnc` sur la préparation. Le nom du fichier renseigne le champ *Fichier*, et le nom **sans extension** pré-remplit le *N° de plan* / *N° programme* **s'il est encore vide** (une valeur saisie n'est jamais écrasée). Un lien « ouvrir » apparaît sous le champ après l'envoi.
 
+**Enregistrer une nomenclature validée ne la dévalide plus (11/09/2026).** Les deux boutons « Enregistrer » du formulaire appellent `nomSave('en_cours')`. Sur une fiche déjà `valide`, ce statut était écrit tel quel : la nomenclature quittait la liste des faites — l'utilisateur concluait « ça ne s'enregistre pas » — et surtout sortait de la **cascade de production**, qui ne lit que les nomenclatures `valide` (choix du dernier indice validé par référence). Preuve reproduite en base avant correction : `valide` / « note initiale » → `en_cours` / « note modifiée ». Désormais :
+
+- **client** — `nomSave` calcule un statut effectif : une fiche déjà validée reste `valide`, on reste sur le formulaire, message « la nomenclature reste validée » ;
+- **serveur** — garde-fou dans `PUT /api/nomenclature/:id` : si la fiche en base est `valide`, tout autre statut reçu est ramené à `valide`. Indispensable, car un onglet resté ouvert sur l'ancienne page envoie encore `en_cours`. Seul un appel explicite `{ devalider: true }` retire la validation. Si la lecture du statut courant échoue, le statut n'est pas modifié du tout — jamais de dévalidation par défaut.
+
+Pour **tracer** une modification de fond (gamme, matière) sur une pièce validée, le chemin prévu reste **« Incrémenter l'indice »** : il crée une révision et conserve l'ancienne.
+
+**Le plan s'ouvre là où son nom est écrit (11/09/2026).** Le champ *Nom du fichier CAO* (`plan_fichier`) n'est que du texte ; le fichier vit dans la GED, zone *Plan CAO*, plus bas dans le formulaire. On cherchait le plan là où son nom apparaît, sans pouvoir l'ouvrir. Un lien **« Ouvrir le plan »** est désormais posé sous ce champ (`nomRenderLienPlan()`, appelé par `gedRenderAll()`) : il vise le document GED dont le nom égale `plan_fichier`, à défaut le dernier plan joint. Si seul le nom existe, sans fichier déposé, un message le dit au lieu de laisser croire que le plan est là. `GET /api/ged/file/:id` n'a pas changé : il servait déjà correctement le fichier, vérifié avec et sans authentification.
+
 > Gotcha d'échappement : les boutons utilisent `this.previousElementSibling.click()` et non `getElementById('…')`. Une apostrophe imbriquée dans un `onclick` construit à l'intérieur d'une chaîne JS elle-même dans un template literal se fait manger (`'` → `'`) et casse tout le script client — panne invisible au build comme au typecheck.
 <!-- /auto -->
 ---

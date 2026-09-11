@@ -570,6 +570,7 @@ export const pageServiceBE = (
               <div>
                 <label style="display:block;font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:.3rem;">Nom du fichier CAO</label>
                 <input id="nom-f-planfic" type="text" placeholder="ex: PL-138001_A.pdf" style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:.45rem .75rem;font-size:.83rem;background:#f8fafc;outline:none;"/>
+                <div id="nom-plan-ouvrir" style="margin-top:4px;font-size:.7rem;"></div>
               </div>
               <div>
                 <label style="display:block;font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:.3rem;">Masse pour 1 pc (g)</label>
@@ -1345,7 +1346,25 @@ export const pageServiceBE = (
         +'</div>';
     }).join('');
   }
-  function gedRenderAll(){ gedRenderZone('plan_client'); gedRenderZone('plan_cao'); nomRenderFaoList(); }
+  function gedRenderAll(){ gedRenderZone('plan_client'); gedRenderZone('plan_cao'); nomRenderFaoList(); nomRenderLienPlan(); }
+  // Le nom du plan s'affiche dans le bloc Identification (champ Nom du fichier CAO), mais ce
+  // champ n'est que du texte : on cherchait le plan la ou il est ecrit, sans pouvoir l'ouvrir.
+  // Le fichier, lui, vit dans la GED (zone Plan CAO, plus bas). On pose le lien sous le nom.
+  function nomRenderLienPlan(){
+    var el=document.getElementById('nom-plan-ouvrir'); if(!el) return;
+    var nomFic=String((document.getElementById('nom-f-planfic')||{}).value||'').trim();
+    var plans=GED_DOCS.filter(function(d){ return d.categorie==='plan_cao'||d.categorie==='plan_client'; });
+    var doc=plans.find(function(d){ return nomFic && String(d.fichier_nom||'').trim()===nomFic; }) || plans[plans.length-1];
+    if(doc){
+      el.innerHTML='<a href="/api/ged/file/'+doc.id+'" target="_blank" rel="noopener" style="color:#4338ca;font-weight:700;text-decoration:none;"><i class="fas fa-eye" style="margin-right:4px;"></i>Ouvrir le plan</a>'
+        +(plans.length>1?' <span style="color:#94a3b8;">('+plans.length+' plans joints, voir la zone Plan CAO)</span>':'');
+      return;
+    }
+    // Un nom sans fichier : la prepa ou une saisie a pu n ecrire que le nom. On le dit.
+    el.innerHTML=(nomFic && nomCurrentId)
+      ? '<span style="color:#b45309;"><i class="fas fa-circle-info" style="margin-right:4px;"></i>Seul le nom est enregistré : le fichier n’a pas été déposé dans l’ERP. Joignez-le dans la zone Plan CAO.</span>'
+      : '';
+  }
   function gedLoad(){ if(!nomCurrentId){ GED_DOCS=[]; gedRenderAll(); return; } fetch('/api/ged/nomenclature/'+encodeURIComponent(nomCurrentId)).then(function(r){return r.json();}).then(function(j){ GED_DOCS=(j&&j.documents)||[]; gedRenderAll(); }).catch(function(){}); }
   // ── Répertoire « Clients & réfs » de la pièce (réf interne ↔ client ↔ réf client ↔ plan) ──
   function nomRefsClientsLoad(code){
@@ -1696,6 +1715,7 @@ export const pageServiceBE = (
     document.getElementById('nom-f-desc').value = '';
     var _np0=document.getElementById('nom-f-numplan'); if(_np0)_np0.value='';
     var _pf0=document.getElementById('nom-f-planfic'); if(_pf0)_pf0.value='';
+    var _po0=document.getElementById('nom-plan-ouvrir'); if(_po0)_po0.innerHTML='';   // pas de lien herite de la fiche precedente
     document.getElementById('nom-f-masse').value = '';
     document.getElementById('nom-f-dims').value = '';
     (document.getElementById('nom-f-surface')||{}).value = '';
@@ -2605,7 +2625,12 @@ export const pageServiceBE = (
   }
 
   async function nomSave(statut) {
-    var payload = nomCollectPayload(statut);
+    // Une nomenclature DEJA validee reste validee quand on l'enregistre. Le bouton
+    // Enregistrer envoyait en_cours et la devalidait en silence : elle quittait la liste
+    // des faites et la cascade de production. Le serveur applique la meme regle.
+    var dejaValidee = (nomCurrentStatut === 'valide');
+    var statutEffectif = (statut !== 'valide' && dejaValidee) ? 'valide' : statut;
+    var payload = nomCollectPayload(statutEffectif);
     if (!payload.num_nom) {
       pushNotif('err','fa-exclamation-triangle','Le N° de nomenclature (réf. pièce) est obligatoire.');
       return;
@@ -2629,10 +2654,17 @@ export const pageServiceBE = (
         // l'impression que le bouton ne fonctionnait pas.
         if (data.id) nomCurrentId = data.id;
         if (data.indice) nomCurrentIndice = data.indice;
-        nomCurrentStatut = statut;
+        nomCurrentStatut = statutEffectif;
         if (statut === 'valide') {
           pushNotif('ok','fa-check-circle', (num ? num+' — ' : '') + 'Nomenclature validée — elle rejoint la liste des nomenclatures faites.', 4500);
           setTimeout(function(){ window.location.replace('/be/service?' + Date.now() + '#noms'); }, 900);
+          return;
+        }
+        if (dejaValidee) {
+          pushNotif('ok','fa-save', (num ? num+' — ' : '') + 'Modifications enregistrées — la nomenclature reste validée.', 4000);
+          var _bv = document.getElementById('nom-form-statut-badge');
+          if (_bv) _bv.innerHTML = '<span style="background:#dcfce7;color:#15803d;border-radius:999px;padding:2px 10px;font-size:.68rem;font-weight:800;">Validée</span>';
+          if (typeof gedRefreshUi === 'function') gedRefreshUi();
           return;
         }
         // Enregistrement simple : on RESTE dans la nomenclature, la progression est sauvegardée

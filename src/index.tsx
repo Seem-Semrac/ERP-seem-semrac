@@ -49,7 +49,7 @@ import {
   getEmployes, getCertifications, getCompetences, upsertCompetence, getPointages, createPointage, updatePointage,
   getFacturesClient, getFacturesFournisseur, getEcrituresComptables,
   createFactureFournisseur, updateFactureFournisseur, getFactureFournisseur,
-  getNomenclatures, createNomenclature, updateNomenclature, deleteNomenclature, upsertFournitures, getFournitures,
+  getNomenclatures, getNomenclature, createNomenclature, updateNomenclature, deleteNomenclature, upsertFournitures, getFournitures,
   getReferencesClients, upsertReferenceClient, deleteReferenceClient, getClientProduits, getClientsProduitsAll,
   getEditLock, upsertEditLock, deleteEditLock, getActiveEditLocks,
   createDemandeTravaux, updateDemandeTravaux,
@@ -4084,7 +4084,20 @@ app.put('/api/nomenclature/:id', async (c) => {
   const id = c.req.param('id')
   const payload = await c.req.json()
   // strip temps calculés côté client (non colonnes) ; etapes_production est persisté (colonne jsonb)
-  const { fournitures, temps_reglage_total_min: _tr, temps_unitaire_total_min: _tu, ...nomPayload } = payload
+  const { fournitures, temps_reglage_total_min: _tr, temps_unitaire_total_min: _tu, devalider: _devalider, ...nomPayload } = payload
+  // ⚠ GARDE-FOU (11/09/2026) : une nomenclature VALIDÉE ne repasse jamais « en cours »
+  //   parce qu'on l'a simplement ré-enregistrée. Les deux boutons « Enregistrer » du
+  //   formulaire envoyaient statut='en_cours' : corriger une nomenclature validée la
+  //   DÉVALIDAIT en silence. Elle quittait la liste des faites — l'utilisateur concluait
+  //   « ça ne s'enregistre pas » — et, pire, sortait de la cascade de production, qui ne
+  //   lit que les nomenclatures au statut valide. Le client est corrigé, mais un onglet
+  //   resté ouvert sur l'ancienne page enverrait encore 'en_cours' : c'est donc le serveur
+  //   qui tranche. Seul un appel explicite { devalider: true } peut retirer la validation.
+  if (nomPayload.statut !== undefined && nomPayload.statut !== 'valide' && _devalider !== true) {
+    const actuelle = await getNomenclature(id)
+    if (!actuelle) delete nomPayload.statut            // lecture en échec : on ne touche pas au statut
+    else if (actuelle.statut === 'valide') nomPayload.statut = 'valide'
+  }
   const { data, error } = await updateNomenclature(id, nomPayload)
   if (error || !data) return c.json({ ok: false, error: error?.message ?? 'Erreur mise à jour nomenclature' })
   if (fournitures) await upsertFournitures(id, fournitures)
