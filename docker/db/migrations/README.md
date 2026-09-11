@@ -41,3 +41,14 @@ docker exec -it erp-db psql -U postgres
 docker logs erp-migrate                         # ce qui a été appliqué au dernier démarrage
 docker exec erp-db psql -U postgres -d postgres -c "table _erp_migrations"
 ```
+
+## Rôle du lanceur et contrôle des mots-clés (11/09/2026)
+
+Le conteneur `erp-migrate` se connecte en **`supabase_admin`** : sur une base née de `schema.sql`
+(VM installée par `install.sh`), les tables appartiennent à ce rôle — l'image Supabase y joue son
+initialisation, puis rétrograde `postgres`. Connecté en `postgres`, le lanceur ne pouvait modifier
+aucune table. Un objet créé par une migration appartient donc à `supabase_admin`.
+
+Contrôle des mots-clés (fait avant toute application, sur le texte sans commentaires, en minuscules) :
+une seule exception au mot-clé de vidage, la clause `before truncate on` d'un déclencheur (qui
+l'**interdit**) ; toute concaténation de chaînes littérales (`'…' || '…'`) est refusée.

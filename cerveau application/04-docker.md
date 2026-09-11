@@ -69,3 +69,8 @@ Documenter ici : le `compose`, les variables d'environnement, les **volumes**, e
 
 ## Pour aller plus loin
 [`docs/ROADMAP-2mois.md`](../docs/ROADMAP-2mois.md) (plan self-hosting complet)
+
+## Lanceur de migrations : rôle `supabase_admin` (11/09/2026)
+- L'image Supabase joue son initialisation — dont `schema.sql` — en `supabase_admin`, puis rétrograde `postgres` (NOSUPERUSER) : sur une VM installée par `install.sh`, les tables ERP appartiennent à `supabase_admin`.
+- `erp-migrate` se connectait en `postgres` → **aucune** migration modifiant une table ne passait sur la VM (« must be owner »), retentée à chaque démarrage. Il se connecte désormais en `supabase_admin` (`PGUSER` dans `docker-compose.yml`, mot de passe = `POSTGRES_PASSWORD`).
+- Le Docker local (base née d'une restauration / du miroir, tables à `postgres`) ne montrait rien : tester un changement de schéma sur une base **neuve** née de `schema.sql`.

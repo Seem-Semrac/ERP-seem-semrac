@@ -71,7 +71,12 @@ services:
     environment:
       PGHOST: db
       PGPORT: ${POSTGRES_PORT}
-      PGUSER: postgres
+      # supabase_admin, PAS postgres : sur une base née de schema.sql (VM installée par install.sh),
+      # les tables ERP appartiennent à supabase_admin — l'image Supabase joue ses scripts
+      # d'initialisation sous ce rôle, puis rétrograde postgres (NOSUPERUSER). Connecté en postgres,
+      # le lanceur ne pouvait modifier AUCUNE table (« must be owner ») : les migrations échouaient
+      # et étaient retentées à chaque démarrage. Mot de passe = POSTGRES_PASSWORD (posé par l'image).
+      PGUSER: supabase_admin
       PGDATABASE: ${POSTGRES_DB}
       PGPASSWORD: ${POSTGRES_PASSWORD}
 

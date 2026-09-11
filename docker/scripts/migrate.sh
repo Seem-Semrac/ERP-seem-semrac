@@ -56,15 +56,20 @@ if [ ${#fichiers[@]} -eq 0 ]; then
 fi
 
 # ── GARANTIE 1 — on inspecte TOUS les fichiers AVANT d'en appliquer un seul.
-#    Les commentaires SQL (-- …) sont retirés pour éviter les faux positifs.
-#    `drop policy`, `drop index`, `drop trigger`, `drop constraint` restent autorisés :
-#    ils ne détruisent aucune donnée.
+#    Les commentaires SQL (-- …) sont retirés pour éviter les faux positifs, et le texte est mis en
+#    minuscules. `drop policy`, `drop index`, `drop trigger`, `drop constraint` restent autorisés :
+#    ils ne détruisent aucune donnée. UNE exception au mot-clé de vidage, déclarée ici plutôt que
+#    contournée : la clause « before truncate on » d'un déclencheur, qui INTERDIT le vidage d'une
+#    table (journal EN 9100). Refusée en revanche : la concaténation de chaînes littérales
+#    ('dele' || 'te …'), qui servirait à masquer un mot-clé à ce contrôle.
 interdits='(drop[[:space:]]+(table|column|database|schema|type|sequence))|truncate[[:space:]]|delete[[:space:]]+from'
+concat="'[[:space:]]*[|][|][[:space:]]*'"
+filtre() { sed 's/--.*$//' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/before[[:space:]]+truncate[[:space:]]+on/before (vidage) on/g'; }
 refus=0
 for f in "${fichiers[@]}"; do
-  if sed 's/--.*$//' "$f" | grep -Eiq "$interdits"; then
-    echo "  ✗ REFUSE : $(basename "$f") contient une instruction destructrice." >&2
-    sed 's/--.*$//' "$f" | grep -Ein "$interdits" | head -5 | sed 's/^/      /' >&2
+  if filtre "$f" | grep -Eq "$interdits|$concat"; then
+    echo "  ✗ REFUSE : $(basename "$f") contient une instruction destructrice (ou masquée)." >&2
+    filtre "$f" | grep -En "$interdits|$concat" | head -5 | sed 's/^/      /' >&2
     refus=1
   fi
 done

@@ -14,6 +14,8 @@
 
 **Le mécanisme** : un conteneur éphémère `erp-migrate` (`docker/migrate.Dockerfile`) démarre à chaque `up`, après que la base est saine, applique les fichiers de `docker/db/migrations/` **jamais encore joués**, puis s'arrête. Son journal est la table `_erp_migrations`.
 
+**Rôle — corrigé le 11/09/2026** : le lanceur se connecte en **`supabase_admin`** (mot de passe = `POSTGRES_PASSWORD`). L'image Supabase joue ses scripts d'initialisation — dont `schema.sql` — sous ce rôle, puis rétrograde `postgres` (NOSUPERUSER) : sur une VM installée par `install.sh`, les tables ERP appartiennent donc à `supabase_admin`. Connecté en `postgres`, le lanceur ne pouvait en modifier **aucune** (« must be owner of table … ») : toute migration qui modifie une table échouait, n'était pas journalisée, et était retentée à chaque démarrage. Une base plus ancienne, née d'une restauration ou du miroir, appartient à `postgres` — elle fonctionnait, ce qui masquait le problème.
+
 > ⚠️ **Correction du 09/09/2026** : `app` ne dépend **plus** de la réussite de `erp-migrate` (`service_completed_successfully` retiré). Une migration en échec mettait toute l'application à terre — un schéma en retard est un désagrément, un ERP arrêté est un arrêt de travail. Un échec est signalé bruyamment, n'est pas journalisé, et la migration est **retentée au démarrage suivant**.
 
 **Les données ne sont jamais touchées.** Le runner inspecte **tous** les fichiers *avant* d'en appliquer un seul et **refuse le lot entier** si l'un contient :
@@ -22,7 +24,7 @@
 DROP TABLE · DROP COLUMN · DROP DATABASE · DROP SCHEMA · DROP TYPE · DROP SEQUENCE · TRUNCATE · DELETE FROM
 ```
 
-Les commentaires SQL sont retirés avant l'analyse (pas de faux positif sur un `-- …drop table…`). Restent autorisés, car ils ne détruisent aucune donnée : `drop policy`, `drop index`, `drop trigger`, `drop constraint`. Une suppression réellement voulue se fait à la main : `docker exec -it erp-db psql -U postgres`.
+Les commentaires SQL sont retirés avant l'analyse (pas de faux positif sur un `-- …drop table…`). Restent autorisés, car ils ne détruisent aucune donnée : `drop policy`, `drop index`, `drop trigger`, `drop constraint`. Une seule exception au mot-clé de vidage, déclarée dans le lanceur : la clause `before truncate on` d'un déclencheur, qui **interdit** le vidage (journal EN 9100). Refusée en revanche : toute concaténation de chaînes littérales (`'…' || '…'`), qui servirait à masquer un mot-clé. Une suppression réellement voulue se fait à la main : `docker exec -it erp-db psql -U postgres`.
 
 **Chaque fichier s'exécute dans une transaction** (`psql -1`) : soit tout passe, soit rien. Après application, un `notify pgrst, 'reload schema'` rend les nouvelles colonnes visibles à l'API sans redémarrage.
 
