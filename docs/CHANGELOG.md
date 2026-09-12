@@ -56,6 +56,12 @@ bon de retour) et, sous un PV non conforme, ce que la Qualité a décidé du lot
 
 - Fichiers : `src/index.tsx`, `src/queries.ts`, `src/qualite.tsx`, `src/achats.tsx`,
   `src/expeditions.tsx`, `src/shared.ts`, `src/be.tsx`, `src/types.ts`
+**Garde-fou ajouté aux 6 scripts cloud** (12/09) : joué par erreur sur la base Docker, `cloud-6`
+répondait `must be owner of table avoirs_fournisseurs` — la migration 008 y était déjà passée, sous
+le rôle `supabase_admin` du lanceur. Chaque `cloud-N` refuse désormais de s'exécuter sur une base
+Docker/VM (détection de `_erp_migrations`) en disant quoi faire à la place. Protection précieuse sur
+`cloud-2`, qui est destructif.
+
 - Migration DB : **oui** — `docker/db/migrations/008-reception-fournisseur-avoirs.sql` (Docker/VM,
   jouée) · `docker/db/cloud/cloud-6-reception-fournisseur-avoirs.sql` (**cloud : à jouer à la main**)
 - Vérifié : `tsc` 0 erreur · harnais 60 PASS / 0 FAIL · 69 contrôles d'API bout-en-bout sur Docker

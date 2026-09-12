@@ -21,6 +21,21 @@
 -- Idempotente : `add column if not exists`, relançable sans effet.
 -- ═══════════════════════════════════════════════════════════════════════════
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- GARDE-FOU : ce script est pour la base CLOUD (Supabase Studio du projet en ligne).
+-- La base Docker / la VM appliquent docker/db/migrations/ TOUTES SEULES (erp-docker.sh maj) :
+-- les y rejouer à la main échoue de façon déroutante (« must be owner of table … », parce que
+-- le lanceur de migrations crée ses objets sous le rôle supabase_admin, pas sous le vôtre).
+-- Signature d'une base Docker / VM : la table _erp_migrations, que le cloud n'a pas.
+-- ─────────────────────────────────────────────────────────────────────────────
+do $$
+begin
+  if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = '_erp_migrations') then
+    raise exception 'MAUVAISE BASE : vous etes sur la base Docker / VM (table _erp_migrations presente). Ce script ne sert QUE pour la base cloud. Sur une VM, lancez plutot : ~/erp/docker/scripts/erp-docker.sh maj';
+  end if;
+end
+$$;
+
 do $$
 declare
   t text;

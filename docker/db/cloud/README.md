@@ -4,6 +4,15 @@ Le Docker local et la VM appliquent leur schéma **tout seuls** : le conteneur
 `erp-migrate` déroule `docker/db/migrations/` à chaque `erp-docker.sh maj`, en
 prenant une sauvegarde avant.
 
+> ⚠ **Où jouer ces scripts : dans le Studio du projet EN LIGNE**
+> (`https://supabase.com/dashboard/project/<ref>/sql/new`), **jamais** dans le Studio de la base
+> Docker locale ni sur la VM. Celles-là appliquent `docker/db/migrations/` toutes seules ; y rejouer
+> un script cloud échoue de façon déroutante — `must be owner of table …`, parce que le lanceur de
+> migrations crée ses objets sous le rôle `supabase_admin` et pas sous le vôtre. Depuis le
+> 12/09/2026, **chaque script cloud commence par un garde-fou** qui détecte la table
+> `_erp_migrations` (présente sur Docker/VM, absente du cloud) et refuse de s'exécuter avec un
+> message explicite. Rien n'est appliqué dans ce cas : l'erreur annule tout.
+
 La Supabase **cloud** n'a pas ce mécanisme — pas de runner, pas de PAT dans
 l'environnement de développement. Ce qui la concerne se joue donc à la main,
 dans **Supabase Studio → SQL Editor**.
