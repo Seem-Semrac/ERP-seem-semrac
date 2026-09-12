@@ -192,6 +192,27 @@
 
 ⚠️ **Attention :** Il n'y a pas de formulaire à remplir ici — c'est une décision par bouton, avec demande de confirmation avant validation.
 
+## Décider d'un lot reçu non conforme (quarantaine fournisseur)
+**Quand l'utiliser :** Quand un PV de contrôle de réception non conforme a envoyé en quarantaine un lot reçu d'un fournisseur ou d'un sous-traitant, et qu'il faut dire ce qu'on en fait : le renvoyer, l'accepter par dérogation, ou n'en garder qu'une partie.
+**Où le trouver :** Onglet « Quarantaine » → bouton rouge « Décider » sur la ligne du lot. (Les quarantaines internes gardent le bouton « Statuer ».)
+
+En haut de la fenêtre, un rappel non modifiable : fournisseur, n° de bon de commande, n° de BL, n° de NC et motif de mise en quarantaine.
+
+| Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
+|---|---|---|---|---|
+| Quantité du lot | nombre | Non | Reprise du bon de livraison. À corriger **seulement si elle est inconnue** : c'est elle qui sert à répartir accepté / renvoyé / rebut. | 10 |
+| Que fait-on de ce lot ? | choix (Renvoyer au fournisseur, Dérogation avec le fournisseur, Entrée partielle en stock) | Oui | « Renvoyer » : tout repart, rien n'entre en stock. « Dérogation » : le lot est accepté en l'état et entre en stock. « Entrée partielle » : une partie entre en stock après tri. | Entrée partielle en stock |
+| Quantité acceptée | nombre | Oui (entrée partielle) | Ce qui entre réellement en stock. Le reste s'affiche à côté. Doit être inférieur à la quantité du lot — tout accepter, c'est une dérogation. | 6 |
+| Le reste (entrée partielle) | choix (Le reste repart chez le fournisseur, Le reste part au rebut chez nous) | Oui (entrée partielle) | Dit où va ce qu'on n'a pas gardé. Le rebut est inscrit au registre des déchets (service Environnement). | Le reste repart chez le fournisseur |
+| Réf. de la dérogation | texte | Non (dérogation) | Le numéro ou la référence de l'accord passé avec le fournisseur, si vous l'avez. | DER-2026-014 |
+| Réfaction obtenue € HT | nombre | Non (dérogation) | Le geste commercial obtenu pour accepter le lot en l'état. Un montant saisi ici crée un avoir fournisseur. | 180.00 |
+| Compensation du fournisseur | choix (Avoir, Remplacement) | Oui (renvoi et entrée partielle) | « Avoir » : le fournisseur nous doit de l'argent (l'avoir part dans Achats › Avoirs fournisseurs). « Remplacement » : il relivre — la réception du bon de commande rouvre de la quantité non acceptée. | Avoir |
+| Montant de l'avoir € HT | nombre | Non | Pré-rempli au prix unitaire du bon de commande × la quantité non acceptée. Modifiable. Si le prix unitaire est inconnu, saisissez-le. | 96.00 |
+| Motif de la décision | zone de texte | Oui (3 caractères minimum) | Ce qui a été constaté et ce qui a été convenu avec le fournisseur. Enregistré avec l'auteur et la date. | 4 pièces hors tolérance, retour accepté par le fournisseur |
+
+💡 **Astuce :** Après validation, la ligne affiche ce qui a été fait (« Renvoyé au fournisseur », « Dérogation fournisseur », « Entrée partielle 6/10 ») et ce qui reste à faire (« Retour à expédier », « Avoir réclamé (Achats) », « Remplacement attendu »).
+⚠️ **Attention :** La décision ne se prend **qu'une fois** — un second clic est refusé. Si la matière est renvoyée **sans remplacement**, un message prévient qu'elle manque à l'affaire : il faut **repasser commande**. Si la base n'a pas encore la mise à jour (migration 008 / script cloud-6), la décision est refusée.
+
 ## Nouvelle ligne de plan de contrôle
 **Quand l'utiliser :** Pour ajouter une ligne d'inspection au plan de contrôle EN9100 (ce qu'on vérifie, comment, à quelle fréquence).
 **Où le trouver :** Onglet « Plan de contrôle » → bouton « Nouvelle ligne ».

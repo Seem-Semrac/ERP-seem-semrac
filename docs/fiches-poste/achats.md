@@ -21,7 +21,15 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 
 ![achats-rfq](../assets/achats-rfq.png)
 
-### 2. Transformer une DA en BC
+### 2. Suivre les avoirs fournisseurs
+1. Achats › **Avoirs fournisseurs** : ce que fournisseurs et sous-traitants nous doivent (à ne pas confondre avec les avoirs clients, service Commercial).
+2. Un avoir arrive tout seul quand la Qualité renvoie un lot, le met au rebut ou obtient une réfaction ; « Nouvel avoir » pour en saisir un à la main.
+3. Quand l'avoir du fournisseur arrive : **Reçu** (son n°, sa date, le montant réellement accordé). Quand on s'en sert : **Imputer** (montant + n° de facture).
+4. Un avoir ne se supprime pas : il s'annule, avec un motif, tant qu'il n'a pas servi.
+
+![achats-avoirs](../assets/achats-avoirs.png)
+
+### 3. Transformer une DA en BC
 1. Onglet **Demandes d'achat**, sélectionner la DA.
 2. Générer le bon de commande fournisseur.
 

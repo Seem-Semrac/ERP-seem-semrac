@@ -44,6 +44,50 @@
 💡 **Astuce :** Ajoutez des lignes avec « Ajouter une ligne » : le Montant HT se met à jour automatiquement (Qté × PU additionnés).
 ⚠️ **Attention :** Le prix officiel d'un fournisseur ne se met **jamais** à jour via un bon de commande — seulement via une demande de prix (RFQ) validée. Une ligne sans référence est ignorée.
 
+## Nouvel avoir fournisseur
+**Quand l'utiliser :** Pour inscrire à la main un avoir qu'un fournisseur ou un sous-traitant nous doit (les avoirs nés d'une décision Qualité sur un lot reçu non conforme s'inscrivent tout seuls).
+**Où le trouver :** Onglet « Avoirs fournisseurs » → bouton « Nouvel avoir ».
+
+| Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
+|---|---|---|---|---|
+| Type | liste déroulante (Fournisseur, Sous-traitant) | Non | Dit dans quelle liste chercher le tiers. | Fournisseur |
+| Fournisseur / ST | liste déroulante (tiers en base) | Oui | L'entreprise qui nous doit l'avoir. | Aluminium de France |
+| Bon de commande concerné (facultatif) | liste déroulante (BC de ce tiers) | Non | Rattache l'avoir à la commande d'origine : il apparaîtra dans la colonne Origine. | BC-2026-0142 |
+| Montant HT | nombre | Oui | Ce qu'on réclame au fournisseur, hors taxes. | 340.00 |
+| Motif | zone de texte | Oui | Pourquoi le fournisseur nous doit cet avoir. | Erreur de facturation sur la livraison du 12/09 |
+| État | liste déroulante (À recevoir — réclamé au fournisseur, Reçu — l'avoir du fournisseur est en main) | Non | « À recevoir » par défaut. « Reçu » si vous avez déjà le document en main. | À recevoir |
+| N° de l'avoir du fournisseur | texte | Oui (si État = Reçu) | Le numéro que le fournisseur a porté sur SON avoir. | AV-4471 |
+| Reçu le | date | Non (si État = Reçu) | La date de l'avoir du fournisseur. | 12/09/2026 |
+
+💡 **Astuce :** Rattacher le bon de commande évite de chercher plus tard d'où vient l'avoir : le n° de BC (et le BL) s'affichent dans la colonne Origine.
+⚠️ **Attention :** Ce sont les avoirs **fournisseurs** — ce qu'on nous doit. Les avoirs **clients** restent au service Commercial.
+
+## Avoir reçu du fournisseur
+**Quand l'utiliser :** Quand l'avoir réclamé arrive enfin du fournisseur : on enregistre son document et le montant qu'il accorde vraiment.
+**Où le trouver :** Onglet « Avoirs fournisseurs » → bouton « Reçu » sur une ligne au statut « À recevoir ».
+
+| Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
+|---|---|---|---|---|
+| N° de l'avoir du fournisseur | texte | Oui | Le numéro porté sur le document reçu ; sans lui, l'enregistrement est refusé. | AV-4471 |
+| Reçu le | date | Non | La date de l'avoir. Le jour même par défaut. | 12/09/2026 |
+| Montant accordé HT | nombre | Non | Le montant réellement accordé, prérempli avec le montant réclamé. **Il peut différer** : c'est le montant de SON avoir qui fait foi. | 96.00 |
+
+💡 **Astuce :** Une fois reçu, l'avoir passe en « Disponible » et vient grossir la colonne du même nom dans « Ce que chacun nous doit ».
+⚠️ **Attention :** Si le fournisseur n'accorde pas tout, corrigez le montant ici — sinon le registre affichera une somme qu'on n'aura jamais.
+
+## Imputer un avoir
+**Quand l'utiliser :** Pour utiliser un avoir disponible : le déduire d'une facture fournisseur, d'une commande…
+**Où le trouver :** Onglet « Avoirs fournisseurs » → bouton « Imputer » sur une ligne. Le rappel en haut de la fenêtre indique le solde restant.
+
+| Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
+|---|---|---|---|---|
+| Montant imputé HT | nombre | Oui | Ce qu'on déduit maintenant. Prérempli avec le solde ; laissez moins pour une imputation partielle. | 50.00 |
+| Imputé sur | texte | Oui | Sur quoi l'avoir est déduit : n° de facture fournisseur, de bon de commande… | FF-2026-0311 |
+| Note (facultatif) | texte | Non | Précision libre sur l'imputation. | Déduit sur la facture de septembre |
+
+💡 **Astuce :** Chaque imputation reste affichée sous le motif de l'avoir (date, montant, référence) : l'historique se lit d'un coup d'œil.
+⚠️ **Attention :** Un avoir ne se supprime **jamais** : il s'**annule**, avec un motif obligatoire, et seulement tant qu'aucune partie n'en a été utilisée. Dès la première imputation, le bouton d'annulation disparaît.
+
 ## Nouveau fournisseur
 **Quand l'utiliser :** Pour enregistrer une nouvelle entreprise qui vous vend de la matière, des consommables ou des fournitures.
 **Où le trouver :** Onglet « Fournisseurs / ST », vue « Fournisseurs » active, bouton « Nouveau fournisseur ».

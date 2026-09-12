@@ -8,7 +8,7 @@ Porte d'entrée et de sortie des marchandises, organisée par **sens du flux** :
 
 ## Les onglets
 - **Réceptions** — Tout ce qui arrive : commandes fournisseurs et sous-traitants à réceptionner, retours de sous-traitance, **retours clients** attendus, BC en attente de validation fournisseur, puis les arrivées déjà enregistrées.
-- **Envois** — Tout ce qui part : commandes prêtes à expédier (lot libéré), BL à envoyer, pièces à confier en sous-traitance.
+- **Envois** — Tout ce qui part : commandes prêtes à expédier (lot libéré), BL à envoyer, pièces à confier en sous-traitance, et les **retours fournisseurs** décidés par la Qualité.
 - **Calendrier** — Frise unique **arrivées + départs**, puis le bloc **« Aujourd'hui »** listant ce qui doit entrer et sortir dans la journée, retards compris.
 - **Fournisseurs** — Référentiel (consulter, ajouter, supprimer) et, par fournisseur, ses **bons de commande envoyés** et les **bons de livraison reçus** (avec transporteur et date).
 - **Dashboard** — Volumes, OTD client et fournisseur, en-cours.
@@ -20,6 +20,9 @@ Porte d'entrée et de sortie des marchandises, organisée par **sens du flux** :
 2. Saisir la **quantité reçue** (inférieure à la commande = réception partielle, le BC reste ouvert pour le solde).
 3. Renseigner le **transporteur** et sa référence.
 4. Valider : un BL de réception est créé et rattaché au BC, la date d'arrivée réelle est posée.
+5. Faire le **PV de contrôle** sur la ligne : le contenu n'entre en stock qu'au PV **conforme**. Un **PV non conforme envoie toujours le lot en quarantaine** — rien n'entre en stock, et c'est la Qualité qui décide de la suite.
+
+> Sous un PV non conforme, la ligne dit ce que la Qualité en a fait : **« renvoyé au fournisseur · à expédier / expédié »**, **« dérogation fournisseur · entré en stock »**, **« entrée partielle 6/10 »** — ou **« en quarantaine — décision Qualité attendue »** tant que rien n'est décidé.
 
 > **OTD figé** — la date d'arrivée prévue est modifiable, mais l'ERP **gèle la première date promise** : c'est elle qui sert au calcul de l'OTD fournisseur. Un décalage de date ne rachète pas la ponctualité.
 
@@ -35,6 +38,12 @@ Porte d'entrée et de sortie des marchandises, organisée par **sens du flux** :
 4. Valider : BL créé, stock décrémenté, facture client et écriture de vente préparées.
 
 > **Porte qualité** — le BL est **refusé** si le lot porte une NC ouverte ou est en quarantaine. Faire lever le blocage par la Qualité.
+
+### Expédier un retour fournisseur
+1. Onglet **Envois**, carte **« Retours fournisseurs »** : y figurent les lots que la Qualité a décidé de **renvoyer** — BL / lot, fournisseur, pièce, **quantité à renvoyer**, avoir ou remplacement attendu, date de décision.
+2. Préparer le colis, puis cliquer **« Expédié »**.
+3. Renseigner, si vous l'avez, la **référence du bon de retour** ou le **n° de suivi** (facultatif), puis valider.
+4. La ligne quitte la liste ; la date et la personne sont enregistrées. Un second clic est refusé.
 
 ### Consulter l'historique d'un fournisseur
 1. Onglet **Fournisseurs** : rechercher par nom, puis cliquer le fournisseur.

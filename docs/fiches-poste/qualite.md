@@ -28,7 +28,15 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 
 ![qualite-nc](../assets/qualite-nc.png)
 
-### 3. Ouvrir un 8D
+### 3. Décider d'un lot reçu non conforme
+1. Qualité › **Quarantaine** : un lot refusé au contrôle réception porte le bouton rouge **Décider** (les lots de production gardent « Statuer »).
+2. Trois choix : **renvoyer** tout le lot au fournisseur · **dérogation** (il entre en stock en l'état, réfaction possible) · **entrée partielle** (la part acceptée entre, le reste repart ou part au rebut).
+3. Renvoi et entrée partielle : choisir **avoir** (il part aux Achats) ou **remplacement** (le fournisseur relivre).
+4. Le **motif est obligatoire** et la décision ne se prend qu'une fois. Matière renvoyée sans remplacement = il faut repasser commande.
+
+![qualite-quarantaine](../assets/qualite-quarantaine.png)
+
+### 4. Ouvrir un 8D
 1. Onglet **Rapports 8D**, dérouler D1→D8.
 
 ![qualite-8d](../assets/qualite-8d.png)

@@ -396,10 +396,31 @@ export interface Quarantaine {
   motif?: string
   pv_id?: string
   nc_id?: string
-  statut: 'en_cours' | 'en_validation' | 'libere' | 'rejete'
+  statut: 'en_cours' | 'en_validation' | 'libere' | 'libere_derogation' | 'rejete'
   libere_par?: string
   libere_le?: string
   duree_jours?: number
+  // Décision sur un lot reçu d'un fournisseur (migration 008) : laquelle, combien, qui, et la suite
+  // à donner (retour à expédier, avoir réclamé, remplacement attendu).
+  issue?: 'retour_fournisseur' | 'derogation_fournisseur' | 'entree_partielle' | null
+  qte?: number | null
+  qte_acceptee?: number | null
+  qte_retour?: number | null
+  qte_rebut?: number | null
+  compensation?: string | null
+  bc_id?: string | null
+  bl_id?: string | null
+  fournisseur_nom?: string | null
+  derogation_ref?: string | null
+  decision_par?: string | null
+  decision_le?: string | null
+  decision_motif?: string | null
+  avoir_id?: string | null
+  retour_expedie_le?: string | null
+  retour_expedie_par?: string | null
+  retour_ref?: string | null
+  // Contexte de l'achat, calculé par la route (jamais stocké) : BC, BL, quantité, prix unitaire.
+  reception?: any
 }
 
 export interface Audit {

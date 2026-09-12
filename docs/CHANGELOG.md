@@ -2,6 +2,68 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-12 — Lot fournisseur non conforme : renvoi, dérogation ou entrée partielle · registre des avoirs fournisseurs · motif de suppression
+
+*« Mettre un motif plutôt. Pour la quarantaine quand c'est une NC fournisseur, une libération de lot,
+on doit choisir si on renvoie au fournisseur, si on fait une dérogation avec le fournisseur ou si on
+rentre en stock partiellement. Il faut ensuite pouvoir créer un système dans lequel on répertorie les
+avoirs que nous avons chez nos fournisseurs et sous-traitants ; ces avoirs-là seront traités dans les
+achats, contrairement aux avoirs clients. »*
+
+**1 · Supprimer une nomenclature validée exige un motif.** Le motif est inscrit dans l'entrée
+« suppression » du journal EN 9100, avec l'auteur et la date ; il est demandé à l'unité comme en
+suppression groupée (`appMotif`, nouvelle fenêtre partagée). Une fiche validée puis dévalidée le
+réclame aussi — sinon « dévalider puis supprimer » contournait la règle. Et si le journal n'existe pas
+sur la base (script `cloud-5` non joué), la suppression d'une fiche suivie est **refusée** : un motif
+qui ne peut pas être tracé ne sert à rien.
+
+**2 · Un lot reçu non conforme a maintenant une issue.** La quarantaine née d'un PV de réception ne se
+« statue » plus : elle se **décide**
+(`POST /api/qualite/quarantaine/:id/decision-fournisseur`) — renvoi au fournisseur, dérogation avec le
+fournisseur (le lot entre en stock, réfaction possible), ou entrée partielle (la part acceptée entre
+en stock, le reste repart ou part au rebut). Compensation au choix : **avoir** (inscrit aux Achats,
+montant pré-rempli au prix unitaire du BC) ou **remplacement** (le BC rouvre sa réception de la
+quantité non acceptée). Motif obligatoire, auteur tiré de la session, décision **réservée
+atomiquement** (pas de double crédit ni de double avoir). Le rebut part au registre des déchets, la NC
+passe à « traité », et le BC devient `controle` quand toutes ses réceptions sont tranchées
+(`recalculerStatutBc`, règle unique partagée avec le PV conforme). Une matière renvoyée sans
+remplacement **n'ouvre pas** la porte matière : la réponse dit qu'il faut repasser commande.
+Les anciennes voies sont fermées pour ces lots (`Statuer`, `/liberer`, `/rejeter`, décision Direction)
+— la « dérogation » y créait une dérogation CLIENT au nom du fournisseur.
+
+**3 · Registre des avoirs fournisseurs, dans les Achats.** Nouvelle table `avoirs_fournisseurs`
+(distincte de `credits`, les avoirs clients du Commercial) et 7ᵉ onglet « Avoirs fournisseurs » :
+ce que chaque fournisseur ou sous-traitant nous doit, d'où il vient (lot non conforme, réfaction,
+saisie manuelle), son cycle **à recevoir → reçu → partiellement utilisé → soldé**, ses imputations
+(sur quelle facture, par qui, quand) et son annulation motivée. Un avoir ne se supprime jamais.
+Toutes les transitions sont conditionnelles : deux onglets ouverts ne peuvent pas imputer deux fois le
+même euro.
+
+Côté Expéditions : carte **« Retours fournisseurs »** (bouton « Expédié » → date, auteur, référence du
+bon de retour) et, sous un PV non conforme, ce que la Qualité a décidé du lot.
+
+**Revue adverse (28 agents) : 5 défauts confirmés, tous corrigés.**
+1. Tant que la base n'a pas la 008, les anciennes sorties (`Statuer`, `liberer`, `rejeter`) **restent
+   ouvertes** : les fermer au profit d'un « Décider » qui refuse aurait laissé le lot sans issue —
+   donc l'affaire bloquée à l'expédition. L'écran ne propose « Décider » que si la base le permet.
+2. **Décider sans quantité est refusé** (400) : un BL reçu à blanc donnait `qte_retour = 0`, et le
+   renvoi disparaissait des Expéditions (qui filtrent sur > 0) pendant que la porte matière s'ouvrait.
+3. Un avoir **pas encore reçu ne s'impute plus** : l'imputer faisait disparaître le bouton « Reçu »,
+   donc la possibilité d'enregistrer le n° de l'avoir du fournisseur.
+4. La porte matière fermée par un renvoi **se rouvre** dès qu'un autre bon de commande matière de
+   l'affaire est contrôlé après la décision (la matière a été rachetée) — sinon, blocage à vie.
+5. Les fenêtres d'avoir se ferment au succès, bouton laissé inactif jusqu'au rechargement.
+
+- Fichiers : `src/index.tsx`, `src/queries.ts`, `src/qualite.tsx`, `src/achats.tsx`,
+  `src/expeditions.tsx`, `src/shared.ts`, `src/be.tsx`, `src/types.ts`
+- Migration DB : **oui** — `docker/db/migrations/008-reception-fournisseur-avoirs.sql` (Docker/VM,
+  jouée) · `docker/db/cloud/cloud-6-reception-fournisseur-avoirs.sql` (**cloud : à jouer à la main**)
+- Vérifié : `tsc` 0 erreur · harnais 60 PASS / 0 FAIL · 69 contrôles d'API bout-en-bout sur Docker
+  (jeu `-TEST-` supprimé ensuite)
+- Doc mise à jour : `technique/03-base-de-donnees.md`, `03b-tables-reference.md`,
+  `technique/06-modules/{achats,qualite,be,expeditions}.md`, `technique/07-api-reference.md`,
+  `manuel/{achats,qualite,expeditions,be}.md` (+ HTML) · Captures à refaire : oui
+
 ## 2026-09-11 — Nomenclatures validées : journal EN 9100 de toutes les modifications
 
 *« Pour l'EN 9100, je veux pouvoir tracer dans les logs toutes les modifications effectuées sur

@@ -84,6 +84,15 @@
       <li>Depuis le formulaire d'une nomenclature enregistrée : le bandeau violet <b>« Indice actuel »</b> propose <b>« Incrémenter l'indice → B »</b>. Confirmez : la révision précédente est conservée telle quelle.</li>
     </ol>
 
+    <h3>Pas à pas — supprimer une nomenclature validée (motif obligatoire)</h3>
+    <ol class="steps">
+      <li>Dans la liste, cliquez <b>« Supprimer »</b> sur la ligne. Pour un simple <b>brouillon</b>, une confirmation suffit.</li>
+      <li>Pour une nomenclature <b>validée</b> — ou qui l’a été puis a été <b>dévalidée</b> —, une fenêtre dédiée réclame un <b>motif</b>. Sans motif, rien n’est supprimé.</li>
+      <li>Écrivez pourquoi la fiche disparaît (pièce abandonnée, doublon, erreur de création…), puis confirmez.</li>
+      <li>Le motif est inscrit au <b>journal EN 9100</b> avec <b>qui</b> a supprimé et <b>quand</b>. Le journal survit à la fiche : la suppression reste consultable.</li>
+      <li><b>Suppression groupée :</b> cochez les lignes, puis lancez la suppression depuis la barre de sélection. Le <b>motif est demandé une seule fois</b>, dans la fenêtre de confirmation, et vaut pour <b>toute la sélection</b>.</li>
+    </ol>
+
     <h3>Le formulaire nomenclature, champ par champ (Identification)</h3>
     <div class="tbl">
       <table>
@@ -123,8 +132,10 @@
       <li>Une nomenclature ouverte par un collègue est <b>verrouillée</b> : une notification vous indique qui la modifie ; patientez, la liste se met à jour en direct (rafraîchissement automatique toutes les ~7&nbsp;secondes hors édition).</li>
       <li>Les champs « N° programme machine / fichier programme » n'apparaissent dans la gamme que pour les étapes sur <b>machine CNC</b>.</li>
       <li><b>Traçabilité EN 9100</b> : toute modification d’une nomenclature <b>validée</b> est inscrite au journal, avec son auteur — le compte connecté. Un brouillon n’est pas tracé : le journal commence à la validation.</li>
+      <li><b>Supprimer une nomenclature validée demande un motif</b>, y compris en suppression groupée. Il rejoint le journal EN 9100 avec l’auteur et la date : on saura toujours pourquoi la fiche n’est plus là.</li>
     </ul>
-    <div class="warn"><b>Attention :</b> la suppression d'une nomenclature est <b>irréversible</b> (une confirmation est demandée). Pour faire évoluer une pièce, préférez toujours <b>créer un nouvel indice</b> : l'ancienne révision reste consultable.</div>
+    <div class="warn"><b>Attention :</b> la suppression d'une nomenclature est <b>irréversible</b> (une confirmation est demandée, et un <b>motif</b> dès que la fiche a été validée). Pour faire évoluer une pièce, préférez toujours <b>créer un nouvel indice</b> : l'ancienne révision reste consultable.</div>
+    <div class="warn"><b>Pas de journal, pas de suppression.</b> Si le journal EN 9100 n’existe pas encore sur la base (script <code>cloud-5</code> non joué), la suppression d’une nomenclature <b>validée</b> est <b>refusée</b> : le motif ne pourrait pas être tracé. Le message vous le dit ; prévenez l’administrateur.</div>
     <div class="astuce"><b>Astuce :</b> le bouton <b>« Créer une demande de prix »</b> en haut de l'onglet accepte plusieurs articles d'un coup — l'ERP crée <b>une demande par référence</b> et les envoie dans Achats → « Demandes de prix ». Le prix officiel du catalogue est mis à jour à la validation de la réponse.</div>
   </section>
 

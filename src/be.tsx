@@ -391,7 +391,7 @@ export const pageServiceBE = (
                         style="padding:5px 12px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:white;border:none;border-radius:7px;font-size:.72rem;font-weight:700;cursor:pointer;">
                         <i class="fas fa-edit" style="margin-right:4px;"></i>Ouvrir
                       </button>
-                      <button onclick="nomSupprimer('${n.id}','${n.num_nom ?? ''}')"
+                      <button onclick="nomSupprimer('${n.id}','${n.num_nom ?? ''}',1)"
                         style="padding:5px 10px;background:#fee2e2;color:#b91c1c;border:none;border-radius:7px;font-size:.72rem;font-weight:700;cursor:pointer;"
                         title="Supprimer">
                         <i class="fas fa-trash"></i>
@@ -466,7 +466,7 @@ export const pageServiceBE = (
                         style="padding:5px 12px;background:linear-gradient(135deg,#f59e0b,#b45309);color:white;border:none;border-radius:7px;font-size:.72rem;font-weight:700;cursor:pointer;">
                         <i class="fas fa-edit" style="margin-right:4px;"></i>Ouvrir
                       </button>
-                      <button onclick="nomSupprimer('${n.id}','${n.num_nom ?? ''}')"
+                      <button onclick="nomSupprimer('${n.id}','${n.num_nom ?? ''}',1)"
                         style="padding:5px 10px;background:#fee2e2;color:#b91c1c;border:none;border-radius:7px;font-size:.72rem;font-weight:700;cursor:pointer;" title="Supprimer">
                         <i class="fas fa-trash"></i>
                       </button>
@@ -483,7 +483,7 @@ export const pageServiceBE = (
         </div>
       </div>
     </div>
-    ${bulkSelectAssets([{ key: 'nom', base: '/api/nomenclature/', label: 'nomenclature(s)' }, { key: 'nomm', base: '/api/nomenclature/', label: 'nomenclature(s) mère(s)' }])}
+    ${bulkSelectAssets([{ key: 'nom', base: '/api/nomenclature/', label: 'nomenclature(s)', motif: true }, { key: 'nomm', base: '/api/nomenclature/', label: 'nomenclature(s) mère(s)', motif: true }])}
 
     <!-- FORMULAIRE NOMENCLATURE -->
     <div id="nom-form-view" style="display:none;margin:0 auto;">
@@ -2750,11 +2750,23 @@ export const pageServiceBE = (
 
   // Suppression in-place : on retire uniquement la ligne supprimée et on re-numérote
   // les indices. Pas de reload complet → évite le flash "tout s'efface".
-  async function nomSupprimer(id, num) {
-    if (!await appConfirm('Supprimer la nomenclature ' + num + ' ? Cette action est irreversible.')) return;
+  async function nomSupprimer(id, num, suivi) {
+    // Une nomenclature VALIDÉE (ou validée puis dévalidée) ne se supprime qu'avec un MOTIF, inscrit
+    // au journal EN 9100. Les listes Standards / Mères ne contiennent que des validées (suivi = 1).
+    var motif = null;
+    if (suivi) {
+      motif = await appMotif('Supprimer la nomenclature ' + num + ' ? Cette action est irréversible.\\nIndiquez le motif : il sera inscrit au journal EN 9100.', { title: 'Supprimer une nomenclature validée', okLabel: 'Supprimer' });
+      if (motif === null) return;
+    } else if (!await appConfirm('Supprimer la nomenclature ' + num + ' ? Cette action est irreversible.')) return;
     try {
-      var res = await fetch('/api/nomenclature/' + id, { method: 'DELETE' });
-      var data = await res.json();
+      var envoyer = function(m){ return fetch('/api/nomenclature/' + id, m ? { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ motif: m }) } : { method: 'DELETE' }).then(function(r){ return r.json(); }); };
+      var data = await envoyer(motif);
+      // Brouillon issu d'une fiche validée puis dévalidée : le serveur réclame le motif.
+      if (!data.ok && data.motif_requis) {
+        motif = await appMotif('La nomenclature ' + num + ' a déjà été validée : sa suppression est inscrite au journal EN 9100.\\nIndiquez le motif.', { title: 'Motif de suppression', okLabel: 'Supprimer' });
+        if (motif === null) return;
+        data = await envoyer(motif);
+      }
       if (!data.ok) {
         pushNotif('err','fa-exclamation-triangle','Erreur suppression: ' + (data.error || 'inconnu'), 5000);
         return;

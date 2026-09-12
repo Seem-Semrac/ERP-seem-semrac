@@ -74,6 +74,8 @@ import {
   createBonDeCommande, updateBonDeCommande, getBonDeCommande, bcHasAckColumn,
   createBonDeLivraison, updateBonDeLivraison,
   createPVControle, createQuarantaine, updateQuarantaine, getStockReel,
+  getQuarantaineStricte, majQuarantaineSi, quarantaineDecisionDispo,
+  getAvoirsFournisseurs, getAvoirFournisseur, createAvoirFournisseur, majAvoirFournisseurSi,
   resolveAffaireId,
   getFournisseurs, getSousTraitantsAll, createFournisseur, createSousTraitant, updateFournisseur, updateSousTraitant, deleteFournisseur, deleteSousTraitant, computeOtd, getFournisseurScorecard,
   createMachine, updateMachine, deleteMachine, getPresences, upsertPresence, getLot, updateLot, lotHasLibCols, updateStockArticle, createArticleStock,
@@ -1182,9 +1184,27 @@ app.post('/api/offre/:id/accepter', async (c) => {
 })
 
 // Libération / rejet d'un lot en quarantaine (débloque ou rejette l'affaire pour l'expédition).
+// ⚠ Ces deux routes ne changent QUE le statut : elles ne valent que pour une quarantaine INTERNE
+//   (lot de production bloqué au contrôle). Un lot reçu d'un fournisseur a des conséquences
+//   physiques et comptables (stock, avoir, retour) et passe par la décision fournisseur.
+async function gardeQuarantaineSimple(id: string): Promise<string | null> {
+  const lu = await getQuarantaineStricte(id)
+  if (lu.error) return 'Lecture de la quarantaine impossible : ' + lu.error
+  if (!lu.data) return 'Lot en quarantaine introuvable.'
+  if (String(lu.data.statut || '') !== 'en_cours') return 'Ce lot n’attend plus de décision (statut ' + (lu.data.statut || '—') + ').'
+  // ⚠ On ne renvoie vers la décision fournisseur que si elle EXISTE sur cette base : sans la
+  //   migration 008, elle refuse — et fermer aussi cette porte-ci laisserait le lot sans aucune
+  //   sortie, donc l'affaire bloquée à l'expédition tant que le script cloud n'est pas joué.
+  if ((await quarantaineDecisionDispo()) && receptionDeQuarantaine(lu.data, pvReceptionParNum(await getPVControles().catch(() => [] as any[])))) {
+    return 'Lot reçu d’un fournisseur : la décision se prend dans Qualité › Quarantaine › Décider (renvoi, dérogation fournisseur ou entrée partielle).'
+  }
+  return null
+}
 app.post('/api/quarantaine/:id/liberer', async (c) => {
   const id = c.req.param('id')
   const b = await c.req.json().catch(() => ({} as any))
+  const garde = await gardeQuarantaineSimple(id)
+  if (garde) return c.json({ ok: false, error: garde }, 409)
   const u = (c as any).get('user')
   const { data, error } = await updateQuarantaine(id, { statut: 'libere', libere_par: (u && u.nom) || b.par || 'Qualité', libere_le: new Date().toISOString().slice(0, 10) })
   if (error) return c.json({ ok: false, error: error.message }, 400)
@@ -1193,6 +1213,8 @@ app.post('/api/quarantaine/:id/liberer', async (c) => {
 app.post('/api/quarantaine/:id/rejeter', async (c) => {
   const id = c.req.param('id')
   const b = await c.req.json().catch(() => ({} as any))
+  const garde = await gardeQuarantaineSimple(id)
+  if (garde) return c.json({ ok: false, error: garde }, 409)
   const u = (c as any).get('user')
   const { data, error } = await updateQuarantaine(id, { statut: 'rejete', libere_par: (u && u.nom) || b.par || 'Qualité', libere_le: new Date().toISOString().slice(0, 10) })
   if (error) return c.json({ ok: false, error: error.message }, 400)
@@ -1750,7 +1772,146 @@ app.get('/achats/service', async (c) => {
     reception: b.date_reception_reelle ? String(b.date_reception_reelle).slice(0, 10) : '',
     accuse: b.accuse_fournisseur_le ? String(b.accuse_fournisseur_le).slice(0, 10) : '',
   }))
-  return c.html(pageServiceAchats(das, fournisseurs, sousTraitants, refCount, dpEnrichies as any[], sansPrix, scorecard as any[], produits as any[], prochaineRefLibre(_bcsPourLibre as any[]), _affaires, _bcsAchats))
+  // Registre des avoirs fournisseurs (migration 008) : fail-soft — l'onglet dit lui-même que la
+  // base n'a pas encore la table plutôt que de faire échouer toute la page Achats.
+  const _avf = await getAvoirsFournisseurs()
+  return c.html(pageServiceAchats(das, fournisseurs, sousTraitants, refCount, dpEnrichies as any[], sansPrix, scorecard as any[], produits as any[], prochaineRefLibre(_bcsPourLibre as any[]), _affaires, _bcsAchats,
+    { lignes: _avf.data, absente: _avf.absente, erreur: _avf.absente ? null : _avf.error }))
+})
+
+// ══════════════════════════════════════════════════════════════
+// AVOIRS FOURNISSEURS / SOUS-TRAITANTS — registre du service ACHATS
+// « Il faut pouvoir répertorier les avoirs que nous avons chez nos fournisseurs et sous-traitants ;
+//   ces avoirs-là seront traités dans les achats, contrairement aux avoirs clients. » (11/09/2026)
+// Cycle : à recevoir (réclamé) → reçu (l'avoir du fournisseur est en main) → partiellement utilisé
+//   → soldé ; ou annulé avec motif. Jamais supprimé (la base ne donne pas le droit DELETE).
+// Chaque transition est CONDITIONNELLE (statut et montant imputé attendus) : deux onglets ouverts
+// ne peuvent pas imputer deux fois le même euro.
+// ══════════════════════════════════════════════════════════════
+const _dateOuNull = (s: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '').slice(0, 10)) ? String(s).slice(0, 10) : null
+
+app.post('/api/achats/avoirs-fournisseurs', async (c) => {
+  const b = await c.req.json().catch(() => ({} as any))
+  const tiersNom = String(b.tiers_nom || '').trim().slice(0, 200)
+  if (!tiersNom) return c.json({ ok: false, error: 'Fournisseur ou sous-traitant requis.' }, 400)
+  const montant = Number(b.montant)
+  if (!Number.isFinite(montant) || montant <= 0) return c.json({ ok: false, error: 'Montant HT de l’avoir requis (supérieur à 0).' }, 400)
+  const motif = String(b.motif || '').trim().slice(0, 1000)
+  if (motif.length < 3) return c.json({ ok: false, error: 'Motif de l’avoir requis (3 caractères au moins).' }, 400)
+  const dejaRecu = String(b.statut || '') === 'recu'
+  const refF = String(b.ref_fournisseur || '').trim().slice(0, 120)
+  if (dejaRecu && !refF) return c.json({ ok: false, error: 'N° de l’avoir du fournisseur requis pour un avoir déjà reçu.' }, 400)
+  const bcId: string | null = String(b.bc_id || '').trim() || null
+  let numAffaire: string | null = null
+  if (bcId) {
+    const bcl: any = await getBonDeCommande(bcId)
+    if (!bcl) return c.json({ ok: false, error: 'Bon de commande ' + bcId + ' introuvable.' }, 400)
+    numAffaire = bcl.num_affaire || bcl.affaire_id || null
+  }
+  const par = await resolveSigner(c, b, 'Achats')
+  const r = await creerAvoirFournisseur({
+    tiers_type: String(b.tiers_type || '') === 'sous_traitant' ? 'sous_traitant' : 'fournisseur',
+    tiers_id: String(b.tiers_id || '').trim() || null,
+    tiers_nom: tiersNom,
+    origine: 'manuel', motif, montant: arrondi2(montant), montant_impute: 0,
+    statut: dejaRecu ? 'recu' : 'a_recevoir', date_demande: TODAY_ISO(),
+    ref_fournisseur: dejaRecu ? refF : null,
+    date_reception: dejaRecu ? (_dateOuNull(b.date_reception) || TODAY_ISO()) : null,
+    bc_id: bcId, num_affaire: numAffaire, cree_par: par,
+  })
+  if (r.error) return c.json({ ok: false, error: r.error }, 400)
+  return c.json({ ok: true, avoir: r.data })
+})
+
+// L'avoir du fournisseur est arrivé : on note SON numéro et sa date. Le montant peut être ajusté
+// (le fournisseur n'accorde pas toujours ce qui a été réclamé).
+app.post('/api/achats/avoirs-fournisseurs/:id/recu', async (c) => {
+  const id = c.req.param('id')
+  const b = await c.req.json().catch(() => ({} as any))
+  const ref = String(b.ref_fournisseur || '').trim().slice(0, 120)
+  if (!ref) return c.json({ ok: false, error: 'N° de l’avoir émis par le fournisseur requis.' }, 400)
+  const lu = await getAvoirFournisseur(id)
+  if (lu.error) return c.json({ ok: false, error: avfMessage(lu.error, lu.absente) }, lu.absente ? 409 : 503)
+  const a: any = lu.data
+  if (!a) return c.json({ ok: false, error: 'Avoir introuvable.' }, 404)
+  if (String(a.statut || '') !== 'a_recevoir') return c.json({ ok: false, error: 'Cet avoir n’est plus « à recevoir » (' + (a.statut || '—') + ').' }, 409)
+  const patch: any = { statut: 'recu', ref_fournisseur: ref, date_reception: _dateOuNull(b.date_reception) || TODAY_ISO(), updated_at: new Date().toISOString() }
+  if (b.montant != null && String(b.montant) !== '') {
+    const m = Number(b.montant)
+    if (!Number.isFinite(m) || m <= 0) return c.json({ ok: false, error: 'Montant accordé invalide.' }, 400)
+    patch.montant = arrondi2(m)
+  } else if (!(Number(a.montant) > 0)) {
+    return c.json({ ok: false, error: 'Cet avoir n’a pas de montant : renseignez celui de l’avoir reçu.' }, 400)
+  }
+  const r = await majAvoirFournisseurSi(id, patch, { statut: 'a_recevoir' })
+  if (r.error) return c.json({ ok: false, error: r.error }, 400)
+  if (r.conflit) return c.json({ ok: false, error: 'Avoir modifié entre-temps : rechargez la page.' }, 409)
+  return c.json({ ok: true, avoir: r.data })
+})
+
+// Imputer : l'avoir est utilisé (déduit d'une facture fournisseur, d'une commande…).
+app.post('/api/achats/avoirs-fournisseurs/:id/imputer', async (c) => {
+  const id = c.req.param('id')
+  const b = await c.req.json().catch(() => ({} as any))
+  const m = arrondi2(b.montant)
+  if (!(m > 0)) return c.json({ ok: false, error: 'Montant à imputer requis (supérieur à 0).' }, 400)
+  const ref = String(b.ref || '').trim().slice(0, 200)
+  if (!ref) return c.json({ ok: false, error: 'Indiquez sur quoi l’avoir est imputé (n° de facture fournisseur, de bon de commande…).' }, 400)
+  const lu = await getAvoirFournisseur(id)
+  if (lu.error) return c.json({ ok: false, error: avfMessage(lu.error, lu.absente) }, lu.absente ? 409 : 503)
+  const a: any = lu.data
+  if (!a) return c.json({ ok: false, error: 'Avoir introuvable.' }, 404)
+  // Un avoir pas encore reçu ne s'impute pas : sinon son statut passerait à « partiellement
+  // utilisé », le bouton « Reçu » disparaîtrait et le n° de l'avoir du fournisseur — la pièce
+  // comptable — ne pourrait plus jamais être enregistré.
+  if (String(a.statut || '') === 'a_recevoir') {
+    return c.json({ ok: false, error: 'Avoir pas encore reçu du fournisseur : enregistrez-le d’abord avec « Reçu » (son n° et le montant réellement accordé), puis imputez-le.' }, 409)
+  }
+  if (!['recu', 'partiel'].includes(String(a.statut || ''))) {
+    return c.json({ ok: false, error: 'Cet avoir est ' + (String(a.statut) === 'annule' ? 'annulé' : 'soldé') + ' : plus rien à imputer.' }, 409)
+  }
+  if (!(Number(a.montant) > 0)) return c.json({ ok: false, error: 'Avoir sans montant : renseignez-le d’abord (bouton « Reçu »).' }, 400)
+  const solde = avfSolde(a)
+  if (m > solde + 0.005) return c.json({ ok: false, error: 'Montant supérieur au solde de l’avoir (' + solde.toFixed(2) + ' € HT).' }, 400)
+  const impute = arrondi2((Number(a.montant_impute) || 0) + m)
+  const imps = Array.isArray(a.imputations) ? a.imputations : []
+  const par = await resolveSigner(c, b, 'Achats')
+  const patch: any = {
+    montant_impute: impute,
+    statut: (Number(a.montant) - impute) <= 0.005 ? 'solde' : 'partiel',
+    imputations: [...imps, { date: TODAY_ISO(), montant: m, ref, note: String(b.note || '').trim().slice(0, 300) || null, par }],
+    updated_at: new Date().toISOString(),
+  }
+  const r = await majAvoirFournisseurSi(id, patch, { statut: String(a.statut), montant_impute: Number(a.montant_impute) || 0 })
+  if (r.error) return c.json({ ok: false, error: r.error }, 400)
+  if (r.conflit) return c.json({ ok: false, error: 'Avoir modifié entre-temps (imputation simultanée ?) : rechargez la page.' }, 409)
+  return c.json({ ok: true, avoir: r.data, solde: avfSolde(r.data) })
+})
+
+// Annuler : l'avoir n'a pas lieu d'être (réclamation abandonnée, doublon…). Motif obligatoire, et
+// impossible dès qu'une partie en a été utilisée.
+app.post('/api/achats/avoirs-fournisseurs/:id/annuler', async (c) => {
+  const id = c.req.param('id')
+  const b = await c.req.json().catch(() => ({} as any))
+  const motif = String(b.motif || '').trim().slice(0, 500)
+  if (motif.length < 3) return c.json({ ok: false, motif_requis: true, error: 'Motif d’annulation obligatoire.' }, 400)
+  const lu = await getAvoirFournisseur(id)
+  if (lu.error) return c.json({ ok: false, error: avfMessage(lu.error, lu.absente) }, lu.absente ? 409 : 503)
+  const a: any = lu.data
+  if (!a) return c.json({ ok: false, error: 'Avoir introuvable.' }, 404)
+  if (!['a_recevoir', 'recu', 'partiel'].includes(String(a.statut || ''))) {
+    return c.json({ ok: false, error: 'Cet avoir est déjà ' + (String(a.statut) === 'annule' ? 'annulé' : 'soldé') + '.' }, 409)
+  }
+  if ((Number(a.montant_impute) || 0) > 0) {
+    return c.json({ ok: false, error: 'Avoir déjà utilisé (' + arrondi2(a.montant_impute).toFixed(2) + ' € imputés) : il ne s’annule plus.' }, 409)
+  }
+  const par = await resolveSigner(c, b, 'Achats')
+  const r = await majAvoirFournisseurSi(id,
+    { statut: 'annule', annule_le: TODAY_ISO(), annule_par: par, annule_motif: motif, updated_at: new Date().toISOString() },
+    { statut: String(a.statut), montant_impute: 0 })
+  if (r.error) return c.json({ ok: false, error: r.error }, 400)
+  if (r.conflit) return c.json({ ok: false, error: 'Avoir modifié entre-temps : rechargez la page.' }, 409)
+  return c.json({ ok: true, avoir: r.data })
 })
 
 // ─── Fiches détaillées Fournisseur / Sous-traitant ───────────
@@ -2510,16 +2671,17 @@ app.get('/api/be/noms-signature', async (c) => {
 // « On reçoit, ensuite on doit faire le PV de contrôle, et il faut qu'il soit fait et conforme
 //   pour que le contenu rentre en stock. » Avant, le stock était crédité dès la réception : une
 //   matière encore non contrôlée — voire refusée au contrôle — était déjà comptée disponible.
-//   · quantité = celle du BL de réception (une réception partielle = un BL = un PV) ;
+//   · quantité = celle du BL de réception (une réception partielle = un BL = un PV), ou la part
+//     ACCEPTÉE quand la Qualité n'a gardé qu'une partie d'un lot non conforme (entrée partielle) ;
 //   · BC machine exclu (il va à l'OPEX) ; sous-traitance exclue (pas un achat de stock) ;
 //   · IDEMPOTENT : un mouvement d'entrée de même motif déjà présent ⇒ rien. Si cette vérification
 //     échoue, on NE crédite PAS — un crédit manqué se voit, un crédit double ne se voit pas.
 //   Même format de motif qu'avant, pour reconnaître les réceptions déjà créditées par l'ancien code.
-async function entrerStockReception(bc: any, bl: any): Promise<{ entre: boolean; qte: number; article: string | null; raison: string | null }> {
+async function entrerStockReception(bc: any, bl: any, qteAcceptee?: number): Promise<{ entre: boolean; qte: number; article: string | null; raison: string | null }> {
   const typeBc = String(bc?.type_bc || '')
   if (/machine/i.test(String(bc?.categorie || ''))) return { entre: false, qte: 0, article: null, raison: 'achat machine (il va à l’OPEX)' }
   if (typeBc === 'st' || typeBc === 'sous_traitant') return { entre: false, qte: 0, article: null, raison: 'sous-traitance : pas d’entrée en stock' }
-  const qte = Number(bl?.qte) || 0
+  const qte = (qteAcceptee != null) ? (Number(qteAcceptee) || 0) : (Number(bl?.qte) || 0)
   if (qte <= 0) return { entre: false, qte: 0, article: null, raison: 'quantité reçue nulle sur le BL' }
   // La référence de la ligne du BC prime sur le libellé libre (même appariement qu'avant).
   const lignes = Array.isArray(bc?.lignes) ? bc.lignes : []
@@ -2551,11 +2713,35 @@ async function ouvrirPorteMatiere(bc: any): Promise<number> {
   if (!affaires.length) return 0
   const estMatBc = (b: any) => !['sous_traitant', 'st'].includes(String(b?.type_bc || '')) && !/machine/i.test(String(b?.categorie || ''))
   const estControle = (b: any) => ['controle', 'cloture'].includes(String(b?.statut || ''))
-  const [allBcs, bdts] = await Promise.all([getBonsDeCommande().catch(() => [] as any[]), getBonsDeTravail().catch(() => [] as any[])])
+  const [allBcs, bdts, quars] = await Promise.all([getBonsDeCommande().catch(() => [] as any[]), getBonsDeTravail().catch(() => [] as any[]), getQuarantaines().catch(() => [] as any[])])
+  // MATIÈRE PARTIE SANS RETOUR : un lot renvoyé au fournisseur (ou mis au rebut) sans remplacement
+  // manque à l'affaire. Le BC est « contrôlé » — la Qualité a tranché — mais la matière n'est pas là :
+  // ouvrir la porte dirait « matière disponible » pour ce qui est reparti. Il faut repasser commande.
+  const manqueParBc = new Map<string, { qte: number; le: string }>()
+  for (const q of (quars as any[])) {
+    if (!q || !q.issue || !q.bc_id || String(q.compensation || '') === 'remplacement') continue
+    const k = String(q.bc_id)
+    const p = manqueParBc.get(k) || { qte: 0, le: '' }
+    p.qte += (Number(q.qte_retour) || 0) + (Number(q.qte_rebut) || 0)
+    const le = String(q.decision_le || '').slice(0, 10)
+    if (le > p.le) p.le = le
+    manqueParBc.set(k, p)
+  }
+  // Le manque se COMBLE : si un autre bon de commande matière de l'affaire a été reçu et contrôlé
+  // APRÈS la décision, la matière a été rachetée et la porte doit pouvoir s'ouvrir. Sans cette
+  // sortie, une affaire restait bloquée à vie — rien n'aurait pu la rouvrir.
+  const manqueNonComble = (mats: any[], b: any): boolean => {
+    const p = manqueParBc.get(String(b.id))
+    if (!p || !(p.qte > 0)) return false
+    if (!p.le) return true
+    return !mats.some((autre: any) => String(autre.id) !== String(b.id) && estControle(autre)
+      && String(autre.date_reception_reelle || '').slice(0, 10) > p.le)
+  }
   let n = 0
   for (const aff of affaires) {
     const mats = (allBcs as any[]).filter(b => bcAffaires(b).includes(aff) && estMatBc(b))
     if (!mats.length || !mats.every(estControle)) continue
+    if (mats.some(b => manqueNonComble(mats, b))) continue
     for (const b of (bdts as any[])) {
       if (String(b.num_affaire) !== aff || b.matiere_ok === true) continue
       const r: any = await updateBDT(String(b.id), { matiere_ok: true }).catch(() => ({ error: true }))
@@ -2563,6 +2749,98 @@ async function ouvrirPorteMatiere(bc: any): Promise<number> {
     }
   }
   return n
+}
+
+// ── RÉCEPTION NON CONFORME : contexte de l'achat, prix, statut du bon de commande ───────────
+// Une quarantaine née d'un PV de réception porte le contexte de l'achat : bon de commande, bon de
+// livraison, fournisseur. Les quarantaines créées AVANT la migration 008 n'ont pas ces colonnes —
+// on les retrouve par le n° de PV (quarantaines.pv_id = pv_controle.num_pv).
+function pvReceptionParNum(pvs: any[]): Map<string, any> {
+  const m = new Map<string, any>()
+  for (const p of (pvs || [])) if (p && p.num_pv && String(p.type_controle || '') === 'reception') m.set(String(p.num_pv), p)
+  return m
+}
+function receptionDeQuarantaine(q: any, pvParNum: Map<string, any>): { bcId: string; blId: string | null } | null {
+  if (!q) return null
+  if (q.bc_id) return { bcId: String(q.bc_id), blId: q.bl_id ? String(q.bl_id) : (q.lot_id ? String(q.lot_id) : null) }
+  const pv = q.pv_id ? pvParNum.get(String(q.pv_id)) : null
+  if (!pv || !pv.bc_id) return null
+  return { bcId: String(pv.bc_id), blId: pv.bl_id ? String(pv.bl_id) : (q.lot_id ? String(q.lot_id) : null) }
+}
+// Prix unitaire d'un BC : celui de la ligne quand elle le porte, sinon montant HT / quantité
+// commandée. Sert à PRÉ-REMPLIR le montant d'un avoir — jamais à l'imposer.
+function prixUnitaireBc(bc: any): number | null {
+  if (!bc) return null
+  let lignes: any[] = []
+  if (Array.isArray(bc.lignes)) lignes = bc.lignes
+  else if (typeof bc.lignes === 'string' && bc.lignes.trim().startsWith('[')) { try { lignes = JSON.parse(bc.lignes) } catch { lignes = [] } }
+  if (lignes.length === 1 && Number(lignes[0]?.prix_unitaire) > 0) return Number(lignes[0].prix_unitaire)
+  const qc = Number(bc.qte_commandee) || 0
+  const mt = Number(bc.montant_ht) || 0
+  return (qc > 0 && mt > 0) ? Math.round((mt / qc) * 10000) / 10000 : null
+}
+// Le BC est CONTRÔLÉ quand il est reçu en totalité ET que CHACUNE de ses réceptions est TRANCHÉE :
+// PV conforme, ou lot non conforme sur lequel la Qualité a pris sa décision (renvoi, dérogation
+// fournisseur, entrée partielle). Avant, seul un PV conforme comptait : un BC dont un lot était
+// parti en quarantaine ne redevenait JAMAIS « contrôlé », même une fois la décision prise.
+// Toute lecture en échec laisse le statut EN PLACE : on ne déclare pas contrôlé par ignorance.
+async function recalculerStatutBc(bcId: string): Promise<{ statut: string; change: boolean; bc: any }> {
+  const bc: any = await getBonDeCommande(bcId)
+  if (!bc) return { statut: '', change: false, bc: null }
+  const st = String(bc.statut || '')
+  if (!['recu_total', 'controle'].includes(st)) return { statut: st, change: false, bc }
+  const [bls, pvs, qs] = await Promise.all([
+    getBonsDeLivraison().catch(() => [] as any[]),
+    getPVControles().catch(() => [] as any[]),
+    getQuarantaines().catch(() => [] as any[]),
+  ])
+  const blsRecep = (bls as any[]).filter((b: any) => String(b.bc_id || '') === String(bcId) && String(b.type_bl || '') === 'reception' && !b.nc_id && String(b.statut || '') !== 'annule')
+  if (!blsRecep.length) return { statut: st, change: false, bc }
+  const libres = new Set<string>((pvs as any[]).filter((p: any) => String(p.type_controle || '') === 'reception' && String(p.decision || '') === 'libere').map((p: any) => String(p.bl_id || '')))
+  const tranches = new Set<string>()
+  for (const q of (qs as any[])) { if (!q || !q.issue) continue; const k = String(q.bl_id || q.lot_id || ''); if (k) tranches.add(k) }
+  const toutes = blsRecep.every((b: any) => libres.has(String(b.id)) || tranches.has(String(b.id)))
+  if (toutes && st !== 'controle') {
+    const { error } = await updateBonDeCommande(bcId, { statut: 'controle' } as any)
+    if (error) return { statut: st, change: false, bc }
+    return { statut: 'controle', change: true, bc: { ...bc, statut: 'controle' } }
+  }
+  return { statut: st, change: false, bc }
+}
+// Quantité partie sans remplacement sur un BC (renvoyée au fournisseur ou mise au rebut) : elle
+// manque à l'affaire. Sert à expliquer pourquoi la porte matière ne s'ouvre pas.
+async function matiereManquanteBc(bcId: string): Promise<number> {
+  const qs = await getQuarantaines().catch(() => [] as any[])
+  let manque = 0
+  for (const q of (qs as any[])) {
+    if (!q || !q.issue || String(q.bc_id || '') !== String(bcId)) continue
+    if (String(q.compensation || '') === 'remplacement') continue
+    manque += (Number(q.qte_retour) || 0) + (Number(q.qte_rebut) || 0)
+  }
+  return Math.round(manque * 1000) / 1000
+}
+// ── AVOIRS FOURNISSEURS : numérotation AVF-AAAA-NNN, création idempotente par quarantaine ──
+const avfSolde = (a: any) => Math.round(((Number(a?.montant) || 0) - (Number(a?.montant_impute) || 0)) * 100) / 100
+const arrondi2 = (n: any) => Math.round((Number(n) || 0) * 100) / 100
+const avfMessage = (m: string | null, absente: boolean) => absente
+  ? 'Registre des avoirs fournisseurs absent de la base : jouer la migration 008 (VM : erp-docker.sh maj) ou le script cloud-6 (Supabase Studio).'
+  : String(m || 'erreur inconnue')
+async function creerAvoirFournisseur(p: Record<string, any>): Promise<{ data: any | null; error: string | null; existant: boolean }> {
+  for (let essai = 0; essai < 4; essai++) {
+    const liste = await getAvoirsFournisseurs()
+    if (liste.error) return { data: null, error: avfMessage(liste.error, liste.absente), existant: false }
+    // UN avoir par décision de quarantaine (l'index unique de la base dit le dernier mot).
+    if (p.quarantaine_id) {
+      const deja = liste.data.find((a: any) => String(a.quarantaine_id || '') === String(p.quarantaine_id))
+      if (deja) return { data: deja, error: null, existant: true }
+    }
+    const num = nextSeqId('AVF', liste.data.map((a: any) => a.num_avoir))
+    const r = await createAvoirFournisseur({ ...p, num_avoir: num })
+    if (!r.error) return { data: r.data, error: null, existant: false }
+    // Numéro pris (ou avoir déjà créé pour cette quarantaine) par une écriture simultanée : on relit.
+    if (r.code !== '23505') return { data: null, error: avfMessage(r.error, r.absente), existant: false }
+  }
+  return { data: null, error: 'numérotation des avoirs fournisseurs en conflit, réessayez', existant: false }
 }
 
 app.post('/api/expeditions/bc/:id/receptionner', async (c) => {
@@ -2785,6 +3063,7 @@ app.post('/api/expeditions/bc/:id/pv', async (c) => {
   let quarantaineId: string | null = null
   let stock: any = null
   let bdtDebloques = 0
+  let manqueMatiere = 0
   let statutBc = String((bc as any).statut || '')
   const lotRef = bl ? String(bl.id) : ((bc as any).bl_id || null)
   if (anomalie) {
@@ -2802,10 +3081,17 @@ app.post('/api/expeditions/bc/:id/pv', async (c) => {
       operation: 'Contrôle réception',
       detecteur: controleur,
       affaire_id: bc.affaire_id || null,
+      // Colonne Qualité « fournisseur » quand la base l'a : sans elle, une NC de réception ne se
+      // distingue d'une NC client que par son type, et le fournisseur n'est lu nulle part.
+      ...((await ncHasExtCols().catch(() => false)) ? { fournisseur_nom: bc.fournisseur_nom || null } : {}),
     }).catch(() => ({ error: true }))
     if (rNc?.error) ncId = null   // l'échec était avalé et un n° de NC inexistant renvoyé quand même
-    if (body.quarantaine) {
-      const { data: q } = await createQuarantaine({
+    // QUARANTAINE SYSTÉMATIQUE dès qu'il y a une réception physique (un BL) : c'est elle qui porte
+    // la décision de la Qualité — renvoi au fournisseur, dérogation fournisseur, entrée partielle —
+    // et qui rend au BC la possibilité de redevenir « contrôlé ». Sans elle, le lot refusé restait
+    // sans issue. Le choix reste offert pour un retour de sous-traitance sans BL.
+    if (body.quarantaine || bl) {
+      const baseQ: any = {
         lot_id: lotRef,
         piece: bc.articles || null,
         client_nom: bc.fournisseur_nom || null,
@@ -2814,8 +3100,13 @@ app.post('/api/expeditions/bc/:id/pv', async (c) => {
         pv_id: numPv,
         nc_id: ncId,
         statut: 'en_cours',
-      } as any).catch(() => ({ data: null } as any))
-      quarantaineId = (q as any)?.id || null
+      }
+      // Contexte de l'achat (migration 008) : sans ces colonnes, la quarantaine naît quand même —
+      // l'écran retrouvera le BC par le n° de PV.
+      const extQ: any = { qte: bl ? (Number(bl.qte) || null) : null, bc_id: id, bl_id: bl ? String(bl.id) : null, fournisseur_nom: bc.fournisseur_nom || null }
+      let rq: any = await createQuarantaine({ ...baseQ, ...extQ } as any)
+      if (rq?.error && /column|schema cache/i.test(String(rq.error.message || ''))) rq = await createQuarantaine(baseQ as any)
+      quarantaineId = (rq as any)?.data?.id || null
     }
     // ⚠ Le statut du BC n'est plus écrasé par 'recu' : il gardait la trace de la réception
     //   (recu_partiel / recu_total) et bloquait l'ouverture de la porte matière.
@@ -2823,18 +3114,40 @@ app.post('/api/expeditions/bc/:id/pv', async (c) => {
   } else {
     // CONFORME : le contenu du BL entre en stock (idempotent).
     if (bl) stock = await entrerStockReception(bc, bl)
-    // Le BC est CONTRÔLÉ quand il est reçu en totalité ET que chacune de ses réceptions a un PV conforme.
-    const blsLibres = new Set<string>((pvs as any[]).filter(p => String(p.type_controle || '') === 'reception' && String(p.decision || '') === 'libere').map(p => String(p.bl_id || '')))
-    if (bl) blsLibres.add(String(bl.id))
-    const toutesControlees = blsRecep.length > 0 && blsRecep.every(b => blsLibres.has(String(b.id)))
-    const recuTotal = ['recu_total', 'controle', 'cloture'].includes(statutBc)
-    const patchBc: any = { pv_id: numPv }
-    if (recuTotal && toutesControlees && statutBc !== 'cloture') { patchBc.statut = 'controle'; statutBc = 'controle' }
-    await updateBonDeCommande(id, patchBc).catch(() => {})
-    // Porte matière : elle ne s'ouvre qu'ici, quand le BC vient d'être entièrement contrôlé.
-    if (statutBc === 'controle') bdtDebloques = await ouvrirPorteMatiere(bc).catch(() => 0)
+    await updateBonDeCommande(id, { pv_id: numPv } as any).catch(() => {})
+    // Une seule règle, un seul endroit : le BC est contrôlé quand toutes ses réceptions sont
+    // tranchées (PV conforme OU décision de la Qualité sur le lot non conforme).
+    const rec = await recalculerStatutBc(id)
+    if (rec.statut) statutBc = rec.statut
+    // Porte matière : elle ne s'ouvre qu'ici, quand le BC vient d'être entièrement contrôlé — et
+    // jamais si un lot de ce BC est reparti chez le fournisseur sans remplacement (elle le dit).
+    if (statutBc === 'controle') {
+      manqueMatiere = await matiereManquanteBc(id).catch(() => 0)
+      if (!(manqueMatiere > 0)) bdtDebloques = await ouvrirPorteMatiere(bc).catch(() => 0)
+    }
   }
-  return c.json({ ok: true, pv_id: numPv, nc_id: ncId, quarantaine_id: quarantaineId, anomalie, stock, bc_statut: statutBc, bdt_debloques: bdtDebloques })
+  return c.json({ ok: true, pv_id: numPv, nc_id: ncId, quarantaine_id: quarantaineId, anomalie, stock, bc_statut: statutBc, bdt_debloques: bdtDebloques, manque_matiere: manqueMatiere || 0 })
+})
+
+// ─── RETOUR FOURNISSEUR EXPÉDIÉ : le lot refusé est physiquement reparti ─────────────────────
+// La décision de la Qualité (renvoi au fournisseur) fait apparaître une ligne « à expédier » dans
+// les Expéditions ; ce bouton la solde. Idempotent : le second clic est refusé, pas dédoublé.
+app.post('/api/expeditions/retour-fournisseur/:qid/expedie', async (c) => {
+  const qid = c.req.param('qid')
+  const b = await c.req.json().catch(() => ({} as any))
+  const lu = await getQuarantaineStricte(qid)
+  if (lu.error) return c.json({ ok: false, error: 'Lecture de la quarantaine impossible : ' + lu.error }, 503)
+  const q: any = lu.data
+  if (!q) return c.json({ ok: false, error: 'Lot en quarantaine introuvable.' }, 404)
+  if (!q.issue || !(Number(q.qte_retour) > 0)) return c.json({ ok: false, error: 'Aucun renvoi au fournisseur décidé sur ce lot.' }, 409)
+  if (q.retour_expedie_le) return c.json({ ok: false, error: 'Retour déjà expédié le ' + String(q.retour_expedie_le).slice(0, 10) + '.' }, 409)
+  const par = await resolveSigner(c, b, 'Expéditions')
+  const r = await majQuarantaineSi(qid,
+    { retour_expedie_le: TODAY_ISO(), retour_expedie_par: par, retour_ref: String(b.ref || '').trim().slice(0, 200) || null },
+    { retour_expedie_le: null })
+  if (r.error) return c.json({ ok: false, error: r.error }, 400)
+  if (r.conflit) return c.json({ ok: false, error: 'Retour déjà expédié par ailleurs.' }, 409)
+  return c.json({ ok: true, quarantaine: r.data })
 })
 
 // ─── API : BL client partiel (lots cochés + qté) → décrément lots + facture partielle ───
@@ -4303,7 +4616,7 @@ app.put('/api/nomenclature/:id', async (c) => {
   const id = c.req.param('id')
   const payload = await c.req.json()
   // strip temps calculés côté client (non colonnes) ; etapes_production est persisté (colonne jsonb)
-  const { fournitures, temps_reglage_total_min: _tr, temps_unitaire_total_min: _tu, devalider: _devalider, ...nomPayload } = payload
+  const { fournitures, temps_reglage_total_min: _tr, temps_unitaire_total_min: _tu, devalider: _devalider, motif: _motifPut, ...nomPayload } = payload
   // L'état AVANT, lu strictement : il sert au garde-fou de validation ET au journal EN 9100.
   const lecAvant = await getNomenclatureStricte(id)
   const avant: any = lecAvant.data
@@ -4352,7 +4665,7 @@ app.put('/api/nomenclature/:id', async (c) => {
       const fSnap = fournitures ? fournAvant : await getFournituresStrictes(id)
       instantane = { nomenclature: avant, fournitures: fSnap.error ? null : (fSnap.data || []), fournitures_erreur: fSnap.error || null }
     } else if (evenement === 'validation') instantane = await instantaneValide(data)
-    jr = await tracerNomenclature(c, { evenement, route: 'PUT /api/nomenclature/:id', fiche: data, statutAvant: avant.statut, statutApres: data.statut, changements: ch, instantane, forcer: evenement !== 'modification' })
+    jr = await tracerNomenclature(c, { evenement, route: 'PUT /api/nomenclature/:id', fiche: data, motif: _motifPut ? String(_motifPut).trim().slice(0, 500) : null, statutAvant: avant.statut, statutApres: data.statut, changements: ch, instantane, forcer: evenement !== 'modification' })
   } else if (suiviAvant === null) jr = indetermine()
   // Chaînage automatique : si la nomenclature est validée et liée à une DT en attente,
   // on vérifie si toutes les pièces de la DT ont leur nomenclature validée → bascule en analyse BE
@@ -4468,12 +4781,22 @@ app.delete('/api/nomenclature/:id', async (c) => {
   let jr: ResultatJournal = { journal: null, raison: null }
   const suiviSup = await suiviEN9100(avant)
   if (suiviSup === null) return c.json({ ok: false, error: 'Lecture du journal EN 9100 impossible : suppression refusée pour garantir la traçabilité. Réessayez.' }, 503)
+  // MOTIF OBLIGATOIRE pour supprimer une fiche suivie (validée, ou validée puis dévalidée — sinon
+  // « dévalider puis supprimer » contournerait la règle). Demande du 11/09/2026 : plutôt que
+  // d'interdire, exiger un motif. Il est inscrit dans l'entrée « suppression » du journal EN 9100.
+  const corpsSup = await c.req.json().catch(() => ({} as any))
+  const motifSup = String(corpsSup?.motif ?? '').trim().slice(0, 500)
+  if (suiviSup && motifSup.length < 3) return c.json({ ok: false, motif_requis: true, error: 'Motif obligatoire pour supprimer une nomenclature validée (traçabilité EN 9100).' }, 400)
   if (suiviSup) {
     const fAvant = await getFournituresStrictes(id)
     if (fAvant.error) return c.json({ ok: false, error: 'Lecture des fournitures impossible : suppression refusée pour garantir la traçabilité (' + fAvant.error + ').' }, 503)
-    jr = await tracerNomenclature(c, { evenement: 'suppression', route: 'DELETE /api/nomenclature/:id', fiche: avant, statutAvant: avant.statut, statutApres: null, changements: [{ bloc: 'fiche', champ: 'fiche supprimée', avant: String(avant.num_nom || avant.id) + ' ind. ' + String(avant.indice || 'A'), apres: null }], instantane: { nomenclature: avant, fournitures: fAvant.data || [] }, forcer: true })
-    // Table absente (cloud avant cloud-5) : rien à protéger, la suppression suit — l'écran le dit.
-    if (jr.journal === false && !String(jr.raison || '').startsWith('table_absente')) return c.json({ ok: false, error: 'Journal EN 9100 en échec : suppression refusée pour garantir la traçabilité (' + jr.raison + ').' }, 503)
+    jr = await tracerNomenclature(c, { evenement: 'suppression', route: 'DELETE /api/nomenclature/:id', fiche: avant, motif: motifSup, statutAvant: avant.statut, statutApres: null, changements: [{ bloc: 'fiche', champ: 'fiche supprimée', avant: String(avant.num_nom || avant.id) + ' ind. ' + String(avant.indice || 'A'), apres: null }], instantane: { nomenclature: avant, fournitures: fAvant.data || [] }, forcer: true })
+    // Le motif doit être TRACÉ : journal en échec, ou absent (cloud avant cloud-5) ⇒ la suppression
+    // d'une fiche suivie est refusée — sinon le motif saisi serait perdu sans que personne le sache.
+    if (jr.journal === false) {
+      const absent = String(jr.raison || '').startsWith('table_absente')
+      return c.json({ ok: false, error: absent ? 'Journal EN 9100 absent sur cette base (script cloud-5 à jouer) : une nomenclature validée ne peut pas être supprimée tant que son motif ne peut pas être tracé.' : 'Journal EN 9100 en échec : suppression refusée pour garantir la traçabilité (' + jr.raison + ').' }, absent ? 409 : 503)
+    }
   }
   const sup = await supprimerNomenclatureStricte(id)
   if (!sup.error && !sup.n) {
@@ -4483,9 +4806,9 @@ app.delete('/api/nomenclature/:id', async (c) => {
     if (!re.error && !re.data) return c.json({ ok: true, deja_supprimee: true, journal: jr.journal, journal_raison: jr.raison })
   }
   if (sup.error || !sup.n) {
-    const motif = sup.error || 'aucune ligne supprimée'
+    const raisonEchec = sup.error || 'aucune ligne supprimée'
     // Le journal n'accepte que des ajouts : l'échec s'inscrit par une seconde entrée.
-    if (jr.journal === true) await tracerNomenclature(c, { evenement: 'suppression_echouee', route: 'DELETE /api/nomenclature/:id', fiche: avant, statutAvant: avant.statut, statutApres: avant.statut, changements: [{ bloc: 'fiche', champ: 'suppression annulée', avant: null, apres: motif }], forcer: true })
+    if (jr.journal === true) await tracerNomenclature(c, { evenement: 'suppression_echouee', route: 'DELETE /api/nomenclature/:id', fiche: avant, motif: motifSup, statutAvant: avant.statut, statutApres: avant.statut, changements: [{ bloc: 'fiche', champ: 'suppression annulée', avant: null, apres: raisonEchec }], forcer: true })
     return c.json({ ok: false, error: sup.error ? sup.error : 'La nomenclature n’a pas été supprimée (aucune ligne effacée).' }, sup.error ? 400 : 409)
   }
   return c.json({ ok: true, journal: jr.journal, journal_raison: jr.raison })
@@ -7323,7 +7646,30 @@ app.get('/qualite/service', async (c) => {
     aLiberer: lotsEnr.filter((l: any) => l.prod_finie && l.statut !== 'libere' && l.statut !== 'expedie' && !quarLotIds.has(String(l.id))),
     liberes: lotsEnr.filter((l: any) => l.statut === 'libere'),
   }
-  return c.html(pageServiceQualite(ncs, pvs, qs, audits, periss, ops, r8d, machines, procs, capas, ecme as any[], controles as any[], derogs as any[], plansC as any[], mvtPer as any[], fournisseurs as any[], validations as any[], liberation, auditProg as any[], auditGrilles as any[], auditQuestions as any[], auditAuto as any, fais as any[]))
+  // Quarantaine : quand le lot vient d'une RÉCEPTION fournisseur, l'écran doit pouvoir proposer la
+  // décision (renvoi / dérogation / entrée partielle) — donc connaître le bon de commande, le bon
+  // de livraison, la quantité et le prix unitaire. Calculé ici une fois pour toutes.
+  const [bcsQ, blsQ, decisionDispo] = await Promise.all([getBonsDeCommande().catch(() => [] as any[]), getBonsDeLivraison().catch(() => [] as any[]), quarantaineDecisionDispo()])
+  const pvNumQ = pvReceptionParNum(pvs as any[])
+  const bcIdxQ = new Map((bcsQ as any[]).map((b: any) => [String(b.id), b]))
+  const blIdxQ = new Map((blsQ as any[]).map((b: any) => [String(b.id), b]))
+  const qsEnr = (qs as any[]).map((q: any) => {
+    // Pas de contexte de réception si la base n'a pas la 008 : l'écran propose alors « Statuer »
+    // (l'ancienne voie, qui reste ouverte) au lieu d'un « Décider » voué au refus.
+    const r = decisionDispo ? receptionDeQuarantaine(q, pvNumQ) : null
+    if (!r) return q
+    const bcq: any = bcIdxQ.get(r.bcId) || null
+    const blq: any = r.blId ? (blIdxQ.get(r.blId) || null) : null
+    return { ...q, reception: {
+      bc_id: r.bcId, num_bc: (bcq && (bcq.num_bc || bcq.id)) || r.bcId, bl_id: r.blId,
+      qte: (Number(q.qte) || Number(blq && blq.qte) || null),
+      pu: prixUnitaireBc(bcq),
+      fournisseur: (bcq && bcq.fournisseur_nom) || q.fournisseur_nom || q.client_nom || '',
+      st: !!bcq && ['st', 'sous_traitant'].includes(String(bcq.type_bc || '')),
+      num_affaire: (bcq && (bcq.num_affaire || bcq.affaire_id)) || '',
+    } }
+  })
+  return c.html(pageServiceQualite(ncs, pvs, qsEnr as any, audits, periss, ops, r8d, machines, procs, capas, ecme as any[], controles as any[], derogs as any[], plansC as any[], mvtPer as any[], fournisseurs as any[], validations as any[], liberation, auditProg as any[], auditGrilles as any[], auditQuestions as any[], auditAuto as any, fais as any[]))
 })
 
 // ─── Produits périssables (CRUD + sortie FIFO) ───────────────────
@@ -9247,6 +9593,16 @@ app.post('/api/qualite/quarantaine/:id/statuer', async (c) => {
   const today = TODAY_ISO()
   const q: any = ((await getQuarantaines().catch(() => [] as any[])) as any[]).find(x => String(x.id) === String(id))
   if (!q) return c.json({ ok: false, error: 'Quarantaine introuvable.' }, 404)
+  // Une quarantaine ne se statue qu'UNE fois : l'écran ne propose « Statuer » que sur un lot en
+  // cours, mais un vieil onglet ou un double clic arrivaient jusqu'ici.
+  if (String(q.statut || '') !== 'en_cours') return c.json({ ok: false, error: 'Ce lot n’attend plus de décision (statut ' + (q.statut || '—') + ').' }, 409)
+  // LOT REÇU D'UN FOURNISSEUR : sa sortie passe par la décision fournisseur, qui fait entrer la
+  // marchandise acceptée en stock et inscrit l'avoir. Les trois voies d'ici ne touchaient qu'au
+  // statut — et la « dérogation » créait une dérogation CLIENT au nom du fournisseur.
+  // Même règle qu'au-dessus : tant que la base n'a pas la 008, « Statuer » reste la seule sortie.
+  if ((await quarantaineDecisionDispo()) && receptionDeQuarantaine(q, pvReceptionParNum(await getPVControles().catch(() => [] as any[])))) {
+    return c.json({ ok: false, reception_fournisseur: true, error: 'Lot reçu d’un fournisseur : choisissez renvoi au fournisseur, dérogation fournisseur ou entrée partielle (bouton « Décider »).' }, 409)
+  }
   const objet = (q.id || '') + ' — ' + (q.piece || q.lot_id || '')
   if (mode === 'validation') {
     // soumet à la Direction ; la décision Direction répercutera le statut (hook /api/validations/:id/decision)
@@ -9297,6 +9653,181 @@ app.post('/api/qualite/quarantaine/:id/statuer', async (c) => {
     return c.json({ ok: true, mode, issue, dechetAuto })
   }
   return c.json({ ok: false, error: 'Mode inconnu.' }, 400)
+})
+
+// ══════════════════════════════════════════════════════════════
+// DÉCISION SUR UN LOT REÇU D'UN FOURNISSEUR (quarantaine née d'un PV de réception)
+// « Pour la quarantaine quand c'est une NC fournisseur, une libération de lot, on doit choisir si
+//   on renvoie au fournisseur, si on fait une dérogation avec le fournisseur ou si on rentre en
+//   stock partiellement. » (11/09/2026)
+//   · renvoi      : tout le lot repart ; rien n'entre en stock ;
+//   · dérogation  : le lot est accepté en l'état et entre en stock ; réfaction facultative ;
+//   · partielle   : la part acceptée entre en stock, le reste repart ou est mis au rebut chez nous.
+// Compensation (renvoi et partielle) : AVOIR (inscrit au registre des Achats) ou REMPLACEMENT
+// (le BC rouvre sa réception de la quantité non acceptée — le fournisseur doit relivrer).
+// La décision est RÉSERVÉE d'abord (passage atomique en_cours → décidé) : un double clic ne peut ni
+// créditer le stock deux fois, ni créer deux avoirs. Les effets qui suivent sont idempotents, et
+// chaque effet en échec est DIT dans la réponse plutôt qu'avalé.
+// ══════════════════════════════════════════════════════════════
+app.post('/api/qualite/quarantaine/:id/decision-fournisseur', async (c) => {
+  const id = c.req.param('id')
+  const b = await c.req.json().catch(() => ({} as any))
+  const decision = String(b.decision || '')
+  if (!['retour', 'derogation', 'partielle'].includes(decision)) return c.json({ ok: false, error: 'Décision inconnue : renvoi, dérogation fournisseur ou entrée partielle.' }, 400)
+  const motif = String(b.motif ?? '').trim().slice(0, 1000)
+  if (motif.length < 3) return c.json({ ok: false, motif_requis: true, error: 'Motif obligatoire (3 caractères au moins) : il justifie la décision auprès du fournisseur et à l’audit.' }, 400)
+  // Sans les colonnes de la 008, la décision ne serait tracée nulle part : on refuse plutôt que de
+  // décider en silence (le message dit quoi jouer).
+  if (!(await quarantaineDecisionDispo())) return c.json({ ok: false, migration: true, error: 'Base à mettre à jour : la décision fournisseur a besoin de la migration 008 (VM) ou du script cloud-6 (cloud).' }, 409)
+  const lu = await getQuarantaineStricte(id)
+  if (lu.error) return c.json({ ok: false, error: 'Lecture de la quarantaine impossible : ' + lu.error }, 503)
+  const q: any = lu.data
+  if (!q) return c.json({ ok: false, error: 'Lot en quarantaine introuvable.' }, 404)
+  if (String(q.statut || '') !== 'en_cours') return c.json({ ok: false, error: 'Ce lot n’attend plus de décision (' + (q.issue || q.statut || '—') + ').' }, 409)
+  const ctx = receptionDeQuarantaine(q, pvReceptionParNum(await getPVControles().catch(() => [] as any[])))
+  if (!ctx) return c.json({ ok: false, error: 'Ce lot ne vient pas d’une réception fournisseur : utilisez « Statuer ».' }, 409)
+  const bc: any = await getBonDeCommande(ctx.bcId)
+  if (!bc) return c.json({ ok: false, error: 'Bon de commande ' + ctx.bcId + ' introuvable : décision impossible.' }, 409)
+  const bl: any = ctx.blId ? (((await getBonsDeLivraison().catch(() => [] as any[])) as any[]).find((x: any) => String(x.id) === ctx.blId) || null) : null
+  const estSt = ['st', 'sous_traitant'].includes(String(bc.type_bc || ''))
+  const horsStock = estSt || /machine/i.test(String(bc.categorie || ''))
+  const fmtQte = (n: any) => String(Math.round((Number(n) || 0) * 1000) / 1000).replace('.', ',')
+  const qte = Number(q.qte) || Number(bl?.qte) || Number(b.qte_lot) || 0
+
+  // Sans quantité, rien de ce qui suit n'a de sens : le renvoi ne s'afficherait nulle part (les
+  // Expéditions filtrent sur qte_retour > 0), l'avoir vaudrait 0 € et la porte matière s'ouvrirait
+  // comme si la matière était là. Et la décision est définitive : mieux vaut la réclamer ici.
+  if (!(qte > 0)) return c.json({ ok: false, qte_requise: true, error: 'Quantité du lot inconnue : indiquez-la avant de décider — elle fixe ce qui repart, ce qui entre en stock et le montant de l’avoir.' }, 400)
+  let qteAcc = 0, qteRet = 0, qteReb = 0
+  if (decision === 'retour') qteRet = qte
+  else if (decision === 'derogation') qteAcc = qte
+  else {
+    qteAcc = Number(b.qte_acceptee)
+    if (!Number.isFinite(qteAcc) || qteAcc < 0 || qteAcc >= qte) return c.json({ ok: false, error: 'Quantité acceptée : de 0 à moins de ' + fmtQte(qte) + ' (tout accepter, c’est une dérogation).' }, 400)
+    if (String(b.reste || '') === 'rebut') qteReb = Math.round((qte - qteAcc) * 1000) / 1000
+    else qteRet = Math.round((qte - qteAcc) * 1000) / 1000
+  }
+  const qteNonAcc = Math.round((qteRet + qteReb) * 1000) / 1000
+  const refaction = decision === 'derogation' ? Math.max(0, Number(b.montant_refaction) || 0) : 0
+  const compensation = decision === 'derogation'
+    ? (refaction > 0 ? 'avoir' : 'aucune')
+    : (String(b.compensation || '') === 'remplacement' ? 'remplacement' : 'avoir')
+  if (compensation === 'remplacement' && !(qteNonAcc > 0)) return c.json({ ok: false, error: 'Quantité du lot inconnue : impossible d’attendre un remplacement sans savoir combien.' }, 400)
+  const pu = prixUnitaireBc(bc)
+  const montantAvoir = compensation !== 'avoir' ? 0
+    : decision === 'derogation' ? arrondi2(refaction)
+    : (b.montant_avoir != null && String(b.montant_avoir) !== '' && Number.isFinite(Number(b.montant_avoir)) && Number(b.montant_avoir) >= 0)
+      ? arrondi2(b.montant_avoir)
+      : (pu ? arrondi2(pu * qteNonAcc) : 0)
+  const u = (c as any).get('user')
+  const par = u ? auteurDe(c).nom : (String(b.auteur || '').trim() || 'Qualité')
+  const today = TODAY_ISO()
+  const issue = decision === 'retour' ? 'retour_fournisseur' : (decision === 'derogation' ? 'derogation_fournisseur' : 'entree_partielle')
+  const statutQ = decision === 'retour' ? 'rejete' : (decision === 'derogation' ? 'libere_derogation' : 'libere')
+
+  // ① RÉSERVATION ATOMIQUE : en_cours → décidé. Tout ce qui suit ne s'exécute qu'une fois.
+  const decisionQ: any = {
+    statut: statutQ, issue,
+    qte: qte || null, qte_acceptee: qteAcc, qte_retour: qteRet, qte_rebut: qteReb, compensation,
+    bc_id: ctx.bcId, bl_id: ctx.blId, fournisseur_nom: bc.fournisseur_nom || q.client_nom || null,
+    derogation_ref: decision === 'derogation' ? (String(b.derogation_ref || '').trim().slice(0, 200) || null) : null,
+    decision_par: par, decision_le: today, decision_motif: motif,
+    libere_par: par, libere_le: today,
+  }
+  let claim = await majQuarantaineSi(id, decisionQ, { statut: 'en_cours' })
+  // Base dont une contrainte refuserait 'libere_derogation' : la décision reste lisible par `issue`.
+  if (claim.error && statutQ === 'libere_derogation' && claim.code === '23514') {
+    claim = await majQuarantaineSi(id, { ...decisionQ, statut: 'libere' }, { statut: 'en_cours' })
+  }
+  if (claim.error) return c.json({ ok: false, error: 'Décision non enregistrée : ' + claim.error }, 400)
+  if (claim.conflit) return c.json({ ok: false, error: 'Ce lot vient d’être statué par ailleurs.' }, 409)
+
+  const avertissements: string[] = []
+  // ② STOCK : la part acceptée entre en stock (même motif que l'entrée au PV conforme ⇒ idempotent).
+  let stock: any = null
+  if (qteAcc > 0 && bl) {
+    stock = await entrerStockReception(bc, bl, qteAcc)
+    if (!stock.entre && !horsStock) avertissements.push('Stock non crédité : ' + (stock.raison || 'raison inconnue') + '.')
+  } else if (qteAcc > 0 && !bl && !horsStock) {
+    avertissements.push('Aucun bon de livraison rattaché : la part acceptée n’a pas pu entrer en stock toute seule.')
+  }
+  // ③ REMPLACEMENT : le fournisseur doit relivrer ⇒ la réception du BC se rouvre d'autant.
+  if (compensation === 'remplacement') {
+    const recue = Math.max(0, Math.round(((Number(bc.qte_recue) || 0) - qteNonAcc) * 1000) / 1000)
+    const patchBcR: any = { qte_recue: recue }
+    if (!['cloture', 'annule'].includes(String(bc.statut || ''))) patchBcR.statut = 'recu_partiel'
+    const rr: any = await updateBonDeCommande(ctx.bcId, patchBcR)
+    if (rr?.error) avertissements.push('Bon de commande non rouvert pour le remplacement : ' + rr.error.message + '.')
+  }
+  // ④ AVOIR : inscrit au registre des Achats, en attente de l'avoir du fournisseur.
+  let avoir: any = null
+  if (compensation === 'avoir') {
+    const quoi = decision === 'derogation'
+      ? 'Réfaction sur dérogation'
+      : (qteRet > 0 ? 'Renvoi de ' + fmtQte(qteRet) : 'Rebut de ' + fmtQte(qteReb))
+    const ra = await creerAvoirFournisseur({
+      tiers_type: estSt ? 'sous_traitant' : 'fournisseur',
+      tiers_id: (estSt ? bc.sous_traitant_id : bc.fournisseur_id) || null,
+      tiers_nom: bc.fournisseur_nom || q.client_nom || '—',
+      origine: decision === 'derogation' ? 'refaction' : 'reception_non_conforme',
+      motif: quoi + ' · BC ' + (bc.num_bc || bc.id) + (ctx.blId ? ' · BL ' + ctx.blId : '') + ' — ' + motif,
+      montant: montantAvoir, montant_impute: 0, statut: 'a_recevoir', date_demande: today,
+      bc_id: ctx.bcId, bl_id: ctx.blId, quarantaine_id: id, nc_id: q.nc_id || null,
+      num_affaire: bc.num_affaire || bc.affaire_id || null, cree_par: par,
+    })
+    if (ra.error) avertissements.push('Avoir non inscrit au registre : ' + ra.error + ' — à créer à la main dans Achats › Avoirs fournisseurs.')
+    else {
+      avoir = ra.data
+      await updateQuarantaine(id, { avoir_id: String(ra.data.id) } as any).catch(() => {})
+      if (!(montantAvoir > 0)) avertissements.push('Avoir ' + ra.data.num_avoir + ' inscrit SANS montant (prix unitaire du bon de commande inconnu) : à compléter aux Achats.')
+    }
+  }
+  // ⑤ REBUT chez nous : registre des déchets (Environnement), comme tout rejet de quarantaine.
+  if (qteReb > 0) {
+    const rd: any = await ensureHseDechet('quarantaine', String(id), {
+      entite: q.activite || 'Seem', date_dechet: today,
+      designation: 'Rebut réception fournisseur ' + (q.piece || ctx.blId || id),
+      dangereux: false, quantite: qteReb, unite: 'pcs',
+      zone_producteur: 'Quarantaine', statut: 'en_attente',
+    }).catch(() => ({ error: true } as any))
+    if (rd?.error) avertissements.push('Rebut non inscrit au registre des déchets (Environnement) : à saisir à la main.')
+  }
+  // ⑥ NON-CONFORMITÉ : son traitement est décidé (elle ne bloque plus, l'action corrective suit).
+  if (q.nc_id) {
+    const nc: any = ((await getNCs().catch(() => [] as any[])) as any[]).find((n: any) => String(n.id) === String(q.nc_id))
+    if (nc && !ncEstClose(nc.statut)) {
+      const rn: any = await updateNonConformite(String(q.nc_id), { statut: 'traite' } as any).catch(() => ({ error: true }))
+      if (rn?.error) avertissements.push('Non-conformité ' + q.nc_id + ' non mise à jour : à clôturer à la main.')
+    }
+  }
+  // ⑦ BON DE COMMANDE et PORTE MATIÈRE.
+  const qteManquante = await matiereManquanteBc(ctx.bcId).catch(() => (compensation === 'remplacement' ? 0 : qteNonAcc))
+  const rec = await recalculerStatutBc(ctx.bcId)
+  let bdtDebloques = 0
+  if (rec.statut === 'controle') {
+    if (qteManquante > 0) {
+      // La matière renvoyée sans remplacement MANQUE à l'affaire : ouvrir la porte matière dirait
+      // « matière disponible » pour une matière qui n'est pas là. Il faut repasser commande.
+      avertissements.push('Matière manquante : ' + fmtQte(qteManquante) + ' non remplacé(s) — la porte matière de l’affaire ' + (bc.num_affaire || bc.affaire_id || '') + ' n’est pas ouverte par cette décision ; repassez commande.')
+    } else {
+      bdtDebloques = await ouvrirPorteMatiere(rec.bc || bc).catch(() => 0)
+    }
+  }
+
+  const morceaux: string[] = []
+  if (qteAcc > 0) morceaux.push(fmtQte(qteAcc) + ((stock && stock.entre) ? ' entré(s) en stock' : ' accepté(s)'))
+  if (qteRet > 0) morceaux.push(fmtQte(qteRet) + ' à renvoyer au fournisseur (Expéditions)')
+  if (qteReb > 0) morceaux.push(fmtQte(qteReb) + ' au rebut')
+  if (avoir) morceaux.push('avoir ' + avoir.num_avoir + (montantAvoir > 0 ? ' (' + montantAvoir.toFixed(2) + ' € HT)' : '') + ' inscrit aux Achats')
+  if (compensation === 'remplacement') morceaux.push('remplacement attendu sur le BC ' + (bc.num_bc || bc.id))
+  return c.json({
+    ok: true, decision, issue, statut: (claim.data && claim.data.statut) || statutQ,
+    qte, qte_acceptee: qteAcc, qte_retour: qteRet, qte_rebut: qteReb, compensation,
+    stock, avoir: avoir ? { id: avoir.id, num_avoir: avoir.num_avoir, montant: Number(avoir.montant) || 0 } : null,
+    bc_statut: rec.statut, bdt_debloques: bdtDebloques,
+    resume: 'Décision enregistrée' + (morceaux.length ? ' : ' + morceaux.join(', ') : '') + '.',
+    avertissements,
+  })
 })
 
 // ── Lancer en production une COMMANDE PRIORITAIRE : commande réelle prioritaire → lot LOTP → BDTP/BDSP (encadrés rouge au planning) ──
@@ -9709,7 +10240,11 @@ app.post('/api/validations/:id/decision', async (c) => {
     const upd2: any = statut === 'valide'
       ? { statut: 'libere', libere_par: upd.decided_by, libere_le: le }
       : (rm === 'annulation' ? { statut: 'rejete', libere_par: upd.decided_by, libere_le: le } : { statut: 'en_cours' })
-    await updateQuarantaine(String((data as any).ref_id), upd2).catch(() => {})
+    // Lot reçu d'un fournisseur : la Direction ne peut pas le « libérer » d'un trait — il y faut
+    // l'entrée en stock et l'avoir que porte la décision fournisseur. Le lot revient à la Qualité.
+    const luQ = await getQuarantaineStricte(String((data as any).ref_id))
+    const recepQ = luQ.data ? receptionDeQuarantaine(luQ.data, pvReceptionParNum(await getPVControles().catch(() => [] as any[]))) : null
+    await updateQuarantaine(String((data as any).ref_id), (recepQ ? { statut: 'en_cours' } : upd2) as any).catch(() => {})
   }
   return c.json({ ok: true, validation: data })
 })

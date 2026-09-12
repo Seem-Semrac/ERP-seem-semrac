@@ -302,7 +302,7 @@ const MVT_LOOK: Record<string, [string, string, string]> = {
 //     (demande utilisateur du 10/09/2026). La validation fournisseur, elle, est passée
 //     dans Achats › Bons de commande : c'est un acte d'achat, pas d'expédition.
 // ══════════════════════════════════════════════════════════════
-function panelReceptions(bcs: any[], _bcsAttendus: any[], receptions: any[], bds: any[], _ncs: any[], blsRetour: any[], _vdMap: Record<string, any>, _hasAck: boolean, today: string, pvParBl: Record<string, any> = {}) {
+function panelReceptions(bcs: any[], _bcsAttendus: any[], receptions: any[], bds: any[], _ncs: any[], blsRetour: any[], _vdMap: Record<string, any>, _hasAck: boolean, today: string, pvParBl: Record<string, any> = {}, quarParBl: Record<string, any> = {}) {
   const tr = (cells: string[]) => `<tr style="border-bottom:1px solid #f8fafc;">${cells.join('')}</tr>`
   const vide = (n: number, txt: string) => `<tr><td colspan="${n}" style="text-align:center;padding:22px;color:#9ca3af;font-size:.8rem;">${txt}</td></tr>`
   const card = (titre: string, icone: string, coul: string, cpt: number, sous: string, corps: string) => `
@@ -326,9 +326,17 @@ function panelReceptions(bcs: any[], _bcsAttendus: any[], receptions: any[], bds
     if (!b.bc_id) return '<span style="color:#cbd5e1;font-size:.7rem;">—</span>'
     const pv = pvParBl[String(b.id)]
     if (!pv) return `<button onclick="expOpenPV('${escX(b.bc_id)}','${escX(b.id)}')" title="Faire le PV de contrôle : le contenu n’entre en stock qu’au PV conforme" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:7px;padding:5px 10px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-hourglass-half" style="margin-right:4px;"></i>PV à faire</button>`
-    return String(pv.decision || '') === 'libere'
-      ? `<span title="PV conforme : le contenu est entré en stock" style="background:#dcfce7;color:#15803d;border-radius:999px;padding:2px 10px;font-size:.66rem;font-weight:700;white-space:nowrap;"><i class="fas fa-check" style="margin-right:4px;"></i>Conforme · ${escX(pv.num_pv || '')}</span>`
-      : `<span title="PV non conforme : rien n’est entré en stock" style="background:#fee2e2;color:#b91c1c;border-radius:999px;padding:2px 10px;font-size:.66rem;font-weight:700;white-space:nowrap;"><i class="fas fa-ban" style="margin-right:4px;"></i>Non conforme · ${escX(pv.num_pv || '')}</span>`
+    if (String(pv.decision || '') === 'libere') return `<span title="PV conforme : le contenu est entré en stock" style="background:#dcfce7;color:#15803d;border-radius:999px;padding:2px 10px;font-size:.66rem;font-weight:700;white-space:nowrap;"><i class="fas fa-check" style="margin-right:4px;"></i>Conforme · ${escX(pv.num_pv || '')}</span>`
+    // Non conforme : dire ce que la Qualité en a fait, sinon la ligne reste « bloquée » pour
+    // toujours à l'écran alors que le lot est renvoyé, dérogé ou partiellement entré en stock.
+    const q: any = quarParBl[String(b.id)]
+    const nb = (v: any) => String(Math.round((Number(v) || 0) * 1000) / 1000).replace('.', ',')
+    const suite = !q ? ''
+      : String(q.issue || '') === 'retour_fournisseur' ? ('renvoyé au fournisseur' + (q.retour_expedie_le ? ' · expédié' : ' · à expédier'))
+      : String(q.issue || '') === 'derogation_fournisseur' ? 'dérogation fournisseur · entré en stock'
+      : String(q.issue || '') === 'entree_partielle' ? ('entrée partielle ' + nb(q.qte_acceptee) + '/' + nb(q.qte))
+      : (String(q.statut || '') === 'en_cours' ? 'en quarantaine — décision Qualité attendue' : '')
+    return `<span title="PV non conforme : rien n’est entré en stock au contrôle" style="background:#fee2e2;color:#b91c1c;border-radius:999px;padding:2px 10px;font-size:.66rem;font-weight:700;white-space:nowrap;"><i class="fas fa-ban" style="margin-right:4px;"></i>Non conforme · ${escX(pv.num_pv || '')}</span>${suite ? `<div style="font-size:.62rem;color:#64748b;margin-top:3px;">→ ${escX(suite)}</div>` : ''}`
   }
 
   const ligneRecue = (b: any, couleur: string) => tr([
@@ -385,7 +393,7 @@ function panelReceptions(bcs: any[], _bcsAttendus: any[], receptions: any[], bds
 //   ⚠ Les files « à envoyer aujourd'hui » ne sont plus ici : elles vivent dans le
 //     CALENDRIER, qui est l'écran des échéances (demande utilisateur du 10/09/2026).
 // ══════════════════════════════════════════════════════════════
-function panelEnvois(bds: any[], blsClient: any[], cmds: any[], qualiteBloque: (c: any) => string | null, today: string, bdsBloc: Record<string, string> = {}) {
+function panelEnvois(bds: any[], blsClient: any[], cmds: any[], qualiteBloque: (c: any) => string | null, today: string, bdsBloc: Record<string, string> = {}, retoursFourn: any[] = []) {
   const tr = (cells: string[]) => `<tr style="border-bottom:1px solid #f8fafc;">${cells.join('')}</tr>`
   const vide = (n: number, txt: string) => `<tr><td colspan="${n}" style="text-align:center;padding:22px;color:#9ca3af;font-size:.8rem;">${txt}</td></tr>`
   const card = (titre: string, icone: string, coul: string, cpt: number, sous: string, corps: string) => `
@@ -463,6 +471,16 @@ function panelEnvois(bds: any[], blsClient: any[], cmds: any[], qualiteBloque: (
 
     ${card('Sous-traitance', 'fa-arrow-right-arrow-left', '#4f46e5', bdsEnCours.length, 'pièces à faire partir chez un sous-traitant',
       H(['N° BDS', 'Sous-traitant', 'Opération / Pièce', '#Qté', '#Envoi prévu', '#Statut']) + (rowsSt || vide(6, 'Aucune sous-traitance en cours')) + '</tbody></table>')}
+
+    ${card('Retours fournisseurs', 'fa-truck-arrow-right', '#b91c1c', (retoursFourn || []).length, 'lots refusés au contrôle que la Qualité a décidé de renvoyer',
+      H(['BL / Lot', 'Fournisseur', 'Pièce', '#Qté à renvoyer', '#Décidé le', '#Départ']) + ((retoursFourn || []).map((q: any) => tr([
+        TD(`<div style="font-weight:700;color:#b91c1c;">${escX(q.bl_id || q.lot_id || q.id)}</div><div style="font-size:.65rem;color:#94a3b8;">${escX([q.bc_id ? 'BC ' + q.bc_id : '', q.nc_id ? 'NC ' + q.nc_id : ''].filter(Boolean).join(' · '))}</div>`),
+        TD(escX(q.fournisseur_nom ?? q.client_nom ?? '—')),
+        TD(`<span style="font-size:.75rem;color:#475569;">${escX(q.piece ?? '—')}</span><div style="font-size:.63rem;color:#94a3b8;">${escX(String(q.compensation || '') === 'remplacement' ? 'remplacement attendu' : 'avoir réclamé')}</div>`),
+        TDC(`<span style="font-weight:700;">${escX(String(q.qte_retour ?? '—'))}</span>`),
+        TDC(`<span style="font-size:.72rem;color:#64748b;">${_frDate(q.decision_le)}</span>`),
+        TDC(`<button onclick="expRetourFournExpedie('${escX(q.id)}','${escX(q.bl_id || q.lot_id || q.id)}')" title="Le lot est parti chez le fournisseur" style="background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:7px;padding:5px 10px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-truck-arrow-right" style="margin-right:4px;"></i>Expédié</button>`),
+      ])).join('') || vide(6, 'Aucun lot à renvoyer')) + '</tbody></table>')}
     <div style="font-size:.7rem;color:#94a3b8;margin-top:-8px;margin-bottom:16px;padding-left:4px;">
       <i class="fas fa-lock" style="margin-right:5px;"></i>Un BST ne part chez le sous-traitant qu'une fois l'opération précédente de la gamme soldée. Le départ se déclenche depuis l'onglet <strong>Calendrier</strong>.
     </div>
@@ -805,6 +823,11 @@ export const pageServiceExpeditions = (
   // l'écran doit dire, ligne par ligne, où en est le contrôle.
   const PV_PAR_BL: Record<string, any> = {}
   ;(extra.pvs ?? []).forEach((p: any) => { if (p && p.bl_id && String(p.type_controle || '') === 'reception') PV_PAR_BL[String(p.bl_id)] = p })
+  // Quarantaines de RÉCEPTION par n° de BL : l'écran doit dire ce que la Qualité a décidé du lot
+  // refusé (renvoyé, dérogé, partiellement accepté) — et lister ce qui reste à faire PARTIR.
+  const QUAR_PAR_BL: Record<string, any> = {}
+  ;(dbQuar ?? []).forEach((q: any) => { if (!q || (!q.bc_id && !q.pv_id)) return; const k = String(q.bl_id || q.lot_id || ''); if (k) QUAR_PAR_BL[k] = q })
+  const RETOURS_FOURN = (dbQuar ?? []).filter((q: any) => q && q.issue && Number(q.qte_retour) > 0 && !q.retour_expedie_le)
   const VD_MAP = buildValDirMap(dbValidations || [])   // décisions Direction par (ref_table, ref_id)
   // Un BL annulé n'est ni une arrivée ni un départ : écarté des 3 onglets et du calendrier.
   const allBLs = (dbBLs ?? [...BL_CLIENTS_DEFAULT, ...BST_DEFAULT]).filter((b: any) => String(b.statut || '') !== 'annule')
@@ -825,7 +848,9 @@ export const pageServiceExpeditions = (
   const DAS  = dbDAs   ?? []
   const FST  = dbFST   ?? []
   // ── Porte qualité : une commande prod-terminée reste BLOQUÉE tant qu'une NC bloquante OU une quarantaine active la concerne (lien souple par n° affaire / lot). ──
-  const _qOpen = (s: any) => !['cloture', 'cloturé', 'clôturé', 'fermee', 'fermé', 'fermée', 'resolu', 'résolu', 'resolue', 'résolue', 'libere', 'libéré', 'liberee', 'libérée', 'rejete', 'rejeté'].includes(String(s || '').toLowerCase())
+  // ⚠ 'libere_derogation' manquait : un lot libéré sous dérogation restait « ouvert » et bloquait
+  //   l'expédition de l'affaire pour toujours.
+  const _qOpen = (s: any) => !['cloture', 'cloturé', 'clôturé', 'fermee', 'fermé', 'fermée', 'resolu', 'résolu', 'resolue', 'résolue', 'libere', 'libéré', 'liberee', 'libérée', 'libere_derogation', 'rejete', 'rejeté'].includes(String(s || '').toLowerCase())
   const qualiteBloque = (c: any): string | null => {
     const aff = String(c.num_affaire || c.id)
     const lotIds = new Set((dbLots ?? []).filter((l: any) => String(l.cmd_id) === String(c.id) || String(l.id || '').indexOf(aff) !== -1).map((l: any) => String(l.id)))
@@ -878,7 +903,7 @@ export const pageServiceExpeditions = (
       tabs: TABS.map(([id,lbl,ic]) => ({
         id, label: lbl, icon: ic,
         badge: id === 'receptions' ? (MOUVEMENTS.filter(m => m.sens === 'in' && !m.fait).length || undefined)
-             : id === 'envois' ? (MOUVEMENTS.filter(m => m.sens === 'out' && !m.fait).length || undefined)
+             : id === 'envois' ? ((MOUVEMENTS.filter(m => m.sens === 'out' && !m.fait).length + RETOURS_FOURN.length) || undefined)
              : id === 'calendrier' ? (MOUVEMENTS.filter(m => !m.fait && m.date && m.date <= TODAY_REQ).length || undefined)
              : undefined,
       })),
@@ -888,8 +913,8 @@ export const pageServiceExpeditions = (
     })}
 
     <div style="padding:22px 30px;">
-      ${panelEnvois(BDS, BLS, CMDS, qualiteBloque, TODAY_REQ, BDS_BLOC)}
-      ${panelReceptions(BCS, BCS_A_RECEVOIR, BLS_RECEPTION, BDS, dbNcs ?? [], BLS_RETOUR, VD_MAP, !!dbHasAck, TODAY_REQ, PV_PAR_BL)}
+      ${panelEnvois(BDS, BLS, CMDS, qualiteBloque, TODAY_REQ, BDS_BLOC, RETOURS_FOURN)}
+      ${panelReceptions(BCS, BCS_A_RECEVOIR, BLS_RECEPTION, BDS, dbNcs ?? [], BLS_RETOUR, VD_MAP, !!dbHasAck, TODAY_REQ, PV_PAR_BL, QUAR_PAR_BL)}
       ${panelCalendrier(MOUVEMENTS, TODAY_REQ, BDS_BLOC)}
       ${panelFournisseurs(FOURNS, BCS, allBLs)}
       ${panelDashboard(BLS, BSTS, BCS, CMDS)}
@@ -954,7 +979,7 @@ export const pageServiceExpeditions = (
               <div><label style="${FLBL}">Gravité NC</label><select id="pv_gravite" style="${FINP}"><option>Mineure</option><option selected>Majeure</option><option>Critique</option><option>Bloquante</option></select></div>
               <div style="display:flex;align-items:flex-end;"><label style="display:flex;align-items:center;gap:8px;font-size:.8rem;font-weight:600;color:#92400e;cursor:pointer;"><input type="checkbox" id="pv_quarantaine" checked/> Mettre le lot en quarantaine</label></div>
             </div>
-            <div style="font-size:.72rem;color:#b91c1c;margin-top:8px;"><i class="fas fa-exclamation-triangle" style="margin-right:5px;"></i>Une fiche de non-conformité sera créée automatiquement et envoyée au service Qualité.</div>
+            <div style="font-size:.72rem;color:#b91c1c;margin-top:8px;"><i class="fas fa-exclamation-triangle" style="margin-right:5px;"></i>Une fiche de non-conformité sera créée automatiquement et envoyée au service Qualité. Une réception refusée part <strong>toujours</strong> en quarantaine : la Qualité y décide du renvoi au fournisseur, d’une dérogation ou d’une entrée partielle en stock.</div>
           </div>
           <div><label style="${FLBL}">Observations</label><textarea id="pv_obs" rows="3" placeholder="Constats, mesures, écarts…" style="${FINP}resize:vertical;"></textarea></div>
           <div><label style="${FLBL}">Contrôleur</label><input id="pv_op" type="text" placeholder="Nom du contrôleur" value="Expéditions" style="${FINP}"/></div>
@@ -1084,6 +1109,19 @@ export const pageServiceExpeditions = (
         }
         setTimeout(function(){location.hash='receptions';softReload();},1100);
       }).catch(function(){ _pvEnCours=false; pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
+  }
+
+  // Le lot refusé part physiquement chez le fournisseur : on note la date, qui l’envoie, et la
+  // référence du bon de retour. La ligne quitte alors la liste « à renvoyer ».
+  async function expRetourFournExpedie(qid, lib){
+    var ref = await appMotif('Le lot ' + lib + ' part chez le fournisseur.\\nRéférence du bon de retour ou n° de suivi (facultatif) :', {title:'Retour fournisseur expédié', okLabel:'Expédié', min:0, placeholder:'Référence (facultatif)'});
+    if(ref===null) return;
+    fetch('/api/expeditions/retour-fournisseur/'+encodeURIComponent(qid)+'/expedie',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ref:ref})})
+      .then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Échec.',7000); return; }
+        pushNotif('ok','fa-truck-arrow-right','Retour fournisseur expédié.',4500);
+        setTimeout(function(){location.hash='envois';softReload();},900);
+      }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
   }
 
   function expShowTab(id){

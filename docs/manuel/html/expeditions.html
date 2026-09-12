@@ -38,7 +38,7 @@
     </ol>
   </nav>
 
-  <div class="note"><b>Le principe du service.</b> Les cinq onglets ne sont pas cinq bases de données différentes : ce sont <b>cinq projections des mêmes tables</b> (bons de commande, bons de sous-traitance, bons de livraison, commandes, non-conformités). Une réception enregistrée apparaît immédiatement dans le calendrier et dans l'historique du fournisseur — vous n'avez jamais à saisir deux fois.<br><br><b>Et une règle de rangement :</b> les <b>actions du jour</b> vivent dans le <b>Calendrier</b>, uniquement. Les onglets Envois et Réceptions sont des <b>vues</b> — ils montrent ce qui vient et ce qui est entré, ils ne demandent rien. Si vous cherchez un bouton, il est dans le Calendrier.</div>
+  <div class="note"><b>Le principe du service.</b> Les cinq onglets ne sont pas cinq bases de données différentes : ce sont <b>cinq projections des mêmes tables</b> (bons de commande, bons de sous-traitance, bons de livraison, commandes, non-conformités). Une réception enregistrée apparaît immédiatement dans le calendrier et dans l'historique du fournisseur — vous n'avez jamais à saisir deux fois.<br><br><b>Et une règle de rangement :</b> les <b>actions du jour</b> vivent dans le <b>Calendrier</b>. Les onglets Envois et Réceptions sont des <b>vues</b> — ils montrent ce qui vient et ce qui est entré. Deux exceptions, et elles n'ont pas de date prévue : le <b>PV de contrôle</b> se remplit dans <b>Réceptions</b>, au moment où l'on a la pièce en main, et le départ d'un <b>retour fournisseur</b> se pointe dans <b>Envois</b>, dès que la Qualité l'a décidé. Pour tout le reste, si vous cherchez un bouton, il est dans le Calendrier.</div>
 
   <!-- ═══════════════ ONGLET 1 : CALENDRIER (ACCUEIL) ═══════════════ -->
   <section class="tab" id="tab-calendrier">
@@ -74,17 +74,28 @@
   <!-- ═══════════════ ONGLET 2 : ENVOIS ═══════════════ -->
   <section class="tab" id="tab-envois">
     <div class="tab-head"><span class="tab-num">2</span><h2>Envois — ce qui va partir</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> Voir venir la charge d'expédition. Ce n'est <b>pas</b> une liste de tâches : rien ne s'y valide. On y lit ce qui est en cours de fabrication et ce qui est en cours de sous-traitance, pour savoir ce qu'on aura à faire partir dans les jours qui viennent.</p>
+    <p class="tab-but"><b>À quoi ça sert.</b> Voir venir la charge d'expédition. On y lit ce qui est en cours de fabrication et ce qui est en cours de sous-traitance, pour savoir ce qu'on aura à faire partir dans les jours qui viennent. Une seule chose s'y valide : le <b>départ d'un retour fournisseur</b>, parce que c'est le seul mouvement qui n'a pas de date prévue — il part dès que la Qualité l'a décidé.</p>
 
     <h3>Ce que vous voyez</h3>
     <ul class="points">
       <li><b>Client</b> — les <b>commandes en cours</b>, dès qu'elles sont passées en programmation. Chaque ligne porte l'affaire, le client, la pièce, une <b>barre d'avancement</b> (bons de travail soldés sur le total), la livraison prévue et l'état : <span class="b b-mut">En production</span>, <span class="b b-ok">Prête à expédier</span>, ou le <b>motif du blocage qualité</b> s'il y en a un.</li>
       <li><b>Sous-traitance</b> — les <b>BST en cours</b> : le sous-traitant, l'opération, la quantité, l'envoi prévu. La colonne d'état affiche <span class="b b-mut">🔒 attend …</span> quand l'opération précédente de la gamme n'est pas encore soldée.</li>
+      <li><b>Retours fournisseurs</b> — les lots refusés au contrôle que la <b>Qualité a décidé de renvoyer</b>. Une ligne par lot : <b>BL / lot</b> (avec le BC et la NC d'origine), <b>fournisseur</b>, <b>pièce</b> (avec la mention <i>avoir réclamé</i> ou <i>remplacement attendu</i>), <b>quantité à renvoyer</b>, <b>date de décision</b>, et le bouton <b>« Expédié »</b>.</li>
     </ul>
     <figure class="shot">
       <img src="../../assets/expeditions-envois.png" alt="Capture de l'onglet Envois" loading="lazy">
       <figcaption><b>Envois</b> — les commandes en cours et les sous-traitances en cours : ce qu'on aura à faire partir.</figcaption>
     </figure>
+    <p>⚠ capture à rafraîchir — la carte « Retours fournisseurs » ne figure pas encore sur la capture ci-dessus.</p>
+
+    <h3>Pas à pas — expédier un retour fournisseur</h3>
+    <ol class="steps">
+      <li>Dans la carte <b>« Retours fournisseurs »</b>, repérez le lot : la ligne dit <b>combien</b> renvoyer, à <b>qui</b>, et ce qu'on attend en échange (avoir ou remplacement).</li>
+      <li>Préparez le colis, puis cliquez <b>« Expédié »</b>.</li>
+      <li>Renseignez, si vous l'avez, la <b>référence du bon de retour</b> ou le <b>n° de suivi</b> — c'est <b>facultatif</b> — puis validez.</li>
+      <li>La ligne <b>quitte la liste</b> : la date et la personne sont enregistrées, et la Qualité voit son retour parti.</li>
+    </ol>
+    <div class="warn"><b>Un départ ne s'enregistre qu'une fois.</b> Un second clic est refusé. En sens inverse, un lot qui n'apparaît pas ici n'a pas encore été décidé par la Qualité : ce n'est pas à l'expédition de trancher.</div>
 
     <h3>Pas à pas — créer un bon de livraison client</h3>
     <ol class="steps">
@@ -114,7 +125,14 @@
       <li><b>Retour client</b> — les retours arrivés, rattachés à leur non-conformité.</li>
     </ul>
     <p>La colonne <b>Contrôle</b> dit où en est chaque réception : <span class="b b-mut">PV à faire</span> (un bouton, qui ouvre le PV), <span class="b b-ok">Conforme · PV-x</span> ou <span class="b b-crit">Non conforme · PV-x</span>. Le PV se remplit ici, au moment où l'on a la pièce en main.</p>
-    <div class="warn"><b>Le stock attend le PV.</b> Une réception n'entre <b>pas</b> en stock : le contenu n'y entre qu'au <b>PV conforme</b>, avec la quantité reçue. Un PV non conforme ouvre une non-conformité et met le lot en quarantaine — rien n'entre en stock. Chaque réception n'a <b>qu'un seul</b> PV : il ne se refait pas.</div>
+    <p>Sous un <b>PV non conforme</b>, une ligne en petit dit <b>ce que la Qualité en a fait</b> — vous n'avez pas à aller le demander :</p>
+    <ul class="points">
+      <li><b>« en quarantaine — décision Qualité attendue »</b> — le lot est isolé, rien n'est encore tranché.</li>
+      <li><b>« renvoyé au fournisseur · à expédier »</b>, puis <b>« · expédié »</b> une fois le colis parti (le lot figure alors dans <a href="#tab-envois">Envois → Retours fournisseurs</a>).</li>
+      <li><b>« dérogation fournisseur · entré en stock »</b> — le lot a été accepté en l'état.</li>
+      <li><b>« entrée partielle 6/10 »</b> — la part acceptée est entrée en stock, le reste est reparti ou a été mis au rebut.</li>
+    </ul>
+    <div class="warn"><b>Le stock attend le PV.</b> Une réception n'entre <b>pas</b> en stock : le contenu n'y entre qu'au <b>PV conforme</b>, avec la quantité reçue. Une réception <b>refusée part toujours en quarantaine</b> : le PV non conforme ouvre une non-conformité « réception fournisseur », met le lot en quarantaine et rien n'entre en stock. C'est ensuite la <b>Qualité</b> qui décide — renvoi, dérogation fournisseur ou entrée partielle (Qualité → Quarantaine → bouton « Décider »). Chaque réception n'a <b>qu'un seul</b> PV : il ne se refait pas.</div>
     <div class="note"><b>Ce qui n'est <em>plus</em> ici.</b> Les commandes <b>à réceptionner</b> sont dans le <b>Calendrier</b> — c'est une action, elle vit avec les autres actions du jour. Et la <b>validation d'une commande par le fournisseur</b> se fait désormais dans <b>Achats → onglet « Bons de commande »</b> : c'est l'acheteur qui suit l'accusé de réception de son fournisseur, pas l'expéditionnaire.</div>
     <figure class="shot">
       <img src="../../assets/expeditions-receptions.png" alt="Capture de l'onglet Réceptions" loading="lazy">
@@ -213,7 +231,7 @@
     </ul>
     <figure class="shot">
       <img src="../../assets/form-expeditions-pv.png" alt="Fenêtre de PV de contrôle à réception" loading="lazy">
-      <figcaption><b>PV de contrôle à réception</b> — conformité du lot reçu ; un écart déclenche une non-conformité et, si nécessaire, une mise en quarantaine.</figcaption>
+      <figcaption><b>PV de contrôle à réception</b> — conformité du lot reçu ; un PV non conforme déclenche une non-conformité et met <b>toujours</b> le lot en quarantaine, en attente de la décision Qualité.</figcaption>
     </figure>
   </section>
 

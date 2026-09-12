@@ -592,6 +592,52 @@ function appConfirm(message, opts){
   });
 }
 if(typeof window!=='undefined') window.appConfirm=appConfirm;
+// Saisie d'un MOTIF obligatoire, au design de l'ERP — renvoie une Promise<string|null> (null = annulé).
+// Ctrl+Entrée valide (Entrée seule va à la ligne), Échap annule. Usage :
+//   var m = await appMotif('Supprimer X ?', {title:'…', min:3}); if(m===null) return;
+function appMotif(message, opts){
+  opts = opts || {};
+  var min = (opts.min == null) ? 3 : Number(opts.min);
+  var ph = String(opts.placeholder || (min > 0 ? 'Motif (obligatoire)' : 'Facultatif')).replace(/'/g, '&#39;').replace(/</g, '&lt;');
+  return new Promise(function(resolve){
+    var old = document.getElementById('appMotifOverlay'); if(old) old.remove();
+    var msgStr = String(message==null?'':message);
+    var safeMsg = msgStr.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\n/g,'<br>');
+    var title = String(opts.title || 'Motif obligatoire').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    var okLabel = opts.okLabel || 'Confirmer';
+    var ov = document.createElement('div');
+    ov.id = 'appMotifOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);backdrop-filter:blur(3px);z-index:100001;display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.innerHTML = "<div role='dialog' aria-modal='true' style='background:white;border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,.28);width:100%;max-width:470px;overflow:hidden;'>"
+      + "<div style='padding:16px 20px;display:flex;align-items:center;gap:11px;border-bottom:1px solid #f1f5f9;'>"
+      +   "<span style='width:34px;height:34px;border-radius:50%;background:#dc262618;display:flex;align-items:center;justify-content:center;flex:none;'><i class='fas fa-pen-to-square' style='color:#dc2626;'></i></span>"
+      +   "<div style='font-weight:800;font-size:.95rem;color:#111827;'>"+title+"</div></div>"
+      + "<div style='padding:16px 20px 6px;font-size:.86rem;color:#374151;line-height:1.55;'>"+safeMsg+"</div>"
+      + "<div style='padding:6px 20px 14px;'><textarea id='appMotifTxt' rows='3' placeholder='"+ph+"' style='width:100%;box-sizing:border-box;border:1.5px solid #e2e8f0;border-radius:9px;padding:9px 11px;font-size:.84rem;background:#f8fafc;resize:vertical;font-family:inherit;'></textarea>"
+      +   "<div id='appMotifErr' style='display:none;color:#b91c1c;font-size:.74rem;font-weight:700;margin-top:5px;'></div>"
+      +   "<div style='color:#94a3b8;font-size:.68rem;margin-top:4px;'>Ctrl + Entrée pour valider</div></div>"
+      + "<div style='padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:9px;'>"
+      +   "<button id='appMotifNo' type='button' style='padding:9px 16px;background:#f1f5f9;color:#374151;border:none;border-radius:9px;font-weight:700;cursor:pointer;font-size:.82rem;'>Annuler</button>"
+      +   "<button id='appMotifYes' type='button' style='padding:9px 18px;background:#dc2626;color:white;border:none;border-radius:9px;font-weight:800;cursor:pointer;font-size:.82rem;'>"+okLabel+"</button>"
+      + "</div></div>";
+    document.body.appendChild(ov);
+    var ta = document.getElementById('appMotifTxt');
+    var onKey;
+    var done = function(v){ try{ ov.remove(); }catch(e){} document.removeEventListener('keydown', onKey); resolve(v); };
+    var valider = function(){
+      var v = String(ta.value||'').trim();
+      if(v.length<min){ var er=document.getElementById('appMotifErr'); er.style.display='block'; er.textContent='Motif obligatoire ('+min+' caractères au moins).'; ta.focus(); return; }
+      done(v.slice(0,500));
+    };
+    onKey = function(e){ if(e.key==='Escape') done(null); else if(e.key==='Enter' && (e.ctrlKey||e.metaKey)) valider(); };
+    document.getElementById('appMotifYes').onclick = valider;
+    document.getElementById('appMotifNo').onclick = function(){ done(null); };
+    ov.addEventListener('mousedown', function(e){ if(e.target===ov) done(null); });
+    document.addEventListener('keydown', onKey);
+    if(ta) ta.focus();
+  });
+}
+if(typeof window!=='undefined') window.appMotif=appMotif;
 // Combobox recherchable AU DESIGN DE L'APP — améliore AUTOMATIQUEMENT tous les <input list="…datalist…"> :
 // menu déroulant stylé + filtrage à la frappe + navigation clavier, en conservant l'onchange existant (on
 // re-déclenche l'événement 'change' à la sélection). Non invasif : lit les <option> du datalist puis détache
@@ -824,8 +870,8 @@ export const bulkToolbar = (key: string, accent = '#6366f1'): string => `<span s
   </span>
 </span>`
 
-export const bulkSelectAssets = (groups: Array<{ key: string; base: string; label?: string }>): string => {
-  const cfg = JSON.stringify(Object.fromEntries(groups.map(g => [g.key, { base: g.base, label: g.label || 'élément(s)' }]))).replace(/</g, '\\u003c')
+export const bulkSelectAssets = (groups: Array<{ key: string; base: string; label?: string; motif?: boolean }>): string => {
+  const cfg = JSON.stringify(Object.fromEntries(groups.map(g => [g.key, { base: g.base, label: g.label || 'élément(s)', motif: !!g.motif }]))).replace(/</g, '\\u003c')
   return `
 <div id="bulk-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:8000;align-items:center;justify-content:center;">
   <div style="background:white;border-radius:16px;max-width:430px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;">
@@ -856,19 +902,26 @@ function bulkAsk(key){
   var n=bulkCount(key);
   if(!n){ if(window.pushNotif) pushNotif('warn','fa-info-circle','Aucun élément sélectionné.'); else alert('Aucun élément sélectionné.'); return; }
   _bulkPending=key;
-  document.getElementById('bulk-modal-msg').innerHTML='Voulez-vous vraiment supprimer <b>'+n+'</b> '+((BULK_CFG[key]||{}).label||'élément(s)')+' ?<br><span style="color:#b91c1c;">Cette action est irréversible.</span>';
+  document.getElementById('bulk-modal-msg').innerHTML='Voulez-vous vraiment supprimer <b>'+n+'</b> '+((BULK_CFG[key]||{}).label||'élément(s)')+' ?<br><span style="color:#b91c1c;">Cette action est irréversible.</span>'
+    +((BULK_CFG[key]||{}).motif?'<div style="margin-top:12px;"><label style="display:block;font-size:.66rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Motif (obligatoire, inscrit au journal EN 9100)</label><textarea id="bulk-modal-motif" rows="3" style="width:100%;box-sizing:border-box;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 10px;font-size:.82rem;background:#f8fafc;resize:vertical;font-family:inherit;"></textarea></div>':'');
   document.getElementById('bulk-modal').style.display='flex';
 }
 function bulkConfirm(){
   var key=_bulkPending; if(!key) return;
   var base=(BULK_CFG[key]||{}).base; var ids=[];
   _bboxes(key).forEach(function(b){ if(b.checked) ids.push(b.getAttribute('data-id')); });
+  // Motif lu et vérifié AVANT de fermer la confirmation : sans motif, rien ne part.
+  var motifB=null;
+  if((BULK_CFG[key]||{}).motif){
+    var tm=document.getElementById('bulk-modal-motif'); motifB=String((tm&&tm.value)||'').trim();
+    if(motifB.length<3){ if(window.pushNotif) pushNotif('warn','fa-pen-to-square','Motif obligatoire (3 caractères au moins) : il est inscrit au journal EN 9100.'); if(tm) tm.focus(); return; }
+  }
   document.getElementById('bulk-modal').style.display='none';
   if(!base||!ids.length) return;
   if(window.pushNotif) pushNotif('ok','fa-hourglass-half','Suppression de '+ids.length+'…',1500);
   var done=0,failed=0,nontrace=0,raison='';
   Promise.all(ids.map(function(id){
-    return fetch(base+encodeURIComponent(id),{method:'DELETE'})
+    return fetch(base+encodeURIComponent(id), motifB!==null ? {method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({motif:motifB})} : {method:'DELETE'})
       .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ j=j||{}; if(!r.ok) j.ok=false; return j; }); })
       .then(function(j){ if(j&&j.ok!==false){ done++; if(j.journal===false) nontrace++; } else { failed++; if(j&&j.error&&!raison) raison=String(j.error).replace(/[<>]/g,''); } })
       .catch(function(){ failed++; });

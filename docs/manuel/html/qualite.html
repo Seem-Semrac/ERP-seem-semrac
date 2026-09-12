@@ -309,20 +309,49 @@
   <!-- ══════════════ 6. QUARANTAINE ══════════════ -->
   <section class="tab" id="tab-quarantaine">
     <div class="tab-head"><span class="tab-num">6</span><h2>Quarantaine</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> La quarantaine isole tout objet douteux — lot bloqué au contrôle final, palette, outillage, réception fournisseur — en attendant une décision. C'est un flux <b>séparé</b> de la libération : ce qui entre ici (depuis une NC, ou un blocage de libération) doit en sortir par une décision tracée.</p>
+    <p class="tab-but"><b>À quoi ça sert.</b> La quarantaine isole tout objet douteux — lot bloqué au contrôle final, palette, outillage, réception fournisseur — en attendant une décision. C'est un flux <b>séparé</b> de la libération : ce qui entre ici (depuis une NC, un blocage de libération, ou un PV de réception non conforme) doit en sortir par une décision tracée. Pour un lot <b>reçu d'un fournisseur</b>, cette décision a ses propres branches — renvoi, dérogation fournisseur, entrée partielle — parce qu'elle engage aussi le stock, un avoir et une expédition de retour.</p>
 
     <h3>Ce que vous voyez</h3>
     <p>Trois tuiles KPI : <b>Lots en quarantaine</b> (en attente de décision), <b>Durée max (jours)</b> (lot le plus ancien), <b>Libérés (total)</b>. Puis le tableau : N°&nbsp;Quarantaine, Lot / Réf., Pièce, Client, Motif, Mise en Q., Durée (j), Statut, Actions. La durée passe en orange au-delà de 2 jours et en rouge au-delà de 5.</p>
     <ul class="points">
-      <li>Statuts : <span class="b b-warn">En quarantaine</span> · <span class="b b-info">Validation Direction</span> · <span class="b b-ok">Libéré ✓</span> · <span class="b b-info">Libéré (dérogation)</span> · <span class="b b-crit">Rejeté</span>.</li>
+      <li>Statuts : <span class="b b-warn">En quarantaine</span> · <span class="b b-info">Validation Direction</span> · <span class="b b-ok">Libéré ✓</span> · <span class="b b-info">Libéré (dérogation)</span> · <span class="b b-crit">Rejeté</span>. Après une décision sur un lot fournisseur, le statut dit ce qui a été fait : <span class="b b-crit">Renvoyé au fournisseur</span> · <span class="b b-info">Dérogation fournisseur</span> · <span class="b b-ok">Entrée partielle 6/10</span>.</li>
       <li>Sur une ligne « En quarantaine », le bouton violet <b>« Statuer »</b> ouvre la décision de sortie ; une ligne déjà statuée affiche qui a décidé et quand.</li>
+      <li><b>Deux boutons, selon d'où vient le lot.</b> Un lot <b>reçu d'un fournisseur</b> porte un bouton rouge <b>« Décider »</b> — renvoi, dérogation fournisseur ou entrée partielle. Les quarantaines <b>internes</b> (lots de production) gardent le bouton violet <b>« Statuer »</b> décrit plus bas.</li>
+      <li>Sous une ligne déjà décidée, une ligne en petit rappelle <b>ce qui reste à faire</b> : <span class="b b-warn">Retour à expédier</span>, <span class="b b-ok">Retour expédié le …</span>, <b>Avoir réclamé (Achats)</b>, <b>Remplacement attendu</b>, ou la quantité mise au rebut.</li>
     </ul>
     <figure class="shot">
       <img src="../../assets/qualite-quarantaine.png" alt="Capture de l'onglet Quarantaine" loading="lazy">
       <figcaption><b>Quarantaine</b> — surveillez la colonne Durée : rouge = plus de 5 jours sans décision.</figcaption>
     </figure>
+    <p>⚠ capture à rafraîchir — le bouton rouge « Décider » et la fenêtre de décision sur un lot reçu d'un fournisseur ne figurent pas encore sur la capture ci-dessus.</p>
+
+    <h3>Pas à pas — décider d'un lot reçu d'un fournisseur (bouton « Décider »)</h3>
+    <p>Un <b>PV de contrôle de réception non conforme</b> (Expéditions → Réceptions) envoie <b>toujours</b> le lot en quarantaine, avec une non-conformité « réception fournisseur ». Rien n'est entré en stock : c'est ici qu'on tranche.</p>
+    <ol class="steps">
+      <li>Sur la ligne du lot, cliquez le bouton rouge <b>« Décider »</b>. La fenêtre rappelle le <b>fournisseur</b>, le <b>n° de bon de commande</b>, le <b>n° de BL</b>, la <b>NC</b> et le <b>motif de mise en quarantaine</b>.</li>
+      <li>Vérifiez la <b>quantité du lot</b> : elle est reprise du bon de livraison. Ne la corrigez que si elle est <b>inconnue</b>.</li>
+      <li>Choisissez ce qu'on fait du lot :
+        <ul class="points">
+          <li><b>Renvoyer au fournisseur</b> — tout le lot repart, <b>rien n'entre en stock</b>.</li>
+          <li><b>Dérogation avec le fournisseur</b> — le lot est <b>accepté en l'état</b> et <b>entre en stock</b>. Vous pouvez noter la <b>réf. de la dérogation</b> et la <b>réfaction obtenue (€ HT)</b> : une réfaction crée un avoir fournisseur.</li>
+          <li><b>Entrée partielle en stock</b> — saisissez la <b>quantité acceptée</b> (c'est elle qui entre en stock ; le reste s'affiche à côté), puis dites si le reste <b>repart chez le fournisseur</b> ou <b>part au rebut chez nous</b>.</li>
+        </ul>
+      </li>
+      <li>Pour un <b>renvoi</b> ou une <b>entrée partielle</b>, choisissez la <b>compensation du fournisseur</b> : <b>Avoir</b> (inscrit aux Achats, montant pré-rempli au <b>prix unitaire du bon de commande</b> et modifiable) ou <b>Remplacement</b> (le fournisseur relivre : son bon de commande <b>rouvre sa réception</b> de la quantité non acceptée).</li>
+      <li>Saisissez le <b>motif de la décision</b> — obligatoire, <b>3 caractères minimum</b> : ce qui a été constaté et ce qui a été convenu avec le fournisseur.</li>
+      <li>Cliquez <b>« Enregistrer la décision »</b>. L'ERP résume ce qu'il a fait (entrée en stock, quantité à renvoyer, avoir inscrit, remplacement attendu) et signale tout ce qui n'a pas pu se faire tout seul.</li>
+    </ol>
+    <ul class="points">
+      <li>Le <b>rebut</b> décidé ici est inscrit au <b>registre des déchets</b> du service Environnement.</li>
+      <li>L'<b>avoir</b> part dans <b>Achats → Avoirs fournisseurs</b>, au statut « À recevoir » : c'est l'acheteur qui le réclame et le suit ensuite.</li>
+      <li>Le <b>retour</b> à expédier apparaît dans <b>Expéditions → Envois</b>, carte « Retours fournisseurs ».</li>
+    </ul>
+    <div class="warn"><b>Une décision ne se prend qu'une fois.</b> Elle est enregistrée avec son <b>auteur</b>, sa <b>date</b> et son <b>motif</b> ; un second clic est refusé (« ce lot n'attend plus de décision »). Vérifiez la quantité acceptée avant de valider.</div>
+    <div class="warn"><b>Matière renvoyée sans remplacement.</b> Si le lot repart et qu'aucun remplacement n'est attendu, un message vous prévient que <b>la matière manque à l'affaire</b> : la <b>porte matière</b> n'est pas ouverte par cette décision, il faut <b>repasser commande</b>.</div>
+    <div class="note"><b>Base non à jour.</b> Tant que la mise à jour de la base n'est pas faite (migration <code>008</code> / script <code>cloud-6</code>), la décision est <b>refusée</b> avec un message qui le dit, et le bandeau orange correspondant s'affiche dans Achats → Avoirs fournisseurs.</div>
 
     <h3>Pas à pas — statuer la sortie de quarantaine (3 branches)</h3>
+    <p>Pour une quarantaine <b>interne</b> (lot de production bloqué au contrôle final, palette, outillage) : bouton violet <b>« Statuer »</b>.</p>
     <ol class="steps">
       <li>Cliquez sur <b>« Statuer »</b> : la fenêtre affiche l'objet concerné et le champ « Décision par » (prérempli « Qualité »).</li>
       <li><b>Branche 1 — Validation managériale</b> : choisissez la priorité (normale ou critique) et cliquez sur <b>« Soumettre à la Direction »</b>. Le dossier passe en statut « Validation Direction » ; la décision prise par la Direction (dans Direction › À valider) <b>libère ou rejette automatiquement</b> l'objet.</li>
@@ -333,7 +362,8 @@
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
       <li>Un objet en quarantaine bloque les BL qui le concernent (porte qualité côté Expéditions).</li>
-      <li>L'entrée en quarantaine se fait depuis une NC (onglet Non-Conformités) ou par le blocage d'un lot à la libération — pas directement ici.</li>
+      <li>L'entrée en quarantaine se fait depuis une NC (onglet Non-Conformités), par le blocage d'un lot à la libération, ou par un <b>PV de contrôle de réception non conforme</b> — pas directement ici.</li>
+      <li><b>Un PV de réception non conforme met toujours le lot en quarantaine</b>, quelle que soit la suite envisagée : c'est ce qui garantit qu'aucune marchandise refusée n'entre en stock sans décision tracée.</li>
     </ul>
     <div class="astuce"><b>Astuce :</b> réservez la branche « Validation managériale » aux cas à enjeu (client sensible, coût élevé) : la Direction est notifiée et sa décision s'applique sans autre manipulation.</div>
   </section>

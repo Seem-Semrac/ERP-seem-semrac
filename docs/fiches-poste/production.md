@@ -18,7 +18,7 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 1. **/production/service** → onglet **Planning Gantt BDT** (planning unique).
 2. Glisser une carte de « **BDT à classer** » (au-dessus du planning) sur le poste, ou sur la sous-case **Matin / Ap-m / Soir** de l'opérateur.
 3. Un clic sur un BDT n'affiche que **son poste + l'étape d'avant et d'après** ; « Tout afficher » lève le focus.
-3. Les BDT prioritaires (BDTP) sont encadrés en rouge.
+4. Les BDT prioritaires (BDTP) sont encadrés en rouge.
 
 ![production-service](../assets/production-service.png)
 

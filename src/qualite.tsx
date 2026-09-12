@@ -93,6 +93,30 @@ function quarStatutBadge(s: string) {
   return badge(v[0], v[1], v[2])
 }
 
+// Une quarantaine de RÉCEPTION dit, une fois décidée, CE QU'ON A FAIT du lot — pas seulement qu'il
+// est sorti de quarantaine : renvoyé, accepté sous dérogation, ou partiellement entré en stock.
+function quarIssueBadge(q: any) {
+  const nb = (v: any) => String(Math.round((Number(v) || 0) * 1000) / 1000).replace('.', ',')
+  const issue = String(q?.issue || '')
+  if (issue === 'retour_fournisseur') return badge('#fee2e2', '#b91c1c', 'Renvoyé au fournisseur')
+  if (issue === 'derogation_fournisseur') return badge('#e0e7ff', '#4338ca', 'Dérogation fournisseur')
+  if (issue === 'entree_partielle') return badge('#dcfce7', '#15803d', 'Entrée partielle ' + nb(q.qte_acceptee) + '/' + nb(q.qte))
+  return quarStatutBadge(String(q?.statut || ''))
+}
+// Ce qu'il RESTE à faire après la décision : le renvoi doit partir (Expéditions), l'avoir doit
+// arriver (Achats), le remplacement doit être relivré. Sans ça, une décision prise se perd.
+function quarSuiteDecision(q: any): string {
+  if (!q || !q.issue) return ''
+  const bits: string[] = []
+  if (Number(q.qte_retour) > 0) bits.push(q.retour_expedie_le
+    ? `<span style="color:#15803d;">Retour expédié le ${escX(String(q.retour_expedie_le).slice(0, 10))}</span>`
+    : `<span style="color:#b45309;font-weight:700;"><i class="fas fa-truck-arrow-right" style="margin-right:4px;"></i>Retour à expédier</span>`)
+  if (String(q.compensation || '') === 'avoir') bits.push(`<span style="color:#0f766e;">Avoir réclamé (Achats)</span>`)
+  if (String(q.compensation || '') === 'remplacement') bits.push(`<span style="color:#6d28d9;">Remplacement attendu</span>`)
+  if (Number(q.qte_rebut) > 0) bits.push(`<span style="color:#b91c1c;">${escX(String(q.qte_rebut))} au rebut</span>`)
+  return bits.length ? `<div style="font-size:.63rem;margin-top:3px;line-height:1.5;">${bits.join(' · ')}</div>` : ''
+}
+
 function auditStatutBadge(s: string) {
   const m: Record<string,[string,string,string]> = {
     planifie: ['#dbeafe','#1d4ed8','Planifié'],
@@ -566,6 +590,9 @@ function panel8D(rapports: any[]) {
 
 function panelQuarantaine(qs: Quarantaine[]) {
   const enCours = qs.filter(q => q.statut === 'en_cours')
+  const QLBL = 'display:block;font-size:.62rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px;'
+  const QINP = 'width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 9px;font-size:.8rem;background:#f8fafc;box-sizing:border-box;'
+  const QOPT = 'display:flex;gap:8px;align-items:flex-start;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:.79rem;color:#374151;cursor:pointer;'
   return `
   <div id="qual-panel-quarantaine" style="display:none;">
     ${panelHdr('Quarantaine','fa-ban','#b91c1c', enCours.length)}
@@ -586,14 +613,20 @@ function panelQuarantaine(qs: Quarantaine[]) {
             qs.map(q => `
             <tr style="border-bottom:1px solid #f9fafb;" onmouseenter="this.style.background='#fafafa'" onmouseleave="this.style.background=''">
               ${TD(`<div style="font-weight:700;color:#8b5cf6;">${escX(q.id)}</div>`)}
-              ${TD(`<span style="font-size:.75rem;font-weight:600;color:#374151;">${escX(q.lot_id ?? '—')}</span>`)}
+              ${TD(`<span style="font-size:.75rem;font-weight:600;color:#374151;">${escX(q.lot_id ?? '—')}</span>${(q as any).reception ? `<div style="font-size:.63rem;color:#0369a1;">BC ${escX((q as any).reception.num_bc)}${(q as any).reception.st ? ' · sous-traitance' : ''}</div>` : ''}`)}
               ${TD(escX(q.piece ?? '—'))}
               ${TD(escX(q.client_nom ?? '—'))}
               ${TD(`<span style="font-size:.73rem;color:#6b7280;max-width:180px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escX(q.motif ?? '—')}</span>`)}
               ${TDC(`<span style="font-size:.75rem;color:#6b7280;">${q.date_mise_quarantaine}</span>`)}
               ${TDC(`<span style="font-weight:700;color:${(q.duree_jours??0)>5?'#b91c1c':(q.duree_jours??0)>2?'#92400e':'#374151'};">${q.duree_jours ?? '—'}</span>`)}
-              ${TDC(quarStatutBadge(q.statut))}
-              ${TDC(q.statut === 'en_cours' ? `<button onclick="qualStatuerQuar('${q.id}')" style="padding:5px 14px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:white;border:none;border-radius:7px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-gavel" style="margin-right:5px;"></i>Statuer</button>` : ((q.statut as string) === 'en_validation' ? `<span style="font-size:.68rem;color:#1d4ed8;font-weight:700;"><i class="fas fa-hourglass-half" style="margin-right:4px;"></i>Validation Direction</span>` : `<span style="color:#9ca3af;font-size:.72rem;">${q.libere_par ? 'Par '+escX(q.libere_par) : '—'}${q.libere_le ? ' · '+escX(q.libere_le) : ''}</span>`))}
+              ${TDC(quarIssueBadge(q))}
+              ${TDC(q.statut === 'en_cours'
+                ? ((q as any).reception
+                  ? `<button onclick="qfOpen('${escX(q.id)}')" title="Renvoi au fournisseur, dérogation fournisseur ou entrée partielle en stock" style="padding:5px 14px;background:linear-gradient(135deg,#b91c1c,#7f1d1d);color:white;border:none;border-radius:7px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-truck-arrow-right" style="margin-right:5px;"></i>Décider</button>`
+                  : `<button onclick="qualStatuerQuar('${escX(q.id)}')" style="padding:5px 14px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:white;border:none;border-radius:7px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-gavel" style="margin-right:5px;"></i>Statuer</button>`)
+                : ((q.statut as string) === 'en_validation'
+                  ? `<span style="font-size:.68rem;color:#1d4ed8;font-weight:700;"><i class="fas fa-hourglass-half" style="margin-right:4px;"></i>Validation Direction</span>`
+                  : `<div style="color:#9ca3af;font-size:.72rem;">${((q as any).decision_par || q.libere_par) ? 'Par ' + escX((q as any).decision_par || q.libere_par) : '—'}${((q as any).decision_le || q.libere_le) ? ' · ' + escX(String((q as any).decision_le || q.libere_le).slice(0, 10)) : ''}</div>${quarSuiteDecision(q)}`))}
             </tr>`).join('')}
           </tbody>
         </table>
@@ -626,12 +659,134 @@ function panelQuarantaine(qs: Quarantaine[]) {
         </div>
       </div>
     </div>
+    <div id="quarFournModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1150;align-items:center;justify-content:center;">
+      <div style="background:white;border-radius:16px;width:94%;max-width:640px;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+        <div style="padding:16px 20px;border-bottom:1px solid #f1f5f9;font-weight:800;color:#111827;"><i class="fas fa-truck-arrow-right" style="color:#b91c1c;margin-right:8px;"></i>Lot reçu non conforme — <span id="qf_title"></span></div>
+        <div style="padding:16px 20px;">
+          <input type="hidden" id="qf_id"/>
+          <div id="qf_info" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;font-size:.78rem;color:#374151;margin-bottom:12px;"></div>
+          <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:12px;">
+            <div style="width:170px;"><label style="${QLBL}">Quantité du lot</label><input id="qf_qte" type="number" min="0" step="any" oninput="qfMaj()" style="${QINP}"/></div>
+            <div style="font-size:.7rem;color:#6b7280;padding-bottom:8px;">Reprise du bon de livraison — à corriger seulement si elle est inconnue.</div>
+          </div>
+          <div style="font-size:.64rem;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Que fait-on de ce lot ?</div>
+          <label style="${QOPT}"><input type="radio" name="qf_dec" value="retour" onchange="qfMaj()" checked/><span><b>Renvoyer au fournisseur</b> — tout le lot repart, rien n’entre en stock.</span></label>
+          <label style="${QOPT}"><input type="radio" name="qf_dec" value="derogation" onchange="qfMaj()"/><span><b>Dérogation avec le fournisseur</b> — le lot est accepté en l’état et entre en stock.</span></label>
+          <label style="${QOPT}"><input type="radio" name="qf_dec" value="partielle" onchange="qfMaj()"/><span><b>Entrée partielle en stock</b> — après tri : une partie entre en stock, le reste repart ou part au rebut.</span></label>
+          <div id="qf_box_part" style="display:none;border:1.5px solid #bbf7d0;border-radius:10px;padding:12px;margin-bottom:10px;background:#f0fdf4;">
+            <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;">
+              <div style="width:170px;"><label style="${QLBL}">Quantité acceptée</label><input id="qf_acc" type="number" min="0" step="any" oninput="qfMaj()" style="${QINP}"/></div>
+              <div style="font-size:.76rem;color:#374151;padding-bottom:8px;">Reste : <b id="qf_reste_lbl">0</b></div>
+            </div>
+            <div style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap;font-size:.78rem;color:#374151;">
+              <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="radio" name="qf_reste" value="retour" onchange="qfMaj()" checked/>Le reste repart chez le fournisseur</label>
+              <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="radio" name="qf_reste" value="rebut" onchange="qfMaj()"/>Le reste part au rebut chez nous</label>
+            </div>
+          </div>
+          <div id="qf_box_der" style="display:none;border:1.5px solid #c7d2fe;border-radius:10px;padding:12px;margin-bottom:10px;background:#eef2ff;">
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+              <div style="flex:1;min-width:190px;"><label style="${QLBL}">Réf. de la dérogation (facultatif)</label><input id="qf_der_ref" type="text" style="${QINP}"/></div>
+              <div style="width:185px;"><label style="${QLBL}">Réfaction obtenue € HT</label><input id="qf_refaction" type="number" min="0" step="0.01" style="${QINP}"/></div>
+            </div>
+            <div style="font-size:.7rem;color:#6b7280;margin-top:6px;">Une réfaction inscrit un avoir fournisseur dans les Achats.</div>
+          </div>
+          <div id="qf_box_comp" style="border:1.5px solid #fed7aa;border-radius:10px;padding:12px;margin-bottom:10px;background:#fff7ed;">
+            <div style="font-size:.64rem;font-weight:800;color:#9a3412;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Compensation du fournisseur</div>
+            <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:.78rem;color:#374151;">
+              <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="radio" name="qf_comp" value="avoir" onchange="qfMaj()" checked/>Avoir (inscrit aux Achats)</label>
+              <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="radio" name="qf_comp" value="remplacement" onchange="qfMaj()"/>Remplacement (il relivre)</label>
+            </div>
+            <div id="qf_box_mont" style="margin-top:10px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+              <div style="width:195px;"><label style="${QLBL}">Montant de l’avoir € HT</label><input id="qf_montant" type="number" min="0" step="0.01" oninput="qfTouche()" style="${QINP}"/></div>
+              <div id="qf_pu_lbl" style="font-size:.7rem;color:#6b7280;padding-bottom:8px;"></div>
+            </div>
+          </div>
+          <label style="${QLBL}">Motif de la décision (obligatoire)</label>
+          <textarea id="qf_motif" rows="2" placeholder="Ce qui a été constaté, et ce qui a été convenu avec le fournisseur" style="${QINP}resize:vertical;"></textarea>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:9px;">
+          <button onclick="document.getElementById('quarFournModal').style.display='none'" style="padding:9px 16px;background:#f1f5f9;color:#374151;border:none;border-radius:9px;font-weight:600;cursor:pointer;">Fermer</button>
+          <button id="qf_btn" onclick="qfValider()" style="padding:9px 18px;background:linear-gradient(135deg,#b91c1c,#7f1d1d);color:white;border:none;border-radius:9px;font-weight:800;cursor:pointer;">Enregistrer la décision</button>
+        </div>
+      </div>
+    </div>
     <script>
-      window.QUAR_DATA=${sjX(qs.map((q: any) => ({ id: q.id, piece: q.piece, lot_id: q.lot_id, nc_id: q.nc_id, client_nom: q.client_nom })))};
+      window.QUAR_DATA=${sjX(qs.map((q: any) => ({ id: q.id, piece: q.piece, lot_id: q.lot_id, nc_id: q.nc_id, client_nom: q.client_nom, motif: q.motif, statut: q.statut, reception: (q as any).reception || null })))};
       function qualStatuerQuar(id){ var q=(window.QUAR_DATA||[]).find(function(x){return String(x.id)===String(id);})||{}; document.getElementById('qs_id').value=id; document.getElementById('qs_title').textContent=(q.piece||q.lot_id||q.id||''); document.getElementById('qs_texte').value=''; document.getElementById('quarStatuerModal').style.display='flex'; }
       function qsPost(body){ var id=document.getElementById('qs_id').value; return fetch('/api/qualite/quarantaine/'+encodeURIComponent(id)+'/statuer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json();}); }
       function qsSubmit(mode){ qsPost({mode:mode, auteur:document.getElementById('qs_auteur').value, priorite:document.getElementById('qs_prio').value}).then(function(j){ if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'\\u00c9chec.'); return; } pushNotif('ok','fa-check',mode==='validation'?'Soumis \\u00e0 la validation de la Direction.':('D\\u00e9rogation '+(j.derogation||'')+' cr\\u00e9\\u00e9e \\u2014 \\u00e0 compl\\u00e9ter dans D\\u00e9rogations.'),4500); document.getElementById('quarStatuerModal').style.display='none'; setTimeout(function(){softReload();},900); }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur r\\u00e9seau.'); }); }
       function qsImmediate(issue){ var texte=document.getElementById('qs_texte').value; if(!texte){ pushNotif('err','fa-exclamation-circle','Renseignez la d\\u00e9cision.'); return; } qsPost({mode:'immediate', issue:issue, texte:texte, auteur:document.getElementById('qs_auteur').value}).then(function(j){ if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'\\u00c9chec.'); return; } pushNotif('ok','fa-check',issue==='libere'?'Lot lib\\u00e9r\\u00e9.':'Lot rejet\\u00e9.',3500); document.getElementById('quarStatuerModal').style.display='none'; setTimeout(function(){softReload();},900); }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur r\\u00e9seau.'); }); }
+      // ── Décision sur un lot reçu d’un fournisseur : renvoi, dérogation, entrée partielle ──
+      var _qfCur=null, _qfMontantTouche=false, _qfEnCours=false;
+      function qfEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+      function qfVal(n){ var e=document.querySelector('input[name='+n+']:checked'); return e?e.value:''; }
+      function qfShow(id,v){ var e=document.getElementById(id); if(e) e.style.display=v?'block':'none'; }
+      function qfTouche(){ _qfMontantTouche=true; }
+      function qfOpen(id){
+        var q=(window.QUAR_DATA||[]).find(function(x){return String(x.id)===String(id);});
+        if(!q||!q.reception){ pushNotif('err','fa-ban','Ce lot ne vient pas d’une réception fournisseur : utilisez Statuer.'); return; }
+        _qfCur=q; _qfMontantTouche=false;
+        var r=q.reception;
+        document.getElementById('qf_id').value=id;
+        document.getElementById('qf_title').textContent=(q.piece||q.lot_id||q.id||'');
+        document.getElementById('qf_info').innerHTML='<b>'+qfEsc(r.fournisseur||'')+'</b>'+(r.st?' (sous-traitant)':'')+' · BC '+qfEsc(r.num_bc||'')+(r.bl_id?' · BL '+qfEsc(r.bl_id):'')+(q.nc_id?' · NC '+qfEsc(q.nc_id):'')+'<div style="margin-top:4px;color:#6b7280;">Mise en quarantaine : '+qfEsc(q.motif||'—')+'</div>';
+        document.getElementById('qf_qte').value=(r.qte!=null?r.qte:'');
+        document.getElementById('qf_acc').value='';
+        document.getElementById('qf_der_ref').value='';
+        document.getElementById('qf_refaction').value='';
+        document.getElementById('qf_motif').value='';
+        var d0=document.querySelector('input[name=qf_dec][value=retour]'); if(d0) d0.checked=true;
+        var c0=document.querySelector('input[name=qf_comp][value=avoir]'); if(c0) c0.checked=true;
+        var r0=document.querySelector('input[name=qf_reste][value=retour]'); if(r0) r0.checked=true;
+        document.getElementById('qf_pu_lbl').textContent = r.pu ? ('Prix unitaire du bon de commande : '+r.pu+' € HT') : 'Prix unitaire inconnu : saisissez le montant.';
+        qfMaj();
+        document.getElementById('quarFournModal').style.display='flex';
+      }
+      function qfMaj(){
+        var d=qfVal('qf_dec'), comp=qfVal('qf_comp');
+        qfShow('qf_box_part', d==='partielle');
+        qfShow('qf_box_der', d==='derogation');
+        qfShow('qf_box_comp', d!=='derogation');
+        qfShow('qf_box_mont', d!=='derogation' && comp==='avoir');
+        var qte=Number(document.getElementById('qf_qte').value)||0;
+        var acc=Number(document.getElementById('qf_acc').value)||0;
+        var reste = d==='retour' ? qte : (d==='partielle' ? Math.max(0, Math.round((qte-acc)*1000)/1000) : 0);
+        document.getElementById('qf_reste_lbl').textContent=String(reste);
+        var pu=(_qfCur&&_qfCur.reception)?(Number(_qfCur.reception.pu)||0):0;
+        if(!_qfMontantTouche) document.getElementById('qf_montant').value=(pu>0&&reste>0)?(Math.round(reste*pu*100)/100).toFixed(2):'';
+      }
+      function qfValider(){
+        if(_qfEnCours) return;
+        var id=document.getElementById('qf_id').value, d=qfVal('qf_dec');
+        var motif=document.getElementById('qf_motif').value.trim();
+        if(motif.length<3){ pushNotif('err','fa-pen-to-square','Motif obligatoire : il justifie la décision auprès du fournisseur.'); return; }
+        var qte=Number(document.getElementById('qf_qte').value)||0;
+        if(!(qte>0)){ pushNotif('err','fa-scale-balanced','Indiquez la quantité du lot : c’est elle qui fixe ce qui repart, ce qui entre en stock et le montant de l’avoir.',7000); return; }
+        var body={decision:d, motif:motif, qte_lot:qte||null};
+        if(d==='partielle'){
+          var brut=document.getElementById('qf_acc').value;
+          if(brut===''){ pushNotif('err','fa-scale-balanced','Indiquez la quantité acceptée (celle qui entre en stock).'); return; }
+          body.qte_acceptee=Number(brut); body.reste=qfVal('qf_reste');
+        }
+        if(d==='derogation'){
+          body.derogation_ref=document.getElementById('qf_der_ref').value.trim()||null;
+          body.montant_refaction=Number(document.getElementById('qf_refaction').value)||0;
+        } else {
+          body.compensation=qfVal('qf_comp');
+          var m=document.getElementById('qf_montant').value;
+          if(body.compensation==='avoir'&&m!=='') body.montant_avoir=Number(m);
+        }
+        _qfEnCours=true; var btn=document.getElementById('qf_btn'); if(btn) btn.disabled=true;
+        fetch('/api/qualite/quarantaine/'+encodeURIComponent(id)+'/decision-fournisseur',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+          .then(function(r){return r.json();}).then(function(j){
+            _qfEnCours=false; if(btn) btn.disabled=false;
+            if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Décision refusée.',8000); return; }
+            document.getElementById('quarFournModal').style.display='none';
+            pushNotif('ok','fa-clipboard-check',j.resume||'Décision enregistrée.',9000);
+            (j.avertissements||[]).forEach(function(a){ pushNotif('warn','fa-triangle-exclamation',a,12000); });
+            setTimeout(function(){softReload();},1200);
+          }).catch(function(){ _qfEnCours=false; if(btn) btn.disabled=false; pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
+      }
     </script>
   </div>`
 }

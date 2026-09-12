@@ -31,19 +31,20 @@ const R = [
     mission: 'Consulter les fournisseurs, passer les commandes, tenir le référentiel fournisseurs.',
     taches: [
       ['Lancer une demande de prix (RFQ)', 'achats-rfq', ['Achats › **Demandes de prix**, « Nouvelle RFQ ».', 'Fournisseur(s) + articles.', 'Saisir les prix reçus → alimente le catalogue.']],
+      ['Suivre les avoirs fournisseurs', 'achats-avoirs', ['Achats › **Avoirs fournisseurs** : ce que fournisseurs et sous-traitants nous doivent (à ne pas confondre avec les avoirs clients, service Commercial).', 'Un avoir arrive tout seul quand la Qualité renvoie un lot, le met au rebut ou obtient une réfaction ; « Nouvel avoir » pour en saisir un à la main.', 'Quand l\'avoir du fournisseur arrive : **Reçu** (son n°, sa date, le montant réellement accordé). Quand on s\'en sert : **Imputer** (montant + n° de facture).', 'Un avoir ne se supprime pas : il s\'annule, avec un motif, tant qu\'il n\'a pas servi.']],
       ['Transformer une DA en BC', 'achats-da', ['Onglet **Demandes d\'achat**, sélectionner la DA.', 'Générer le bon de commande fournisseur.']],
     ] },
   { role: 'production', label: 'Programmation production', rw: ['production'], r: ['be', 'achats', 'oas', 'qualité', 'sécurité', 'expéditions', 'stock', 'maintenance'],
     mission: 'Planifier la fabrication et suivre l\'avancement des BDT/BDS.',
     taches: [
-      ['Affecter un BDT à un opérateur', 'production-planning', ['**/production/planning**.', 'Glisser une carte de « BDT à affecter » sur un opérateur au bon créneau.', 'Les BDT prioritaires (BDTP) sont encadrés en rouge.']],
+      ['Affecter un BDT à un opérateur', 'production-service', ['**/production/service** → onglet **Planning Gantt BDT** (planning unique).', 'Glisser une carte de « **BDT à classer** » (au-dessus du planning) sur le poste, ou sur la sous-case **Matin / Ap-m / Soir** de l\'opérateur.', 'Un clic sur un BDT n\'affiche que **son poste + l\'étape d\'avant et d\'après** ; « Tout afficher » lève le focus.', 'Les BDT prioritaires (BDTP) sont encadrés en rouge.']],
       ['Suivre les commandes à faire', 'production-service', ['Onglet **Commandes & Lots** : commandes → lots → BDT.']],
     ] },
   { role: 'operateur', label: 'Opérateur atelier', rw: [], r: ['production', 'oas', 'qualité', 'expéditions'],
     mission: 'Réaliser les opérations de fabrication et tracer son travail (pointage + soldage BDT au PIN).',
     taches: [
       ['Pointer (borne atelier)', 'rh-pointage', ['Sur la **borne partagée** : saisir matricule + PIN.', 'Pointer l\'entrée / la sortie.']],
-      ['Prendre et solder un BDT', 'production-planning', ['Repérer son BDT sur le planning.', 'Au démarrage : passer le BDT en **Reçu**.', 'À la fin : **Solder** → temps réel + **son PIN** (signature). Un écart peut déclencher une NC.']],
+      ['Prendre et solder un BDT', 'production-service', ['Repérer son BDT sur le planning.', 'Au démarrage : passer le BDT en **Reçu**.', 'À la fin : **Solder** → temps réel + **son PIN** (signature). Un écart peut déclencher une NC.']],
       ['Signaler une non-conformité', 'qualite-nc', ['Prévenir la Qualité (ou depuis l\'écran production).', 'Décrire le défaut, la pièce, le lot.']],
     ] },
   { role: 'oas', label: 'Opérateur OAS (traitement de surface)', rw: ['oas'], r: ['be', 'production', 'qualité', 'sécurité', 'stock', 'maintenance'],
@@ -57,12 +58,14 @@ const R = [
     taches: [
       ['Déclarer une non-conformité', 'qualite-nc', ['Qualité › **Non-Conformités**, « Nouvelle NC ».', 'Type, détecteur, gravité, lot/réf, catégorie, entité.', 'Une NC bloquante bloque les BL du lot.']],
       ['Traiter un retour client', 'qualite-nc', ['Sur une NC **client**, cliquer **Retour**.', 'Facture/affaire, lot, nb pièces, prix de vente / coût de revient.', 'Choisir : Refuser · Avoir · Commande prioritaire.']],
+      ['Décider d\'un lot reçu non conforme', 'qualite-quarantaine', ['Qualité › **Quarantaine** : un lot refusé au contrôle réception porte le bouton rouge **Décider** (les lots de production gardent « Statuer »).', 'Trois choix : **renvoyer** tout le lot au fournisseur · **dérogation** (il entre en stock en l\'état, réfaction possible) · **entrée partielle** (la part acceptée entre, le reste repart ou part au rebut).', 'Renvoi et entrée partielle : choisir **avoir** (il part aux Achats) ou **remplacement** (le fournisseur relivre).', 'Le **motif est obligatoire** et la décision ne se prend qu\'une fois. Matière renvoyée sans remplacement = il faut repasser commande.']],
       ['Ouvrir un 8D', 'qualite-8d', ['Onglet **Rapports 8D**, dérouler D1→D8.']],
     ] },
   { role: 'logistique', label: 'Logistique (expéditions & stock)', rw: ['expéditions', 'stock'], r: ['commercial', 'achats', 'production'],
     mission: 'Livrer les commandes et tenir les stocks.',
     taches: [
       ['Créer un bon de livraison', 'expeditions', ['Expéditions › **Bons de Livraison**, sélectionner la commande.', 'Quantités expédiées (BL partiel possible).', '⚠ Bloqué si quarantaine/NC : voir Qualité. Validation → facture.']],
+      ['Expédier un retour fournisseur', 'expeditions-envois', ['Expéditions › **Envois**, carte **Retours fournisseurs** : les lots que la Qualité a décidé de renvoyer.', 'Préparer le colis, puis **Expédié** ; la référence du bon de retour ou le n° de suivi est facultative.', 'La ligne quitte alors la liste ; un second clic est refusé.']],
       ['Suivre les alertes de stock', 'stock-rt', ['Stock › **Alertes et Réappro.** : articles sous le seuil.']],
     ] },
   { role: 'maintenance', label: 'Technicien(ne) maintenance', rw: ['maintenance'], r: ['achats', 'production', 'oas', 'sécurité', 'stock'],

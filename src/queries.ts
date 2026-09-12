@@ -1567,6 +1567,65 @@ export async function updateQuarantaine(id: string, payload: Partial<Quarantaine
   return { data, error }
 }
 
+// ─── QUARANTAINE : lecture et transitions STRICTES (décision fournisseur, migration 008) ───
+// `getQuarantaines` avale l'erreur (data ?? []) : pour une décision IRRÉVERSIBLE, il faut
+// distinguer « lot introuvable » de « base injoignable ».
+export async function getQuarantaineStricte(id: string): Promise<{ data: any | null; error: string | null }> {
+  const { data, error } = await supabase.from('quarantaines').select('*').eq('id', id).maybeSingle()
+  return { data: data ?? null, error: error ? error.message : null }
+}
+// Mise à jour CONDITIONNELLE : la ligne ne bouge que si elle est encore dans l'état attendu
+// (statut 'en_cours', retour pas encore expédié…). Deux clics simultanés ⇒ le second voit `conflit`
+// au lieu de rejouer les effets (entrée en stock, avoir, décrément du BC).
+export async function majQuarantaineSi(id: string, payload: Record<string, any>, attendu: Record<string, any>): Promise<{ data: any | null; error: string | null; code: string | null; conflit: boolean }> {
+  let r: any = supabase.from('quarantaines').update(payload).eq('id', id)
+  for (const [k, v] of Object.entries(attendu)) r = (v === null) ? r.is(k, null) : r.eq(k, v)
+  const { data, error } = await r.select()
+  if (error) return { data: null, error: error.message, code: (error as any).code ?? null, conflit: false }
+  const rows = (data ?? []) as any[]
+  return { data: rows[0] ?? null, error: null, code: null, conflit: rows.length === 0 }
+}
+// Les colonnes de la décision existent-elles ? (migration 008 Docker / script cloud-6)
+export async function quarantaineDecisionDispo(): Promise<boolean> {
+  const { error } = await supabase.from('quarantaines').select('issue').limit(1)
+  return !error
+}
+
+// ─── AVOIRS FOURNISSEURS / SOUS-TRAITANTS (service Achats, migration 008) ───
+// Ce que NOS fournisseurs et sous-traitants nous doivent — à ne pas confondre avec `credits`,
+// les avoirs CLIENTS (service Commercial). Aucune suppression : un avoir s'annule (statut + motif).
+const _avfAbsente = (e: any) => {
+  if (!e) return false
+  if (e.code === '42P01' || e.code === 'PGRST205') return true
+  const m = String(e.message || '')
+  return /avoirs_fournisseurs/.test(m) && !/column/i.test(m) && /(relation .*does not exist|could not find the table)/i.test(m)
+}
+export async function getAvoirsFournisseurs(): Promise<{ data: any[]; error: string | null; absente: boolean }> {
+  const { data, error } = await supabase.from('avoirs_fournisseurs').select('*').order('created_at', { ascending: false })
+  if (error) return { data: [], error: error.message, absente: _avfAbsente(error) }
+  return { data: data ?? [], error: null, absente: false }
+}
+export async function getAvoirFournisseur(id: string): Promise<{ data: any | null; error: string | null; absente: boolean }> {
+  const { data, error } = await supabase.from('avoirs_fournisseurs').select('*').eq('id', id).maybeSingle()
+  if (error) return { data: null, error: error.message, absente: _avfAbsente(error) }
+  return { data: data ?? null, error: null, absente: false }
+}
+export async function createAvoirFournisseur(payload: Record<string, any>): Promise<{ data: any | null; error: string | null; code: string | null; absente: boolean }> {
+  const { data, error } = await supabase.from('avoirs_fournisseurs').insert(payload).select().single()
+  if (error) return { data: null, error: error.message, code: (error as any).code ?? null, absente: _avfAbsente(error) }
+  return { data, error: null, code: null, absente: false }
+}
+// Transition conditionnelle (même principe que la quarantaine) : impossible d'imputer deux fois le
+// même euro depuis deux onglets ouverts sur le même avoir.
+export async function majAvoirFournisseurSi(id: string, payload: Record<string, any>, attendu: Record<string, any>): Promise<{ data: any | null; error: string | null; conflit: boolean }> {
+  let r: any = supabase.from('avoirs_fournisseurs').update(payload).eq('id', id)
+  for (const [k, v] of Object.entries(attendu)) r = (v === null) ? r.is(k, null) : r.eq(k, v)
+  const { data, error } = await r.select()
+  if (error) return { data: null, error: error.message, conflit: false }
+  const rows = (data ?? []) as any[]
+  return { data: rows[0] ?? null, error: null, conflit: rows.length === 0 }
+}
+
 export async function getAudits(): Promise<Audit[]> {
   const { data } = await supabase.from('audits').select('*').order('date_audit', { ascending: false })
   return data ?? []

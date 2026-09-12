@@ -23,7 +23,7 @@
     <div class="metachips">
       <span class="chip">👤 Pour qui : <b>Acheteur(se)</b> (écriture : Achats, Stocks — lecture : Commercial, BE, Production, Expéditions, Maintenance)</span>
       <span class="chip">🧭 Dans l'ERP : <b>Sidebar → Achats</b></span>
-      <span class="chip">🗂 <b>6 onglets</b></span>
+      <span class="chip">🗂 <b>7 onglets</b></span>
     </div>
   </header>
 
@@ -33,6 +33,7 @@
       <li><a href="#tab-rfq">Demandes de prix (RFQ)</a></li>
       <li><a href="#tab-da">Demandes d'achat</a></li>
       <li><a href="#tab-bc">Bons de commande</a></li>
+      <li><a href="#tab-avoirs">Avoirs fournisseurs</a></li>
       <li><a href="#tab-fourn">Fournisseurs / ST</a></li>
       <li><a href="#tab-scorecard">Scorecard</a></li>
       <li><a href="#tab-dashboard">Dashboard achats</a></li>
@@ -213,8 +214,52 @@
     <div class="astuce"><b>Astuce :</b> commencez votre semaine par le compteur ambre « sans date d'arrivée ». Une fois toutes les commandes datées, la colonne <b>Arrivée prévue</b> vous dit d'un coup d'œil ce qui doit tomber dans les jours qui viennent, et donc qui relancer.</div>
   </section>
 
+  <section class="tab" id="tab-avoirs">
+    <div class="tab-head"><span class="tab-num">4</span><h2>Avoirs fournisseurs</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le registre de ce que nos <b>fournisseurs</b> et <b>sous-traitants nous doivent</b> : marchandise renvoyée, pièces mises au rebut chez nous, réfaction obtenue sur une dérogation. Un avoir y entre, on le réclame, on le reçoit, puis on l'utilise — et on voit à tout moment combien d'argent est encore en attente chez chaque fournisseur.</p>
+    <div class="warn"><b>À ne pas confondre.</b> Ici, ce sont les avoirs <b>fournisseurs</b> — l'argent qu'on nous doit. Les avoirs <b>clients</b> — l'argent qu'on doit à nos clients après un retour — restent au service <b>Commercial</b>. Deux registres, deux sens.</div>
+
+    <h3>Ce que vous voyez</h3>
+    <p>En haut, le titre, un compteur des avoirs ouverts, la <b>barre de recherche</b> (n° d'avoir, fournisseur / ST, statut, origine) et le bouton <b>« Nouvel avoir »</b>. En dessous, trois compteurs :</p>
+    <ul class="points">
+      <li><b>À recevoir</b> — réclamé aux fournisseurs, avoir non encore reçu.</li>
+      <li><b>Disponible</b> — avoirs en main, pas encore utilisés.</li>
+      <li><b>Déjà imputé</b> — ce qui a déjà été déduit de factures ou de commandes.</li>
+    </ul>
+    <p>Vient ensuite le tableau <b>« Ce que chacun nous doit »</b> : une ligne par fournisseur ou sous-traitant, avec le nombre d'avoirs ouverts, le montant à recevoir, le montant disponible et le total. Puis la <b>liste des avoirs</b> : N° avoir (et, dessous, la date et le n° de l'avoir du fournisseur une fois reçu), Fournisseur / ST, <b>Origine</b> (avec le BC, le BL et la NC qui l'ont produit), <b>Motif / imputations</b>, Montant HT, Imputé, Solde, Statut, et les boutons d'action.</p>
+    <figure class="shot">
+      <img src="../../assets/achats-avoirs.png" alt="Capture de l'onglet Avoirs fournisseurs : compteurs et registre" loading="lazy">
+      <figcaption><b>Avoirs fournisseurs</b> — les trois compteurs (à recevoir, disponible, déjà imputé) puis le registre. Ici sur une base de démonstration : le registre est vide tant qu'aucun avoir n'a été réclamé.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — d'où viennent les avoirs</h3>
+    <ol class="steps">
+      <li><b>Automatiquement</b> : quand la Qualité décide, sur un lot reçu non conforme, un <b>renvoi au fournisseur</b>, un <b>rebut</b> ou une <b>réfaction</b> sur dérogation, l'avoir est inscrit ici tout seul, au statut <span class="b b-warn">À recevoir</span>. Son montant est calculé au <b>prix unitaire du bon de commande</b> ; le motif rappelle le BC, le BL et ce qui a été constaté.</li>
+      <li><b>À la main</b>, avec <b>« Nouvel avoir »</b> : choisissez le <b>type</b> (fournisseur ou sous-traitant), le <b>tiers</b>, éventuellement le <b>bon de commande concerné</b>, le <b>montant HT</b> et le <b>motif</b>. Si l'avoir est <b>déjà reçu</b>, basculez l'état sur « Reçu » et saisissez le <b>n° de l'avoir du fournisseur</b> et sa <b>date</b>. Puis <b>« Inscrire l'avoir »</b>.</li>
+    </ol>
+
+    <h3>Pas à pas — le cycle d'un avoir</h3>
+    <ol class="steps">
+      <li><span class="b b-warn">À recevoir</span> — l'avoir est réclamé, le fournisseur ne l'a pas encore émis.</li>
+      <li>Quand son avoir arrive, cliquez <b>« Reçu »</b> : saisissez le <b>n° de l'avoir du fournisseur</b> (obligatoire), la <b>date</b> et le <b>montant réellement accordé</b>. Ce montant <b>peut différer</b> de ce qui avait été réclamé — c'est celui du fournisseur qui fait foi.</li>
+      <li>L'avoir passe <span class="b b-ok">Disponible</span> : c'est de l'argent en main, à déduire.</li>
+      <li>Cliquez <b>« Imputer »</b> pour l'utiliser : le <b>montant imputé HT</b> et <b>sur quoi</b> (n° de facture fournisseur, de bon de commande…), plus une <b>note</b> facultative. L'avoir devient <b>partiellement utilisé</b>, puis <b>soldé</b> quand il ne reste plus rien.</li>
+      <li>Chaque imputation reste <b>visible sous le motif</b> de l'avoir : date, montant, référence. L'historique ne se perd pas.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li><b>Un avoir ne se supprime jamais.</b> Il <b>s'annule</b>, avec un <b>motif obligatoire</b>, et reste au registre marqué « annulé » avec son motif visible.</li>
+      <li>L'annulation n'est possible que <b>tant qu'aucune partie n'en a été utilisée</b> : dès la première imputation, le bouton disparaît.</li>
+      <li>Le <b>solde</b> affiché est le montant moins ce qui a déjà été imputé. Les compteurs du haut et le tableau « Ce que chacun nous doit » se recalculent tout seuls.</li>
+      <li>Un avoir inscrit automatiquement <b>sans montant</b> (prix unitaire du bon de commande inconnu) est signalé comme tel : complétez-le ici.</li>
+    </ul>
+    <div class="warn"><b>Base non à jour.</b> Si un <b>bandeau orange</b> annonce que le registre est absent de cette base, la mise à jour n'a pas été jouée (migration <code>008</code> côté VM, script <code>cloud-6</code> côté cloud). Tant que c'est le cas, la <b>Qualité ne peut pas décider</b> sur un lot reçu non conforme : prévenez l'administrateur.</div>
+    <div class="astuce"><b>Astuce :</b> le tableau « Ce que chacun nous doit » est votre argument de négociation. Avant une commande chez un fournisseur, regardez ce qu'il vous doit encore : un avoir disponible s'impute directement sur sa prochaine facture.</div>
+  </section>
+
   <section class="tab" id="tab-fourn">
-    <div class="tab-head"><span class="tab-num">4</span><h2>Fournisseurs / ST</h2></div>
+    <div class="tab-head"><span class="tab-num">5</span><h2>Fournisseurs / ST</h2></div>
     <p class="tab-but"><b>À quoi ça sert.</b> C'est le référentiel de votre panel : d'un côté les <b>fournisseurs</b> (matière, visserie, consommables…), de l'autre les <b>sous-traitants</b> (traitements de surface, découpe, rectification…). Chaque fiche porte les contacts, le catalogue de références avec prix, les familles de fourniture ou prestations, et sert de base aux demandes de prix et aux bons de commande.</p>
 
     <h3>Ce que vous voyez</h3>
@@ -276,7 +321,7 @@
   </section>
 
   <section class="tab" id="tab-scorecard">
-    <div class="tab-head"><span class="tab-num">5</span><h2>Scorecard</h2></div>
+    <div class="tab-head"><span class="tab-num">6</span><h2>Scorecard</h2></div>
     <p class="tab-but"><b>À quoi ça sert.</b> La scorecard évalue objectivement vos fournisseurs et sous-traitants à partir de leur historique réel dans l'ERP : ponctualité de livraison, qualité à réception et régularité de paiement. Elle vous aide à choisir qui consulter, qui surveiller et qui écarter — une exigence classique des audits EN 9100.</p>
 
     <h3>Ce que vous voyez</h3>
@@ -303,7 +348,7 @@
   </section>
 
   <section class="tab" id="tab-dashboard">
-    <div class="tab-head"><span class="tab-num">6</span><h2>Dashboard achats</h2></div>
+    <div class="tab-head"><span class="tab-num">7</span><h2>Dashboard achats</h2></div>
     <p class="tab-but"><b>À quoi ça sert.</b> C'est la vue d'ensemble du service : votre charge du moment (DA en attente), les urgences à ne pas rater et la répartition des achats par type. C'est l'écran à consulter en début de journée pour organiser votre travail.</p>
 
     <h3>Ce que vous voyez</h3>

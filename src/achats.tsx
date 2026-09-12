@@ -115,6 +115,7 @@ export const pageServiceAchats = (
   dbProchainLibre?: string,
   dbAffaires?: string[],
   dbBcs?:       any[],
+  dbAvoirs?:    { lignes: any[]; absente: boolean; erreur: string | null },
 ) => {
   const DAS   = dbDas          ?? []
   const FOURN = dbFournisseurs ?? []
@@ -639,10 +640,140 @@ export const pageServiceAchats = (
     recu: !!b.recu, dateFigee: !!b.dateFigee, motifGel: b.motifGel || '', accuse: b.accuse || '',
   })))
 
+  // ── ONGLET AVOIRS FOURNISSEURS / SOUS-TRAITANTS ───────────────────────────────────────────
+  // « Répertorier les avoirs que nous avons chez nos fournisseurs et sous-traitants ; ces avoirs-là
+  //   sont traités dans les achats, contrairement aux avoirs clients. » (11/09/2026)
+  // Un avoir naît d'une décision Qualité sur un lot reçu non conforme (renvoi, rebut, réfaction sur
+  // dérogation) ou d'une saisie ici. Il se reçoit (n° du fournisseur), s'impute (facture, commande),
+  // s'annule avec motif — mais ne se supprime jamais.
+  const AVF_ETAT = dbAvoirs ?? { lignes: [] as any[], absente: false, erreur: null as string | null }
+  const AVF: any[] = AVF_ETAT.lignes ?? []
+  const avfSolde = (a: any) => Math.round(((Number(a.montant) || 0) - (Number(a.montant_impute) || 0)) * 100) / 100
+  const avfEur = (n: any) => (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' \u20ac'
+  const AVF_OUVERT = ['a_recevoir', 'recu', 'partiel']
+  const AVF_OUVERTS = AVF.filter((a: any) => AVF_OUVERT.includes(String(a.statut || '')))
+  const avfNumBc = (id: any) => { const b = BCS.find((x: any) => String(x.id) === String(id)); return b ? String(b.num_bc || b.id) : String(id || '') }
+  const AVF_LBL: Record<string, [string, string, string]> = {
+    a_recevoir: ['\u00c0 recevoir',              '#fef3c7', '#92400e'],
+    recu:       ['Disponible',                   '#dcfce7', '#166534'],
+    partiel:    ['Partiellement utilis\u00e9',   '#dbeafe', '#1d4ed8'],
+    solde:      ['Sold\u00e9',                   '#f1f5f9', '#475569'],
+    annule:     ['Annul\u00e9',                  '#fee2e2', '#b91c1c'],
+  }
+  const avfBadge = (st: string) => {
+    const v = AVF_LBL[String(st || '')] || [String(st || '\u2014'), '#f1f5f9', '#475569']
+    return `<span style="background:${v[1]};color:${v[2]};border-radius:999px;padding:2px 10px;font-size:.65rem;font-weight:800;white-space:nowrap;">${escX(v[0])}</span>`
+  }
+  const AVF_ORIG: Record<string, string> = {
+    reception_non_conforme: 'Lot re\u00e7u non conforme',
+    refaction: 'R\u00e9faction (d\u00e9rogation)',
+    manuel: 'Saisie manuelle',
+  }
+  const avfTotARecevoir = AVF.filter((a: any) => String(a.statut) === 'a_recevoir').reduce((t: number, a: any) => t + avfSolde(a), 0)
+  const avfTotDispo = AVF.filter((a: any) => ['recu', 'partiel'].includes(String(a.statut || ''))).reduce((t: number, a: any) => t + avfSolde(a), 0)
+  const avfTotUtilise = AVF.filter((a: any) => String(a.statut || '') !== 'annule').reduce((t: number, a: any) => t + (Number(a.montant_impute) || 0), 0)
+  const avfParTiers: Record<string, { nom: string; type: string; aRecevoir: number; dispo: number; n: number }> = {}
+  AVF_OUVERTS.forEach((a: any) => {
+    const k = String(a.tiers_nom || '\u2014')
+    const t = (avfParTiers[k] = avfParTiers[k] || { nom: k, type: String(a.tiers_type || 'fournisseur'), aRecevoir: 0, dispo: 0, n: 0 })
+    t.n++
+    if (String(a.statut) === 'a_recevoir') t.aRecevoir += avfSolde(a); else t.dispo += avfSolde(a)
+  })
+  const AVF_TIERS = Object.keys(avfParTiers).map(k => avfParTiers[k]).sort((x, y) => (y.aRecevoir + y.dispo) - (x.aRecevoir + x.dispo))
+  // Les avoirs encore vivants d'abord : un registre se lit par ce qu'il reste à faire.
+  const AVF_TRI = [...AVF].sort((a: any, b: any) => (AVF_OUVERT.includes(String(b.statut)) ? 1 : 0) - (AVF_OUVERT.includes(String(a.statut)) ? 1 : 0))
+  const avfKpi = (icone: string, coul: string, valeur: string, titre: string, sous: string) => `
+    <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);padding:14px 16px;display:flex;gap:12px;align-items:center;">
+      <span style="width:38px;height:38px;border-radius:10px;background:${coul}1a;color:${coul};display:flex;align-items:center;justify-content:center;flex:none;"><i class="fas ${icone}"></i></span>
+      <div><div style="font-size:1.15rem;font-weight:800;color:#111827;">${valeur}</div>
+      <div style="font-size:.72rem;font-weight:700;color:#475569;">${titre}</div>
+      <div style="font-size:.64rem;color:#94a3b8;">${sous}</div></div>
+    </div>`
+  const rowAvf = (a: any) => {
+    const st = String(a.statut || '')
+    const ouvert = AVF_OUVERT.includes(st)
+    const solde = avfSolde(a)
+    const imps: any[] = Array.isArray(a.imputations) ? a.imputations : []
+    const orig = AVF_ORIG[String(a.origine || '')] || String(a.origine || '\u2014')
+    const actions = (st === 'annule' || st === 'solde') ? '<span style="color:#cbd5e1;">\u2014</span>' : [
+      st === 'a_recevoir' ? `<button onclick="achAvfRecu('${escX(a.id)}')" title="L&#39;avoir du fournisseur est arriv\u00e9" style="padding:5px 10px;background:#dcfce7;color:#15803d;border:none;border-radius:7px;font-size:.68rem;font-weight:700;cursor:pointer;white-space:nowrap;"><i class="fas fa-inbox" style="margin-right:4px;"></i>Re\u00e7u</button>` : '',
+      // « Imputer » n'apparaît qu'une fois l'avoir RE\u00c7U : l'imputer avant ferait dispara\u00eetre le
+      // bouton « Re\u00e7u », donc la possibilit\u00e9 d'enregistrer le n\u00b0 de l'avoir du fournisseur.
+      st === 'a_recevoir' ? '' : `<button onclick="achAvfImp('${escX(a.id)}')" title="Utiliser cet avoir (facture fournisseur, commande\u2026)" style="padding:5px 10px;background:#e0f2fe;color:#0369a1;border:none;border-radius:7px;font-size:.68rem;font-weight:700;cursor:pointer;white-space:nowrap;"><i class="fas fa-arrow-right-to-bracket" style="margin-right:4px;"></i>Imputer</button>`,
+      (Number(a.montant_impute) || 0) > 0 ? '' : `<button onclick="achAvfAnnuler('${escX(a.id)}')" title="Annuler cet avoir (motif obligatoire)" style="padding:5px 9px;background:#fef2f2;color:#b91c1c;border:none;border-radius:7px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-ban"></i></button>`,
+    ].filter(Boolean).join(' ')
+    return `<tr data-num="${escX(a.num_avoir)}" data-tiers="${escX(a.tiers_nom)}" data-statut="${escX((AVF_LBL[st] || [st])[0])}" data-origine="${escX(orig + ' ' + (a.bc_id ? avfNumBc(a.bc_id) : ''))}"
+        style="border-bottom:1px solid #f9fafb;${ouvert ? '' : 'opacity:.66;'}" onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">
+      <td style="${TD}"><div style="font-weight:800;color:#0f766e;">${escX(a.num_avoir)}</div><div style="font-size:.62rem;color:#94a3b8;">${frD(String(a.created_at || a.date_demande || '').slice(0, 10))}${a.ref_fournisseur ? ' \u00b7 avoir fourn. ' + escX(a.ref_fournisseur) : ''}</div></td>
+      <td style="${TD}"><div style="font-weight:600;color:#374151;">${escX(a.tiers_nom)}</div><div style="font-size:.62rem;color:#94a3b8;">${String(a.tiers_type) === 'sous_traitant' ? 'Sous-traitant' : 'Fournisseur'}</div></td>
+      <td style="${TD}font-size:.73rem;color:#475569;">${escX(orig)}${a.bc_id ? `<div style="font-size:.62rem;color:#0369a1;">BC ${escX(avfNumBc(a.bc_id))}${a.bl_id ? ' \u00b7 BL ' + escX(a.bl_id) : ''}</div>` : ''}${a.nc_id ? `<div style="font-size:.62rem;color:#b91c1c;">NC ${escX(a.nc_id)}</div>` : ''}</td>
+      <td style="${TD}font-size:.73rem;color:#6b7280;max-width:300px;">${escX(a.motif || '\u2014')}${imps.map((im: any) => `<div style="font-size:.62rem;color:#0369a1;">\u2192 ${frD(String(im.date || ''))} \u00b7 ${avfEur(im.montant)} \u00b7 ${escX(String(im.ref || ''))}</div>`).join('')}${st === 'annule' && a.annule_motif ? `<div style="font-size:.62rem;color:#b91c1c;">Annul\u00e9 : ${escX(a.annule_motif)}</div>` : ''}</td>
+      <td style="${TD}text-align:right;font-weight:700;color:#374151;white-space:nowrap;">${avfEur(a.montant)}</td>
+      <td style="${TD}text-align:right;color:#64748b;white-space:nowrap;">${(Number(a.montant_impute) || 0) > 0 ? avfEur(a.montant_impute) : '\u2014'}</td>
+      <td style="${TD}text-align:right;font-weight:800;white-space:nowrap;color:${ouvert && solde > 0 ? '#0f766e' : '#94a3b8'};">${ouvert ? avfEur(solde) : '\u2014'}</td>
+      <td style="${TD}text-align:center;">${avfBadge(st)}</td>
+      <td style="${TD}text-align:center;white-space:nowrap;">${actions}</td>
+    </tr>`
+  }
+
+  const tabAvoirs = `
+  <div id="ach-panel-avoirs" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+      <div style="font-size:1rem;font-weight:800;color:#111827;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <i class="fas fa-hand-holding-dollar" style="color:#14b8a6;"></i>Avoirs fournisseurs / sous-traitants
+        <span style="background:#ccfbf1;color:#0f766e;border-radius:999px;padding:1px 10px;font-size:.72rem;font-weight:800;">${AVF_OUVERTS.length}</span>
+        <span style="font-size:.72rem;color:#9ca3af;font-weight:600;">\u00b7 ce que nos fournisseurs et sous-traitants NOUS doivent \u2014 les avoirs clients, eux, restent au service Commercial</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        ${searchBar('ach-avf', [['num', 'N\u00b0 avoir'], ['tiers', 'Fournisseur / ST'], ['statut', 'Statut'], ['origine', 'Origine']])}
+        <button onclick="achAvfNew()" style="padding:8px 14px;background:linear-gradient(135deg,#14b8a6,#0f766e);color:white;border:none;border-radius:9px;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;"><i class="fas fa-plus" style="margin-right:6px;"></i>Nouvel avoir</button>
+      </div>
+    </div>
+    ${AVF_ETAT.absente ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:.8rem;color:#92400e;"><i class="fas fa-database" style="margin-right:7px;"></i><strong>Registre absent de cette base</strong> \u2014 jouer la migration <code>008</code> (VM : <code>erp-docker.sh maj</code>) ou le script <code>cloud-6</code> (Supabase Studio). Tant que c&#39;est le cas, la Qualit\u00e9 ne peut pas non plus statuer sur un lot re\u00e7u non conforme.</div>` : ''}
+    ${AVF_ETAT.erreur ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:.8rem;color:#b91c1c;"><i class="fas fa-triangle-exclamation" style="margin-right:7px;"></i>Lecture du registre impossible : ${escX(AVF_ETAT.erreur)}</div>` : ''}
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px;">
+      ${avfKpi('fa-hourglass-half', '#f59e0b', avfEur(avfTotARecevoir), '\u00c0 recevoir', 'r\u00e9clam\u00e9 aux fournisseurs, avoir non re\u00e7u')}
+      ${avfKpi('fa-wallet', '#14b8a6', avfEur(avfTotDispo), 'Disponible', 'avoirs en main, non encore utilis\u00e9s')}
+      ${avfKpi('fa-arrow-right-to-bracket', '#64748b', avfEur(avfTotUtilise), 'D\u00e9j\u00e0 imput\u00e9', 'd\u00e9duit de factures ou de commandes')}
+    </div>
+    ${AVF_TIERS.length ? `<div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;margin-bottom:18px;">
+      <div style="padding:12px 18px;border-bottom:1px solid #f1f5f9;font-weight:800;color:#111827;font-size:.86rem;"><i class="fas fa-scale-balanced" style="color:#14b8a6;margin-right:7px;"></i>Ce que chacun nous doit</div>
+      <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:.8rem;">
+        <thead><tr style="background:#f8fafc;"><th style="text-align:left;${TH}">Fournisseur / ST</th><th style="text-align:center;${TH}">Avoirs ouverts</th><th style="text-align:right;${TH}">\u00c0 recevoir</th><th style="text-align:right;${TH}">Disponible</th><th style="text-align:right;${TH}">Total</th></tr></thead>
+        <tbody>${AVF_TIERS.map(t => `<tr style="border-bottom:1px solid #f9fafb;">
+          <td style="${TD}font-weight:600;color:#374151;">${escX(t.nom)}<span style="color:#94a3b8;font-size:.66rem;margin-left:6px;">${t.type === 'sous_traitant' ? 'ST' : 'Fourn.'}</span></td>
+          <td style="${TD}text-align:center;color:#64748b;">${t.n}</td>
+          <td style="${TD}text-align:right;color:#92400e;">${avfEur(t.aRecevoir)}</td>
+          <td style="${TD}text-align:right;color:#0f766e;font-weight:700;">${avfEur(t.dispo)}</td>
+          <td style="${TD}text-align:right;font-weight:800;color:#111827;">${avfEur(t.aRecevoir + t.dispo)}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>` : ''}
+    <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;">
+      <div style="overflow-x:auto;">
+        <table id="ach-avf" style="width:100%;border-collapse:collapse;font-size:.8rem;">
+          <thead><tr style="background:#f8fafc;border-bottom:2px solid #f1f5f9;">
+            <th style="text-align:left;${TH}">N\u00b0 avoir</th>
+            <th style="text-align:left;${TH}">Fournisseur / ST</th>
+            <th style="text-align:left;${TH}">Origine</th>
+            <th style="text-align:left;${TH}">Motif / imputations</th>
+            <th style="text-align:right;${TH}">Montant HT</th>
+            <th style="text-align:right;${TH}">Imput\u00e9</th>
+            <th style="text-align:right;${TH}">Solde</th>
+            <th style="text-align:center;${TH}">Statut</th>
+            <th style="text-align:center;${TH}">Actions</th>
+          </tr></thead>
+          <tbody>${AVF_TRI.length === 0 ? emptyRow(9, 'Aucun avoir fournisseur') : AVF_TRI.map(rowAvf).join('')}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`
+
   const ACH_TABS = [
     ['rfq',       'Demandes de prix',           'fa-file-invoice-dollar', '#0ea5e9', DPRIX.length.toString()],
     ['da',        'Demandes d\'achat',          'fa-inbox',        '#10b981', DA_TRAITER.length.toString()],
     ['bc',        'Bons de commande',           'fa-file-contract', '#0ea5e9', BCS.length.toString()],
+    ['avoirs',    'Avoirs fournisseurs',        'fa-hand-holding-dollar', '#14b8a6', AVF_OUVERTS.length ? String(AVF_OUVERTS.length) : ''],
     ['fourn',     'Fournisseurs / ST',          'fa-industry',     '#8b5cf6', (FOURN.length + STRAIT.length).toString()],
     ['scorecard', 'Scorecard',                  'fa-ranking-star', '#ec4899', SCORE.length ? String(SCORE.length) : ''],
     ['dashboard', 'Dashboard achats',           'fa-chart-bar',    '#f59e0b', ''],
@@ -665,10 +796,77 @@ export const pageServiceAchats = (
     ${tabDA}
     ${tabRFQ}
     ${tabBC}
+    ${tabAvoirs}
     ${tabDashboard}
     ${tabFourn}
     ${tabScorecard}
 
+  </div>
+
+  <!-- MODALES : avoirs fournisseurs / sous-traitants -->
+  <div id="ach-avf-new" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1100;align-items:center;justify-content:center;" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:white;border-radius:16px;max-width:580px;width:94%;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+      <div style="padding:16px 20px;background:linear-gradient(135deg,#14b8a6,#0f766e);border-radius:16px 16px 0 0;color:white;font-weight:800;"><i class="fas fa-hand-holding-dollar" style="margin-right:8px;"></i>Nouvel avoir fournisseur</div>
+      <div style="padding:18px 20px;display:grid;gap:12px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div><label style="${LBL}">Type</label><select id="avf_type" onchange="achAvfTiers()" style="${INP}"><option value="fournisseur">Fournisseur</option><option value="sous_traitant">Sous-traitant</option></select></div>
+          <div><label style="${LBL}">Fournisseur / ST</label><select id="avf_tiers" onchange="achAvfBcs()" style="${INP}"></select></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 190px;gap:12px;">
+          <div><label style="${LBL}">Bon de commande concern\u00e9 (facultatif)</label><select id="avf_bc" style="${INP}"><option value="">\u2014 aucun \u2014</option></select></div>
+          <div><label style="${LBL}">Montant HT</label><input id="avf_montant" type="number" min="0" step="0.01" style="${INP}"/></div>
+        </div>
+        <div><label style="${LBL}">Motif</label><textarea id="avf_motif" rows="2" placeholder="Pourquoi le fournisseur nous doit cet avoir" style="${INP}resize:vertical;"></textarea></div>
+        <div><label style="${LBL}">\u00c9tat</label><select id="avf_etat" onchange="achAvfEtat()" style="${INP}"><option value="a_recevoir">\u00c0 recevoir \u2014 r\u00e9clam\u00e9 au fournisseur</option><option value="recu">Re\u00e7u \u2014 l&#39;avoir du fournisseur est en main</option></select></div>
+        <div id="avf_recu_box" style="display:none;gap:12px;">
+          <div style="flex:1;"><label style="${LBL}">N\u00b0 de l&#39;avoir du fournisseur</label><input id="avf_ref" type="text" style="${INP}"/></div>
+          <div style="width:180px;"><label style="${LBL}">Re\u00e7u le</label><input id="avf_date" type="date" style="${INP}"/></div>
+        </div>
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:9px;">
+        <button onclick="document.getElementById('ach-avf-new').style.display='none'" style="padding:9px 16px;background:#f1f5f9;color:#374151;border:none;border-radius:9px;font-weight:600;cursor:pointer;">Annuler</button>
+        <button id="avf_btn" onclick="achAvfSave()" style="padding:9px 18px;background:linear-gradient(135deg,#14b8a6,#0f766e);color:white;border:none;border-radius:9px;font-weight:800;cursor:pointer;">Inscrire l&#39;avoir</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="ach-avf-recu" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1100;align-items:center;justify-content:center;" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:white;border-radius:16px;max-width:520px;width:94%;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+      <div style="padding:16px 20px;background:linear-gradient(135deg,#22c55e,#15803d);border-radius:16px 16px 0 0;color:white;font-weight:800;"><i class="fas fa-inbox" style="margin-right:8px;"></i>Avoir re\u00e7u du fournisseur</div>
+      <div style="padding:18px 20px;display:grid;gap:12px;">
+        <input type="hidden" id="avfr_id"/>
+        <div id="avfr_info" style="font-size:.8rem;color:#374151;background:#f8fafc;border:1px solid #e2e8f0;border-radius:9px;padding:9px 11px;"></div>
+        <div style="display:grid;grid-template-columns:1fr 170px;gap:12px;">
+          <div><label style="${LBL}">N\u00b0 de l&#39;avoir du fournisseur</label><input id="avfr_ref" type="text" style="${INP}"/></div>
+          <div><label style="${LBL}">Re\u00e7u le</label><input id="avfr_date" type="date" style="${INP}"/></div>
+        </div>
+        <div style="width:200px;"><label style="${LBL}">Montant accord\u00e9 HT</label><input id="avfr_montant" type="number" min="0" step="0.01" style="${INP}"/></div>
+        <div style="font-size:.7rem;color:#6b7280;">Le fournisseur n&#39;accorde pas toujours ce qui a \u00e9t\u00e9 r\u00e9clam\u00e9 : c&#39;est le montant de SON avoir qui fait foi.</div>
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:9px;">
+        <button onclick="document.getElementById('ach-avf-recu').style.display='none'" style="padding:9px 16px;background:#f1f5f9;color:#374151;border:none;border-radius:9px;font-weight:600;cursor:pointer;">Annuler</button>
+        <button id="avfr_btn" onclick="achAvfRecuSave()" style="padding:9px 18px;background:linear-gradient(135deg,#22c55e,#15803d);color:white;border:none;border-radius:9px;font-weight:800;cursor:pointer;">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="ach-avf-imp" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1100;align-items:center;justify-content:center;" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:white;border-radius:16px;max-width:520px;width:94%;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+      <div style="padding:16px 20px;background:linear-gradient(135deg,#0ea5e9,#0369a1);border-radius:16px 16px 0 0;color:white;font-weight:800;"><i class="fas fa-arrow-right-to-bracket" style="margin-right:8px;"></i>Imputer un avoir</div>
+      <div style="padding:18px 20px;display:grid;gap:12px;">
+        <input type="hidden" id="avfi_id"/>
+        <div id="avfi_info" style="font-size:.8rem;color:#374151;background:#f8fafc;border:1px solid #e2e8f0;border-radius:9px;padding:9px 11px;"></div>
+        <div style="display:grid;grid-template-columns:190px 1fr;gap:12px;">
+          <div><label style="${LBL}">Montant imput\u00e9 HT</label><input id="avfi_montant" type="number" min="0" step="0.01" style="${INP}"/></div>
+          <div><label style="${LBL}">Imput\u00e9 sur</label><input id="avfi_ref" type="text" placeholder="N\u00b0 de facture fournisseur, de bon de commande\u2026" style="${INP}"/></div>
+        </div>
+        <div><label style="${LBL}">Note (facultatif)</label><input id="avfi_note" type="text" style="${INP}"/></div>
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:9px;">
+        <button onclick="document.getElementById('ach-avf-imp').style.display='none'" style="padding:9px 16px;background:#f1f5f9;color:#374151;border:none;border-radius:9px;font-weight:600;cursor:pointer;">Annuler</button>
+        <button id="avfi_btn" onclick="achAvfImpSave()" style="padding:9px 18px;background:linear-gradient(135deg,#0ea5e9,#0369a1);color:white;border:none;border-radius:9px;font-weight:800;cursor:pointer;">Imputer</button>
+      </div>
+    </div>
   </div>
 
   <!-- MODAL : changer la date d'arrivee d'un bon de commande -->
@@ -1062,8 +1260,10 @@ export const pageServiceAchats = (
   </script>
 
   <script>
-  var ACH_TABS=['da','rfq','bc','dashboard','fourn','scorecard'];
+  var ACH_TABS=['da','rfq','bc','avoirs','dashboard','fourn','scorecard'];
   var ACH_BCS=${BC_MODAL_JSON};
+  var ACH_AVF=${sjX(AVF.map((a: any) => ({ id: a.id, num_avoir: a.num_avoir, tiers_nom: a.tiers_nom, tiers_type: a.tiers_type, montant: Number(a.montant) || 0, montant_impute: Number(a.montant_impute) || 0, statut: a.statut, ref_fournisseur: a.ref_fournisseur || '' })))};
+  var ACH_TIERS=${sjX({ fournisseur: FOURN.map((f: any) => ({ id: f.id, nom: f.nom })).filter((f: any) => f.nom), sous_traitant: STRAIT.map((f: any) => ({ id: f.id, nom: f.nom })).filter((f: any) => f.nom) })};
   var _achBcCur=null;
 
   // Changer la date d'arrivee prevue d'un bon de commande, depuis les Achats.
@@ -1794,6 +1994,110 @@ export const pageServiceAchats = (
       if(j.ok){ if(j.fusions>0){ pushNotif('ok','fa-object-group', j.fusions+' fournisseur(s) regroupe(s), '+j.absorbees+' demande(s) fusionnee(s).',5000); setTimeout(function(){softReload();},900); } else pushNotif('info','fa-circle-info','Aucun fournisseur en double parmi les demandes a traiter.'); }
       else pushNotif('err','fa-ban', j.error||'Echec du regroupement.');
     }).catch(function(){ pushNotif('err','fa-ban','Erreur reseau.'); });
+  }
+
+  // ── AVOIRS FOURNISSEURS / SOUS-TRAITANTS ──
+  // Le registre de ce que nos fournisseurs nous doivent. Les avoirs n\u00e9s d\u2019une d\u00e9cision Qualit\u00e9
+  // arrivent ici tout seuls ; ceux-ci se saisissent, se re\u00e7oivent, s\u2019imputent et s\u2019annulent.
+  function achAvfEur(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' \u20ac'; }
+  function achAvfGet(id){ return (ACH_AVF||[]).find(function(a){return String(a.id)===String(id);}); }
+  // En cas de SUCC\u00c8S : on ferme la fen\u00eatre et on LAISSE le bouton d\u00e9sactiv\u00e9 jusqu'au rechargement
+  // (900 ms) \u2014 sinon un second clic repartait sur une op\u00e9ration d\u00e9j\u00e0 faite. En cas d'\u00e9chec, la
+  // fen\u00eatre reste ouverte avec les valeurs saisies, et le bouton redevient cliquable.
+  function achAvfPost(url, body, btn, okMsg, modal){
+    if(btn) btn.disabled=true;
+    return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok){ if(btn) btn.disabled=false; pushNotif('err','fa-ban',(j&&j.error)||'Op\u00e9ration refus\u00e9e.',9000); return null; }
+        if(modal){ var m=document.getElementById(modal); if(m) m.style.display='none'; }
+        pushNotif('ok','fa-hand-holding-dollar',okMsg,5000);
+        location.hash='avoirs'; setTimeout(function(){softReload();},900);
+        return j;
+      }).catch(function(){ if(btn) btn.disabled=false; pushNotif('err','fa-exclamation-circle','Erreur reseau.'); return null; });
+  }
+  function achAvfTiers(){
+    var t=document.getElementById('avf_type').value;
+    var sel=document.getElementById('avf_tiers'); sel.innerHTML='';
+    (((window.ACH_TIERS||ACH_TIERS)||{})[t]||[]).forEach(function(x){
+      var o=document.createElement('option'); o.value=x.nom; o.textContent=x.nom; o.setAttribute('data-id',x.id||''); sel.appendChild(o);
+    });
+    if(!sel.options.length){ var vide=document.createElement('option'); vide.value=''; vide.textContent='\u2014 aucun r\u00e9f\u00e9renc\u00e9 \u2014'; sel.appendChild(vide); }
+    achAvfBcs();
+  }
+  function achAvfBcs(){
+    var nom=(document.getElementById('avf_tiers').value||'').toLowerCase().trim();
+    var sel=document.getElementById('avf_bc'); sel.innerHTML='<option value="">\u2014 aucun \u2014</option>';
+    (ACH_BCS||[]).filter(function(b){ return String(b.fournisseur||'').toLowerCase().trim()===nom; }).forEach(function(b){
+      var o=document.createElement('option'); o.value=b.id; o.textContent=(b.num_bc||b.id)+' \u00b7 '+String(b.articles||'').slice(0,40); sel.appendChild(o);
+    });
+  }
+  function achAvfEtat(){ document.getElementById('avf_recu_box').style.display=(document.getElementById('avf_etat').value==='recu')?'flex':'none'; }
+  function achAvfNew(){
+    document.getElementById('avf_type').value='fournisseur';
+    document.getElementById('avf_montant').value='';
+    document.getElementById('avf_motif').value='';
+    document.getElementById('avf_etat').value='a_recevoir';
+    document.getElementById('avf_ref').value='';
+    document.getElementById('avf_date').value=new Date().toISOString().slice(0,10);
+    achAvfTiers(); achAvfEtat();
+    document.getElementById('ach-avf-new').style.display='flex';
+  }
+  function achAvfSave(){
+    var sel=document.getElementById('avf_tiers');
+    var opt=sel.options[sel.selectedIndex];
+    var body={ tiers_type:document.getElementById('avf_type').value, tiers_nom:sel.value,
+      tiers_id:(opt?opt.getAttribute('data-id'):'')||null, bc_id:document.getElementById('avf_bc').value||null,
+      montant:Number(document.getElementById('avf_montant').value), motif:document.getElementById('avf_motif').value.trim(),
+      statut:document.getElementById('avf_etat').value, ref_fournisseur:document.getElementById('avf_ref').value.trim(),
+      date_reception:document.getElementById('avf_date').value };
+    if(!body.tiers_nom){ pushNotif('err','fa-industry','Choisissez le fournisseur ou le sous-traitant.'); return; }
+    if(!(body.montant>0)){ pushNotif('err','fa-euro-sign','Montant HT de l\\'avoir requis.'); return; }
+    if(body.motif.length<3){ pushNotif('err','fa-pen-to-square','Motif requis (3 caract\u00e8res au moins).'); return; }
+    if(body.statut==='recu'&&!body.ref_fournisseur){ pushNotif('err','fa-hashtag','N\u00b0 de l\\'avoir du fournisseur requis.'); return; }
+    achAvfPost('/api/achats/avoirs-fournisseurs', body, document.getElementById('avf_btn'), 'Avoir inscrit au registre.', 'ach-avf-new');
+  }
+  function achAvfRecu(id){
+    var a=achAvfGet(id); if(!a) return;
+    document.getElementById('avfr_id').value=id;
+    document.getElementById('avfr_info').textContent=a.num_avoir+' \u00b7 '+a.tiers_nom+' \u00b7 r\u00e9clam\u00e9 '+achAvfEur(a.montant);
+    document.getElementById('avfr_ref').value='';
+    document.getElementById('avfr_date').value=new Date().toISOString().slice(0,10);
+    document.getElementById('avfr_montant').value=(Number(a.montant)>0?a.montant:'');
+    document.getElementById('ach-avf-recu').style.display='flex';
+  }
+  function achAvfRecuSave(){
+    var id=document.getElementById('avfr_id').value;
+    var ref=document.getElementById('avfr_ref').value.trim();
+    if(!ref){ pushNotif('err','fa-hashtag','N\u00b0 de l\\'avoir \u00e9mis par le fournisseur requis.'); return; }
+    achAvfPost('/api/achats/avoirs-fournisseurs/'+encodeURIComponent(id)+'/recu',
+      {ref_fournisseur:ref, date_reception:document.getElementById('avfr_date').value, montant:document.getElementById('avfr_montant').value},
+      document.getElementById('avfr_btn'), 'Avoir re\u00e7u : disponible pour imputation.', 'ach-avf-recu');
+  }
+  function achAvfImp(id){
+    var a=achAvfGet(id); if(!a) return;
+    var solde=Math.round(((Number(a.montant)||0)-(Number(a.montant_impute)||0))*100)/100;
+    document.getElementById('avfi_id').value=id;
+    document.getElementById('avfi_info').textContent=a.num_avoir+' \u00b7 '+a.tiers_nom+' \u00b7 solde '+achAvfEur(solde);
+    document.getElementById('avfi_montant').value=(solde>0?solde:'');
+    document.getElementById('avfi_ref').value='';
+    document.getElementById('avfi_note').value='';
+    document.getElementById('ach-avf-imp').style.display='flex';
+  }
+  function achAvfImpSave(){
+    var id=document.getElementById('avfi_id').value;
+    var m=Number(document.getElementById('avfi_montant').value);
+    var ref=document.getElementById('avfi_ref').value.trim();
+    if(!(m>0)){ pushNotif('err','fa-euro-sign','Montant \u00e0 imputer requis.'); return; }
+    if(!ref){ pushNotif('err','fa-file-invoice','Indiquez sur quoi l\\'avoir est imput\u00e9.'); return; }
+    achAvfPost('/api/achats/avoirs-fournisseurs/'+encodeURIComponent(id)+'/imputer',
+      {montant:m, ref:ref, note:document.getElementById('avfi_note').value.trim()},
+      document.getElementById('avfi_btn'), 'Avoir imput\u00e9.', 'ach-avf-imp');
+  }
+  async function achAvfAnnuler(id){
+    var a=achAvfGet(id); if(!a) return;
+    var m=await appMotif('Annuler l\\'avoir '+a.num_avoir+' ('+a.tiers_nom+', '+achAvfEur(a.montant)+') ?\\nIl reste au registre, marqu\u00e9 annul\u00e9.', {title:'Annuler un avoir fournisseur', okLabel:'Annuler l\\'avoir'});
+    if(m===null) return;
+    achAvfPost('/api/achats/avoirs-fournisseurs/'+encodeURIComponent(id)+'/annuler', {motif:m}, null, 'Avoir annul\u00e9.');
   }
 
   (function(){

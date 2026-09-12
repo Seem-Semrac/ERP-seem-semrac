@@ -15,6 +15,7 @@ dans **Supabase Studio → SQL Editor**.
 | `cloud-3-annulation-tracabilite.sql` | **pas urgent** — équivalent de la migration 004 | purement additif (`add column if not exists`) · idempotent |
 | `cloud-4-bdt-debut-numerique.sql` | **à faire** — équivalent de la migration 005 | passe `bons_de_travail.debut` d'entier à décimal (aucune perte). Sans lui, un BDT déposé au quart d'heure est arrondi à l'heure pleine |
 | `cloud-5-nomenclature-journal.sql` | **à faire** — équivalent de la migration 006 | crée le journal EN 9100 des nomenclatures (table en ajout seul). Sans lui, les modifications s'enregistrent mais ne sont pas tracées |
+| `cloud-6-reception-fournisseur-avoirs.sql` | **à faire** — équivalent de la migration 008 | décision sur un lot fournisseur non conforme (retour / dérogation / entrée partielle) + registre des avoirs fournisseurs. Sans lui, la Qualité ne peut pas statuer sur une réception non conforme et l'onglet Achats « Avoirs fournisseurs » reste vide |
 
 > La migration Docker **007** (identifiant généré par défaut) n'a **pas** d'équivalent cloud : le
 > cloud génère déjà ses identifiants — c'est la base Docker, née de `schema.sql`, qui les avait perdus.

@@ -12,6 +12,8 @@ Demandes de prix (RFQ), demandes d'achat, bons de commande, fournisseurs & sous-
 ## Onglets
 <!-- auto:onglets -->
 - `rfq` — Demandes de prix
+- `bc` — Bons de commande
+- `avoirs` — Avoirs fournisseurs
 - `da` — Demandes d'achat
 - `fourn` — Fournisseurs / ST
 - `scorecard` — Scorecard
@@ -19,15 +21,16 @@ Demandes de prix (RFQ), demandes d'achat, bons de commande, fournisseurs & sous-
 <!-- /auto -->
 ## API (familles de routes)
 <!-- auto:api -->
-`achats` · `da` · `bc` · `fournisseur(s)` · `sous-traitant(s)` · `demandes-prix` · `catalogue-fournisseurs`
+`achats` · `da` · `bc` · `avoirs-fournisseurs` · `fournisseur(s)` · `sous-traitant(s)` · `demandes-prix` · `catalogue-fournisseurs`
 <!-- /auto -->
 ## Tables principales
 <!-- auto:tables -->
-`fournisseurs` · `sous_traitants` · `demandes_prix` · `demandes_achat` · `bons_commande` · `factures_fournisseur`
+`fournisseurs` · `sous_traitants` · `demandes_prix` · `demandes_achat` · `bons_de_commande` · `avoirs_fournisseurs` · `factures_fournisseur`
 <!-- /auto -->
 ## Points d'attention
 <!-- auto:notes -->
-RFQ = source de vérité des prix → catalogue. BC n'écrit jamais le prix. Scorecard fournisseur/ST.
+RFQ = source de vérité des prix → catalogue. BC n'écrit jamais le prix. Scorecard fournisseur/ST. Onglet Avoirs fournisseurs = ce que fournisseurs et sous-traitants NOUS doivent (table avoirs_fournisseurs, distincte des avoirs CLIENTS de la table credits, service Commercial) : né d’une décision Qualité sur un lot reçu non conforme, ou saisi à la main ; cycle à recevoir → reçu → partiel → soldé ; annulable avec motif tant qu’il n’est pas imputé ; jamais supprimé (la base ne donne pas le droit DELETE).
+<!-- /auto -->
 
 ## Numérotation des BC et des BL — alignée sur l'affaire (09/09/2026)
 
@@ -142,6 +145,33 @@ Le rattachement facture ↔ BC se lit dans l'identifiant `FF-<bcId>` **et** dans
 **Facture du fournisseur en pièce jointe** : un champ fichier (PDF ou image) dans le formulaire. Le document part en GED **après** la création du BC, sous la référence `BC:<id du BC>` et la catégorie `facture_fournisseur`. Il est ensuite **ouvrable depuis Comptabilité › Factures fournisseurs** : la route `/compta/service` remonte du numéro de facture (`FF-<bcId>`) au document, et affiche un bouton *Facture* pointant sur `/api/ged/file/:id`. Aucune colonne de liaison n'a été nécessaire.
 
 La GED accepte désormais un **propriétaire générique** : le champ `ref` de `POST /api/ged/upload` (ex. `BC:BC-2026-002`) remplace `nomenclature_id`, et `GET /api/ged/ref/:ref` liste les documents rattachés. Le préfixe évite toute collision avec un identifiant de nomenclature.
-<!-- /auto -->
+
+## Avoirs fournisseurs / sous-traitants (12/09/2026)
+
+> « Répertorier les avoirs que nous avons chez nos fournisseurs et sous-traitants ; ces avoirs-là
+> seront traités dans les achats, contrairement aux avoirs clients. »
+
+7ᵉ onglet du service (`ach-panel-avoirs`, `/achats/service#avoirs`). Table **`avoirs_fournisseurs`**
+(migration 008 / `cloud-6`), **distincte de `credits`** qui porte les avoirs CLIENTS du Commercial :
+sens opposé, service différent, cycle de vie différent — les mélanger fausserait les deux.
+
+**Cycle de vie** : `a_recevoir` (réclamé) → `recu` (l'avoir du fournisseur est en main, avec SON
+numéro et son montant réellement accordé) → `partiel` → `solde`. Ou `annule`, motif obligatoire et
+seulement tant que rien n'est imputé. **Aucune suppression** : la base ne donne pas le droit DELETE.
+
+**Routes** (famille `achats`, donc gatées comme le reste du service) :
+`POST /api/achats/avoirs-fournisseurs` (création manuelle) · `…/:id/recu` · `…/:id/imputer` ·
+`…/:id/annuler`. Les avoirs nés d'une décision Qualité sont créés côté serveur par
+`creerAvoirFournisseur` (numérotation `AVF-AAAA-NNN`, relecture et réessai sur collision `23505`).
+
+**Concurrence** : chaque transition est **conditionnelle** (`majAvoirFournisseurSi` : statut ET
+montant imputé attendus). Deux onglets ouverts sur le même avoir ne peuvent pas imputer deux fois le
+même euro : le second reçoit 409 « modifié entre-temps ». Les montants sont arrondis au centime et
+comparés avec une tolérance de 0,005 € pour qu'un reste de virgule flottante ne laisse jamais un
+avoir « presque soldé ».
+
+**Sans la migration** (cloud tant que `cloud-6` n'est pas joué) : lecture en échec détectée
+(`getAvoirsFournisseurs().absente`), bandeau orange dans l'onglet, page Achats intacte pour le reste.
+
 ---
 > Fiche générée. Manuel utilisateur correspondant : `docs/manuel/achats.md`. Voir aussi `04-auth-rbac.md`, `07-api-reference.md`.

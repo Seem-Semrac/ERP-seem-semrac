@@ -46,8 +46,36 @@ BC `controle`, `matiere_ok` ouvert ; PV en double → 409 ; PV sans réception �
 NC + quarantaine, stock inchangé ; réception partielle 4 puis 6,5 → +4 puis +6,5, BC `controle` au
 second PV seulement.
 
-⚠ **Hors de la règle, à trancher** : une matière non conforme, mise en quarantaine puis **libérée**
-(dérogation), n'entre pas en stock automatiquement.
+## Le lot refusé au contrôle a maintenant une issue (12/09/2026)
+
+> « Pour la quarantaine quand c'est une NC fournisseur, une libération de lot : on doit choisir si on
+> renvoie au fournisseur, si on fait une dérogation avec le fournisseur, ou si on rentre en stock
+> partiellement. »
+
+Le point laissé ouvert ci-dessus est tranché. La **décision appartient à la Qualité**
+(`POST /api/qualite/quarantaine/:id/decision-fournisseur`, voir [Qualité](qualite.md)) ; les
+Expéditions en portent les conséquences matérielles.
+
+- **Une réception refusée part toujours en quarantaine.** Le PV non conforme crée la NC *et* la
+  quarantaine dès qu'il y a un BL : la case « Mettre en quarantaine » ne peut plus laisser un lot
+  sans issue — un BC dont un lot restait en suspens ne pouvait plus jamais devenir `controle`. La
+  quarantaine porte désormais le contexte de l'achat : `bc_id`, `bl_id`, `qte`, `fournisseur_nom`
+  (écriture *fail-soft* : sans la migration 008, la quarantaine naît quand même).
+- **Le statut du BC se recalcule** au même endroit pour tout le monde (`recalculerStatutBc`) : il
+  passe `controle` quand **toutes** ses réceptions sont *tranchées* — PV conforme **ou** décision de
+  la Qualité sur le lot non conforme. Un **remplacement** attendu fait l'inverse : `qte_recue` est
+  décrémentée de la quantité non acceptée et le BC repasse `recu_partiel`, en attente de relivraison.
+- **Onglet Envois, carte « Retours fournisseurs »** : les lots que la Qualité a décidé de renvoyer,
+  avec le bouton « Expédié » → `POST /api/expeditions/retour-fournisseur/:qid/expedie` (date, auteur,
+  référence du bon de retour ; un second appel est refusé en 409).
+- **Onglet Réceptions** : sous un PV non conforme, la ligne dit ce qu'il est advenu du lot
+  (« renvoyé au fournisseur · à expédier », « dérogation fournisseur · entré en stock »,
+  « entrée partielle 6/10 ») au lieu de rester figée sur « Non conforme ».
+- `entrerStockReception(bc, bl, qteAcceptee?)` accepte une **quantité forcée** : l'entrée partielle
+  crédite la part acceptée avec le **même motif** que l'entrée normale — donc toujours idempotente.
+
+⚠ **Matière manquante** : un lot renvoyé sans remplacement laisse l'affaire sans matière. La porte
+matière n'est alors **pas** ouverte par la décision, et la réponse le dit — il faut repasser commande.
 
 ## La porte d'envoi d'un BST (10/09/2026)
 

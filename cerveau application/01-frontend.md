@@ -30,6 +30,11 @@ Pourquoi ce choix ? Simplicité et robustesse : une techno de moins à maintenir
 | `stock_service.tsx`, `securite.tsx`, `achats.tsx`, `expeditions.tsx`, `oas.tsx` | Stock, HSE, achats, expéditions, traitement OAS | ~1 000 |
 | + `maintenance_service.tsx`, `finances.tsx`, `rapport8d.tsx`, `dashboards.tsx`, `fournisseur_fiche.tsx`, `direction_service.tsx`, `plans.tsx` | Autres services | 400-855 |
 
+## Ajouts récents utiles à connaître
+- **`appMotif`** (`src/shared.ts`) : fenêtre de saisie d'un **motif obligatoire** (Ctrl+Entrée valide, Échap annule), sœur d'`appConfirm`. Utilisée pour la suppression d'une nomenclature validée (motif inscrit au journal EN 9100) — y compris en **suppression groupée** (le moteur `bulkSelectAssets` accepte `motif: true` et vérifie la saisie **avant** de fermer la fenêtre).
+- **Qualité › Quarantaine** : un lot reçu d'un fournisseur ouvre « Décider » (fenêtre `quarFournModal`) au lieu de « Statuer » — renvoi, dérogation fournisseur ou entrée partielle, montant d'avoir pré-rempli au prix unitaire du BC.
+- **Achats › Avoirs fournisseurs** (7ᵉ onglet) et **Expéditions › Envois › Retours fournisseurs** : les deux bouts visibles du même flux.
+
 ## ⚠️ Le piège central du frontend (à connaître absolument)
 Le JS client vit **dans des chaînes de texte** TSX. Les apostrophes et retours à la ligne doivent être **doublement échappés** (`\\'`, `\\n`), sinon la page casse silencieusement. **C'est la 1ʳᵉ cause de régression du dépôt.**
 → Filet de sécurité : `node scripts_doc/harness_all_pages.mjs` (le *harnais*) exécute le JS de **toutes** les pages et attrape ces bugs. Conventions détaillées dans le skill [`erp-new-module`](../.claude/skills/erp-new-module/SKILL.md).

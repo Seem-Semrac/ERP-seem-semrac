@@ -18,7 +18,13 @@ PostgreSQL (Supabase), exposée en REST par PostgREST. Les définitions de table
 `nomenclatures` (indices A/B/C, `prix_revient_unitaire` = matière+MO+machine), `fournitures_nomenclature` (composants matière), `etapes_production` (gamme : temps MO/machine, sous-traitance), `be_refs`, `ref_prix_historique` (source rfq/manuel/import), `produits_fournisseurs` (catalogue), **`nomenclature_journal`** (journal EN 9100 des nomenclatures validées, **en ajout seul** — déclencheurs contre modification, effacement et vidage, heure imposée par la base, droits lecture + ajout, aucune clé étrangère : il survit à la fiche ; migration Docker 006, cloud `cloud-5`).
 
 ### Achats / Fournisseurs
-`fournisseurs`, `sous_traitants`, `demandes_prix` (RFQ = source de vérité des prix), `demandes_achat` (DA), `bons_commande` (BC), `factures_fournisseur`.
+`fournisseurs`, `sous_traitants`, `demandes_prix` (RFQ = source de vérité des prix), `demandes_achat` (DA), `bons_commande` (BC), `factures_fournisseur`, **`avoirs_fournisseurs`**.
+
+**`avoirs_fournisseurs`** (migration **008** / `cloud-6`) — ce que nos fournisseurs et sous-traitants NOUS doivent, traité aux Achats. ⚠ À ne pas confondre avec `credits`, qui porte les avoirs **clients** (service Commercial) : sens opposé, service différent, cycle de vie différent.
+- Identité : `num_avoir` (AVF-AAAA-NNN, index unique), `tiers_type` (`fournisseur` / `sous_traitant`), `tiers_id`, `tiers_nom`.
+- Origine : `origine` (`reception_non_conforme` / `refaction` / `manuel`), `bc_id`, `bl_id`, `quarantaine_id`, `nc_id`, `num_affaire`. **Index unique partiel sur `quarantaine_id`** : une décision Qualité ne peut pas engendrer deux avoirs.
+- Argent : `montant` (HT), `montant_impute`, `imputations` (jsonb : `{date, montant, ref, note, par}`) ; solde = `montant - montant_impute`.
+- Cycle : `statut` `a_recevoir` → `recu` → `partiel` → `solde`, ou `annule` (avec `annule_motif`). **Aucun DELETE** n'est accordé à la clé anon : un avoir s'annule, il ne disparaît pas.
 
 ### Production
 `commandes`, `lots` (FK `cmd_id`), `bons_de_travail` (BDT ; `cmd_ref`/`lot_ref` texte, `temps_alloue`/`temps_reel`, `priorite`, `prioritaire`, `machine_id`, **`process_id`**, **`poste_id`** = placement explicite au poste dans le planning), **`bons_sous_traitance`** (BDS ; ⚠ nom réel, pas `bons_de_sous_traitance`), `machines` (`statut` operationnel/maintenance/arret, `date_panne`, `cout_h`, **`poste_id`**), `machines_opex`, `shifts`, `absences`, `presences`, `affectations_poste`, `process_atelier` (**`poste_id`**), **`postes`** (poste d'atelier = conteneur machines + process ; `nom`/`code`/`activite`/`couleur`/`ordre`/`statut`).
@@ -38,7 +44,7 @@ PostgreSQL (Supabase), exposée en REST par PostgREST. Les définitions de table
 Relevés eau/bains, balancelles (via tables production/oas + relevés) — un bain non conforme génère une NC.
 
 ### Qualité
-**`non_conformites`** (NC ; `type_nc`, `detecteur`, `lot_ref`, `n_commande`, `nb_pieces`, `gravite`, `categorie`, `entite`, + traitement retour : `decision_retour`, `avoir_id`, `cmdp_id`, `montant_avoir`), `pv_controles`, `quarantaines`, `rapports_8d`, `derogations`, `actions_correctives`, `plans_controle`, `controles_cotes` (SPC/capabilité), `ecme`, `produits_perissables` (`emplacement`, `date_expiration`, `statut`), `mouvements_perissables`.
+**`non_conformites`** (NC ; `type_nc`, `detecteur`, `lot_ref`, `n_commande`, `nb_pieces`, `gravite`, `categorie`, `entite`, + traitement retour : `decision_retour`, `avoir_id`, `cmdp_id`, `montant_avoir`), `pv_controles`, `quarantaines` (+ **décision sur un lot reçu**, migration 008 : `issue` = `retour_fournisseur` / `derogation_fournisseur` / `entree_partielle`, `qte`, `qte_acceptee`, `qte_retour`, `qte_rebut`, `compensation` = `avoir`/`remplacement`, contexte `bc_id`/`bl_id`/`fournisseur_nom`, traçabilité `decision_par`/`decision_le`/`decision_motif`, `derogation_ref`, `avoir_id`, et l'expédition du retour `retour_expedie_le`/`retour_expedie_par`/`retour_ref` — le `statut` garde ses valeurs historiques), `rapports_8d`, `derogations`, `actions_correctives`, `plans_controle`, `controles_cotes` (SPC/capabilité), `ecme`, `produits_perissables` (`emplacement`, `date_expiration`, `statut`), `mouvements_perissables`.
 
 ### Sécurité / HSE (14 tables `hse_*`)
 `hse_risques` (DUER), `hse_incidents`/accidents, `hse_epi`/`hse_epi_dotations`/`hse_epi_zone` (matrice EPI × zone), `hse_produits_chimiques` (FDS), `hse_atex_zones`, `hse_verifications` (VGP), `hse_formations`, `hse_conformite`, `hse_mesures_env`, `hse_dechets`, `hse_rse`, `hse_flash`. Référentiels (zones Z1–Z7, secteurs) dans `src/qref.ts` (code, pas base).
@@ -68,6 +74,7 @@ Toute évolution passe par le skill `erp-db` : DDL via Management API + PAT, `no
 
 **Docker / VM** : `docker/db/migrations/NNN-*.sql`, joués par le conteneur `erp-migrate` à chaque `erp-docker.sh maj` (règles : `docker/db/migrations/README.md`). Le **cloud** n'a pas ce mécanisme : son équivalent se joue à la main, `docker/db/cloud/cloud-N-*.sql` (index et état dans `docker/db/cloud/README.md`).
 - **006** `nomenclature_journal` (journal EN 9100) — cloud : `cloud-5`.
+- **008** décision sur un lot reçu non conforme (colonnes de `quarantaines`) + registre `avoirs_fournisseurs` — cloud : `cloud-6`. Sans elle, la route de décision **refuse** (409) au lieu de décider sans tracer, et l'onglet Achats affiche un bandeau.
 - **007** identifiant généré par défaut : la base née de `schema.sql` avait 50 colonnes `id text NOT NULL` **sans défaut** ; toute insertion sans id y échouait (créer une nomenclature, un nouvel indice, l'entrée de stock d'une nouvelle référence…). `gen_random_uuid()::text` posé **uniquement** là où aucun défaut n'existe. Pas d'équivalent cloud : il génère déjà ses identifiants.
 
 ## Hygiène de la base — diagnostics Supabase et parité cloud ⟷ Docker

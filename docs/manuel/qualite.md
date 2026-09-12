@@ -11,6 +11,7 @@ Maîtrise de la conformité : PV de contrôle, non-conformités, 8D, libération
 - **Non-Conformités** — Déclaration et suivi des NC (interne, fournisseur, client, procédé).
 - **Rapports 8D** — Résolution structurée (D1→D8).
 - **Libération Lots** — Décision de libération / quarantaine.
+- **Quarantaine** — Objets isolés en attente de décision. C’est ici qu’on décide du sort d’un lot reçu non conforme d’un fournisseur (bouton **« Décider »**).
 - **Plan de contrôle** — Plans EN9100.
 - **Audit Conformité** — Module d'audits **SMI QSE + SI** (voir « Audits de conformité » plus bas).
 - **Capabilité** — Cp/Cpk via écart réduit.
@@ -31,6 +32,21 @@ Maîtrise de la conformité : PV de contrôle, non-conformités, 8D, libération
 2. Renseigner **n° facture/affaire**, **lot**, **nb de pièces NC**.
 3. Saisir le **prix de vente unitaire** (→ montant de l'avoir) et/ou le **coût de revient** (→ commande prioritaire).
 4. Choisir : **Refuser** · **Faire un avoir** (part dans Commercial › Avoirs) · **Commande prioritaire** (part dans Commercial › Commandes P).
+
+### Décider du sort d’un lot reçu non conforme (fournisseur)
+1. Un PV de contrôle réception **non conforme** (Expéditions › Réceptions) envoie **toujours** le lot en quarantaine, avec une NC « réception fournisseur ».
+2. Onglet **Quarantaine**, sur la ligne du lot, cliquer le bouton rouge **« Décider »**. Les quarantaines internes (lots de production) gardent le bouton **« Statuer »**.
+3. La fenêtre rappelle le **fournisseur**, le **n° de bon de commande**, le **n° de BL**, la **NC** et le **motif de mise en quarantaine**. La quantité vient du bon de livraison : ne la corriger que si elle est inconnue.
+4. Choisir ce qu’on fait du lot :
+   - **Renvoyer au fournisseur** — tout le lot repart, rien n’entre en stock ;
+   - **Dérogation avec le fournisseur** — le lot est accepté en l’état et entre en stock ; on peut noter la **référence de la dérogation** et une **réfaction obtenue (€ HT)**, qui crée un avoir ;
+   - **Entrée partielle en stock** — saisir la **quantité acceptée** (elle entre en stock) et dire si le reste **repart chez le fournisseur** ou **part au rebut chez nous** (le rebut est inscrit au registre des déchets, service Environnement).
+5. Pour un renvoi ou une entrée partielle, choisir la **compensation** : **Avoir** (inscrit automatiquement dans Achats › Avoirs fournisseurs, montant pré-rempli au prix unitaire du bon de commande, modifiable) ou **Remplacement** (le fournisseur relivre : le bon de commande rouvre sa réception de la quantité non acceptée).
+6. Saisir le **motif** (obligatoire, 3 caractères minimum), puis **« Enregistrer la décision »**. Elle est enregistrée avec l’auteur et la date.
+
+> **Une décision ne se prend qu’une fois** : un second clic est refusé.
+> Après décision, la ligne affiche ce qui a été fait (**Renvoyé au fournisseur**, **Dérogation fournisseur**, **Entrée partielle 6/10**) et ce qui reste à faire (**Retour à expédier**, **Avoir réclamé (Achats)**, **Remplacement attendu**).
+> Si la matière est **renvoyée sans remplacement**, un message prévient qu’elle manque à l’affaire et qu’il faut **repasser commande** : la porte matière n’est pas ouverte.
 
 ## Audits de conformité (SMI QSE + SI)
 

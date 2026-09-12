@@ -27,7 +27,7 @@ Nomenclatures (BOM), analyse des DT, préparation technique, références.
 <!-- /auto -->
 ## Points d'attention
 <!-- auto:notes -->
-Masse en g ; temps en millièmes d'heure ; réglage = coût FIXE/lot ; prix matière auto <3 mois sinon RFQ ; indices A/B/C ; drag-drop des process.
+Masse en g ; temps en millièmes d'heure ; réglage = coût FIXE/lot ; prix matière auto <3 mois sinon RFQ ; indices A/B/C ; drag-drop des process. Supprimer une nomenclature VALIDÉE exige un MOTIF (sinon 400 motif_requis), inscrit au journal EN 9100 avec l’auteur et la date ; sans le journal en base, la suppression d’une fiche suivie est refusée (409) plutôt que tracée nulle part.
 <!-- /auto -->
 
 Le formulaire nomenclature est en **deux colonnes** : saisie des champs à gauche (`minmax(340px, 0.78fr)`), déclaration des process et gamme à droite (`minmax(0, 1.22fr)`) — la gamme porte 10 colonnes depuis l'ajout de ROP/RGM et a besoin de la place.

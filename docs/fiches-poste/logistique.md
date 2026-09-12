@@ -21,7 +21,14 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 
 ![expeditions](../assets/expeditions.png)
 
-### 2. Suivre les alertes de stock
+### 2. Expédier un retour fournisseur
+1. Expéditions › **Envois**, carte **Retours fournisseurs** : les lots que la Qualité a décidé de renvoyer.
+2. Préparer le colis, puis **Expédié** ; la référence du bon de retour ou le n° de suivi est facultative.
+3. La ligne quitte alors la liste ; un second clic est refusé.
+
+![expeditions-envois](../assets/expeditions-envois.png)
+
+### 3. Suivre les alertes de stock
 1. Stock › **Alertes et Réappro.** : articles sous le seuil.
 
 ![stock-rt](../assets/stock-rt.png)
