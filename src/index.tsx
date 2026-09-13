@@ -58,7 +58,7 @@ import {
   createOffre, updateOffre, deleteOffre, createCommande, updateCommande, recomputeCmdAvancement, recomputeCmdCout, getCommandeDetail, getLotDetail, getAffaireDetail,
   getBeRefs, getDashboardData,
   getPlanningOperateurs, getPlanningBDTs, getPlanningBDS, getSousTraitants, getShifts, getAbsences, getSalariesActifs,
-  updateBDT, createBDTRow, supprimerBDTRow, updateBDS, createBDSRow,
+  updateBDT, createBDTRow, supprimerBDTRow, getBDTStrict, idsMorceauxBDT, retirerBDTRows, updateBDS, createBDSRow,
   createNonConformiteRow, updateNonConformite, ncHasRetourCols, ncEstClose, ncEstBloquante, ncRattacheeAffaire, ncHasExtCols, ncHasResponsable,
   createCredit, updateCredit, deleteCredit, getCreditsEnCoursForClient, getCommandesPrioritaires, createCommandePrioritaire, updateCommandePrioritaire, createLot,
   getDerogations, createDerogation, updateDerogation,
@@ -6499,42 +6499,75 @@ app.post('/api/production/bdt/:id/deprogrammer', async (c) => {
   return c.json({ ok: true, data })
 })
 
-// Fractionnement d'un BDT long en plusieurs morceaux (par TEMPS — un BDT n'a pas de quantité).
+// Découpe d'un BDT de la GOULOTTE en plusieurs morceaux (par TEMPS — un BDT n'a pas de quantité).
 // Le morceau 1 = le BDT d'origine réduit ; les morceaux 2..N sont créés (mêmes rattachements),
-// remis « à programmer » pour être placés séparément. Durée/temps répartis au prorata (somme exacte).
+// « à programmer », pour être placés séparément sur le planning.
+// Le temps est LIBRE : chaque morceau reçoit exactement les heures saisies (`parts`), la somme peut
+// différer de la durée d'origine — c'est l'utilisateur qui alloue le temps nécessaire. Avant, la
+// saisie était ramenée au prorata de la durée d'origine et les valeurs invalides retirées en silence.
 app.post('/api/production/bdt/:id/separer', async (c) => {
   const id = c.req.param('id')
-  const body = await c.req.json().catch(() => ({} as any))
-  const bdts = await getBonsDeTravail().catch(() => [] as any[])
-  const b = (bdts as any[]).find((x: any) => String(x.id) === String(id))
+  // Un corps JSON « null » est valide pour c.req.json() : sans le `|| {}`, body.parts levait (500).
+  const body = ((await c.req.json().catch(() => null)) || {}) as any
+  const lu = await getBDTStrict(id)
+  if (lu.error) return c.json({ ok: false, error: 'Lecture du BDT impossible : ' + lu.error + '. Rien n’a été modifié.' }, 503)
+  const b = lu.data
   if (!b) return c.json({ ok: false, error: 'BDT introuvable.' }, 404)
   if (['recu', 'solde'].includes(String(b.statut)) || b.temps_reel != null) return c.json({ ok: false, error: 'BDT déjà démarré ou soldé — non fractionnable.' }, 400)
   if (/^annul/i.test(String(b.statut || ''))) return c.json({ ok: false, error: 'BDT annulé — non fractionnable.' }, 400)
-  const total = Number(b.duree ?? b.temps_alloue ?? 0) || 0
-  if (total <= 0) return c.json({ ok: false, error: 'BDT sans durée — rien à fractionner.' }, 400)
-  let parts: number[] = Array.isArray(body.parts) ? body.parts.map((x: any) => Number(x)).filter((x: number) => Number.isFinite(x) && x > 0) : []
-  const n = Math.max(2, Math.min(12, Number(body.n) || parts.length || 2))
-  if (parts.length < 2) parts = Array.from({ length: n }, () => total / n)
-  if (parts.length > 12) parts = parts.slice(0, 12)
-  const sum = parts.reduce((s, x) => s + x, 0) || 1
-  parts = parts.map((x) => x * total / sum)   // normalise → somme = durée d'origine (aucune heure perdue)
+  if (String(b.statut || '') === 'st' || String(b.operateur_id || '') === 'ST') return c.json({ ok: false, error: 'BDT en sous-traitance — non fractionnable.' }, 400)
+  // On ne découpe QUE dans la goulotte. Critère = négation exacte de `enGoulotte` (prod.tsx) :
+  // posé = statut renseigné autre que « a_programmer », avec un process ET un jour.
+  const stB = String(b.statut || '')
+  if (stB !== '' && stB !== 'a_programmer' && b.process_id && b.date_prevue) {
+    return c.json({ ok: false, error: 'Ce BDT est posé sur le planning : remettez-le dans la goulotte avant de le découper.' }, 409)
+  }
+  // `parts` est OBLIGATOIRE : une valeur en heures par morceau (original compris), 2 à 12 morceaux.
+  if (!Array.isArray(body.parts)) return c.json({ ok: false, error: 'Indiquez le temps de chaque morceau (parts : tableau d’heures).' }, 400)
+  const rawParts: any[] = body.parts
+  if (rawParts.length < 2 || rawParts.length > 12) return c.json({ ok: false, error: 'Un BDT se découpe en 2 à 12 morceaux (' + rawParts.length + ' reçu' + (rawParts.length > 1 ? 's' : '') + ').' }, 400)
   const r4 = (x: number) => Math.round(x * 10000) / 10000
-  const tAll = Number(b.temps_alloue ?? total) || 0
+  // Précision au 1/100 d'heure : la colonne `duree` du cloud ne garde que 2 décimales (1.23456 relu
+  // 1.23). Arrondir ici garde duree = temps_alloue et un total renvoyé égal à ce qui est en base.
+  const r2 = (x: number) => Math.round(x * 100) / 100
+  const parts: number[] = []
+  for (let i = 0; i < rawParts.length; i++) {
+    const x = rawParts[i]
+    // Nombre, ou chaîne décimale simple (« 1,5 ») — pas d'hexadécimal ni d'exposant que Number() accepterait.
+    const v = typeof x === 'number' ? x : (typeof x === 'string' && /^\s*\d+([.,]\d+)?\s*$/.test(x) ? Number(x.trim().replace(',', '.')) : NaN)
+    if (!Number.isFinite(v) || r2(v) <= 0) return c.json({ ok: false, error: 'Morceau ' + (i + 1) + ' : le temps doit être un nombre d’heures supérieur à 0 (au centième d’heure près).' }, 400)
+    parts.push(r2(v))
+  }
+  // Durée d'origine (information et proportion du temps machine). Un BDT à 0 h se découpe aussi.
+  const total = Number(b.duree ?? b.temps_alloue ?? 0) || 0
+  const sumParts = parts.reduce((s, x) => s + x, 0)
   const tMach = b.temps_machine_alloue == null ? null : (Number(b.temps_machine_alloue) || 0)
-  const frac = (d: number) => total > 0 ? d / total : 1 / parts.length
+  // Temps machine : même proportion que sur l'original (rapporté à la durée d'origine, ou à la somme
+  // saisie si l'original n'avait pas de durée).
+  const machOf = (d: number) => (tMach as number) * d / (total > 0 ? total : sumParts)
   // Numérotation depuis la RACINE : re-séparer un BDT (ou un morceau) prend le suffixe libre
   // suivant. Avant, « -M2 » était recalculé à chaque fois : la 2ᵉ séparation heurtait la clé
   // primaire, ne créait rien, et rognait quand même l'original.
   const racine = String(id).replace(/-M\d+$/, '')
+  const dejaLa = await idsMorceauxBDT(racine)
+  if (dejaLa.error) return c.json({ ok: false, error: 'Lecture des morceaux existants impossible : ' + dejaLa.error + '. Rien n’a été modifié.' }, 503)
   let k = 1
-  for (const x of (bdts as any[]).map((y: any) => String(y.id))) {
+  for (const x of dejaLa.data) {
     const m = /-M(\d+)$/.exec(x)
     if (m && x.slice(0, x.length - m[0].length) === racine) k = Math.max(k, Number(m[1]))
   }
-  // Les morceaux vont dans la GOULOTTE : ni poste, ni machine, ni jour, ni heure. Avant, ils
-  // naissaient « programmés » avec le process de l'original et tombaient sur le planning du
-  // jour réel à 6 h.
-  const COPY = ['num_affaire', 'cmd_id', 'cmd_ref', 'lot_id', 'lot_ref', 'client_nom', 'activite', 'piece', 'operation', 'priorite', 'prioritaire', 'matiere_ok', 'pv_requis', 'oas_avant', 'oas_apres', 'seq', 'date_echeance']
+  // Les morceaux vont dans la GOULOTTE : statut « a_programmer », ni jour, ni heure, ni opérateur.
+  // Ils GARDENT le process et le poste de l'original (lien à la gamme) : la goulotte (`enGoulotte`)
+  // et la réception (`/recu`) se fondent sur le statut et le jour, un process renseigné ne pose donc
+  // pas le morceau sur le planning. PAS la machine : les heures machine de Maintenance comptent
+  // tout BDT portant un machine_id (l'étape entière quand temps_machine_alloue est vide) — chaque
+  // morceau aurait multiplié ces heures avant même d'être programmé. `/affecter` la repose au placement.
+  const COPY = ['process_id', 'poste_id', 'affaire_id', 'num_affaire', 'cmd_id', 'cmd_ref', 'lot_id', 'lot_ref', 'client_nom', 'activite', 'piece', 'operation', 'priorite', 'prioritaire', 'matiere_ok', 'pv_requis', 'oas_avant', 'oas_apres', 'seq', 'date_echeance']
+  // Retour arrière vérifié : on dit la vérité si un morceau n'a pas pu être retiré.
+  const retourArriere = async (ids: string[]) => {
+    const restants = await retirerBDTRows(ids)
+    return restants.length ? ' ⚠ Morceau(x) resté(s) en base malgré le retour arrière : ' + restants.join(', ') + ' — à supprimer à la main.' : ''
+  }
   // 1) CRÉER les morceaux d'abord. Au moindre échec, on retire ce qui a été créé et on s'arrête
   //    SANS avoir touché l'original. Avant, l'original était réduit en premier et les échecs
   //    d'insertion avalés : des heures disparaissaient.
@@ -6542,26 +6575,25 @@ app.post('/api/production/bdt/:id/separer', async (c) => {
   for (let i = 1; i < parts.length; i++) {
     k++
     const payload: any = { id: `${racine}-M${k}`, statut: 'a_programmer', operateur_id: null, debut: null, date_prevue: null }
-    for (const col of ['process_id', 'machine_id', 'poste_id']) if (col in b) payload[col] = null
     for (const col of COPY) if (b[col] != null) payload[col] = b[col]
-    payload.duree = r4(parts[i]); payload.temps_alloue = r4(tAll * frac(parts[i]))
-    if (tMach != null) payload.temps_machine_alloue = r4(tMach * frac(parts[i]))
+    payload.duree = parts[i]; payload.temps_alloue = parts[i]
+    if (tMach != null) payload.temps_machine_alloue = r4(machOf(parts[i]))
     const { error } = await createBDTRow(payload)
     if (error) {
-      for (const cid of created) await supprimerBDTRow(cid).catch(() => {})
-      return c.json({ ok: false, error: 'Création du morceau ' + payload.id + ' refusée : ' + error.message + '. Rien n’a été modifié.' }, 400)
+      const reste = await retourArriere(created)
+      return c.json({ ok: false, error: 'Création du morceau ' + payload.id + ' refusée : ' + error.message + '.' + (reste || ' Rien n’a été modifié.') }, 400)
     }
     created.push(payload.id)
   }
   // 2) Réduire l'original au 1ᵉʳ morceau : il garde sa place, son statut et son id.
-  const patchOrig: any = { duree: r4(parts[0]), temps_alloue: r4(tAll * frac(parts[0])) }
-  if (tMach != null) patchOrig.temps_machine_alloue = r4(tMach * frac(parts[0]))
+  const patchOrig: any = { duree: parts[0], temps_alloue: parts[0] }
+  if (tMach != null) patchOrig.temps_machine_alloue = r4(machOf(parts[0]))
   const { error: eUpd } = await updateBDT(id, patchOrig)
   if (eUpd) {
-    for (const cid of created) await supprimerBDTRow(cid).catch(() => {})
-    return c.json({ ok: false, error: 'Réduction de l’original refusée : ' + eUpd.message + '. Les morceaux ont été retirés.' }, 400)
+    const reste = await retourArriere(created)
+    return c.json({ ok: false, error: 'Réduction de l’original refusée : ' + eUpd.message + '.' + (reste || ' Les morceaux ont été retirés.') }, 400)
   }
-  return c.json({ ok: true, count: created.length + 1, created })
+  return c.json({ ok: true, count: created.length + 1, created, total_avant: r4(total), total_apres: r2(sumParts) })
 })
 
 // Nom complet d'un opérateur (réception / soldage d'un BDT, historiques).

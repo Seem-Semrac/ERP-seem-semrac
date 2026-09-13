@@ -2608,6 +2608,29 @@ export async function supprimerBDTRow(id: string): Promise<{ error: string | nul
   return { error: error ? error.message : null }
 }
 
+// Lecture STRICTE d'un BDT par id (découpe) : une panne n'est jamais confondue avec « introuvable ».
+export async function getBDTStrict(id: string): Promise<{ data: any | null; error: string | null }> {
+  const { data, error } = await supabase.from('bons_de_travail').select('*').eq('id', id).maybeSingle()
+  return { data: data ?? null, error: error ? error.message : null }
+}
+
+// Identifiants des morceaux déjà créés pour une racine (`R-M2`, `R-M3`…), sans la limite de page de
+// getBonsDeTravail : un ancien morceau hors page provoquait une collision de clé à la découpe suivante.
+export async function idsMorceauxBDT(racine: string): Promise<{ data: string[]; error: string | null }> {
+  const { data, error } = await supabase.from('bons_de_travail').select('id').like('id', racine + '-M%').limit(10000)
+  return { data: (data ?? []).map((r: any) => String(r.id)), error: error ? error.message : null }
+}
+
+// Retrait des morceaux lors d'un retour arrière, VÉRIFIÉ par relecture (un DELETE refusé par RLS
+// peut répondre sans erreur) : renvoie les id qui sont encore en base.
+export async function retirerBDTRows(ids: string[]): Promise<string[]> {
+  if (!ids.length) return []
+  for (const id of ids) await supabase.from('bons_de_travail').delete().eq('id', id)
+  const { data, error } = await supabase.from('bons_de_travail').select('id').in('id', ids)
+  if (error) return ids.slice()
+  return (data ?? []).map((r: any) => String(r.id))
+}
+
 export async function createBDTRow(payload: Record<string, any>) {
   const { data, error } = await supabase.from('bons_de_travail').insert(payload).select().single()
   return { data, error }

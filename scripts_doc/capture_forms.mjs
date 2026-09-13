@@ -87,13 +87,19 @@ const M = [
   { file: 'form-achats-rfq-reponses', path: '/achats/service', tabClick: '#ach-tab-rfq',   fn: "document.querySelector('#ach-panel-rfq button[onclick^=\"rfqOpen(\"]').click()", wait: 1400 },  // nécessite une RFQ en base
   { file: 'form-achats-fournisseur',  path: '/achats/service', tabClick: '#ach-tab-fourn', fn: "achRefSwitch('fournisseurs'); achRefAdd();" },
   { file: 'form-achats-st',           path: '/achats/service', tabClick: '#ach-tab-fourn', fn: "achRefSwitch('soustraitants'); achRefAdd();" },
-  // Production — #splitModal est imbriquée dans le panneau Dashboard Production.
-  //   Si aucun BDT planifié n'existe en base, on injecte un exemple DANS LE NAVIGATEUR (variable JS
-  //   locale à la page) pour illustrer le formulaire : AUCUNE écriture en base de données.
-  { file: 'form-production-separer',  path: '/production/service', tabClick: '#ptab-dash-prod', wait: 900,
-    fn: "(function(){var b=(typeof BDTS!=='undefined'&&BDTS)?BDTS.filter(function(x){return Number(x.duree||x.tempsAlloue||0)>0;})[0]:null;"
-      + "if(!b&&typeof BDTS!=='undefined'){b={id:'BDT-2026-0001-01-01',num_bdt:'BDT-2026-0001-01-01',piece:'Bride alu 7075',operation:'Usinage CN',duree:12,tempsAlloue:12,qte:40,statut:'programme',lot_ref:'LOT-2026-0001-01'};BDTS.push(b);}"
-      + "if(b) splitBdt(b.id);})()" },
+  // Production — #splitModal vit dans le panneau PLANNING (#ptab-gantt-bdt) et ne s'ouvre QUE par
+  //   les ciseaux d'une carte de la goulotte (plus de clic droit sur le planning). On clique les
+  //   ciseaux d'une carte (de préférence un BDT qui a une durée). Goulotte vide : on injecte une
+  //   carte d'exemple DANS LE NAVIGATEUR (variable JS locale à la page) — AUCUNE écriture en base.
+  //   Un 3e morceau de 1,5 h est ajouté à l'écran pour illustrer le temps libre (rien n'est envoyé).
+  { file: 'form-production-separer',  path: '/production/service', tabClick: '#ptab-gantt-bdt', wait: 900,
+    fn: "(function(){if(typeof BDTS==='undefined') throw new Error('BDTS absent');"
+      + "function carte(){var cs=[].slice.call(document.querySelectorAll('#pendingList .pending-card'));"
+      + "return cs.filter(function(c){var b=BDTS.find(function(x){return String(x.id)===c.getAttribute('data-bdtid');});return b&&Number(b.duree||0)>0;})[0]||cs[0]||null;}"
+      + "var c=carte();"
+      + "if(!c){BDTS.push({id:'BDT-2026-0001-01-01',client:'Client exemple',piece:'Bride alu 7075',operation:'Usinage CN',duree:12,tempsAlloue:12,statut:'a_programmer',process:'pending',datePrevue:null,activite:'Seem',lotId:'LOT-2026-0001-01',numAffaire:'2026-0001',seq:1});buildPending();c=carte();}"
+      + "var btn=c&&c.querySelector('button[onclick*=\"splitBdt(\"]');if(!btn) throw new Error('ciseaux introuvables');"
+      + "btn.click();splitAdd();_splitBdt.vals[_splitBdt.vals.length-1]='1.5';splitRender();})()" },
   // OAS — clôture avec autocontrôle (≠ création de balancelle)
   { file: 'form-oas-cloture-balancelle', path: '/oas/service', fn: "openCloreBalModal('BAL-DEMO','OAS-2026-1042','LOT-2026-014','Bride alu 7075')", wait: 800 },
   // Expéditions (dépendent des tableaux globaux EXP_PLAN / EXP_BC)

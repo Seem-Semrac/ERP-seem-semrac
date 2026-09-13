@@ -1664,7 +1664,7 @@ ${serviceHeader({
     <div id="pendingDropZone" class="card" style="padding:14px 16px;border-radius:14px;transition:outline .12s;margin-bottom:14px;" ondragover="onPendingOver(event)" ondragleave="onPendingLeave(event)" ondrop="onPendingDrop(event)">
       <div style="margin-bottom:10px;">
         <div style="font-weight:700;color:#1e293b;font-size:.82rem;display:flex;align-items:center;gap:6px;"><i class="fas fa-inbox" style="color:#f97316;"></i> BDT à classer / en attente de programmation<span id="cntPend" style="background:#ffedd5;color:#c2410c;font-size:.65rem;font-weight:700;padding:1px 7px;border-radius:999px;margin-left:auto;">0</span></div>
-        <div style="font-size:.62rem;color:#94a3b8;margin-top:3px;">Triés par échéance · chemin critique · Glisser une carte sur le planning pour la programmer · déposer ici une barre du planning pour la déprogrammer · <i class="fas fa-scissors"></i> pour séparer</div>
+        <div style="font-size:.62rem;color:#94a3b8;margin-top:3px;">Triés par échéance · chemin critique · Glisser une carte sur le planning pour la programmer · déposer ici une barre du planning pour la déprogrammer · <i class="fas fa-scissors"></i> sur une carte pour découper le BDT en morceaux (temps libre par morceau) — la découpe se fait uniquement ici, dans la goulotte</div>
       </div>
       <div id="pendingList" style="overflow-y:auto;max-height:240px;display:flex;flex-wrap:wrap;gap:8px;margin:0 -4px;padding:4px;"></div>
     </div>
@@ -1767,6 +1767,21 @@ ${serviceHeader({
         <div style="margin-top:12px;"><label class="form-label">Observations</label><input id="sm_motif" type="text" placeholder="Motif / n° lot matière…" class="form-input"/></div>
       </div>
       <div style="padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;"><button onclick="closeModal('sortieModal')" class="btn btn-secondary">Annuler</button><button onclick="confirmSortie()" class="btn" style="background:linear-gradient(135deg,#0ea5e9,#0284c7);color:white;"><i class="fas fa-check"></i> Valider la sortie</button></div>
+    </div>
+  </div>
+  <!-- Modal découpe d'un BDT de la GOULOTTE (ciseaux d'une carte) : temps LIBRE par morceau.
+       Rangée dans CE panneau (planning) : dans un autre onglet, masqué, elle ne s'affichait pas. -->
+  <div id="splitModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center;z-index:500;">
+    <div style="background:white;border-radius:20px;box-shadow:0 24px 64px rgba(0,0,0,.25);width:100%;max-width:520px;margin:1rem;overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
+      <div style="padding:14px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#8b5cf6,#7c3aed);"><h3 style="font-weight:700;color:white;font-size:.95rem;"><i class="fas fa-scissors" style="margin-right:8px;"></i>Découper le BDT en morceaux</h3><button type="button" onclick="closeModal('splitModal')" style="color:rgba(255,255,255,.7);background:none;border:none;font-size:1.2rem;cursor:pointer;"><i class="fas fa-times"></i></button></div>
+      <div style="padding:20px;overflow-y:auto;">
+        <div id="splitInfo" style="background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:12px;font-size:.82rem;"></div>
+        <div style="font-size:.72rem;color:#64748b;background:#f5f3ff;border:1px solid #ede9fe;border-radius:9px;padding:8px 11px;margin-bottom:12px;"><i class="fas fa-circle-info" style="color:#7c3aed;margin-right:5px;"></i>Saisissez le temps de chaque morceau. Chaque morceau reçoit <strong>exactement</strong> le temps saisi et reste dans la goulotte : vous le programmerez séparément. Le premier morceau garde le numéro du BDT.</div>
+        <div id="splitParts" style="display:grid;gap:8px;"></div>
+        <button type="button" id="splitAddBtn" onclick="splitAdd()" style="margin-top:10px;font-size:.74rem;font-weight:700;color:#7c3aed;background:#f5f3ff;border:1px dashed #c4b5fd;border-radius:8px;padding:6px 12px;cursor:pointer;"><i class="fas fa-plus" style="margin-right:5px;"></i>Ajouter un morceau</button>
+        <div id="splitTotal" style="margin-top:12px;font-size:.8rem;"></div>
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;"><button type="button" onclick="closeModal('splitModal')" class="btn btn-secondary">Annuler</button><button type="button" id="splitConfirmBtn" onclick="splitSave()" class="btn btn-primary" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);"><i class="fas fa-scissors"></i> Découper</button></div>
     </div>
   </div>
 </div>
@@ -2118,24 +2133,6 @@ ${serviceHeader({
       <div style="padding:14px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#f97316,#ea580c);"><h3 style="font-weight:700;color:white;font-size:.95rem;"><i class="fas fa-copy" style="margin-right:8px;"></i>Dupliquer le BDT</h3><button onclick="document.getElementById('dupModal').style.display='none'" style="color:rgba(255,255,255,.7);background:none;border:none;font-size:1.2rem;cursor:pointer;"><i class="fas fa-times"></i></button></div>
       <div style="padding:20px;"><div id="dupInfo" style="background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:14px;font-size:.82rem;"></div><div><label class="form-label">Réaffecter à l'opérateur</label><select id="dupOp" class="form-input">${opsForModal2.map(o=>`<option value="${o.id}">${escX(o.nom)} (${o.activite} · ${o.shift})</option>`).join('')}</select></div><div style="margin-top:10px;"><label class="form-label">Heure de début</label><input id="dupDebut" type="time" value="06:00" class="form-input"/></div></div>
       <div style="padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;"><button onclick="document.getElementById('dupModal').style.display='none'" class="btn btn-secondary">Annuler</button><button onclick="confirmDup()" class="btn btn-primary"><i class="fas fa-copy"></i> Dupliquer & Affecter</button></div>
-    </div>
-  </div>
-
-  <!-- Modal fractionnement : séparer un BDT long en morceaux (par temps) -->
-  <div id="splitModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center;z-index:500;">
-    <div style="background:white;border-radius:20px;box-shadow:0 24px 64px rgba(0,0,0,.25);width:100%;max-width:520px;margin:1rem;overflow:hidden;">
-      <div style="padding:14px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#8b5cf6,#7c3aed);"><h3 style="font-weight:700;color:white;font-size:.95rem;"><i class="fas fa-scissors" style="margin-right:8px;"></i>Séparer le BDT en morceaux</h3><button onclick="document.getElementById('splitModal').style.display='none'" style="color:rgba(255,255,255,.7);background:none;border:none;font-size:1.2rem;cursor:pointer;"><i class="fas fa-times"></i></button></div>
-      <div style="padding:20px;">
-        <div id="splitInfo" style="background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:14px;font-size:.82rem;"></div>
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-          <label class="form-label" style="margin:0;">Nombre de morceaux</label>
-          <input id="splitN" type="number" min="2" max="12" value="2" oninput="splitRender(true)" style="width:80px;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 9px;font-size:.85rem;text-align:center;"/>
-          <button type="button" onclick="splitRender(true)" style="font-size:.72rem;font-weight:700;color:#7c3aed;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:5px 10px;cursor:pointer;">Répartir également</button>
-        </div>
-        <div id="splitParts" style="display:grid;gap:8px;"></div>
-        <div id="splitTotal" style="margin-top:10px;font-size:.78rem;"></div>
-      </div>
-      <div style="padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;"><button onclick="document.getElementById('splitModal').style.display='none'" class="btn btn-secondary">Annuler</button><button id="splitConfirmBtn" onclick="splitSave()" class="btn btn-primary" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);"><i class="fas fa-scissors"></i> Séparer</button></div>
     </div>
   </div>
 </div>
@@ -2902,7 +2899,7 @@ function affaireMatch(b){ if(!filtAffaire) return true; var q=filtAffaire.toLowe
 function setAffaireFilter(v){ filtAffaire=(v||'').trim(); var b=document.getElementById('affClear'); if(b) b.style.display=filtAffaire?'inline-flex':'none'; buildAll(); }
 function clearAffaireFilter(){ var i=document.getElementById('affSearch'); if(i) i.value=''; setAffaireFilter(''); }
 // Ordre file d'attente : échéance client au plus tôt, puis chemin critique (lot + séquence d'opérations)
-function pendSort(a,b){ var da=a.dateEcheance||'9999-12-31', db=b.dateEcheance||'9999-12-31'; if(da!==db) return da<db?-1:1; var ka=lotKey(a), kb=lotKey(b); if(ka!==kb) return ka<kb?-1:1; var sa=(a.seq==null?9999:a.seq), sb=(b.seq==null?9999:b.seq); if(sa!==sb) return sa-sb; return a.id<b.id?-1:1; }
+function pendSort(a,b){ var da=a.dateEcheance||'9999-12-31', db=b.dateEcheance||'9999-12-31'; if(da!==db) return da<db?-1:1; var ka=lotKey(a), kb=lotKey(b); if(ka!==kb) return ka<kb?-1:1; var sa=(a.seq==null?9999:a.seq), sb=(b.seq==null?9999:b.seq); if(sa!==sb) return sa-sb; return String(a.id).localeCompare(String(b.id),undefined,{numeric:true}); }
 // Surbrillance de tous les BDT d'un même lot dans le planning (pour repérer le précédent)
 function highlightLot(key){ var bars=document.querySelectorAll('#ganttBody .bdt-bar'); for(var i=0;i<bars.length;i++){ var el=bars[i]; if(el.dataset.lot===key){ el.style.outline='3px solid #facc15'; el.style.outlineOffset='1px'; el.style.zIndex='25'; el.style.opacity='1'; } else { el.style.opacity='0.28'; } } }
 function clearHighlight(){ var bars=document.querySelectorAll('#ganttBody .bdt-bar'); for(var i=0;i<bars.length;i++){ var el=bars[i]; el.style.outline=''; el.style.outlineOffset=''; el.style.zIndex=''; if(!filtAffaire) el.style.opacity=''; } if(filtAffaire) buildGantt(); }
@@ -3129,15 +3126,8 @@ function openStatutMenu(e,bdt){
   var labels={recu:'<i class="fas fa-play" style="margin-right:6px;color:#f59e0b;"></i>Réceptionner (Reçu)',solde:'<i class="fas fa-check-double" style="margin-right:6px;color:#22c55e;"></i>Solder le BDT',deprogrammer:'<i class="fas fa-undo" style="margin-right:6px;color:#f97316;"></i>Déprogrammer (retour en attente)'};
   if(next.length){ var sep=document.createElement('div'); sep.style.cssText='padding:.32rem .7rem;font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#94a3b8;background:#fafbfc;border-top:1px solid #f1f5f9;border-bottom:1px solid #f1f5f9;'; sep.innerHTML='Statut · matricule + PIN'; menu.appendChild(sep); }
   next.forEach(function(s){ var item=document.createElement('div'); item.style.cssText='padding:.45rem .7rem;font-size:.78rem;cursor:pointer;transition:background .1s;'+(s==='deprogrammer'?'border-top:1px solid #f1f5f9;':''); item.innerHTML=labels[s]||s; item.addEventListener('mouseenter',function(){ item.style.background='#f1f5f9'; }); item.addEventListener('mouseleave',function(){ item.style.background=''; }); item.addEventListener('click',function(){ menu.remove(); if(s==='solde') openSoldageModal(bdt.id); else if(s==='deprogrammer') deprogramBDT(bdt.id); else openRecuModal(bdt.id); }); menu.appendChild(item); });
-  // Action : séparer un BDT long en plusieurs morceaux (tant qu il n est ni reçu ni soldé)
-  if(bdt.statut!=='recu' && bdt.statut!=='solde'){
-    var sepItem=document.createElement('div'); sepItem.style.cssText='padding:.45rem .7rem;font-size:.78rem;cursor:pointer;transition:background .1s;border-top:1px solid #f1f5f9;';
-    sepItem.innerHTML='<i class="fas fa-scissors" style="margin-right:6px;color:#8b5cf6;"></i>Séparer en morceaux';
-    sepItem.addEventListener('mouseenter',function(){ sepItem.style.background='#f1f5f9'; });
-    sepItem.addEventListener('mouseleave',function(){ sepItem.style.background=''; });
-    sepItem.addEventListener('click',function(){ menu.remove(); splitBdt(bdt.id); });
-    menu.appendChild(sepItem);
-  }
+  // Pas de découpe depuis le planning : un BDT se découpe UNIQUEMENT dans la goulotte (ciseaux
+  // de sa carte). Pour découper un BDT posé, le déprogrammer d abord.
   setTimeout(function(){ document.addEventListener('click',function h(){ menu.remove(); document.removeEventListener('click',h); },{once:true}); },50);
   document.body.appendChild(menu);
 }
@@ -3277,7 +3267,7 @@ function buildPending(){
           +(b.dateEcheance?'<span style="color:#ef4444;font-weight:600;"><i class="fas fa-flag-checkered" style="margin-right:3px;"></i>'+b.dateEcheance+'</span>':'')
         +'</div>'
       +'</div>'
-      +'<button type="button" onclick="event.stopPropagation();splitBdt(\\''+b.id+'\\')" ondblclick="event.stopPropagation()" title="Séparer ce BDT en morceaux" style="flex-shrink:0;align-self:center;background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe;border-radius:7px;padding:4px 7px;cursor:pointer;font-size:.72rem;"><i class="fas fa-scissors"></i></button>'
+      +'<button type="button" onclick="event.stopPropagation();splitBdt(\\''+b.id+'\\')" ondblclick="event.stopPropagation()" title="Découper ce BDT en morceaux" style="flex-shrink:0;align-self:center;background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe;border-radius:7px;padding:4px 7px;cursor:pointer;font-size:.72rem;"><i class="fas fa-scissors"></i></button>'
       +'</div>';
   }).join(''):(filtAffaire?'<div style="text-align:center;padding:20px;color:#d1d5db;font-size:.75rem;"><i class="fas fa-search" style="display:block;font-size:1.5rem;margin-bottom:4px;"></i>Aucun BDT en attente pour « '+filtAffaire+' »</div>':'<div style="text-align:center;padding:20px;color:#d1d5db;font-size:.75rem;"><i class="fas fa-check-circle" style="display:block;font-size:1.5rem;margin-bottom:4px;"></i>Tous les BDT sont affectés</div>');
 }
@@ -3843,53 +3833,93 @@ var _dupBdtId=null;
 var _dupBdtData=${sjX(bdtsToday2.map(b=>({id:b.id,client:b.client,piece:b.piece,operation:b.operation,duree:b.duree,priorite:b.priorite})))};
 function dupBDT(id){ _dupBdtId=id; var bdt=_dupBdtData.find(function(b){return b.id===id;}); if(!bdt) return; document.getElementById('dupInfo').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.78rem;"><div><span style="color:#94a3b8;">BDT: </span><strong>'+bdt.id+'</strong></div><div><span style="color:#94a3b8;">Opération: </span>'+bdt.operation+'</div><div><span style="color:#94a3b8;">Client: </span>'+bdt.client+'</div><div><span style="color:#94a3b8;">Durée: </span>'+bdt.duree+'h</div></div><div style="margin-top:8px;font-size:.72rem;color:#f59e0b;"><i class="fas fa-info-circle" style="margin-right:4px;"></i>Un nouveau BDT sera créé avec un nouvel identifiant.</div>'; var m=document.getElementById('dupModal'); if(m) m.style.display='flex'; }
 function confirmDup(){ var m=document.getElementById('dupModal'); if(m) m.style.display='none'; pushNotif('ok','fa-copy','BDT <strong>'+_dupBdtId+'</strong> dupliqué → Opérateur réaffecté. Nouveau BDT créé.'); _dupBdtId=null; }
-// ── Fractionnement d un BDT long en morceaux (par temps) ──
-var _splitBdt=null;
-function splitBdt(id){
-  var bdt=BDTS.find(function(b){return b.id===id;}); if(!bdt) return;
-  var total=Number(bdt.duree||bdt.tempsAlloue||0)||0;
-  if(total<=0){ pushNotif('err','fa-ban','BDT sans durée — rien à fractionner.'); return; }
-  _splitBdt={id:id,total:total};
-  document.getElementById('splitInfo').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.78rem;"><div><span style="color:#94a3b8;">BDT : </span><strong>'+id+'</strong></div><div><span style="color:#94a3b8;">Opération : </span>'+(bdt.operation||'')+'</div><div style="grid-column:1/-1;"><span style="color:#94a3b8;">Durée totale : </span><strong>'+total+' h</strong></div></div>';
-  document.getElementById('splitN').value=2;
-  splitRender(true);
-  document.getElementById('splitModal').style.display='flex';
+// ── Découpe d un BDT de la GOULOTTE en morceaux : temps LIBRE par morceau ──
+//    Seul point d entrée : les ciseaux d une carte de goulotte (plus rien depuis le planning).
+//    Chaque morceau reçoit EXACTEMENT le temps saisi ; la somme peut différer de la durée
+//    d origine (comparaison purement informative). Le serveur refuse (409) un BDT posé.
+var _splitBdt=null, _splitWired=false, SPLIT_MIN=2, SPLIT_MAX=12;
+function splitEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(ch){ return ch==='&'?'&amp;':ch==='<'?'&lt;':ch==='>'?'&gt;':'&quot;'; }); }
+function splitFmtH(x){ var r=Math.round((Number(x)||0)*1000)/1000; return String(r).replace('.',','); }
+// Durée actuelle lue comme le serveur : duree, sinon temps alloué (0 si aucune).
+function splitDureeOf(bdt){ var d=(bdt.duree!=null&&bdt.duree!=='')?Number(bdt.duree):Number(bdt.tempsAlloue||0); return (isFinite(d)&&d>0)?d:0; }
+// Précision = le 1/100 d heure : c est ce que garde la colonne duree en base (cf. route /separer).
+function splitR2(x){ return Math.round((Number(x)||0)*100)/100; }
+function splitValid(x){ return isFinite(x)&&Math.round(x*100)>0; }
+// Délégation d événements sur la liste des morceaux (posée une seule fois).
+function splitWire(){
+  if(_splitWired) return; var box=document.getElementById('splitParts'); if(!box) return; _splitWired=true;
+  box.addEventListener('input',function(e){ var t=e.target; if(!_splitBdt||!t||!t.classList||!t.classList.contains('split-part')) return; var i=Number(t.getAttribute('data-i')); if(i>=0&&i<_splitBdt.vals.length){ _splitBdt.vals[i]=t.value; splitTotalCheck(); } });
+  box.addEventListener('click',function(e){ var t=(e.target&&e.target.closest)?e.target.closest('.split-del'):null; if(!t||t.disabled||!_splitBdt) return; splitRemove(Number(t.getAttribute('data-i'))); });
 }
-function splitPartsRead(){ return Array.prototype.map.call(document.querySelectorAll('#splitParts .split-part'),function(inp){ return Number(inp.value)||0; }); }
-function splitRender(equal){
+function splitBdt(id){
+  var bdt=BDTS.find(function(b){return String(b.id)===String(id);}); if(!bdt) return;
+  if(!enGoulotte(bdt)){ pushNotif('warn','fa-exclamation-triangle','Seul un BDT de la goulotte se découpe : déprogrammez-le d’abord.'); return; }
+  splitWire();
+  var total=splitDureeOf(bdt);
+  // Moitié arrondie au 1/100 ; le 2ᵉ morceau prend le reste pour que le total reste identique.
+  var h1=total>0?splitR2(total/2):0, h2=total>0?splitR2(total-h1):0;
+  _splitBdt={id:bdt.id,total:total,vals:[total>0?String(h1):'',total>0?String(h2):''],busy:false};
+  document.getElementById('splitInfo').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.78rem;">'
+    +'<div><span style="color:#94a3b8;">BDT : </span><strong>'+splitEsc(bdt.id)+'</strong></div>'
+    +'<div><span style="color:#94a3b8;">Opération : </span>'+splitEsc(bdt.operation||'—')+'</div>'
+    +'<div><span style="color:#94a3b8;">Pièce : </span>'+splitEsc(bdt.piece||'—')+'</div>'
+    +'<div><span style="color:#94a3b8;">Durée actuelle : </span><strong>'+splitFmtH(total)+' h</strong></div>'
+    +'</div>';
+  splitRender();
+  document.getElementById('splitModal').style.display='flex';
+  var first=document.querySelector('#splitParts .split-part'); if(first){ try{ first.focus(); }catch(e){} }
+}
+function splitRender(){
   if(!_splitBdt) return;
-  var n=Math.max(2,Math.min(12,parseInt(document.getElementById('splitN').value,10)||2));
-  var prev = equal ? [] : splitPartsRead();
-  var each=Math.round(_splitBdt.total/n*10000)/10000;
-  var html='';
+  var vals=_splitBdt.vals, n=vals.length, lock=n<=SPLIT_MIN, html='';
   for(var i=0;i<n;i++){
-    var val=(!equal && prev[i]!=null) ? prev[i] : each;
-    html+='<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:.74rem;color:#64748b;width:82px;">Morceau '+(i+1)+'</span><input class="split-part" type="number" step="0.01" min="0" value="'+val+'" oninput="splitTotalCheck()" style="flex:1;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 9px;font-size:.82rem;"/><span style="font-size:.72rem;color:#94a3b8;">h</span></div>';
+    html+='<div style="display:flex;align-items:center;gap:8px;">'
+      +'<span style="font-size:.74rem;color:#64748b;width:82px;font-weight:600;">Morceau '+(i+1)+'</span>'
+      +'<input class="split-part" data-i="'+i+'" type="number" step="0.25" min="0" inputmode="decimal" placeholder="heures" value="'+splitEsc(vals[i])+'" style="flex:1;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 9px;font-size:.82rem;"/>'
+      +'<span style="font-size:.72rem;color:#94a3b8;">h</span>'
+      +'<button type="button" class="split-del" data-i="'+i+'"'+(lock?' disabled':'')+' title="'+(lock?'Il faut au moins 2 morceaux':'Retirer ce morceau')+'" style="background:#fff1f2;color:#e11d48;border:1px solid #fecdd3;border-radius:7px;padding:5px 8px;font-size:.72rem;cursor:'+(lock?'not-allowed':'pointer')+';opacity:'+(lock?'.4':'1')+';"><i class="fas fa-trash-can"></i></button>'
+      +'</div>';
   }
   document.getElementById('splitParts').innerHTML=html;
+  var add=document.getElementById('splitAddBtn');
+  if(add){ var full=n>=SPLIT_MAX; add.disabled=full; add.style.opacity=full?'.45':'1'; add.style.cursor=full?'not-allowed':'pointer'; add.title=full?'12 morceaux au maximum':''; }
   splitTotalCheck();
 }
+// Ajouter / retirer une ligne ne touche PAS aux temps déjà saisis (conservés dans _splitBdt.vals).
+function splitAdd(){
+  if(!_splitBdt||_splitBdt.vals.length>=SPLIT_MAX) return;
+  _splitBdt.vals.push(''); splitRender();
+  var ins=document.querySelectorAll('#splitParts .split-part'); var last=ins[ins.length-1]; if(last){ try{ last.focus(); }catch(e){} }
+}
+function splitRemove(i){
+  if(!_splitBdt||_splitBdt.vals.length<=SPLIT_MIN||!(i>=0&&i<_splitBdt.vals.length)) return;
+  _splitBdt.vals.splice(i,1); splitRender();
+}
+function splitPartsRead(){ return _splitBdt?_splitBdt.vals.map(function(v){ var s=String(v==null?'':v).trim().replace(',','.'); return s===''?NaN:Number(s); }):[]; }
 function splitTotalCheck(){
   if(!_splitBdt) return;
-  var parts=splitPartsRead(); var sum=Math.round(parts.reduce(function(s,x){return s+x;},0)*10000)/10000;
-  var allPos=parts.every(function(x){return x>0;});
-  var ok=allPos && Math.abs(sum-_splitBdt.total)<0.001;
-  var el=document.getElementById('splitTotal'); var btn=document.getElementById('splitConfirmBtn');
-  el.innerHTML = ok
-    ? '<span style="color:#16a34a;font-weight:700;"><i class="fas fa-circle-check" style="margin-right:4px;"></i>Somme = '+sum+' h (= durée d origine)</span>'
-    : '<span style="color:#b45309;font-weight:700;"><i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>Somme = '+sum+' h · durée d origine '+_splitBdt.total+' h</span> <span style="color:#94a3b8;">— la répartition sera ajustée au prorata à l enregistrement.</span>';
-  if(btn){ btn.disabled=!allPos; btn.style.opacity=allPos?'1':'.5'; }
+  var parts=splitPartsRead();
+  var ok=parts.length>=SPLIT_MIN&&parts.length<=SPLIT_MAX&&parts.every(splitValid);
+  var sum=splitR2(parts.reduce(function(s,x){ return s+((isFinite(x)&&x>0)?splitR2(x):0); },0));
+  var diff=splitR2(sum-_splitBdt.total);
+  var cmp=diff===0?'identique au BDT d’origine':(diff>0?'+'+splitFmtH(diff)+' h par rapport au BDT d’origine':'−'+splitFmtH(-diff)+' h par rapport au BDT d’origine');
+  var el=document.getElementById('splitTotal'), btn=document.getElementById('splitConfirmBtn');
+  if(el) el.innerHTML='<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;"><span style="font-weight:800;color:#1e293b;">Temps alloué total : '+splitFmtH(sum)+' h</span><span style="color:'+(diff===0?'#16a34a':'#64748b')+';font-size:.74rem;">('+cmp+')</span></div>'
+    +(ok?'':'<div style="margin-top:4px;color:#b45309;font-size:.72rem;"><i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>Renseignez un temps supérieur à 0 pour chaque morceau.</div>');
+  if(btn){ var dis=!ok||_splitBdt.busy; btn.disabled=dis; btn.style.opacity=dis?'.5':'1'; btn.style.cursor=dis?'not-allowed':'pointer'; }
 }
 function splitSave(){
-  if(!_splitBdt) return;
+  if(!_splitBdt||_splitBdt.busy) return;
   var parts=splitPartsRead();
-  if(!parts.every(function(x){return x>0;})){ pushNotif('err','fa-ban','Chaque morceau doit avoir une durée supérieure à 0.'); return; }
-  var url='/api/production/bdt/'+encodeURIComponent(_splitBdt.id)+'/separer';
-  fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({parts:parts})})
-    .then(function(r){return r.json();}).then(function(j){
-      if(j&&j.ok){ var m=document.getElementById('splitModal'); if(m) m.style.display='none'; pushNotif('ok','fa-scissors','BDT séparé en '+j.count+' morceaux — les nouveaux sont dans la goulotte, à programmer.',4500); setTimeout(function(){ softReload(); },700); }
-      else pushNotif('err','fa-ban',(j&&j.error)||'Fractionnement échoué.',4500);
-    }).catch(function(){ pushNotif('err','fa-times','Erreur réseau.',4000); });
+  if(parts.length<SPLIT_MIN||parts.length>SPLIT_MAX||!parts.every(splitValid)){ pushNotif('err','fa-ban','Chaque morceau doit avoir un temps supérieur à 0.'); return; }
+  var cur=_splitBdt; cur.busy=true; splitTotalCheck();
+  var url='/api/production/bdt/'+encodeURIComponent(cur.id)+'/separer';
+  fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({parts:parts.map(splitR2)})})
+    .then(function(r){ return r.json().catch(function(){ return {ok:false,error:'Réponse inattendue du serveur (HTTP '+r.status+').'}; }); })
+    .then(function(j){
+      if(j&&j.ok){ closeModal('splitModal'); _splitBdt=null; pushNotif('ok','fa-scissors','BDT découpé en '+j.count+' morceaux — total alloué '+splitFmtH(j.total_apres)+' h',4500); setTimeout(function(){ softReload(); },700); }
+      else { cur.busy=false; if(_splitBdt===cur) splitTotalCheck(); pushNotif('err','fa-ban',splitEsc((j&&j.error)||'Découpe échouée.'),5000); }
+    }).catch(function(){ cur.busy=false; if(_splitBdt===cur) splitTotalCheck(); pushNotif('err','fa-times','Erreur réseau.',4000); });
 }
 
 // ─── Initialisation ──────────────────────────────────────────

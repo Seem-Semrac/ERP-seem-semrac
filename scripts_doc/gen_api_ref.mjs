@@ -32,9 +32,22 @@ for (const r of routes) {
 const apiGroups = [...groups.entries()].filter(([k]) => k.startsWith('api/')).sort((a, b) => b[1].length - a[1].length)
 const pageGroups = [...groups.entries()].filter(([k]) => k.startsWith('pages/')).sort((a, b) => b[1].length - a[1].length)
 
+const dst = join(ROOT, 'docs', 'technique', '07-api-reference.md')
+// Contrats détaillés ÉCRITS À LA MAIN : le bloc délimité par ces marqueurs est relu dans le fichier
+// existant et CONSERVÉ tel quel à chaque génération (le reste du fichier est réécrit).
+const MANU_OPEN = '<!-- manuel:contrats -->'
+const MANU_CLOSE = '<!-- /manuel:contrats -->'
+let manuel = ''
+try {
+  const prev = readFileSync(dst, 'utf-8')
+  const i = prev.indexOf(MANU_OPEN), j = prev.indexOf(MANU_CLOSE)
+  if (i >= 0 && j > i) manuel = prev.slice(i, j + MANU_CLOSE.length)
+} catch { /* premier passage : pas de fichier existant */ }
+
 let md = `# Référence API & routes
 
-> **Fichier généré** par \`node scripts_doc/gen_api_ref.mjs\` — ne pas éditer à la main.
+> **Fichier généré** par \`node scripts_doc/gen_api_ref.mjs\` — ne pas éditer à la main, **sauf** le bloc
+> « Contrats détaillés » (entre les marqueurs \`manuel:contrats\`), conservé d'une génération à l'autre.
 > Source : \`src/index.tsx\` (${routes.length} routes). Les numéros de ligne sont indicatifs (au moment de la génération).
 
 ## Routes API (${apiGroups.reduce((n, [, v]) => n + v.length, 0)})
@@ -50,12 +63,12 @@ for (const [fam, list] of apiGroups) {
     md += `| ${r.method} | \`${r.path}\` | L${r.line} |\n`
   md += '\n'
 }
+if (manuel) md += manuel + '\n\n'
 md += `## Routes pages (${pageGroups.reduce((n, [, v]) => n + v.length, 0)})\n\n| Méthode | Chemin | index.tsx |\n|---|---|---|\n`
 for (const [, list] of pageGroups)
   for (const r of list.sort((a, b) => a.path.localeCompare(b.path)))
     md += `| ${r.method} | \`${r.path}\` | L${r.line} |\n`
 
-const dst = join(ROOT, 'docs', 'technique', '07-api-reference.md')
 mkdirSync(dirname(dst), { recursive: true })
 writeFileSync(dst, md)
 console.log('OK → docs/technique/07-api-reference.md (' + routes.length + ' routes, ' + apiGroups.length + ' familles API)')

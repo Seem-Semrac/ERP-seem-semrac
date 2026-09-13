@@ -2,6 +2,42 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-13 — Découper un BDT : dans la goulotte seulement, temps libre par morceau
+
+*« Pour découper les BDT je veux pouvoir les découper uniquement dans la goulotte, pas dans le
+planning. Je veux pouvoir simplement les découper en plusieurs fois et allouer le temps nécessaire pour
+réaliser le BDT comme j'en ai envie ; après il se découpera en plusieurs fois dans la goulotte. »*
+
+**1 · La découpe se fait depuis la goulotte, et seulement là.** Les ciseaux d'une carte de goulotte
+ouvrent la fenêtre ; l'entrée « Séparer en morceaux » du clic droit des barres du planning est
+supprimée, et le serveur refuse (409) de découper un BDT posé sur le planning — il faut d'abord le
+remettre dans la goulotte. **Défaut trouvé au passage** : la fenêtre de découpe était rangée depuis sa
+création dans l'onglet caché « Dashboard Production » ; ouverte depuis le planning, elle ne
+s'affichait tout simplement pas.
+
+**2 · Le temps est libre.** Une ligne d'heures par morceau, « + Ajouter un morceau » (2 à 12), les
+saisies ne se réinitialisent plus quand on ajoute ou retire une ligne. Chaque morceau reçoit
+**exactement** le temps saisi (au 1/100 d'heure) : plus d'ajustement au prorata, la somme peut
+dépasser ou rester sous la durée d'origine — le pied de fenêtre affiche l'écart, à titre indicatif.
+Un BDT sans durée se découpe aussi. Les morceaux restent dans la goulotte, avec le process et le poste
+de l'original, à programmer séparément.
+
+**3 · Robustesse de `POST /api/production/bdt/:id/separer`.** `parts` obligatoire et validé (400
+explicite au lieu du filtrage et de la troncature silencieux ; chaînes décimales simples seulement ;
+corps `null` → 400 au lieu de 500) ; lecture **stricte** du BDT par id et des suffixes `-Mk` par
+requête ciblée (l'ancienne lecture avalait les pannes et s'arrêtait à 1000 lignes) ; retour arrière
+**vérifié par relecture** (un morceau resté en base est nommé) ; précision alignée sur la colonne
+`duree` du cloud (2 décimales) pour garder `duree = temps_alloue` ; `machine_id` **non recopié** sur
+les nouveaux morceaux (les heures machine de Maintenance auraient compté l'étape entière pour chaque
+morceau avant même sa programmation). Goulotte triée numériquement (`-M10` après `-M2`).
+
+Vérifié : typecheck 0, harnais 60/0 ; **54 + 16 contrôles d'API** sur des BDT `-TEST-` (supprimés, relus
+à 0) ; écran au navigateur (fenêtre visible depuis le planning, ajout/retrait sans perte, bouton grisé,
+clic droit sans découpe, aucune erreur console) ; revue adverse du diff. Doc : manuel Production (md +
+HTML + `manuels_contenu.ts`), `06-modules/production.md`, contrat détaillé dans `07-api-reference.md`
+(bloc écrit à la main désormais conservé par `gen_api_ref.mjs`), capture `form-production-separer.png`,
+étude Laravel. Aucune migration.
+
 ## 2026-09-12 — Lot fournisseur non conforme : renvoi, dérogation ou entrée partielle · registre des avoirs fournisseurs · motif de suppression
 
 *« Mettre un motif plutôt. Pour la quarantaine quand c'est une NC fournisseur, une libération de lot,
