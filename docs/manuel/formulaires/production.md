@@ -14,7 +14,8 @@
 | Opération | liste déroulante (selon l'activité choisie : pour Seem — Tronçonnage, Usinage, Ébavurage, Thermocollage, Oxydation anodique sulfurique, Emballage ; pour Semrac — Poinçonnage / Laser, Ébavurage, Pliage, Montage, Soudure, Fraisage / Taraudage, Ponçage, Sérigraphie, Emballage) | Oui | Le type de travail à réaliser. La liste ne se remplit qu'après avoir choisi l'activité. | Pliage |
 | Pièce / Référence | texte | Oui | La référence de la pièce à fabriquer. | DISSIP-A24 |
 | Quantité | nombre | Non | Le nombre de pièces à produire (présent uniquement sur le planning). | 100 |
-| Durée estimée (h) / Durée (h) | nombre | Oui | Le temps prévu pour l'opération, en heures (on peut mettre des demi-heures). | 2.5 |
+| Durée estimée (h) / Durée (h) | nombre | Oui | Le temps prévu pour l'opération, en heures (on peut mettre des demi-heures), réglage compris. | 2.5 |
+| dont réglage (h) | nombre ≥ 0 (pas 0,05) | Non | La part de la durée consacrée au réglage : fixe, faite une seule fois, elle reste sur le morceau 1 si le BDT est découpé, et elle sert au chemin critique (l'étape suivante du lot démarre après). Vide = réglage inconnu. Ne peut pas dépasser la durée. | 0.5 |
 | Heure de début / Heure début | date (heure) | Non | L'heure à laquelle l'opération commence dans la journée. Par défaut 06:00. | 06:00 |
 | Priorité | liste déroulante (Normal, Urgent, Critique) | Non | L'importance du travail ; « Critique » l'affiche en rouge sur le planning. | Urgent |
 | Type | liste déroulante (Interne – opérateur, Sous-traitance) | Non | Indique si l'opération est faite en interne ou envoyée chez un sous-traitant. « Sous-traitance » affiche des cases supplémentaires (uniquement sur le planning). | Interne – opérateur |
@@ -52,6 +53,18 @@
 
 💡 **Astuce :** Vous n'avez pas besoin de calculer le temps passé : il est déduit tout seul de l'heure de début (à la réception) et de l'heure de fin.
 ⚠️ **Attention :** Sans heure de fin ni identification (matricule + PIN), le BDT ne peut pas être soldé. Si vous choisissez « Non-conformité », une fiche est envoyée automatiquement à la Qualité.
+
+## Découper le BDT en morceaux
+**Quand l'utiliser :** Pour réaliser une opération en plusieurs fois (plusieurs créneaux, jours ou postes).
+**Où le trouver :** Dans la goulotte « BDT à classer » du planning, bouton **ciseaux** de la carte du BDT (un BDT posé sur le planning se déprogramme d'abord).
+
+| Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
+|---|---|---|---|---|
+| Réglage (h) | nombre ≥ 0 | Non | **Verrouillé** quand le réglage est connu (enregistré sur le BDT, retrouvé sans ambiguïté dans la gamme, ou déjà porté par un autre morceau : il vaut alors 0). **Saisissable** seulement quand il est inconnu, sur le BDT d'origine : vide = tout le temps est traité en réalisation. Un bouton « Utiliser … h » recopie la valeur proposée par la gamme quand elle est incertaine. Ne peut pas dépasser la durée du BDT. | 0.5 |
+| Réalisation (h) — une ligne par morceau | nombre | Oui | Le temps de réalisation de chaque morceau (2 à 12 morceaux, pré-remplis à la moitié de la réalisation). Supérieur à 0, sauf le morceau 1 qui peut ne porter que le réglage (0). Le morceau 1 affiche « soit … h au total ». | 2 |
+
+💡 **Astuce :** Le pied de la fenêtre compare la réalisation répartie à la réalisation d'origine et donne le temps alloué total (réglage + réalisation) : le temps est libre, le total peut différer de la durée d'origine.
+⚠️ **Attention :** Si la lecture du réglage échoue, « Découper » reste grisé : « Relire le réglage », ou saisissez-le. Si le BDT a changé depuis l'ouverture de la fenêtre (autre écran), la découpe est refusée « Page périmée » : rechargez le planning. Une découpe se défait tant qu'aucun morceau n'a commencé : bouton « Annuler la découpe » sur la carte d'un morceau.
 
 ## Nouvelle Sous-Traitance (commande ST)
 **Quand l'utiliser :** Pour envoyer une opération (traitement de surface, peinture, zingage…) chez un prestataire extérieur.
@@ -163,9 +176,19 @@
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
-| Shift à appliquer | liste déroulante (Matin, Journée, Soir, Absent, Effacer (non programmé)) | Oui | La plage horaire à mettre en place. « Effacer » retire la programmation. | Matin |
+| Shift à appliquer | liste déroulante (Matin 6h-14h, Journée 7h-17h, Après-midi 14h-22h, Soirée 22h-6h, Absent, Effacer (non programmé)) | Oui | La plage horaire à mettre en place. « Effacer » vide réellement les cases (plus d'« absent » enregistré à la place). Le message final compte les cases enregistrées et les échecs. | Matin 6h-14h |
 | Jours concernés | liste déroulante (Lun → Ven (5 jours ouvrés), Lun → Dim (7 jours)) | Oui | Les jours de la semaine à programmer. | Lun → Ven (5 jours ouvrés) |
 | Opérateurs cibles | case à cocher (une case par opérateur) | Oui | Les opérateurs auxquels appliquer le shift. Des boutons permettent de tout cocher/décocher ou de sélectionner par site (Seem / Semrac). | Antoine D., Karim B. |
 
 💡 **Astuce :** Utilisez les boutons « Seem » / « Semrac » pour cocher rapidement tous les opérateurs d'un site.
-⚠️ **Attention :** Les jours où un opérateur est déjà en absence RH ne sont pas modifiés, même s'il est coché.
+⚠️ **Attention :** Les jours où un opérateur est déjà en absence RH ne sont pas modifiés, même s'il est coché. La semaine doit avoir été lue (sinon : « réessayez dans un instant »).
+
+## Case de présence (menu d'un jour)
+**Quand l'utiliser :** Pour programmer ou corriger le créneau d'un opérateur sur un jour.
+**Où le trouver :** Onglet Présence opérateurs → clic (ou Entrée) sur la case de l'opérateur et du jour.
+
+| Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
+|---|---|---|---|---|
+| Créneau | menu (Matin 6h-14h, Journée 7h-17h, Après-midi 14h-22h, Soirée 22h-6h, Absent, Effacer) | Oui | Un choix = un seul enregistrement. En cas d'échec, la case revient à la dernière valeur enregistrée et un message donne la raison. « Effacer » vide la case. Au clavier : flèches haut/bas, Entrée, Échap ou Tab pour refermer. | Journée 7h-17h |
+
+⚠️ **Attention :** Les cases d'une semaine jamais lue sont verrouillées (« … » pendant la lecture, « ? » en cas d'échec : bouton « Réessayer ») ; les absences RH (cadenas) ne se modifient pas ici.

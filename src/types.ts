@@ -242,6 +242,9 @@ export interface BonDeTravail {
   temps_alloue?: number
   temps_reel?: number                   // coût réel : t = temps_reel ?? duree (shared.ts coutReelBdt)
   temps_machine_alloue?: number
+  temps_reglage?: number | null         // h, compris dans duree ; null = inconnu (migration 011 / cloud-9)
+  duree_avant_decoupe?: number | null   // h, racine avant sa 1re découpe (« Annuler la découpe »)
+  temps_machine_avant_decoupe?: number | null
   process_id?: string | null            // process du BDT → taux machine s'il est de type machine
   created_at?: string
   updated_at?: string

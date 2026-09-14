@@ -25,6 +25,7 @@ Le middleware appelle `canAccess(user, path, method)` sur **chaque** requête (h
 7. Sinon : niveau du service dans `ROLE_MATRIX` — **écriture** (POST/PATCH/DELETE) exige `rw`, **lecture** (GET) accepte `r` ou `rw`. Multi-rôles → meilleur niveau.
 
 > ⚠ **Règle d'or pour toute nouvelle route API** : ajouter sa **famille** à `API_FAM_SERVICE` (sinon elle est refusée par défaut). Voir skill `erp-new-module`.
+> ⚠ **Corollaire : un bouton du service X qui appelle `/api/Y/…` est gaté sur Y.** Exemple corrigé le 14/09/2026 (lot C) : « Approuver » un congé dans Production › Présence appelait `/api/rh/conge/:id/valider` → **403** pour le rôle `production` (pas de droit `rh`). Correctif : une route dans la **famille du service appelant**, `POST /api/production/conge/:id/valider`, qui restreint elle-même son périmètre (congés d'opérateurs `est_operateur`, jamais son propre congé) — plutôt qu'une exception dans `canAccess`. Le harnais (`AUTH_ENFORCE=off`, GET seulement) n'attrape pas ce défaut : le vérifier avec `canAccess` ou une session réelle.
 
 ## Les 13 rôles (`ROLE_MATRIX`)
 `rw` = lecture+écriture · `r` = lecture seule · (vide) = aucun accès.

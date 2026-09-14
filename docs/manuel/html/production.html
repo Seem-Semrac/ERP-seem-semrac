@@ -55,9 +55,17 @@
     <ul class="points">
       <li><b>Barre d'outils</b> : sélecteur de date avec flèches ‹ › (jour précédent / suivant), filtres d'activité et de type de process (voir sous-onglets ci-dessous), légende des couleurs, champ de recherche « N° d'affaire… » et bouton orange <b>« Nouveau BDT »</b>. Un bouton <b>« Demande d'achat »</b> (borne opérateur au matricule + PIN) est disponible dans le bandeau du service.</li>
       <li><b>7 tuiles de statistiques</b> : Programmés, Reçus, Soldés, Soldés NC, En attente, Sous-trait., Process.</li>
-      <li><b>Goulotte « BDT à classer / en attente de programmation »</b> au-dessus du planning : les cartes y sont triées par échéance client puis par chemin critique (séquence des opérations du lot). Chaque carte porte la couleur de son lot, la pièce, la durée, l'activité et l'échéance. On peut aussi y <em>redéposer</em> une barre du planning pour la déprogrammer. Un BDT <b>n'apparaît sur le planning qu'une fois programmé</b> : tant qu'il est « à programmer », il reste dans la goulotte. Chaque carte porte un bouton <b>ciseaux</b> pour le découper en plusieurs morceaux — c'est le <b>seul</b> endroit où l'on découpe un BDT.</li>
-      <li><b>Le Gantt</b> : lignes = postes de travail (avec le nombre de process et de machines du poste), colonnes = heures de 5&nbsp;h à 23&nbsp;h. Chaque barre BDT est colorée selon son statut et porte un liseré gauche à la <b>couleur de son lot</b> — la même couleur que sur le planning BST, pour suivre un lot d'un planning à l'autre. Dans la colonne de gauche, chaque poste offre trois sous-cases <b>Matin / Ap-m / Soir</b> qui reçoivent les opérateurs affectés.</li>
-      <li><b>« Affectation des ressources aux postes »</b> : les opérateurs du jour classés en quatre colonnes (Matin, Après-midi, Soir, Absent). On glisse une carte — ou on la sélectionne au clic — vers une sous-case de process du planning.</li>
+      <li><b>Goulotte « BDT à classer / en attente de programmation »</b> au-dessus du planning : les cartes y sont triées par échéance client, puis par lot et rang dans la gamme — c'est un simple <b>tri d'affichage</b> (le vrai chemin critique est contrôlé à la pose, voir plus bas). Chaque carte porte la couleur de son lot, la pièce, la durée, l'activité et l'échéance, et en plus :
+        <ul>
+          <li>une <b>mini-barre</b> en deux parties — le <b>réglage</b> hachuré violet, puis la <b>réalisation</b> bleue — avec « <b>Réglage 0,5 h · Réalisation 3,5 h</b> » (ou « réglage non renseigné » en orange quand il est inconnu) ;</li>
+          <li>une pastille <b>« M2 · 2/3 »</b> sur un morceau de BDT découpé ;</li>
+          <li>une ligne <b>« au plus tôt : 15/09 8h30 · après le réglage de … »</b> quand l'étape précédente du lot impose une heure de départ ;</li>
+          <li>le bouton <b>ciseaux</b> pour découper le BDT — c'est le <b>seul</b> endroit où l'on découpe — et, sur chaque morceau d'un BDT découpé, le bouton <b>« Annuler la découpe »</b> (flèche de retour, orange).</li>
+        </ul>
+        On peut aussi y <em>redéposer</em> une barre du planning pour la déprogrammer. Un BDT <b>n'apparaît sur le planning qu'une fois programmé</b> : tant qu'il est « à programmer », il reste dans la goulotte.</li>
+      <li><b>Carte « Enchaînements à revoir »</b> (rouge, affichée seulement s'il y en a) : les étapes déjà posées <b>avant leur au plus tôt</b> — avant la fin du réglage de l'étape précédente, avant la fin complète d'une étape suivie d'une OAS ou d'un envoi en sous-traitance, ou avant le retour d'une sous-traitance. Rien n'est décalé automatiquement : un clic sur une ligne ouvre l'étape sur son planning.</li>
+      <li><b>Le Gantt</b> : lignes = postes de travail (avec le nombre de process et de machines du poste), colonnes = heures de 5&nbsp;h à 23&nbsp;h. Chaque barre BDT est colorée selon son statut et porte un liseré gauche à la <b>couleur de son lot</b> — la même couleur que sur le planning BST, pour suivre un lot d'un planning à l'autre. En tête de barre, un segment <b>hachuré</b> représente le <b>temps de réglage</b> ; un trait sombre marque sa fin, qui est le repère du chemin critique. La 3ᵉ ligne de la barre dit « <b>8h · 0,5 + 3,5 h</b> · client » (heure de début · réglage + réalisation). Une pastille rouge (maillon brisé) signale une barre posée avant son au plus tôt. Dans la colonne de gauche, chaque poste offre quatre sous-cases <b>Matin / Journée / Après-midi / Soirée</b> qui reçoivent les opérateurs affectés.</li>
+      <li><b>« Affectation des ressources aux postes »</b> : les opérateurs du jour classés en cinq colonnes (Matin, Journée, Après-midi, Soirée, Absent). On glisse une carte — ou on la sélectionne au clic — vers une sous-case de créneau d'un poste du planning.</li>
     </ul>
     <p>Couleurs des barres et statuts d'un BDT :
       <span class="b b-mut">à programmer</span> (dans la goulotte),
@@ -68,29 +76,29 @@
       Un petit carré blanc ou noir devant le numéro du BDT signale une oxydation <em>incolore</em> ou <em>noire</em> à produire pour le lot.</p>
     <figure class="shot">
       <img src="../../assets/production-service.png" alt="Capture du planning Gantt BDT par poste" loading="lazy">
-      <figcaption><b>Planning Gantt BDT</b> — la goulotte des BDT à classer au-dessus, le Gantt par poste au-dessous ; notez le liseré de couleur « lot » sur chaque barre et les sous-cases Matin / Ap-m / Soir des postes.</figcaption>
+      <figcaption><b>Planning Gantt BDT</b> — la goulotte des BDT à classer au-dessus (mini-barre réglage | réalisation sur chaque carte), le Gantt par poste au-dessous ; notez le liseré de couleur « lot » et le segment de réglage hachuré en tête de chaque barre, ainsi que les sous-cases Matin / Journée / Après-midi / Soirée des postes.</figcaption>
     </figure>
 
     <h3>Pas à pas</h3>
     <p><b>Programmer un BDT sur un poste :</b></p>
     <ol class="steps">
       <li>Choisissez la date en haut à gauche (le planning affiche les BDT prévus ce jour-là).</li>
-      <li>Prenez une carte dans la goulotte <b>« BDT à classer »</b> et glissez-la sur la ligne du poste : un guide vertical orange indique l'heure de dépôt (arrondie au quart d'heure). Vous pouvez aussi <em>cliquer</em> la carte puis cliquer le poste.</li>
-      <li>L'ERP vérifie qu'un process du poste est compatible (même activité Seem/Semrac que le BDT) ; sinon le dépôt est refusé avec un message. Si c'est bon, le BDT passe <span class="b b-info">programmé</span> à la date et l'heure choisies.</li>
-      <li>Pour déplacer un BDT déjà programmé, glissez sa barre sur un autre poste ou un autre horaire. Pour le remettre en attente : clic droit → <b>« Déprogrammer (retour en attente) »</b>, ou glissez la barre dans la goulotte. Un BDT déjà reçu ne se déplace et ne se déprogramme plus.</li>
+      <li>Prenez une carte dans la goulotte <b>« BDT à classer »</b> et glissez-la sur la ligne du poste : un guide vertical orange indique l'heure de dépôt (arrondie au quart d'heure). Si l'étape précédente du lot impose une heure de départ, une <b>zone rouge hachurée</b> couvre la partie de la journée où l'on ne peut pas encore commencer, avec « au plus tôt 9h30 · après le réglage de … ». Vous pouvez aussi <em>cliquer</em> la carte puis cliquer le poste : le BDT garde alors son heure s'il en avait une, sinon il est posé à <b>6&nbsp;h</b>, l'heure où le planning l'affiche.</li>
+      <li>L'ERP vérifie qu'un process du poste est compatible (même activité Seem/Semrac que le BDT) ; sinon le dépôt est refusé avec un message. Il applique ensuite le <b>chemin critique</b> (détail ci-dessous) : posé trop tôt le bon jour, le BDT est <b>calé</b> à l'heure au plus tôt et un message orange « Calé à 9h30 (chemin critique) » le dit ; posé un jour <b>antérieur</b> au jour au plus tôt, il est <b>refusé</b>. Si c'est bon, le BDT passe <span class="b b-info">programmé</span> à la date et l'heure retenues.</li>
+      <li>Pour déplacer un BDT déjà programmé, glissez sa barre sur un autre poste ou un autre horaire. Si ce déplacement rend invalides les étapes suivantes déjà posées, un message les liste (« 1 étape suivante à revoir ») : elles ne sont <b>jamais décalées automatiquement</b> et apparaissent dans la carte « Enchaînements à revoir ». Pour remettre un BDT en attente : clic droit → <b>« Déprogrammer (retour en attente) »</b>, ou glissez la barre dans la goulotte. Un BDT déjà reçu ne se déplace et ne se déprogramme plus.</li>
     </ol>
     <p><b>Réceptionner puis solder un BDT (traçabilité opérateur au PIN) :</b></p>
     <ol class="steps">
-      <li>Quand l'opérateur démarre l'opération : <b>double-cliquez sur la barre</b> du BDT programmé (ou clic droit → <b>« Réceptionner (Reçu) »</b>). La modale demande le <b>matricule</b> et le <b>code PIN</b> de l'opérateur ; l'heure de début réelle est enregistrée et la barre passe en jaune.</li>
+      <li>Quand l'opérateur démarre l'opération : <b>double-cliquez sur la barre</b> du BDT programmé (ou clic droit → <b>« Réceptionner (Reçu) »</b>). La modale rappelle le BDT avec ses lignes <b>Réglage</b> et <b>Réalisation</b>, puis demande le <b>matricule</b> et le <b>code PIN</b> de l'opérateur ; l'heure de début réelle est enregistrée et la barre passe en jaune.</li>
       <li>Une fois le BDT reçu, le <b>double-clic</b> sur sa barre ouvre la <b>déclaration de sortie matière</b>.</li>
-      <li>À la fin : clic droit → <b>« Solder le BDT »</b>. Saisissez l'heure de fin réelle, le résultat (✅ Conforme, ⚠️ Reprise partielle, ❌ Non-conformité), d'éventuelles observations, puis le matricule + PIN de l'opérateur.</li>
+      <li>À la fin : clic droit → <b>« Solder le BDT »</b> (la fenêtre rappelle la durée allouée, le réglage et la réalisation). Saisissez l'heure de fin réelle, le résultat (✅ Conforme, ⚠️ Reprise partielle, ❌ Non-conformité), d'éventuelles observations, puis le matricule + PIN de l'opérateur.</li>
       <li>Si le résultat est « Non-conformité », un champ <b>Gravité</b> apparaît (Mineure / Majeure / Critique / Bloquante). La fiche NC part automatiquement à la Qualité ; une gravité <b>Critique</b> ou <b>Bloquante</b> bloque l'expédition de l'affaire jusqu'à traitement ou dérogation.</li>
       <li>Le temps réel est calculé et comparé au temps alloué — il alimente le journal des temps et les indicateurs (TRS, écarts).</li>
     </ol>
     <p><b>Déclarer une sortie matière :</b> double-cliquez une barre BDT → la modale « Déclaration de sortie matière » s'ouvre. Choisissez le type (<b>Matière</b>, <b>Fourniture</b> ou <b>Consommable machine</b>), l'article du stock, la quantité, et pour un consommable la <b>machine</b> ou le <b>poste</b> concerné (traçage OPEX). La sortie décrémente le stock et se rattache au coût du lot.</p>
-    <p><b>Affecter les opérateurs aux postes :</b> dans le bloc « Affectation des ressources », glissez une carte opérateur (ou cliquez-la pour la sélectionner) puis déposez-la dans une sous-case <b>Matin / Ap-m / Soir</b> d'un poste du planning. L'affectation est enregistrée et tracée pour le jour ; la croix sur l'étiquette la retire. Un opérateur peut tenir plusieurs process et créneaux.</p>
+    <p><b>Affecter les opérateurs aux postes :</b> dans le bloc « Affectation des ressources », glissez une carte opérateur (ou cliquez-la pour la sélectionner) puis déposez-la dans une sous-case <b>Matin / Journée / Après-midi / Soirée</b> d'un poste du planning. L'affectation est enregistrée et tracée pour le jour ; la croix sur l'étiquette la retire. Un opérateur peut tenir plusieurs process et créneaux.</p>
     <ul class="points">
-      <li>Les opérateurs sont classés automatiquement dans la colonne correspondant à leur <b>présence du jour</b> (Matin, Après-midi, Soir) — celle que vous saisissez dans l'onglet <b>Présence opérateurs</b>.</li>
+      <li>Les opérateurs sont classés automatiquement dans la colonne correspondant à leur <b>présence du jour</b> (Matin, Journée, Après-midi, Soirée) — celle que vous saisissez dans l'onglet <b>Présence opérateurs</b>. Pour un jour dont les présences ne sont pas encore chargées (autre semaine), la liste affiche « Chargement des présences du jour… » le temps de les lire, au lieu de ranger tout le monde en « Absent ».</li>
       <li>Un opérateur <b>absent</b> ou <b>non planifié</b> (présence non saisie) apparaît grisé dans la colonne « Absent » et n'est <b>pas déplaçable</b> : passez d'abord par l'onglet Présence pour le rendre affectable.</li>
       <li>Le contrôle de <b>compétence</b> reste porté par le process : un BDT ne peut être programmé que sur un poste dont un process couvre son opération et son activité (Seem/Semrac).</li>
     </ul>
@@ -105,26 +113,67 @@
     <p>Un <b>clic simple</b> sur une barre BDT (ou la sélection d'une carte en attente) resserre le planning autour de l'<b>étape cliquée</b> : au lieu d'afficher tous les postes traversés par le lot, l'ERP ne garde que <b>trois lignes au maximum</b> — le poste de l'étape précédente, celui de l'étape cliquée et celui de l'étape suivante de la gamme. Vous voyez ainsi « d'où arrive » et « où repart » la pièce, sans le bruit du reste de l'atelier.</p>
     <ol class="steps">
       <li>Cliquez une barre BDT du Gantt (ou une carte de la goulotte) : les lignes de postes sans rapport avec l'étape disparaissent.</li>
-      <li>Un <b>bandeau violet « Focus étape »</b> s'affiche au-dessus du planning et résume la position dans la gamme, par exemple : <span class="b b-mut">LOT-2026-0042 · etape 2/4 — Pliage (avant : Poinçonnage · apres : ST Aalberts)</span>. Si le lot ne comporte qu'une opération, le bandeau indique « seule etape ».</li>
+      <li>Un <b>bandeau violet « Focus étape »</b> s'affiche au-dessus du planning et résume la position dans la gamme, par exemple : <span class="b b-mut">LOT-2026-0042 · etape 2/4 — Pliage (avant : Poinçonnage · apres : ST Aalberts)</span>. Si le lot ne comporte qu'une opération, le bandeau indique « seule etape ». Les <b>morceaux</b> d'un BDT découpé comptent pour <b>une seule étape</b>, et le bandeau ajoute l'<b>au plus tôt</b> de l'étape (« · au plus tôt : 15/09 8h30 (après le réglage de …) »).</li>
       <li>Pour revenir à la vue complète : bouton <b>« Tout afficher »</b> du bandeau, ou re-cliquez la <b>même</b> barre. Cliquer une <em>autre</em> barre déplace simplement le focus sur cette nouvelle étape.</li>
       <li>Le focus se libère aussi automatiquement dès que vous programmez le BDT sélectionné.</li>
     </ol>
     <div class="note"><b>Bon à savoir — les étapes sous-traitées :</b> la gamme d'un lot mélange des opérations faites à l'atelier (BDT) et des opérations confiées à un prestataire (BST/BDS). Si l'étape d'avant ou d'après est <b>sous-traitée</b>, elle est nommée dans le bandeau sous la forme <b>« ST &lt;nom du sous-traitant&gt; »</b> — mais elle n'ajoute évidemment <b>aucune ligne</b> au planning des postes, puisqu'elle ne se fait pas dans l'atelier. Le comptage des étapes (« etape 2/4 ») tient bien compte des deux, internes et sous-traitées.</div>
 
+    <h3>Chemin critique : l'étape suivante démarre après le réglage de la précédente</h3>
+    <p>Deux étapes qui se suivent dans la gamme d'un lot <b>peuvent se chevaucher</b>, mais l'étape d'après ne peut commencer qu'une fois le <b>réglage</b> de l'étape d'avant terminé. L'ERP calcule pour chaque étape son <b>au plus tôt</b> — un jour et une heure — et l'applique quand vous posez un BDT ou planifiez un BST. <b>Programmer n'est pas produire</b> : rien n'est retiré du planning et rien n'est jamais décalé tout seul.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Situation</th><th>Au plus tôt de l'étape suivante</th></tr></thead>
+      <tbody>
+        <tr><td>Étape précédente posée, avec un réglage</td><td>Début de l'étape précédente <b>+ son réglage</b>. Exemple : posée à 8&nbsp;h avec 0,5&nbsp;h de réglage → au plus tôt 8h30.</td></tr>
+        <tr><td>Étape précédente sans réglage, ou réglage non renseigné</td><td>Son début (le réglage inconnu compte pour 0, et c'est dit).</td></tr>
+        <tr><td>Étape précédente découpée</td><td>Le morceau qui porte le réglage fait foi. S'il est encore dans la goulotte, l'étape suivante ne démarre pas avant le début du plus tôt des morceaux déjà posés.</td></tr>
+        <tr><td>Étape précédente posée <b>sans heure</b> (posée au clic)</td><td>Comptée à 6&nbsp;h, l'heure où le planning l'affiche.</td></tr>
+        <tr><td>Étape précédente déjà <b>reçue</b></td><td>Son heure de début réelle.</td></tr>
+        <tr><td>Étape précédente <b>soldée</b>, ou dans la goulotte</td><td>Aucune contrainte (la goulotte donne une simple information « étape précédente non programmée »).</td></tr>
+        <tr><td>Passage à l'<b>OAS</b> entre les deux, ou étape suivante <b>sous-traitée</b></td><td>La <b>fin complète</b> de l'étape précédente (un lot passe entier à l'OAS, un carton ne part pas à moitié).</td></tr>
+        <tr><td>Étape précédente <b>sous-traitée</b></td><td>Le jour de retour (retour effectif, sinon date d'envoi + durée), à 5&nbsp;h.</td></tr>
+        <tr><td>Morceaux d'une même étape</td><td>Un morceau sans réglage démarre après le réglage du morceau qui le porte.</td></tr>
+      </tbody>
+    </table></div>
+    <ul class="points">
+      <li>Le planning compte en <b>heures de grille</b>, de 5&nbsp;h à 23&nbsp;h : un réglage qui dépasse 23&nbsp;h reprend le lendemain à 5&nbsp;h. Les week-ends ne sont pas exclus.</li>
+      <li>Posé <b>trop tôt le bon jour</b> : le BDT est calé à l'au plus tôt. Posé <b>un jour avant</b> : refus « Au plus tôt le 15/09 à 8h30 (après le réglage de …) : posez … ce jour-là ou après. »</li>
+      <li>La barre de réglage hachurée et son trait de fin servent de repère : l'étape suivante se place après ce trait.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/production-gantt-reglage.png" alt="Planning avec la carte Enchaînements à revoir, le focus étape et une barre en violation" loading="lazy">
+      <figcaption><b>Chemin critique</b> — en haut, la carte « Enchaînements à revoir » : BDT-…-01-02 est posé à 8&nbsp;h alors que le réglage de l'étape précédente (0,48&nbsp;h, commencé à 8&nbsp;h) finit à 8h29. Sur les cartes de la goulotte, la ligne « au plus tôt ». Dans le Gantt, le segment hachuré en tête de la barre BDT-…-01-01 est son réglage, et la pastille rouge signale la barre à revoir.</figcaption>
+    </figure>
+
     <h3>Découper un BDT en plusieurs morceaux</h3>
-    <p>Un BDT peut être découpé en plusieurs morceaux, pour réaliser l'opération en plusieurs fois (plusieurs créneaux, jours ou postes). La découpe se fait <b>uniquement dans la goulotte</b>, avec le bouton <b>ciseaux</b> de la carte du BDT : il n'y a <b>pas</b> de découpe depuis le planning. Vous allouez <b>librement</b> le temps de chaque morceau, selon ce qu'il faut réellement pour réaliser le travail.</p>
+    <p>Un BDT peut être découpé en plusieurs morceaux, pour réaliser l'opération en plusieurs fois (plusieurs créneaux, jours ou postes). La découpe se fait <b>uniquement dans la goulotte</b>, avec le bouton <b>ciseaux</b> de la carte du BDT : il n'y a <b>pas</b> de découpe depuis le planning. <b>Seul le temps de réalisation se découpe</b> : le <b>réglage</b> est fixe, fait une seule fois, et il reste sur le morceau 1.</p>
     <ol class="steps">
-      <li>Dans la goulotte « BDT à classer », cliquez le bouton <b>ciseaux</b> de la carte. La fenêtre rappelle le BDT : numéro, opération, pièce et <b>durée actuelle</b>.</li>
-      <li>Deux morceaux sont proposés, pré-remplis à la moitié de la durée actuelle (vides si le BDT n'a pas de durée). Saisissez les <b>heures</b> de chaque morceau (par pas d'un quart d'heure, ou toute autre valeur).</li>
+      <li>Dans la goulotte « BDT à classer », cliquez le bouton <b>ciseaux</b> de la carte. La fenêtre rappelle le BDT (numéro, opération, pièce) et décompose sa durée : « <b>Durée 4 h = Réglage 0,5 h</b> (fixe, une seule fois, reste sur le morceau 1) <b>+ Réalisation 3,5 h</b> ». Si le BDT fait déjà partie d'une découpe, un bandeau jaune le rappelle.</li>
+      <li>Le champ <b>Réglage</b> est :
+        <ul>
+          <li><b>verrouillé</b> quand le réglage est connu (enregistré sur le BDT, ou retrouvé sans ambiguïté dans la gamme), ou quand il est déjà porté par un autre morceau (le champ vaut alors 0) ;</li>
+          <li><b>saisissable</b> quand il est inconnu, sur le BDT d'origine seulement : vide = tout le temps est traité en réalisation. Si la gamme donne une valeur sans certitude, un bouton <b>« Utiliser 0,48 h »</b> la recopie — elle n'est jamais saisie à votre place ;</li>
+          <li>le réglage ne peut pas dépasser la durée du BDT.</li>
+        </ul>
+        Si la lecture du réglage échoue (réseau), « Découper » reste grisé : cliquez <b>« Relire le réglage »</b>, ou saisissez-le vous-même.</li>
+      <li>Saisissez la <b>réalisation</b> (en heures) de chaque morceau : deux morceaux sont proposés, pré-remplis à la moitié de la réalisation. Le morceau 1 indique « soit … h au total » (réglage + réalisation) ; il peut ne porter que le réglage (réalisation 0).</li>
       <li><b>« + Ajouter un morceau »</b> ajoute une ligne (12 morceaux au maximum) ; la <b>corbeille</b> retire une ligne (il en faut au moins 2). Ajouter ou retirer une ligne ne touche pas aux temps déjà saisis.</li>
-      <li>Le pied de la fenêtre affiche le <b>temps alloué total</b> et le compare à la durée d'origine (« +1,5 h par rapport au BDT d'origine », « identique », « −2 h »). Ce n'est qu'une information : le total peut être plus grand ou plus petit que la durée d'origine.</li>
-      <li>Cliquez <b>« Découper »</b> (le bouton reste grisé tant qu'un morceau est vide ou à 0). Le BDT d'origine devient le premier morceau et garde son numéro ; les suivants sont créés avec les suffixes <b>-M2</b>, <b>-M3</b>… Chaque morceau reçoit <b>exactement</b> le temps saisi et reste dans la goulotte : programmez-les ensuite séparément en les glissant sur le planning.</li>
+      <li>Le pied de la fenêtre affiche la <b>réalisation répartie</b> (comparée à la réalisation d'origine, à titre indicatif) et le <b>temps alloué total</b> (réglage + réalisation). Le temps est libre : le total peut différer de la durée d'origine.</li>
+      <li>Cliquez <b>« Découper »</b>. Le BDT d'origine devient le premier morceau, garde son numéro et le réglage ; les suivants sont créés avec les suffixes <b>-M2</b>, <b>-M3</b>… (réglage 0). Chaque morceau reste dans la goulotte : programmez-les ensuite séparément.</li>
     </ol>
-    <div class="note"><b>Un BDT déjà posé sur le planning ne se découpe pas.</b> Remettez-le d'abord dans la goulotte (clic droit sur sa barre → « Déprogrammer », ou glissez la barre dans la goulotte), puis découpez-le. Un BDT reçu, soldé, annulé ou sous-traité ne se découpe pas non plus. Les morceaux gardent le rattachement du BDT d'origine (affaire, lot, commande, étape de gamme).</div>
+    <div class="note"><b>Un BDT déjà posé sur le planning ne se découpe pas.</b> Remettez-le d'abord dans la goulotte (clic droit sur sa barre → « Déprogrammer », ou glissez la barre dans la goulotte), puis découpez-le. Un BDT reçu, soldé, annulé ou sous-traité ne se découpe pas non plus. Les morceaux gardent le rattachement du BDT d'origine (affaire, lot, commande, étape de gamme). Si le BDT a changé depuis l'ouverture de la fenêtre (découpé depuis un autre écran, durée modifiée), la découpe est refusée avec « <b>Page périmée</b> » : rechargez le planning.</div>
     <figure class="shot">
       <img src="../../assets/form-production-separer.png" alt="Fenêtre de découpe d'un BDT en morceaux" loading="lazy">
-      <figcaption><b>Découper le BDT en morceaux</b> — le rappel du BDT en haut, une ligne d'heures par morceau avec sa corbeille, le bouton « + Ajouter un morceau », puis le <b>temps alloué total</b> comparé à la durée d'origine, à titre indicatif.</figcaption>
+      <figcaption><b>Découper le BDT en morceaux</b> — la durée décomposée en réglage + réalisation, le champ Réglage (verrouillé ou saisissable), une ligne de réalisation par morceau avec sa corbeille, puis la réalisation répartie et le temps alloué total.</figcaption>
     </figure>
+
+    <h3>Annuler une découpe</h3>
+    <p>Tant qu'aucun morceau n'a commencé, une découpe se défait : bouton <b>« Annuler la découpe »</b> (flèche de retour orange) sur la carte de n'importe quel morceau, dans la goulotte.</p>
+    <ol class="steps">
+      <li>Cliquez le bouton : une confirmation liste les morceaux (durée, réglage, statut).</li>
+      <li>Confirmez <b>« Recoller les morceaux »</b> : les morceaux -M2, -M3… sont supprimés et le BDT d'origine retrouve <b>sa durée d'avant la découpe</b> (ou, pour une découpe ancienne dont elle n'a pas été gardée, la somme des morceaux), avec son réglage compté une seule fois.</li>
+    </ol>
+    <div class="note"><b>Refusé</b> si un morceau est posé sur le planning (« M3 posé le 15/09 : déprogrammez-le »), reçu ou soldé (« M2 déjà reçu : découpe définitive »), affecté à un opérateur, sous-traité, annulé, ou s'il a déjà servi (historique opérateur ou machine, non-conformité, sortie de stock, relevé de cotes). Si un morceau est modifié pendant l'opération, il reste en place et le BDT d'origine est réduit d'autant (« recollage partiel »). En cas de coupure réseau au milieu, relancez simplement « Annuler la découpe » : l'opération reprend sans rien compter deux fois.</div>
 
     <h3>Formulaire « Créer / Affecter un BDT »</h3>
     <p>Le bouton <b>« Nouveau BDT »</b> ouvre la modale de création (pour un travail ponctuel hors cascade commande → lots) :</p>
@@ -136,7 +185,8 @@
         <tr><td>Activité</td><td>Liste : Seem / Semrac</td><td>Oui</td><td>Site concerné — conditionne la liste des opérations.</td></tr>
         <tr><td>Opération</td><td>Liste (selon l'activité)</td><td>Oui</td><td>Opération de fabrication (Usinage CN, Pliage, Soudure…).</td></tr>
         <tr><td>Pièce</td><td>Texte</td><td>Oui</td><td>Référence de la pièce fabriquée.</td></tr>
-        <tr><td>Durée (h)</td><td>Nombre (pas 0,5)</td><td>Oui</td><td>Temps alloué à l'opération.</td></tr>
+        <tr><td>Durée (h)</td><td>Nombre (pas 0,5)</td><td>Oui</td><td>Temps alloué à l'opération, réglage compris.</td></tr>
+        <tr><td>dont réglage (h)</td><td>Nombre (pas 0,05)</td><td>Non</td><td>Part de la durée consacrée au réglage (fixe, fait une seule fois ; il reste sur le morceau 1 en cas de découpe). Vide = réglage inconnu. Ne peut pas dépasser la durée.</td></tr>
         <tr><td>Heure début</td><td>Heure (défaut 06:00)</td><td>Non</td><td>Position initiale de la barre sur le Gantt.</td></tr>
         <tr><td>Priorité</td><td>Normal / Urgent / Critique</td><td>Non</td><td>Colore la carte en attente (vert / orange / rouge).</td></tr>
         <tr><td>Process atelier</td><td>Liste des process compatibles</td><td>Non</td><td>Laisser vide = le BDT reste en attente dans la goulotte.</td></tr>
@@ -145,14 +195,15 @@
 
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
-      <li><b>Porte matière + prépa technique</b> : un BDT créé par la cascade d'acceptation d'offre n'apparaît dans ce planning que lorsque <b>toute la matière de l'affaire est réceptionnée</b> (tous les BC matière reçus) <b>et</b> que la <b>préparation technique</b> de l'affaire est terminée. Tant que ce n'est pas le cas, le BDT existe en base mais <b>n'est visible ni dans la goulotte ni dans le Gantt</b> : suivez son avancement depuis l'onglet <b>Commandes &amp; Lots</b> (section 4) ou depuis la préparation technique du Bureau d'Études.</li>
+      <li><b>Matière et préparation technique</b> : un BDT dont la matière n'est pas réceptionnée ou dont la préparation technique n'est pas terminée <b>reste programmable</b> ; il est seulement signalé dans la carte « Ordres de travail programmables, mais pas encore lançables » (voir en tête de section).</li>
       <li>Les process de traitement de surface (OAS, oxydation, Surtec…) n'apparaissent <b>jamais</b> dans ce planning : ils se pilotent dans le service OAS.</li>
-      <li>La goulotte trie automatiquement par échéance client puis par séquence d'opérations (chemin critique du lot) : traitez-la de haut en bas.</li>
+      <li>La goulotte trie par échéance client, puis par lot et rang dans la gamme : traitez-la de haut en bas. Ce tri n'est pas le chemin critique — celui-ci est contrôlé à la pose de chaque BDT.</li>
+      <li>Le <b>jour et l'heure</b> d'un BDT ne se posent que par le planning (glisser-déposer ou clic) : c'est là que s'applique le chemin critique.</li>
       <li>Pendant un glisser, tous les BDT du même lot sont surlignés en jaune — pratique pour repérer l'opération précédente.</li>
       <li>Clic droit sur une barre : le menu propose aussi <b>« Aller à la commande rattachée »</b> et <b>« Aller au lot rattaché »</b>. Double-clic sur une carte en attente : ouvre la commande mère.</li>
     </ul>
     <div class="warn"><b>Attention :</b> réceptionner et solder exigent le matricule + code PIN de l'opérateur — c'est la signature de traçabilité (EN 9100). Un BDT soldé ne peut plus être déplacé ni découpé ; un BDT posé sur le planning ne se découpe pas (remettez-le d'abord dans la goulotte) ; une NC Critique/Bloquante bloque l'expédition de toute l'affaire.</div>
-    <div class="astuce"><b>Astuce :</b> le survol d'une barre affiche une infobulle complète (client, pièce, durée, process, statut). Rappel des gestes : <b>clic</b> = focus étape (3 lignes max) · <b>double-clic</b> = sortie matière · <b>clic droit</b> = statuts et navigation.</div>
+    <div class="astuce"><b>Astuce :</b> le survol d'une barre affiche une infobulle complète (client, pièce, durée, <b>réglage</b> et <b>réalisation</b>, morceau « M2 · 2/3 », <b>au plus tôt</b> et, le cas échéant, l'enchaînement à revoir, process, statut). Rappel des gestes : <b>clic</b> = focus étape (3 lignes max) · <b>double-clic</b> = sortie matière · <b>clic droit</b> = statuts et navigation.</div>
   </section>
 
   <!-- ════════ 2. GANTT BST ════════ -->
@@ -165,17 +216,18 @@
       <li><b>Barre d'outils</b> : date de début de la fenêtre avec navigation ±7 jours (‹ ›) et ±1 jour (−1j / +1j), rappel « Vue 21 jours · BST de 1 à 20+ jours · couleur = lot », légende des statuts et bouton violet <b>« Nouveau BST »</b>.</li>
       <li><b>5 tuiles KPI</b> : BST total, À planifier, En attente d'envoi, Envoyés (chez ST), Revenus.</li>
       <li><b>La grille</b> : lignes = sous-traitants (nom, localisation, qualification, pastilles des prestations maîtrisées, <b>OTD</b> en % coloré vert ≥ 90, orange ≥ 75, rouge en dessous) ; colonnes = 21 jours (week-ends grisés, aujourd'hui surligné orange). Chaque barre BST porte la couleur de son <b>lot</b> (la même que sur le Gantt BDT) et son statut en contour : <span class="b b-warn">en attente d'envoi</span> (pointillé orange), <span class="b b-info">envoyé</span> (contour bleu), <span class="b b-ok">revenu</span> (contour vert).</li>
-      <li><b>« BST à planifier »</b> <b>au-dessus</b> de la grille (comme la goulotte des BDT sur le Gantt d'atelier) : les cartes sans date ni sous-traitant. Glissez-en une sur la case d'un jour, sur la ligne du sous-traitant, pour la planifier.</li>
+      <li><b>« BST à planifier »</b> <b>au-dessus</b> de la grille (comme la goulotte des BDT sur le Gantt d'atelier) : les cartes sans date ni sous-traitant, chacune avec <b>« Dispo le 17/09 »</b> quand l'étape précédente du lot fixe un jour au plus tôt (fin complète de l'étape d'atelier, ou retour d'une autre sous-traitance). Glissez-en une sur la case d'un jour, sur la ligne du sous-traitant, pour la planifier.</li>
+      <li>Une barre BST planifiée <b>avant</b> son jour au plus tôt est entourée de <b>rouge</b> ; le motif s'affiche dans son infobulle et dans la carte « Enchaînements à revoir » du planning BDT.</li>
     </ul>
     <figure class="shot">
       <img src="../../assets/production-gantt-bst.png" alt="Capture du planning BST jour par jour" loading="lazy">
-      <figcaption><b>Planning Gantt BST</b> — le bac « BST à planifier » au-dessus, puis la grille 21 jours par sous-traitant (avec OTD et prestations) et les barres colorées par lot.</figcaption>
+      <figcaption><b>Planning Gantt BST</b> — le bac « BST à planifier » au-dessus, puis la grille 21 jours par sous-traitant (avec OTD et prestations) et les barres colorées par lot. Sur cet exemple, l'étape d'atelier précédente du lot est programmée le lendemain : la carte à planifier annonce « <b>Dispo le 15/09</b> », et le BST déjà posé le 14/09 est entouré de <b>rouge</b> (planifié avant son au plus tôt).</figcaption>
     </figure>
 
     <h3>Pas à pas</h3>
     <p><b>Planifier un BST :</b></p>
     <ol class="steps">
-      <li>Prenez une carte dans <b>« BST à planifier »</b> (ou cliquez-la pour la sélectionner) et déposez-la sur la case du jour d'envoi, sur la ligne du sous-traitant choisi.</li>
+      <li>Prenez une carte dans <b>« BST à planifier »</b> (ou cliquez-la pour la sélectionner) et déposez-la sur la case du jour d'envoi, sur la ligne du sous-traitant choisi. Un jour <b>antérieur</b> au « Dispo le … » est refusé (« … dispo au plus tôt le 17/09 (après la fin de …) ») et aucun BC n'est créé.</li>
       <li>Le BST passe <span class="b b-warn">en attente d'envoi</span> et l'ERP <b>crée automatiquement le BC sous-traitant</b> lié — il apparaît dans Expéditions → Bons de Commande, prêt à être envoyé.</li>
       <li>Ensuite, le statut du BST est <b>piloté par ce BC</b> : BC envoyé/accusé → le BST passe « envoyé » ; BC reçu → « revenu ». On ne change donc pas le statut depuis le planning, mais depuis le BC en Expéditions.</li>
       <li>Pour déplacer un BST, glissez sa barre sur une autre case. Clic droit → <b>« Déplanifier (retour à l'attente) »</b> pour le remettre dans le bac.</li>
@@ -216,30 +268,34 @@
   <!-- ════════ 3. PRÉSENCE OPÉRATEURS ════════ -->
   <section class="tab" id="tab-presence">
     <div class="tab-head"><span class="tab-num">3</span><h2>Présence opérateurs</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> On y programme les horaires des opérateurs Seem et Semrac, semaine par semaine : matin, journée, soir ou absent. Cette présence pilote directement la disponibilité dans le bloc « Affectation des ressources aux postes » du planning — un opérateur non programmé n'est pas affectable. L'onglet traite aussi les demandes de congés des opérateurs.</p>
+    <p class="tab-but"><b>À quoi ça sert.</b> On y programme les horaires des opérateurs Seem et Semrac, semaine par semaine, sur <b>quatre créneaux</b> — Matin, Journée, Après-midi, Soirée — ou « Absent ». Cette présence pilote directement la disponibilité dans le bloc « Affectation des ressources aux postes » du planning — un opérateur non programmé n'est pas affectable. L'onglet traite aussi les demandes de congés des opérateurs.</p>
 
     <h3>Ce que vous voyez</h3>
     <p>Deux vues, commutées par les deux boutons du haut :</p>
     <ul class="points">
-      <li><b>Planning de présence</b> : une grille opérateurs × 7 jours de la semaine, avec navigation ‹ › entre semaines et filtres Tous / Seem / Semrac. Chaque cellule est colorée : <span class="b b-info">Matin</span> (bleu, 06h-14h), <span class="b b-ok">Journée</span> (vert, 08h-17h), <span class="b" style="background:#ede9fe;color:#5b21b6">Soir</span> (violet, 14h-22h), <span class="b b-crit">Absent</span> (rouge), <span class="b b-mut">Non programmé</span> (gris).</li>
+      <li><b>Planning de présence</b> : une grille opérateurs × 7 jours de la semaine, avec navigation ‹ › entre semaines et filtres Tous / Seem / Semrac. Chaque cellule est colorée : <span class="b b-info">Matin</span> (6h-14h), <span class="b b-ok">Journée</span> (7h-17h), <span class="b" style="background:#ede9fe;color:#6d28d9">Après-midi</span> (14h-22h), <span class="b" style="background:#e2e8f0;color:#0f172a">Soirée</span> (22h-6h), <span class="b b-crit">Absent</span> (rouge), <span class="b b-mut">Non programmé</span> (gris). À côté des flèches, une roue de chargement indique qu'une semaine est en cours de lecture, et un bouton <b>« Réessayer »</b> apparaît si la lecture a échoué.</li>
       <li><b>Demandes de congés à traiter</b> : la liste des demandes des opérateurs (type, dates, heures/jours, motif) avec les boutons <b>Approuver</b> et refuser (✕).</li>
     </ul>
     <figure class="shot">
       <img src="../../assets/production-presence.png" alt="Capture du planning de présence hebdomadaire" loading="lazy">
-      <figcaption><b>Présence opérateurs</b> — la grille hebdomadaire : cliquez une cellule pour faire défiler les shifts ; les cases verrouillées (cadenas) sont des absences RH.</figcaption>
+      <figcaption><b>Présence opérateurs</b> — la grille hebdomadaire : un clic sur une case ouvre le menu des créneaux ; les cases verrouillées (cadenas) sont des absences RH.</figcaption>
     </figure>
 
     <h3>Pas à pas</h3>
     <ol class="steps">
-      <li><b>Programmer un jour</b> : cliquez la cellule de l'opérateur — chaque clic fait défiler matin → journée → soir → absent → vide. La sauvegarde est immédiate.</li>
-      <li><b>Programmer une semaine entière</b> : bouton orange <b>« Programmer la semaine »</b> → choisissez le shift à appliquer, les jours (Lun → Ven ou Lun → Dim), cochez les opérateurs (boutons rapides : Tout cocher / Seem / Semrac) puis <b>« Appliquer à la semaine »</b>. Les jours en absence RH ne sont pas touchés.</li>
-      <li><b>Traiter un congé</b> : vue « Demandes de congés » → <b>Approuver</b> pose l'absence sur le planning de présence <em>et</em> décompte les heures du solde de congés du salarié ; ✕ refuse la demande.</li>
+      <li><b>Programmer un jour</b> : cliquez la cellule de l'opérateur — un petit menu s'ouvre : <b>Matin · Journée · Après-midi · Soirée · Absent · Effacer</b> (le créneau en place est coché). Choisissez : la case change tout de suite et <b>un seul</b> enregistrement part. S'il échoue, la case revient à la dernière valeur enregistrée et un message rouge donne la raison. <b>« Effacer »</b> vide vraiment la case (« Non programmé »).</li>
+      <li>Au clavier : Entrée sur une case ouvre le menu, flèches haut/bas pour choisir, Entrée pour valider, Échap (ou Tab) pour refermer — le curseur revient sur la case.</li>
+      <li><b>Changer de semaine</b> : ‹ › relit les présences de la semaine affichée. Tant qu'une semaine n'a jamais été lue, ses cases sont <b>verrouillées</b> (« … » pendant la lecture, « ? » si elle a échoué) : on ne peut pas écraser une présence qu'on ne voit pas. Une semaine déjà lue reste modifiable même si une relecture échoue.</li>
+      <li><b>Programmer une semaine entière</b> : bouton orange <b>« Programmer la semaine »</b> → choisissez le créneau à appliquer (ou « Effacer »), les jours (Lun → Ven ou Lun → Dim), cochez les opérateurs (boutons rapides : Tout cocher / Seem / Semrac) puis <b>« Appliquer à la semaine »</b>. Les jours en absence RH ne sont pas touchés. Le message final compte les cases enregistrées et, s'il y en a, les échecs (ces cases reviennent à leur valeur).</li>
+      <li><b>Traiter un congé</b> : vue « Demandes de congés » → <b>Approuver</b> pose l'absence sur le planning de présence, renvoie au pool les BDT de l'opérateur sur la période <em>et</em> décompte les heures du solde de congés ; ✕ refuse la demande. Les deux boutons se grisent pendant l'enregistrement. Si un de ces effets n'a pas pu se faire (solde non décompté, BDT non renvoyés…), un message orange le dit.</li>
     </ol>
 
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
       <li>Les absences RH (congés validés, maladie) arrivent automatiquement et sont <b>verrouillées</b> ici (icône cadenas) — elles se gèrent côté RH.</li>
-      <li>La présence saisie ici détermine la colonne (Matin / Après-midi / Soir) des opérateurs dans le bloc « Affectation des ressources aux postes » du planning (section 1), et le calcul de capacité du Dashboard Programmation.</li>
+      <li>La Production ne traite que les congés des <b>opérateurs</b> ; les autres demandes restent à la RH ou à la Direction. <b>Personne ne valide son propre congé</b> : un chef d'équipe qui a les droits de Production voit sa propre demande refusée (« Un congé ne se valide pas soi-même »). Un congé déjà traité (double clic, autre écran) est refusé sans rien décompter une seconde fois.</li>
+      <li>La présence saisie ici détermine la colonne (Matin / Journée / Après-midi / Soirée) des opérateurs dans le bloc « Affectation des ressources aux postes » du planning (section 1), et le calcul de capacité du Dashboard Programmation.</li>
+      <li>La <b>Soirée</b> garde ses horaires de nuit (22h-6h) ; le planning, qui va de 5&nbsp;h à 23&nbsp;h, n'en montre que le début.</li>
     </ul>
     <div class="astuce"><b>Astuce :</b> programmez la semaine type en une fois avec « Programmer la semaine », puis corrigez les exceptions cellule par cellule.</div>
   </section>

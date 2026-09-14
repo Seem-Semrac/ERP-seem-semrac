@@ -2,6 +2,127 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-14 — Production (lot C) : présences qui s'enregistrent, 4 créneaux, réglage et réalisation, découpe réversible, chemin critique
+
+*« il faudrait que quand on a découpé notre bdt on puisse revenir en arrière, dans production on a un
+souci quand on clic sur les présences opérateur sur une seule case ça ne s'enregistre pas pour le
+responsable prod. je veux aussi pouvoir voir visuellement sur le bdt en prod les temps de réglages et les
+temps de réalisation. il me faut un 4e créneau matin journée, après midi, soirée. quand on découpe un BDT
+seul le temps variable est découpable, les temps de réglages sont fixes, nous avons besoin de les faire
+qu'une seule fois. les chemins critiques des BDT BST, deux process qui se suivent peuvent s'imbriquer mais
+le process d'après ne peut se mettre qu'après le temps de réglages du process précédent. »* puis *« on y
+retourne et vite »*.
+
+**Ce qui change pour l'atelier**
+- **Présence opérateurs** : un clic sur une case ouvre un **menu** (Matin · Journée · Après-midi ·
+  Soirée · Absent · Effacer). Un choix = **un seul** enregistrement ; s'il échoue, la case revient à la
+  dernière valeur enregistrée et un message rouge donne la raison. « Effacer » vide vraiment la case. Les
+  flèches ‹ › relisent la semaine affichée ; une semaine jamais lue est **verrouillée** (on ne peut plus
+  écraser une présence invisible). « Programmer la semaine » compte ses échecs. Le responsable de
+  production **approuve ou refuse les congés des opérateurs** (le bouton répondait « Accès refusé ») —
+  jamais le sien.
+- **Quatre créneaux partout** : Matin 6h-14h · Journée 7h-17h · Après-midi 14h-22h · **Soirée** 22h-6h —
+  grille de présence, planning (4 sous-cases par poste, 5 colonnes dans « Affectation des ressources »),
+  fiche salarié RH.
+- **Réglage et réalisation visibles** : mini-barre sur chaque carte de la goulotte (« Réglage 0,5 h ·
+  Réalisation 3,5 h », ou « réglage non renseigné »), segment **hachuré** en tête de chaque barre du Gantt
+  (« 8h · 0,5 + 3,5 h »), lignes Réglage / Réalisation dans l'infobulle, la réception et le soldage, champ
+  « dont réglage (h) » à la création d'un BDT, OF imprimé.
+- **Découpe** : seule la **réalisation** se découpe ; le réglage, fixe et fait une seule fois, reste sur le
+  morceau 1 (qui peut ne porter que lui). Réglage inconnu : on le saisit sur le BDT d'origine, ou tout est
+  traité en réalisation (avertissement).
+- **Annuler une découpe** : bouton « Annuler la découpe » sur la carte de chaque morceau ; le BDT
+  d'origine retrouve **sa durée d'avant la découpe**. Refusé dès qu'un morceau est posé, reçu, soldé,
+  affecté ou a servi (historique, NC, sortie de stock, cotes).
+- **Chemin critique** : l'étape suivante d'un lot ne démarre qu'après le **réglage** de l'étape précédente
+  (fin complète s'il y a une OAS entre les deux ou si l'étape suivante est sous-traitée ; jour de retour
+  après une sous-traitance). Au glisser, une **zone rouge** montre la partie interdite de la journée ; posé
+  trop tôt le bon jour, le BDT est **calé** ; un jour avant, il est **refusé**. Rien n'est décalé en
+  cascade : les étapes devenues invalides sont listées dans la carte **« Enchaînements à revoir »** et
+  marquées d'une pastille rouge. BST : « **Dispo le …** » sur la carte, jour antérieur refusé avant toute
+  création de BC.
+
+**Causes trouvées**
+- **Présence qui ne s'enregistre pas (Docker / VM)** : l'upsert `onConflict:'operateur_id,date_presence'`
+  exige un **index unique** que la base née de `schema.sql` n'avait pas → Postgres 42P10 → la case
+  revenait vide après rechargement. Même défaut latent pour `affectation_poste`, `competences_operateur`,
+  `produits_fournisseurs` et `kpi_objectifs` (migration **010**).
+- **Course de clics (partout, cloud compris)** : le cycle au clic (matin → journée → soir → absent → vide)
+  envoyait jusqu'à 3 POST **en parallèle** sur la même case, dans un ordre d'arrivée non garanti ; la
+  base pouvait garder un créneau intermédiaire. S'y ajoutaient : « vide » enregistré comme `absent`, une
+  fenêtre de 14 jours hors de laquelle un clic écrasait une valeur non chargée, les erreurs réseau
+  avalées, et un faux succès de « Programmer la semaine » (réponses jamais lues).
+- **Congés : 403 pour le responsable prod** : le bouton « Approuver » de l'onglet Présence appelait
+  `/api/rh/conge/:id/valider` (famille `rh`, absente des droits du rôle production). Nouvelle route
+  `/api/production/conge/:id/valider`, limitée aux opérateurs.
+- **Réglage introuvable** : aucune colonne ne séparait réglage et réalisation (tout était fondu dans
+  `duree`), et la formule de création des BDT oubliait le réglage machine (RGM) des gammes au format
+  minutes. Le calage « chemin critique » de l'ancienne page `planning_bdt_bds.tsx` avait disparu avec elle
+  (18/08/2026) : la goulotte ne faisait plus qu'un **tri**.
+
+**Décisions**
+- **Soirée** : seul le libellé change (« Nuit » / « Soir » → « Soirée ») ; les **horaires 22h-6h sont
+  conservés** (identifiant `soir`, aucune donnée migrée). Le planning allant de 5 h à 23 h, il n'en montre
+  que le début — **à faire trancher**.
+- **Chemin critique** : **calage automatique le même jour, refus (409) un jour antérieur**, jamais de
+  décalage en cascade (signalement seulement). Réglage non renseigné = compté 0 et dit. Un BDT posé sans
+  heure compte à 6 h (l'heure où le planning l'affiche) ; toute pose écrit une heure. Le jour et l'heure ne
+  se posent plus par le PATCH générique (400). Week-ends non exclus, chevauchement sur un même poste non
+  contrôlé, pas de bouton « Recaler la suite » : à trancher.
+- **Recollage à la durée d'origine** (`duree_avant_decoupe`, vrai retour arrière), sinon somme des
+  morceaux pour une découpe antérieure au lot ; réglage compté une fois ; opération rejouable.
+- Un seul bon d'une famille découpée porte le réglage ; une saisie n'est acceptée que sur le BDT
+  d'origine, jamais au-delà de sa durée. Les nouveaux BDT ont une durée alignée sur le moteur de coût
+  (`etapeDecomp` : réglage homme + réglage machine, opérations « fixes » comprises).
+
+**Revue adverse avant livraison (28 défauts examinés, 27 corrigés)** — les plus graves : un BDT posé au
+clic (sans heure) échappait au chemin critique ; le réglage pouvait être compté deux fois dans une
+famille découpée ; « Annuler la découpe » relancé après une panne gonflait la durée (10 h → 15 h). Aussi :
+course lecture / écriture de la présence, double validation d'un congé côté RH (solde décompté deux fois),
+effets d'un congé ratés sans message (désormais dits dans `warning`, affichés par RH, Direction et
+Production), auto-validation d'un congé, réglage incertain pré-saisi, découpe depuis une fenêtre périmée,
+arrondi d'une colonne `debut` entière qui créait une violation, contraste des créneaux et des barres
+hachurées, clavier du menu de présence, identifiants de notification en double. Non corrigé (hors lot) :
+données `-TEST-` d'anciens lots dans la base Docker ; un compte créé juste avant sa connexion peut être vu
+« désactivé » pendant 8 s (cache des droits vivants).
+
+**Vérifications** : `tsc` 0 erreur · harnais toutes pages 60 PASS / 0 FAIL / 1 SKIP · moteur du chemin
+critique 170 cas + **parité serveur ↔ navigateur 4 420 comparaisons, 0 écart** · présences 128 contrôles
+(règles pures, vrai script de la page en VM, droits, routes sur Docker) · réglage 81 cas · e2e sur la base
+Docker : colonnes présentes (37), `generer-bdt` (4), revue (23), colonnes absentes (12), base injoignable
+→ 503 (5) · 71 contrôles sur l'application Docker authentifiée · migration 010 rejouée en transactions
+annulées (idempotente, doublon → WARNING sans création, index équivalent reconnu, arbitre `ON CONFLICT`
+vérifié) · navigateur réel (calage, refus, recollage, OF, aucune erreur console) · `erp-docker.sh maj` :
+11 migrations à jour, `/api/version` répond · jeux `-TEST-` supprimés et relus (0). Sur la base Docker,
+011 est appliquée et `reconstituer {appliquer:true}` a écrit 5 réglages certains (relus).
+
+**Scripts à jouer**
+- **Docker / VM** : `~/erp/docker/scripts/erp-docker.sh maj` applique 010 et 011 ; puis, sur la VM,
+  `POST /api/production/bdt/reglage/reconstituer` (`{"appliquer":false}`, lire, puis `{"appliquer":true}`)
+  — mode opératoire dans `technique/02-exploitation-runbook.md`.
+- **Cloud (Studio Supabase EN LIGNE, SQL Editor — jamais celui du Docker)** :
+  `docker/db/cloud/cloud-8-index-uniques-upsert.sql` **à contrôler** (attendu : cinq « rien a faire » ; un
+  WARNING = doublons à traiter à la main) ; `docker/db/cloud/cloud-9-bdt-temps-reglage.sql` **à jouer**,
+  puis la reconstitution du réglage ci-dessus. Tant que `cloud-9` n'est pas joué : réglage « non
+  renseigné » partout (compté 0 par le chemin critique), découpe sans réglage enregistré, recollage sur la
+  somme des morceaux. Rappel : sans `cloud-4`, les heures du planning restent arrondies à l'heure pleine.
+
+- Fichiers : `src/gamme.ts`, `src/presences.ts` (nouveau), `src/index.tsx`, `src/prod.tsx`,
+  `src/queries.ts`, `src/shared.ts`, `src/types.ts`, `src/rh_service.tsx`, `src/direction_service.tsx` ·
+  Migration DB : **oui** (`docker/db/migrations/010-index-uniques-upsert.sql`,
+  `011-bdt-temps-reglage.sql` ; cloud : `cloud-8`, `cloud-9` ; blocs en fin de `docker/db/seed/schema.sql`).
+- Doc mise à jour : `technique/06-modules/{production,rh,direction}.md`, `07-api-reference.md` (contrats
+  du lot C), `03-base-de-donnees.md`, `03b-tables-reference.md`, `02-exploitation-runbook.md`,
+  `04-auth-rbac.md` (piège « bouton du service X → /api/Y »),
+  `manuel/html/{production,rh,direction}.html` (+ `src/manuels_contenu.ts`), `manuel/production.md`,
+  `manuel/formulaires/{production,rh,00-index}.md`, `manuel/parcours/04-production.md`, `fiches-poste/production.md`,
+  cerveau · Outillage : manifestes de `capture_screens.mjs` (`production-presence` menu ouvert, nouvelle
+  `production-gantt-reglage`, `production-gantt-bst` avec une carte d'exemple) et `capture_forms.mjs`
+  (fenêtre de découpe après lecture du réglage), `gen_fiches_poste.mjs` (tâches « Programmer la présence et
+  traiter les congés des opérateurs » et « Découper un BDT ou annuler une découpe ») · Captures refaites sur la stack
+  Docker locale : planning BDT, chemin critique, planning BST, présence (menu), fenêtre de découpe,
+  création de BDT, nouvelle sous-traitance ; `audit_manuels.mjs` sur l'application Docker : 0 grave côté Production.
+
 ## 2026-09-14 — Coût horaire : seul le process en porte un (machine), le temps homme au coût chargé RH
 
 *« Dans les machines et process et postes de travail, seuls les process ont un coût horaire. Quand le

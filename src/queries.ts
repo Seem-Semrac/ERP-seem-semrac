@@ -336,6 +336,75 @@ export async function upsertPresence(payload: Record<string, any>) {
   return { data, error }
 }
 
+// Présences d'une fenêtre de dates, en LECTURE STRICTE (supabase-js ne lève jamais : sans ce retour explicite, une panne
+// ressemblerait à « aucune présence »). `error` non nul = lecture échouée OU tronquée par la limite de lignes de
+// PostgREST : dans les deux cas l'écran ne doit PAS croire la fenêtre chargée — une case affichée vide à tort serait
+// écrasée au clic suivant.
+export async function getPresencesFenetre(from: string, to: string): Promise<{ data: any[] | null; error: { message: string; code?: string } | null }> {
+  const { data, error, count } = await supabase
+    .from('operateur_presence')
+    .select('operateur_id,date_presence,shift', { count: 'exact' })
+    .gte('date_presence', from).lte('date_presence', to)
+    .order('date_presence').order('operateur_id')
+  if (error) return { data: null, error }
+  const rows = data ?? []
+  if (count != null && rows.length < count) return { data: null, error: { message: `lecture tronquée (${rows.length}/${count} lignes) : fenêtre trop large` } }
+  return { data: rows, error: null }
+}
+
+// Vide une case (opérateur × jour). RELIT après coup : un DELETE refusé par les droits de la base répond 204 SANS erreur
+// (gotcha « toujours relire après un DELETE »). `restantes` > 0 = rien n'a été effacé.
+export async function deletePresence(operateurId: string, datePresence: string): Promise<{ restantes: number | null; error: { message: string; code?: string } | null }> {
+  const { error } = await supabase.from('operateur_presence').delete().eq('operateur_id', operateurId).eq('date_presence', datePresence)
+  if (error) return { restantes: null, error }
+  const { data, error: e2 } = await supabase.from('operateur_presence').select('id').eq('operateur_id', operateurId).eq('date_presence', datePresence)
+  if (e2) return { restantes: null, error: e2 }
+  return { restantes: (data ?? []).length, error: null }
+}
+
+// Lecture CIBLÉE d'un salarié (écriture d'une présence, validation d'un congé d'opérateur) — plus de select * de toute la
+// table à chaque clic. { data: null, error: null } = salarié absent ; `error` = panne, jamais confondue avec « absent ».
+export async function getSalarieCible(id: string): Promise<{ data: any | null; error: { message: string; code?: string } | null }> {
+  const { data, error } = await supabase.from('salaries').select('id,nom,prenom,entite,est_operateur,actif').eq('id', id).maybeSingle()
+  if (error) return { data: null, error }
+  return { data: data ?? null, error: null }
+}
+
+// Fiche complète d'UN salarié (select * : les colonnes de solde varient selon la base), lecture STRICTE — décompte du
+// solde à la validation d'un congé. { data: null, error: null } = salarié absent ; `error` = panne.
+export async function getSalarieCompletCible(id: string): Promise<{ data: any | null; error: { message: string; code?: string } | null }> {
+  const { data, error } = await supabase.from('salaries').select('*').eq('id', id).maybeSingle()
+  if (error) return { data: null, error }
+  return { data: data ?? null, error: null }
+}
+
+// BDT d'un opérateur prévus sur une période (bornes comprises, AAAA-MM-JJ), lecture CIBLÉE et STRICTE — congé validé :
+// ces BDT repartent au pool. Avant : getBonsDeTravail() complet, dont une panne rendait [] (aucun BDT renvoyé, sans le dire).
+export async function lireBDTOperateurPeriode(operateurId: string, debut: string, fin: string): Promise<{ data: any[]; error: string | null }> {
+  const { data, error } = await supabase.from('bons_de_travail').select('id,statut,date_prevue,operateur_id')
+    .eq('operateur_id', operateurId).gte('date_prevue', debut).lte('date_prevue', fin).limit(5000)
+  if (error) return { data: [], error: error.message }
+  return { data: (data ?? []) as any[], error: null }
+}
+
+// Lecture CIBLÉE d'un congé. Un identifiant mal formé (conges.id est un uuid sur certaines bases, code 22P02) est un
+// congé introuvable, pas une panne.
+export async function getCongeCible(id: string): Promise<{ data: any | null; error: { message: string; code?: string } | null }> {
+  const { data, error } = await supabase.from('conges').select('*').eq('id', id).maybeSingle()
+  if (error && (error as any).code === '22P02') return { data: null, error: null }
+  if (error) return { data: null, error }
+  return { data: data ?? null, error: null }
+}
+
+// Décision CONDITIONNELLE sur un congé : ne passe que s'il est encore au statut attendu (deux clics simultanés = une
+// seule décision, donc un seul décompte du solde). { data: null, error: null } = plus au statut attendu, ou mise à jour
+// refusée par les droits de la base (qui ne renvoie alors aucune ligne, sans erreur).
+export async function majCongeSiStatut(id: string, statutAttendu: string, payload: Record<string, any>): Promise<{ data: any | null; error: { message: string; code?: string } | null }> {
+  const { data, error } = await supabase.from('conges').update(payload).eq('id', id).eq('statut', statutAttendu).select()
+  if (error) return { data: null, error }
+  return { data: (data ?? [])[0] ?? null, error: null }
+}
+
 // Référentiels nécessaires aux étapes de production d'une nomenclature :
 //   - machines opérationnelles (SANS aucun taux : depuis le 14/09/2026 seul le PROCESS porte un taux)
 //   - process atelier + leur type (machine / manuel / oas) et leur taux machine RÉSOLU (transition comprise)
@@ -2666,6 +2735,193 @@ export async function retirerBDTRows(ids: string[]): Promise<string[]> {
 export async function createBDTRow(payload: Record<string, any>) {
   const { data, error } = await supabase.from('bons_de_travail').insert(payload).select().single()
   return { data, error }
+}
+
+// ─── Réglage / découpe / recollage des BDT (lot C, 14/09/2026) ─────────────────────────────────
+// Toutes ces lectures sont STRICTES : supabase-js ne lève jamais, une panne est rendue dans `error`
+// et n'est jamais confondue avec « aucune ligne ».
+
+// Famille complète d'un BDT : la racine + ses morceaux « racine-Mk » (toutes colonnes). Deux requêtes plutôt
+// qu'un or() : un identifiant contenant une virgule ou une parenthèse casserait la syntaxe du filtre.
+export async function lireFamilleBDT(racine: string): Promise<{ data: any[]; error: string | null }> {
+  const [a, b] = await Promise.all([
+    supabase.from('bons_de_travail').select('*').eq('id', racine),
+    supabase.from('bons_de_travail').select('*').like('id', racine + '-M%').limit(10000),
+  ])
+  if (a.error || b.error) return { data: [], error: (a.error || b.error)!.message }
+  const re = /-M(\d+)$/
+  const morceaux = ((b.data ?? []) as any[]).filter((x: any) => { const id = String(x.id); const m = re.exec(id); return !!m && id.slice(0, id.length - m[0].length) === racine })
+  return { data: [...((a.data ?? []) as any[]), ...morceaux], error: null }
+}
+
+// Tous les BDT (paginé : la limite de lignes de PostgREST tronquerait la liste en silence).
+export async function lireBDTsStrict(): Promise<{ data: any[]; error: string | null }> {
+  const out: any[] = []
+  const PAGE = 1000
+  for (let debut = 0; debut < 200000; debut += PAGE) {
+    const { data, error } = await supabase.from('bons_de_travail').select('*').order('id', { ascending: true }).range(debut, debut + PAGE - 1)
+    if (error) return { data: [], error: error.message }
+    out.push(...((data ?? []) as any[]))
+    if (!data || data.length < PAGE) break
+  }
+  return { data: out, error: null }
+}
+
+async function _lireToutStrict(table: string, cols: string): Promise<{ data: any[]; error: string | null }> {
+  const out: any[] = []
+  const PAGE = 1000
+  for (let debut = 0; debut < 200000; debut += PAGE) {
+    const { data, error } = await supabase.from(table).select(cols).order('id', { ascending: true }).range(debut, debut + PAGE - 1)
+    if (error) return { data: [], error: table + ' : ' + error.message }
+    out.push(...((data ?? []) as any[]))
+    if (!data || data.length < PAGE) break
+  }
+  return { data: out, error: null }
+}
+
+// Données pour retrouver le réglage depuis la gamme (shared.ts reglageBdtDepuisGamme).
+//   cible absente → TOUT (lots, nomenclatures, DT, process) : rapport « reconstituer » ;
+//   cible = un BDT → lectures ciblées (son lot, les nomenclatures de sa pièce, la DT de son affaire).
+export async function lireContexteReglage(cible?: any): Promise<{ ctx: { lots: any[]; nomenclatures: any[]; dts: any[]; process: any[] }; error: string | null }> {
+  const vide = { lots: [] as any[], nomenclatures: [] as any[], dts: [] as any[], process: [] as any[] }
+  const colsNom = 'id, num_nom, code_ref_produit, indice, statut, etapes_production'
+  if (!cible) {
+    const [l, n, d, p] = await Promise.all([
+      _lireToutStrict('lots', 'id, qte, qte_initiale'), _lireToutStrict('nomenclatures', colsNom),
+      _lireToutStrict('demandes_travaux', 'id, num_affaire, pieces_detail'), _lireToutStrict('process_atelier', '*'),
+    ])
+    const err = [l.error, n.error, d.error, p.error].filter(Boolean).join(' · ')
+    if (err) return { ctx: vide, error: err }
+    return { ctx: { lots: l.data, nomenclatures: n.data, dts: d.data, process: p.data }, error: null }
+  }
+  const cleLot = String(cible.lot_id || cible.lot_ref || '')
+  const piece = String(cible.piece ?? '').trim()
+  const aff = String(cible.num_affaire ?? '').trim()
+  // ilike sans joker : insensible à la casse ; % et _ de la pièce échappés. Les espaces autour du code sont
+  // retirés côté serveur (shared.ts compare en minuscules « trim »).
+  const motif = '%' + piece.replace(/[\\%_]/g, (ch) => '\\' + ch) + '%'
+  const [l, n, d, p] = await Promise.all([
+    cleLot ? supabase.from('lots').select('id, qte, qte_initiale').eq('id', cleLot) : Promise.resolve({ data: [], error: null } as any),
+    piece ? supabase.from('nomenclatures').select(colsNom).ilike('code_ref_produit', motif).limit(5000) : Promise.resolve({ data: [], error: null } as any),
+    aff ? supabase.from('demandes_travaux').select('id, num_affaire, pieces_detail').or('num_affaire.eq."' + aff.replace(/["\\]/g, '') + '",id.eq."' + aff.replace(/["\\]/g, '') + '"') : Promise.resolve({ data: [], error: null } as any),
+    supabase.from('process_atelier').select('*'),
+  ])
+  const erreurs: string[] = []
+  if (l.error) erreurs.push('lots : ' + l.error.message)
+  if (n.error) erreurs.push('nomenclatures : ' + n.error.message)
+  if (d.error) erreurs.push('demandes_travaux : ' + d.error.message)
+  if (p.error) erreurs.push('process_atelier : ' + p.error.message)
+  if (erreurs.length) return { ctx: vide, error: erreurs.join(' · ') }
+  return { ctx: { lots: (l.data ?? []) as any[], nomenclatures: (n.data ?? []) as any[], dts: (d.data ?? []) as any[], process: (p.data ?? []) as any[] }, error: null }
+}
+
+// Traces d'exécution au nom de ces BDT (réception, soldage, NC, sortie matière, cotes relevées) : un morceau
+// tracé ne se recolle pas. Table ou colonne absente (base en retard) → ignorée et signalée ; toute autre
+// erreur est rendue (aucun recollage sur une lecture ratée).
+export async function lireTracesBDT(ids: string[]): Promise<{ traces: Array<{ table: string; bdt_id: string }>; ignorees: string[]; error: string | null }> {
+  const TABLES = ['operateur_bdt_historique', 'machine_bdt_historique', 'non_conformites', 'mouvements_stock', 'controles_cotes']
+  if (!ids.length) return { traces: [], ignorees: [], error: null }
+  const res = await Promise.all(TABLES.map((t) => supabase.from(t).select('bdt_id').in('bdt_id', ids).limit(1000)))
+  const traces: Array<{ table: string; bdt_id: string }> = []
+  const ignorees: string[] = []
+  const erreurs: string[] = []
+  res.forEach((r: any, i: number) => {
+    const t = TABLES[i]
+    if (r.error) {
+      const code = String(r.error.code || '')
+      const msg = String(r.error.message || '')
+      if (['42P01', '42703', 'PGRST205', 'PGRST204'].includes(code) || /does not exist|could not find/i.test(msg)) ignorees.push(t)
+      else erreurs.push(t + ' : ' + msg)
+      return
+    }
+    for (const x of ((r.data ?? []) as any[])) if (x && x.bdt_id != null) traces.push({ table: t, bdt_id: String(x.bdt_id) })
+  })
+  return { traces, ignorees, error: erreurs.length ? erreurs.join(' · ') : null }
+}
+
+// Mise à jour CONDITIONNELLE d'un BDT de la goulotte : ne s'applique que si le bon est encore dans l'état lu
+// (même statut, ni reçu, ni pointé, sans opérateur). `data` null sans erreur = le bon a changé entre-temps.
+export async function majBDTSiInchange(id: string, statutLu: any, patch: Record<string, any>): Promise<{ data: any | null; error: string | null }> {
+  let q: any = supabase.from('bons_de_travail').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
+  q = (statutLu == null) ? q.is('statut', null) : q.eq('statut', String(statutLu))
+  const { data, error } = await q.is('temps_reel', null).is('debut_reel', null).is('operateur_id', null).select()
+  if (error) return { data: null, error: error.message }
+  return { data: ((data ?? []) as any[])[0] ?? null, error: null }
+}
+
+// Mise à jour d'un BDT CONDITIONNÉE à l'état lu (verrou optimiste) : chaque colonne de `attendu` doit encore valoir la
+// valeur lue — null → IS NULL, sinon égalité. `data` null sans erreur = le bon a changé entre-temps (ou la base a refusé
+// la mise à jour sans le dire). Sert à la découpe (durée lue) et au recollage (durée et durée d'origine lues).
+export async function majBDTConditionnelle(id: string, patch: Record<string, any>, attendu: Record<string, any>): Promise<{ data: any | null; error: string | null }> {
+  let q: any = supabase.from('bons_de_travail').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
+  for (const col of Object.keys(attendu)) {
+    const v = attendu[col]
+    q = v == null ? q.is(col, null) : q.eq(col, v)
+  }
+  const { data, error } = await q.select()
+  if (error) return { data: null, error: error.message }
+  return { data: ((data ?? []) as any[])[0] ?? null, error: null }
+}
+
+// Retrait des morceaux d'un recollage, chacun sous garde-fou (statut lu, ni reçu, ni pointé, sans opérateur),
+// puis RELECTURE : un DELETE refusé (RLS) ou filtré par un garde-fou répond sans erreur. Rend les morceaux
+// encore en base ; `error` = relecture impossible (état incertain).
+export async function retirerMorceauxBDTGardes(morceaux: any[]): Promise<{ restants: any[]; error: string | null }> {
+  if (!morceaux.length) return { restants: [], error: null }
+  for (const m of morceaux) {
+    let q: any = supabase.from('bons_de_travail').delete().eq('id', String(m.id))
+    q = (m.statut == null) ? q.is('statut', null) : q.eq('statut', String(m.statut))
+    await q.is('temps_reel', null).is('debut_reel', null).is('operateur_id', null)
+  }
+  const { data, error } = await supabase.from('bons_de_travail').select('*').in('id', morceaux.map((m: any) => String(m.id)))
+  if (error) return { restants: [], error: error.message }
+  return { restants: (data ?? []) as any[], error: null }
+}
+
+// Écrit le réglage d'un BDT SEULEMENT s'il est encore vide (rapport « reconstituer ») : une saisie faite
+// entre-temps n'est jamais écrasée.
+export async function ecrireReglageSiVide(id: string, valeur: number): Promise<{ ecrit: boolean; error: string | null }> {
+  const { data, error } = await supabase.from('bons_de_travail').update({ temps_reglage: valeur, updated_at: new Date().toISOString() }).eq('id', id).is('temps_reglage', null).select('id')
+  if (error) return { ecrit: false, error: error.message }
+  return { ecrit: ((data ?? []) as any[]).length > 0, error: null }
+}
+
+// ─── Chemin critique (lot C, 14/09/2026) : lectures CIBLÉES et STRICTES d'un lot ─────────────────────────
+// Toutes les opérations (BDT + BDS) rattachées à un lot : clé = lot_id, sinon lot_ref (gamme.ts cleLot). Deux
+// requêtes par table (eq, pas de or() : un identifiant avec virgule ou parenthèse casserait le filtre), puis
+// dédoublonnage et filtre exact sur la clé. Colonne absente (base en retard) → requête ignorée ; toute autre
+// erreur est RENDUE : une panne n'est jamais « lot sans autre opération ».
+export async function lireOperationsDuLot(cle: string): Promise<{ bdts: any[]; bds: any[]; error: string | null }> {
+  const k = String(cle ?? '').trim()
+  if (!k) return { bdts: [], bds: [], error: null }
+  const res: any[] = await Promise.all([
+    supabase.from('bons_de_travail').select('*').eq('lot_id', k).limit(5000),
+    supabase.from('bons_de_travail').select('*').eq('lot_ref', k).limit(5000),
+    supabase.from('bons_sous_traitance').select('*').eq('lot_id', k).limit(5000),
+    supabase.from('bons_sous_traitance').select('*').eq('lot_ref', k).limit(5000),
+  ])
+  const erreurs: string[] = []
+  const lignes = res.map((r: any, i: number) => {
+    if (!r.error) return (r.data ?? []) as any[]
+    const code = String(r.error.code || ''), msg = String(r.error.message || '')
+    if (['42703', 'PGRST204'].includes(code) || /column .* does not exist|could not find .* column/i.test(msg)) return [] as any[]
+    erreurs.push((i < 2 ? 'bons_de_travail' : 'bons_sous_traitance') + ' : ' + msg)
+    return [] as any[]
+  })
+  if (erreurs.length) return { bdts: [], bds: [], error: erreurs.join(' · ') }
+  const cleDe = (o: any) => String(o?.lot_id ?? '').trim() || String(o?.lot_ref ?? '').trim()
+  const fusion = (a: any[], b: any[]) => {
+    const vus = new Map<string, any>()
+    for (const o of [...a, ...b]) if (o && cleDe(o) === k && !vus.has(String(o.id))) vus.set(String(o.id), o)
+    return Array.from(vus.values())
+  }
+  return { bdts: fusion(lignes[0], lignes[1]), bds: fusion(lignes[2], lignes[3]), error: null }
+}
+
+// Lecture STRICTE d'un BDS par id : une panne n'est jamais confondue avec « introuvable ».
+export async function getBDSStrict(id: string): Promise<{ data: any | null; error: string | null }> {
+  const { data, error } = await supabase.from('bons_sous_traitance').select('*').eq('id', id).maybeSingle()
+  return { data: data ?? null, error: error ? error.message : null }
 }
 
 export async function updateBDS(id: string, patch: Record<string, any>) {

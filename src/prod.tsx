@@ -1,8 +1,10 @@
 // ══════════════════════════════════════════════════════════════
 // PRODUCTION – Planning Gantt BDT/BST · Commandes · Lots · Dashboards
 // ══════════════════════════════════════════════════════════════
-import { escX, layout, serviceHeader, OPERATEURS as OPS_FB, BDT_DATA, SHIFTS, ABSENCES, MACHINES, estAnnule, badgeAnnule, construireTauxAtelier, typeProcess, alerteCoutReel } from './shared'
+import { escX, layout, serviceHeader, OPERATEURS as OPS_FB, BDT_DATA, SHIFTS, ABSENCES, MACHINES, estAnnule, badgeAnnule, construireTauxAtelier, typeProcess, alerteCoutReel, racineBdt, rangMorceauBdt } from './shared'
+import { cleLot, violationsEnchainement, PLAN_DEBUT_JOUR, PLAN_FIN_JOUR, PLAN_HEURE_DEFAUT } from './gamme'
 import { LOGO_SVG, BRAND } from './brand'
+import { CRENEAUX, paletteCreneaux, joursChargesPage } from './presences'
 import type { BonDeTravail, Machine, Operateur, Lot, Commande, FournisseurSt } from './types'
 
 const sjX = (v: any) => JSON.stringify(v).replace(/</g, '\\u003c')
@@ -1125,15 +1127,20 @@ export const pageLotDetail = (
       return { seq: e.ordre != null ? e.ordre : (i + 1), phase: e.phase || '', operation: e.nom || e.operation || '', poste: e.machine_nom || e.process_nom || '', res: '', prog: e.programme || e.num_programme || '', progFic: e.programme_fichier || '', reg, moU, machU, total: reg + (moU + machU) * _qte }
     })
   } else {
-    // Repli : pas de gamme trouvée → étapes depuis les BDT (temps alloué seul)
+    // Repli : pas de gamme trouvée → étapes depuis les BDT (temps alloué). Lot C : la colonne Réglage reprend le
+    // temps_reglage du BDT (null / colonne absente = 0 affiché « — ») ; la colonne machine porte alors la RÉALISATION
+    // du bon (temps total, pas unitaire : aucune quantité ne la multiplie dans les totaux).
     ofOps = ops.slice().sort(seqSort).map((op: any, i: number) => {
       const b = _bdtById[String(op.id)] || {}
-      const t = b.temps_alloue != null ? b.temps_alloue : (b.duree != null ? b.duree : 0)
+      const t = Number(b.temps_alloue != null ? b.temps_alloue : (b.duree != null ? b.duree : 0)) || 0
       const isBds = op.kind === 'BDS'
-      return { seq: op.seq != null ? op.seq : (i + 1), phase: '', operation: op.operation, poste: isBds ? ('S/T' + (op.st ? ' — ' + op.st : '')) : (b.machine_id || ''), res: isBds ? 'S/T' : 'Machine', prog: '', progFic: '', reg: 0, moU: 0, machU: Number(t) || 0, total: Number(t) || 0 }
+      const trB = (!isBds && b.temps_reglage != null && b.temps_reglage !== '' && Number.isFinite(Number(b.temps_reglage))) ? Math.max(0, Math.min(t, Number(b.temps_reglage))) : 0
+      return { seq: op.seq != null ? op.seq : (i + 1), phase: '', operation: op.operation, poste: isBds ? ('S/T' + (op.st ? ' — ' + op.st : '')) : (b.machine_id || ''), res: isBds ? 'S/T' : 'Machine', prog: '', progFic: '', reg: trB, moU: 0, machU: Math.max(0, t - trB), total: t }
     })
   }
-  const _tot = ofOps.reduce((a: any, o: any) => ({ reg: a.reg + o.reg, mo: a.mo + o.moU * _qte, mach: a.mach + o.machU * _qte, total: a.total + o.total }), { reg: 0, mo: 0, mach: 0, total: 0 })
+  // Totaux : avec gamme, MO et machine sont UNITAIRES (× quantité) ; en repli ce sont déjà des temps du bon.
+  const _mult = _etapes.length ? _qte : 1
+  const _tot = ofOps.reduce((a: any, o: any) => ({ reg: a.reg + o.reg, mo: a.mo + o.moU * _mult, mach: a.mach + o.machU * _mult, total: a.total + o.total }), { reg: 0, mo: 0, mach: 0, total: 0 })
   const ofData = { numLot: L.id, affaire: (cmd?.num_affaire) || L.affaire_id || cmdLabel || '', plan: (nom && nom.num_plan) || planRef || '', planFichier: (nom && nom.plan_fichier) || '', indice: (nom && nom.indice) || '', client: L.client_nom, piece: L.piece || (nom && nom.code_ref_produit) || '', qte: _qte, statut: L.synthetic ? '' : (L.statut || ''), dateDebut: L.date_debut, dateFin: L.date_fin, hasGamme: _etapes.length > 0, ops: ofOps, tot: _tot }
   const ofScript = `<script>
 window.OF_DATA=${sjX(ofData)};
@@ -1212,7 +1219,7 @@ export const pageServiceProd = (
   dbBDS?:        any[],
   dbBCst?:       Record<string, any>,
   dbStock?:      any[],
-  dbPresences?:  any[],
+  dbPresences?:  any[] | null,   // null = lecture échouée : aucun jour déclaré chargé (le client relit la semaine)
   dbAbsences?:   any[],
   dbMouvements?: any[],
   dbAffectations?: Record<string, any>,
@@ -1337,8 +1344,24 @@ export const pageServiceProd = (
   const opsForGantt = (dbOps && dbOps.length > 0)
     ? dbOps.map(o => ({id:o.id,nom:o.nom,activite:o.activite,poste:o.poste||'',shift:deriveShift(o.shift_id),competences:o.competences||[]}))
     : OPS_DEFAULT
+  // Familles de découpe (racine + morceaux « -Mk ») : rangs présents, pour la pastille « M2 · 2/3 ».
+  const _rangsFamille: Record<string, number[]> = {}
+  ;(dbBDTs ?? []).forEach((b: any) => { const r = racineBdt(b.id); (_rangsFamille[r] = _rangsFamille[r] || []).push(rangMorceauBdt(b.id)) })
+  Object.keys(_rangsFamille).forEach((r) => _rangsFamille[r].sort((x, y) => x - y))
+  // Projection du planning. Lot C (14/09/2026) :
+  //   reglage     : temps_reglage (h) — null = inconnu (colonne absente avant cloud-9 comprise) ; réalisation = duree − reglage
+  //   racine / rangMorceau / posMorceau / nbMorceaux : famille de découpe (pastille, « Annuler la découpe »)
+  //   oasAvant / oasApres : étape OAS entre deux BDT (chemin critique : fin complète)
+  //   cleLot      : clé de gamme (gamme.ts cleLot) ; sansHeure : `debut` vide en base (l'écran l'affiche à 6 h)
+  // Les champs lus par le moteur de chemin critique client (ccRowBdt) doivent rester fidèles aux colonnes brutes.
   const bdtsForGantt = (dbBDTs && dbBDTs.length > 0)
-    ? dbBDTs.map(b => ({id:b.id,op:b.operateur_id||'',process:(b as any).process_id||'pending',client:b.client_nom||'',piece:b.piece,operation:b.operation,duree:b.duree,debut:b.debut!=null?Number(b.debut):6,priorite:b.priorite,statut:b.statut,resultat:(b as any).resultat||null,activite:b.activite||'Seem',machineId:b.machine_id||null,tempsAlloue:(b as any).temps_alloue||b.duree,debutReel:(b as any).debut_reel||null,finReel:(b as any).fin_reel||null,lotId:(b as any).lot_id||(b as any).lot_ref||null,numAffaire:(b as any).num_affaire||null,dateEcheance:(b as any).date_echeance||null,seq:(b as any).seq!=null?(b as any).seq:null,cmdId:(b as any).cmd_id||null,datePrevue:(b as any).date_prevue||null,oxydation:(b as any).oxydation||null}))
+    ? dbBDTs.map(b => {
+        const racine = racineBdt(b.id), rang = rangMorceauBdt(b.id), rangs = _rangsFamille[racine] || [rang]
+        const tr = (b as any).temps_reglage
+        return {id:b.id,op:b.operateur_id||'',process:(b as any).process_id||'pending',client:b.client_nom||'',piece:b.piece,operation:b.operation,duree:b.duree,debut:b.debut!=null?Number(b.debut):PLAN_HEURE_DEFAUT,priorite:b.priorite,statut:b.statut,resultat:(b as any).resultat||null,activite:b.activite||'Seem',machineId:b.machine_id||null,tempsAlloue:(b as any).temps_alloue||b.duree,debutReel:(b as any).debut_reel||null,finReel:(b as any).fin_reel||null,lotId:(b as any).lot_id||(b as any).lot_ref||null,numAffaire:(b as any).num_affaire||null,dateEcheance:(b as any).date_echeance||null,seq:(b as any).seq!=null?(b as any).seq:null,cmdId:(b as any).cmd_id||null,datePrevue:(b as any).date_prevue||null,oxydation:(b as any).oxydation||null,
+          reglage:(tr!=null&&tr!=='')?Number(tr):null, racine, rangMorceau:rang, posMorceau:rangs.indexOf(rang)+1, nbMorceaux:rangs.length,
+          oasAvant:!!(b as any).oas_avant, oasApres:!!(b as any).oas_apres, cleLot:cleLot(b), sansHeure:(b.debut==null||(b.debut as any)==='')}
+      })
     : BDT_DEFAULT
   const PROCESS_J = sjX(procForGantt)   // sjX (et non JSON.stringify) : un nom contenant « </script> » ne casse plus la page
   const OPS_J  = JSON.stringify(opsForGantt)
@@ -1415,12 +1438,33 @@ export const pageServiceProd = (
       return { ...s, statut: bstStatutFromBC(bc, s.statut), bc_id: s.bc_id || null }
     })
 
+  // ─── Chemin critique : enchaînements à revoir (lot C, src/gamme.ts) ─────
+  // Calculés ICI sur les lignes mêmes que reçoit le script client (BDT bruts + BST au statut piloté par le BC),
+  // pour que la carte rendue par le serveur et celle que le client recalcule après chaque pose soient identiques.
+  const VIOL_CC: Record<string, string> = violationsEnchainement((dbBDTs ?? []) as any[], bdsRowsForBst)
+  const violCcHtml = (() => {
+    const bdtById: Record<string, any> = {}; (dbBDTs ?? []).forEach((b: any) => { bdtById[String(b.id)] = b })
+    const bdsById: Record<string, any> = {}; bdsRowsForBst.forEach((x: any) => { bdsById[String(x.id)] = x })
+    return Object.keys(VIOL_CC).map((id) => {
+      const o = bdtById[id] || bdsById[id] || {}
+      const lot = cleLot(o)
+      return `<div class="cc-viol-ligne" data-id="${escX(id)}" onclick="ccVoir(this.getAttribute('data-id'))" title="Voir sur le planning" style="display:flex;align-items:baseline;gap:8px;padding:6px 8px;border-bottom:1px solid #fee2e2;cursor:pointer;font-size:.74rem;"><i class="fas ${bdsById[id] && !bdtById[id] ? 'fa-industry' : 'fa-screwdriver-wrench'}" style="color:#dc2626;font-size:.66rem;"></i><span style="color:#475569;">${escX(VIOL_CC[id])}</span>${lot ? `<span style="margin-left:auto;font-size:.62rem;color:#0d9488;font-family:monospace;white-space:nowrap;">${escX(lot)}</span>` : ''}</div>`
+    }).join('')
+  })()
+
   // ─── Présence opérateurs ─────────────────────────────────
   // Opérateurs de production (Seem / Semrac) — alimente le planning de présence.
   const opsForPresence = ((dbOps && dbOps.length > 0) ? dbOps : OPS_DEFAULT)
     .filter((o:any) => o.activite === 'Seem' || o.activite === 'Semrac')
     .map((o:any) => ({ id:o.id, nom:o.nom, activite:o.activite, poste:o.poste || '' }))
   const PRESENCES_JS = PRESENCES_DB.map((p:any) => ({ operateur_id:p.operateur_id, date:p.date_presence, shift:p.shift }))
+  // 4 créneaux (Matin · Journée · Après-midi · Soirée) + Absent : libellés, horaires et teintes tirés de SHIFTS (shared.ts)
+  const PRES_PALETTE = paletteCreneaux()
+  const PRES_ORDRE = [...CRENEAUX, 'absent']
+  // Jours dont les présences sont réellement chargées au rendu (⊆ fenêtre lue par la route). Lecture échouée (null) :
+  // aucun — les cases restent verrouillées et le client relit la semaine affichée plutôt que d'écraser une valeur inconnue.
+  const PRES_JOURS_CHARGES: Record<string, boolean> = {}
+  if (Array.isArray(dbPresences)) joursChargesPage(TODAY).forEach(d => { PRES_JOURS_CHARGES[d] = true })
   // Absences RH → cases « absent » (congé / maladie) qui surchargent la présence
   const ABSENCES_RH_JS = ABSENCES_RH.map((a:any) => ({ operateur_id:a.operateur_id, date:a.date_absence, type:a.type }))
 
@@ -1673,11 +1717,22 @@ ${serviceHeader({
       </div>
     </div>` : ''}
 
+    <!-- ENCHAÎNEMENTS À REVOIR (chemin critique) : étapes posées avant leur au plus tôt (réglage, fin complète ou retour
+         de sous-traitance de l'étape précédente). Rendue ici par le serveur, recalculée par le client après chaque pose (ccRenderCarte). -->
+    <div id="ccCarte" class="card" style="padding:14px 16px;border-radius:14px;margin-bottom:14px;border-left:4px solid #dc2626;${Object.keys(VIOL_CC).length ? '' : 'display:none;'}">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+        <span style="font-weight:700;color:#1e293b;font-size:.82rem;"><i class="fas fa-link-slash" style="color:#dc2626;margin-right:6px;"></i>Enchaînements à revoir</span>
+        <span id="ccCarteN" style="background:#fee2e2;color:#b91c1c;font-size:.65rem;font-weight:700;padding:1px 8px;border-radius:999px;">${Object.keys(VIOL_CC).length}</span>
+        <span style="font-size:.66rem;color:#94a3b8;">étapes posées avant leur au plus tôt (réglage, fin complète ou retour de sous-traitance de l’étape précédente) · rien n’est décalé automatiquement · clic : voir sur le planning</span>
+      </div>
+      <div id="ccCarteListe" style="max-height:180px;overflow-y:auto;">${violCcHtml}</div>
+    </div>
+
     <!-- GOULOTTE : BDT à classer AU-DESSUS du planning (pleine largeur) -->
     <div id="pendingDropZone" class="card" style="padding:14px 16px;border-radius:14px;transition:outline .12s;margin-bottom:14px;" ondragover="onPendingOver(event)" ondragleave="onPendingLeave(event)" ondrop="onPendingDrop(event)">
       <div style="margin-bottom:10px;">
         <div style="font-weight:700;color:#1e293b;font-size:.82rem;display:flex;align-items:center;gap:6px;"><i class="fas fa-inbox" style="color:#f97316;"></i> BDT à classer / en attente de programmation<span id="cntPend" style="background:#ffedd5;color:#c2410c;font-size:.65rem;font-weight:700;padding:1px 7px;border-radius:999px;margin-left:auto;">0</span></div>
-        <div style="font-size:.62rem;color:#94a3b8;margin-top:3px;">Triés par échéance · chemin critique · Glisser une carte sur le planning pour la programmer · déposer ici une barre du planning pour la déprogrammer · <i class="fas fa-scissors"></i> sur une carte pour découper le BDT en morceaux (temps libre par morceau) — la découpe se fait uniquement ici, dans la goulotte</div>
+        <div style="font-size:.62rem;color:#94a3b8;margin-top:3px;">Triés par échéance, puis par lot et ordre de gamme · Glisser une carte sur le planning pour la programmer (l’heure est calée après le réglage de l’étape précédente : chemin critique) · <i class="fas fa-rotate-left"></i> sur une carte découpée pour annuler la découpe · déposer ici une barre du planning pour la déprogrammer · <i class="fas fa-scissors"></i> sur une carte pour découper le BDT en morceaux (le réglage reste sur le 1er morceau, seule la réalisation se répartit) — la découpe se fait uniquement ici, dans la goulotte</div>
       </div>
       <div id="pendingList" style="overflow-y:auto;max-height:240px;display:flex;flex-wrap:wrap;gap:8px;margin:0 -4px;padding:4px;"></div>
     </div>
@@ -1703,7 +1758,7 @@ ${serviceHeader({
     <style>.proc-slot.drag-over{border-color:#6366f1 !important;border-style:solid !important;background:#eef2ff !important;} .proc-slot.sel-target{outline:2px dashed #6366f1;outline-offset:-2px;} .ops-card.sel,.pending-card.sel{outline:2px solid #6366f1;outline-offset:1px;}</style>
     <div class="card" style="padding:16px;margin-bottom:16px;">
       <div style="font-weight:700;color:#1e293b;font-size:.85rem;display:flex;align-items:center;gap:6px;margin-bottom:4px;"><i class="fas fa-people-arrows" style="color:#6366f1;"></i> Affectation des ressources aux postes — <span id="rhPosteJour" style="color:#4f46e5;"></span></div>
-      <div style="font-size:.7rem;color:#94a3b8;margin-bottom:12px;">Glisse un opérateur <strong>ou</strong> clique-le pour le sélectionner, puis clique une sous-case (Matin / Après-midi / Soir) d'un process <strong>dans le planning ci-dessus</strong> — affectation programmée &amp; tracée pour le jour.</div>
+      <div style="font-size:.7rem;color:#94a3b8;margin-bottom:12px;">Glisse un opérateur <strong>ou</strong> clique-le pour le sélectionner, puis clique une sous-case (Matin / Journée / Après-midi / Soirée) d'un process <strong>dans le planning ci-dessus</strong> — affectation programmée &amp; tracée pour le jour.</div>
       <div id="opsByShift"></div>
     </div>
   </div>
@@ -1719,6 +1774,7 @@ ${serviceHeader({
         <div><label class="form-label">Opération *</label><select id="m_operation" class="form-input" onchange="updateModalOpsEligibles()"><option value="">— Choisir activité —</option></select></div>
         <div><label class="form-label">Pièce *</label><input id="m_piece" type="text" placeholder="DISSIP-A24" class="form-input"/></div>
         <div><label class="form-label">Durée (h) *</label><input id="m_duree" type="number" step="0.5" placeholder="2.5" class="form-input"/></div>
+        <div><label class="form-label">dont réglage (h) <span style="color:#94a3b8;font-weight:400;font-size:.72rem;">facultatif</span></label><input id="m_reglage" type="number" step="0.05" min="0" placeholder="inconnu" title="Temps de réglage compris dans la durée (fait une seule fois, il reste sur le morceau 1 en cas de découpe). Vide = inconnu." class="form-input"/></div>
         <div><label class="form-label">Heure début</label><input id="m_debut" type="time" value="06:00" class="form-input"/></div>
         <div><label class="form-label">Priorité</label><select id="m_priorite" class="form-input"><option value="normal">Normal</option><option value="urgent">Urgent</option><option value="critique">Critique</option></select></div>
         <div style="grid-column:span 2;"><label class="form-label">Process atelier <span id="compHint" style="color:#f59e0b;font-style:italic;font-size:.72rem;font-weight:400;"></span></label><select id="m_process" class="form-input"><option value="">— Choisir activité d'abord —</option></select></div>
@@ -1782,14 +1838,23 @@ ${serviceHeader({
       <div style="padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;"><button onclick="closeModal('sortieModal')" class="btn btn-secondary">Annuler</button><button onclick="confirmSortie()" class="btn" style="background:linear-gradient(135deg,#0ea5e9,#0284c7);color:white;"><i class="fas fa-check"></i> Valider la sortie</button></div>
     </div>
   </div>
-  <!-- Modal découpe d'un BDT de la GOULOTTE (ciseaux d'une carte) : temps LIBRE par morceau.
+  <!-- Modal découpe d'un BDT de la GOULOTTE (ciseaux d'une carte) : seul le temps de RÉALISATION se découpe,
+       le réglage (fait une seule fois) reste sur le morceau 1. Réglage lu par GET /api/production/bdt/:id/temps.
        Rangée dans CE panneau (planning) : dans un autre onglet, masqué, elle ne s'affichait pas. -->
   <div id="splitModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center;z-index:500;">
-    <div style="background:white;border-radius:20px;box-shadow:0 24px 64px rgba(0,0,0,.25);width:100%;max-width:520px;margin:1rem;overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
+    <div style="background:white;border-radius:20px;box-shadow:0 24px 64px rgba(0,0,0,.25);width:100%;max-width:560px;margin:1rem;overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
       <div style="padding:14px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#8b5cf6,#7c3aed);"><h3 style="font-weight:700;color:white;font-size:.95rem;"><i class="fas fa-scissors" style="margin-right:8px;"></i>Découper le BDT en morceaux</h3><button type="button" onclick="closeModal('splitModal')" style="color:rgba(255,255,255,.7);background:none;border:none;font-size:1.2rem;cursor:pointer;"><i class="fas fa-times"></i></button></div>
+      <div id="splitRappel" style="display:none;padding:8px 20px;background:#fffbeb;border-bottom:1px solid #fde68a;font-size:.72rem;color:#92400e;"></div>
       <div style="padding:20px;overflow-y:auto;">
         <div id="splitInfo" style="background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:12px;font-size:.82rem;"></div>
-        <div style="font-size:.72rem;color:#64748b;background:#f5f3ff;border:1px solid #ede9fe;border-radius:9px;padding:8px 11px;margin-bottom:12px;"><i class="fas fa-circle-info" style="color:#7c3aed;margin-right:5px;"></i>Saisissez le temps de chaque morceau. Chaque morceau reçoit <strong>exactement</strong> le temps saisi et reste dans la goulotte : vous le programmerez séparément. Le premier morceau garde le numéro du BDT.</div>
+        <div id="splitReglageBox" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:9px 11px;margin-bottom:12px;">
+          <label for="splitReglage" style="font-size:.74rem;font-weight:700;color:#475569;width:82px;"><i class="fas fa-screwdriver-wrench" style="margin-right:5px;color:#64748b;"></i>Réglage</label>
+          <input id="splitReglage" type="number" step="0.05" min="0" inputmode="decimal" placeholder="inconnu" style="width:110px;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 9px;font-size:.82rem;"/>
+          <span style="font-size:.72rem;color:#94a3b8;">h</span>
+          <span id="splitReglageAide" style="flex:1;min-width:160px;font-size:.7rem;color:#64748b;"></span>
+        </div>
+        <div style="font-size:.72rem;color:#64748b;background:#f5f3ff;border:1px solid #ede9fe;border-radius:9px;padding:8px 11px;margin-bottom:12px;"><i class="fas fa-circle-info" style="color:#7c3aed;margin-right:5px;"></i>Seul le temps de <strong>réalisation</strong> se découpe : saisissez-le pour chaque morceau. Le <strong>réglage</strong> est fixe, fait une seule fois : il reste sur le morceau 1, qui garde le numéro du BDT (il peut ne porter que le réglage, réalisation 0). Chaque morceau reste dans la goulotte : vous le programmerez séparément.</div>
+        <div style="font-size:.72rem;font-weight:700;color:#475569;margin-bottom:6px;">Réalisation (h) par morceau</div>
         <div id="splitParts" style="display:grid;gap:8px;"></div>
         <button type="button" id="splitAddBtn" onclick="splitAdd()" style="margin-top:10px;font-size:.74rem;font-weight:700;color:#7c3aed;background:#f5f3ff;border:1px dashed #c4b5fd;border-radius:8px;padding:6px 12px;cursor:pointer;"><i class="fas fa-plus" style="margin-right:5px;"></i>Ajouter un morceau</button>
         <div id="splitTotal" style="margin-top:12px;font-size:.8rem;"></div>
@@ -1941,19 +2006,20 @@ ${serviceHeader({
 <!-- ═══ PANEL : PRÉSENCE OPÉRATEURS ══════════════════════════ -->
 <div id="ppanel-presence" style="display:none;">
   <div style="padding:20px;max-width:1500px;margin:0 auto;">
-    <style>.presview-pill{padding:8px 16px;border-radius:10px;border:1px solid #e2e8f0;background:white;color:#64748b;font-size:.82rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,.06);}.presview-pill.active{background:linear-gradient(135deg,#0d9488,#14b8a6);color:white;border-color:transparent;}</style>
+    <style>.presview-pill{padding:8px 16px;border-radius:10px;border:1px solid #e2e8f0;background:white;color:#64748b;font-size:.82rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,.06);}.presview-pill.active{background:linear-gradient(135deg,#0d9488,#14b8a6);color:white;border-color:transparent;}#presMenu .pres-choix:not([disabled]):hover,#presMenu .pres-choix:not([disabled]):focus{background:#f1f5f9 !important;outline:none;}</style>
     <div style="display:flex;gap:8px;margin-bottom:16px;">
       <button id="presViewBtn-grid" onclick="presView('grid')" class="presview-pill active"><i class="fas fa-calendar-week" style="margin-right:7px;"></i>Planning de présence</button>
       <button id="presViewBtn-conges" onclick="presView('conges')" class="presview-pill"><i class="fas fa-umbrella-beach" style="margin-right:7px;"></i>Demandes de congés à traiter<span id="presCongesCount" style="background:#14b8a6;color:white;border-radius:999px;padding:0 8px;font-size:.66rem;margin-left:7px;">${CONGES_OPS.length}</span></button>
     </div>
     <div id="presView-grid">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
-      <div><h1 style="font-size:1.3rem;font-weight:900;color:#1e293b;margin:0;">Présence opérateurs</h1><div style="font-size:.76rem;color:#64748b;margin-top:2px;">Programmez les horaires (matin / journée / soir) par jour et par semaine · absences RH synchronisées</div></div>
+      <div><h1 style="font-size:1.3rem;font-weight:900;color:#1e293b;margin:0;">Présence opérateurs</h1><div style="font-size:.76rem;color:#64748b;margin-top:2px;">Programmez les créneaux (matin / journée / après-midi / soirée) par jour et par semaine · absences RH synchronisées</div></div>
       <div style="flex:1;"></div>
       <div style="display:flex;align-items:center;gap:8px;background:white;border-radius:10px;padding:6px 10px;box-shadow:0 1px 4px rgba(0,0,0,.07);border:1px solid #f1f5f9;">
         <button onclick="presShiftWeek(-1)" style="width:26px;height:26px;border-radius:6px;background:#f1f5f9;border:none;cursor:pointer;">‹</button>
         <span id="presWeekLabel" style="font-size:.8rem;font-weight:700;color:#1e293b;min-width:180px;text-align:center;"></span>
         <button onclick="presShiftWeek(1)" style="width:26px;height:26px;border-radius:6px;background:#f1f5f9;border:none;cursor:pointer;">›</button>
+        <span id="presWeekEtat" style="font-size:.7rem;font-weight:700;"></span>
       </div>
       <div style="display:flex;gap:2px;background:white;border-radius:10px;padding:4px;box-shadow:0 1px 4px rgba(0,0,0,.07);border:1px solid #f1f5f9;">
         <button onclick="presSetAct('all',this)" id="pres-fa-all" class="tab-gang active">Tous</button>
@@ -1962,13 +2028,10 @@ ${serviceHeader({
       </div>
     </div>
     <div style="display:flex;gap:14px;font-size:.7rem;color:#64748b;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
-      <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#dbeafe;border:1px solid #93c5fd;margin-right:4px;"></span>Matin</span>
-      <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#dcfce7;border:1px solid #86efac;margin-right:4px;"></span>Journée</span>
-      <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#ede9fe;border:1px solid #c4b5fd;margin-right:4px;"></span>Soir</span>
-      <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#fef2f2;border:1px solid #fca5a5;margin-right:4px;"></span>Absent</span>
+      ${PRES_ORDRE.map(k => { const p = PRES_PALETTE[k]; return `<span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:${p[0]};border:1px solid ${p[1]}66;margin-right:4px;"></span>${escX(p[2])}${p[3] ? ` <span style="color:#94a3b8;">${escX(p[3])}</span>` : ''}</span>` }).join('\n      ')}
       <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#f8fafc;border:1px solid #e2e8f0;margin-right:4px;"></span>Non programmé</span>
       <button onclick="openPresWeekModal()" style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#f97316,#ea580c);color:white;cursor:pointer;font-size:.78rem;font-weight:700;"><i class="fas fa-calendar-week"></i>Programmer la semaine</button>
-      <span style="color:#94a3b8;flex-basis:100%;"><i class="fas fa-info-circle" style="margin-right:4px;"></i>Cliquez une cellule pour faire défiler matin → journée → soir → absent → vide · ou utilisez « Programmer la semaine » pour appliquer un shift à toute la semaine</span>
+      <span style="color:#94a3b8;flex-basis:100%;"><i class="fas fa-info-circle" style="margin-right:4px;"></i>Cliquez une case pour choisir Matin, Journée, Après-midi, Soirée, Absent ou Effacer · chaque choix est enregistré aussitôt (la case revient à sa valeur si l'enregistrement échoue) · ou utilisez « Programmer la semaine » pour appliquer un créneau à toute la semaine affichée</span>
     </div>
     <div class="card" style="overflow:hidden;">
       <div style="overflow-x:auto;"><div id="presGrid"></div></div>
@@ -1989,8 +2052,8 @@ ${serviceHeader({
               <div style="font-weight:700;color:#1e293b;font-size:.84rem;">${escX(cg.salarie_nom||cg.salarie_id||'—')} <span style="background:#ccfbf1;color:#0f766e;border-radius:999px;padding:1px 7px;font-size:.62rem;font-weight:700;">${(cg.type||'congé').replace('_',' ')}</span></div>
               <div style="font-size:.72rem;color:#64748b;">Du ${cg.date_debut||'—'} au ${cg.date_fin||'—'} · ${heures}${cg.motif?(' · '+escX(cg.motif)):''}</div>
             </div>
-            <button onclick="validerCongeOp('${cg.id}','valide')" style="padding:8px 16px;background:#10b981;color:white;border:none;border-radius:8px;font-size:.78rem;font-weight:700;cursor:pointer;"><i class="fas fa-check" style="margin-right:5px;"></i>Approuver</button>
-            <button onclick="validerCongeOp('${cg.id}','refuse')" style="padding:8px 13px;background:#fee2e2;color:#b91c1c;border:none;border-radius:8px;font-size:.78rem;font-weight:700;cursor:pointer;"><i class="fas fa-times"></i></button>
+            <button type="button" onclick="validerCongeOp('${cg.id}','valide',this)" style="padding:8px 16px;background:#10b981;color:white;border:none;border-radius:8px;font-size:.78rem;font-weight:700;cursor:pointer;"><i class="fas fa-check" style="margin-right:5px;"></i>Approuver</button>
+            <button type="button" onclick="validerCongeOp('${cg.id}','refuse',this)" title="Refuser" aria-label="Refuser" style="padding:8px 13px;background:#fee2e2;color:#b91c1c;border:none;border-radius:8px;font-size:.78rem;font-weight:700;cursor:pointer;"><i class="fas fa-times"></i></button>
           </div>`}).join('') : `<div style="text-align:center;padding:28px;color:#cbd5e1;font-size:.82rem;"><i class="fas fa-check-circle" style="display:block;font-size:1.6rem;margin-bottom:6px;"></i>Aucune demande de congé opérateur en attente.</div>`}
         </div>
       </div>
@@ -2005,15 +2068,12 @@ ${serviceHeader({
         <button onclick="closePresWeekModal()" style="color:rgba(255,255,255,.85);background:none;border:none;font-size:1.2rem;cursor:pointer;"><i class="fas fa-times"></i></button>
       </div>
       <div style="padding:22px;">
-        <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 14px;font-size:.78rem;color:#9a3412;margin-bottom:18px;"><i class="fas fa-info-circle" style="margin-right:5px;"></i>Choisissez un ou plusieurs opérateurs, le shift à appliquer, et la semaine cible. Les jours en absence RH ne seront pas touchés.</div>
+        <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 14px;font-size:.78rem;color:#9a3412;margin-bottom:18px;"><i class="fas fa-info-circle" style="margin-right:5px;"></i>Choisissez un ou plusieurs opérateurs et le créneau à appliquer à la semaine affichée (<strong id="presWkLabel"></strong>). Les jours en absence RH ne seront pas touchés.</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
           <div>
-            <label style="display:block;font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:.3rem;">Shift à appliquer *</label>
+            <label style="display:block;font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:.3rem;">Créneau à appliquer *</label>
             <select id="presWkShift" style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:.45rem .75rem;font-size:.85rem;background:#f8fafc;outline:none;">
-              <option value="matin">Matin</option>
-              <option value="journee">Journée</option>
-              <option value="soir">Soir</option>
-              <option value="absent">Absent</option>
+              ${PRES_ORDRE.map(k => `<option value="${k}">${escX(PRES_PALETTE[k][2])}${PRES_PALETTE[k][3] ? ` (${escX(PRES_PALETTE[k][3])})` : ''}</option>`).join('')}
               <option value="">Effacer (non programmé)</option>
             </select>
           </div>
@@ -2841,7 +2901,7 @@ var TODAY_REAL = '${TODAY}';                                  // date réelle fi
 var AFFECTATIONS = ${sjX(dbAffectations || {})};   // { 'YYYY-MM-DD': { opId: [{p:process_id, s:shift}, …] } } (multi-affectation)
 var dragOpId=null, selOpId=null, selBdtId=null;   // sélection au clic (clic-pour-sélectionner puis clic-pour-placer)
 var filtAct='all', filtType='all', filtAffaire='', dragId=null, _grabDX=0, soldageBdtId=null, recuBdtId=null, focusLot=null;
-var DAY_START=5,DAY_END=23,TOTAL_H=18,PX_H=50,LANE_W=TOTAL_H*50,SNAP=0.25;
+var DAY_START=${PLAN_DEBUT_JOUR},DAY_END=${PLAN_FIN_JOUR},TOTAL_H=DAY_END-DAY_START,PX_H=50,LANE_W=TOTAL_H*50,SNAP=0.25;   // grille du planning = gamme.ts PLAN_DEBUT_JOUR / PLAN_FIN_JOUR
 // Un BDT s'affiche le jour de sa date prévue ; sans date prévue → rattaché au jour réel (à programmer)
 function bdtOnDay(b){ return (b.datePrevue || TODAY_REAL) === currentDate; }
 // UN BDT EST DANS LA GOULOTTE tant qu'il n'a pas ete POSE sur le planning (11/09/2026).
@@ -2851,8 +2911,279 @@ function bdtOnDay(b){ return (b.datePrevue || TODAY_REAL) === currentDate; }
 //   a un poste et pose a 6 h sur le jour courant, A LA FOIS dans la goulotte et sur le planning.
 //   Programme = pose (process + jour), jamais par defaut.
 function enGoulotte(b){ var s=String(b.statut||''); if(s==='st'||b.op==='ST'||s==='recu'||s==='solde'||/^annul/.test(s)) return false; return s==='a_programmer'||!s||b.process==='pending'||!b.datePrevue; }
-// Plage horaire (colonne) d'un opérateur selon sa présence du jour : matin / apmidi / soir / absent
-function opShiftCol(opId){ var g=presGet(opId,currentDate); if(!g.shift||g.shift==='absent') return 'absent'; if(g.shift==='matin') return 'matin'; if(g.shift==='soir') return 'soir'; return 'apmidi'; }
+// ==CC-MOTEUR-DEBUT==
+// ── CHEMIN CRITIQUE (lot C, 14/09/2026) : moteur REPRIS ligne à ligne de src/gamme.ts (auPlusTot,
+//    controleEnchainement, violationsEnchainement). Toute modification se reporte des DEUX côtés :
+//    le serveur cale / refuse la pose avec la même règle (test de parité lotc/test_chemin.ts).
+//    Règle : l étape suivante d un lot ne démarre pas avant la fin du RÉGLAGE de l étape précédente.
+var CC_DEBUT=DAY_START, CC_FIN=DAY_END, CC_HJ=CC_FIN-CC_DEBUT, CC_EPS=1e-6, CC_HEURE_DEFAUT=${PLAN_HEURE_DEFAUT};
+function ccTxt(v){ return String(v==null?'':v).trim(); }
+function ccNb(v){ var n=Number(v); return isFinite(n)?n:0; }
+function ccNum(v){ if(v==null||v==='') return null; var n=Number(v); return isFinite(n)?n:null; }
+function ccArr6(x){ return Math.round(x*1e6)/1e6; }
+function ccCleLot(op){ return ccTxt(op&&op.lot_id)||ccTxt(op&&op.lot_ref); }
+function ccAnnulee(op){ return /^annul/i.test(ccTxt(op&&op.statut)); }
+function ccSoldee(op){
+  if(!op) return false;
+  if(ccTxt(op.date_retour_effective)) return true;
+  var s=ccTxt(op.statut).toLowerCase();
+  var estB=('sous_traitant_id' in op)||('date_retour_prevue' in op)||('date_envoi' in op);
+  if(estB&&(s==='recu'||s==='reçu')) return true;
+  return ['solde','soldé','termine','terminé','cloture','clôture','fini'].indexOf(s)>=0;
+}
+function ccEstBds(op){ return !!op&&(('sous_traitant_id' in op)||('date_retour_prevue' in op)||('date_envoi' in op)||('duree_days' in op)||('date_debut' in op)||('date_retour_effective' in op)); }
+function ccSeq(o){ return (o==null||o.seq==null)?null:ccNb(o.seq); }
+function ccGamme(ops){ return (ops||[]).slice().sort(function(a,b){ var sa=(a==null||a.seq==null)?9999:ccNb(a.seq), sb=(b==null||b.seq==null)?9999:ccNb(b.seq); if(sa!==sb) return sa-sb; var x=ccTxt(a&&a.id), y=ccTxt(b&&b.id); return x<y?-1:(x>y?1:0); }); }
+function ccGroupePrec(cible,ops){
+  var tri=ccGamme(ops), idc=ccTxt(cible&&cible.id), i=-1;
+  for(var q=0;q<tri.length;q++){ if(ccTxt(tri[q]&&tri[q].id)===idc){ i=q; break; } }
+  if(i<0) return [];
+  var sc=ccSeq(cible), j=i-1;
+  while(j>=0&&(ccAnnulee(tri[j])||(sc!=null&&ccSeq(tri[j])===sc))) j--;
+  if(j<0) return [];
+  var sp=ccSeq(tri[j]); if(sp==null) return [tri[j]];
+  return tri.filter(function(o){ return !ccAnnulee(o)&&ccSeq(o)===sp; });
+}
+function ccIsoJour(j){ return new Date(j*86400000).toISOString().slice(0,10); }
+function ccJour(iso){ var m=/^(\\d{4})-(\\d{2})-(\\d{2})/.exec(ccTxt(iso)); if(!m) return null; var t=Date.UTC(Number(m[1]),Number(m[2])-1,Number(m[3])); if(!isFinite(t)) return null; var j=Math.round(t/86400000); return ccIsoJour(j)===m[0]?j:null; }
+function ccBorner(h){ return Math.min(CC_FIN,Math.max(CC_DEBUT,h)); }
+function ccGrille(date,heure){ var j=ccJour(date), h=ccNum(heure); if(j==null||h==null) return null; return ccArr6(j*CC_HJ+ccBorner(h)-CC_DEBUT); }
+function ccParId(a,b){ var x=ccTxt(a&&a.id), y=ccTxt(b&&b.id); return x<y?-1:(x>y?1:0); }
+function ccTrierTextes(l){ return l.slice().sort(function(a,b){ return a<b?-1:(a>b?1:0); }); }
+function ccFmtH(h){ var H=Math.floor(h); var m=Math.round((h-H)*60); if(m===60){ H++; m=0; } return H+'h'+(m>0?(m<10?'0'+m:String(m)):''); }
+function ccJJMM(iso){ var m=/^(\\d{4})-(\\d{2})-(\\d{2})/.exec(ccTxt(iso)); return m?m[3]+'/'+m[2]:ccTxt(iso); }
+function ccFmtNb(x){ return String(Math.round(x*100)/100).replace('.',','); }
+function ccAjouter(dateIso,heure,h){
+  var j=ccJour(dateIso), hh=ccNum(heure); if(j==null||hh==null) return null;
+  var hn=ccNum(h), d=Math.max(0,hn==null?0:hn), depart=ccBorner(hh);
+  if(d<=0) return {date:ccIsoJour(j),heure:ccArr6(depart)};
+  var g=ccArr6(j*CC_HJ+(depart-CC_DEBUT)+d), jour=Math.floor(g/CC_HJ), reste=ccArr6(g-jour*CC_HJ);
+  if(reste<=0){ jour-=1; reste=CC_HJ; }
+  return {date:ccIsoJour(jour),heure:ccArr6(CC_DEBUT+reste)};
+}
+function ccVersDebut(p){ if(p.heure>=CC_FIN-CC_EPS) return {date:ccIsoJour(ccJour(p.date)+1),heure:CC_DEBUT}; return p; }
+function ccHeureReelle(v){ var m=/^\\s*(\\d{1,2})[:h](\\d{2})/.exec(ccTxt(v)); if(!m) return null; var H=Number(m[1]), M=Number(m[2]); return (H>23||M>59)?null:ccArr6(H+M/60); }
+function ccDebutBdt(op){
+  var s=ccTxt(op&&op.statut).toLowerCase(), d=ccTxt(op&&op.date_prevue), h;
+  if(ccSoldee(op)||s==='recu'||s==='reçu'){ if(ccJour(d)==null) return null; h=ccHeureReelle(op.debut_reel); if(h==null) h=ccNum(op.debut); return {date:d.slice(0,10),heure:(h==null?CC_HEURE_DEFAUT:h)}; }
+  if(!s||s==='a_programmer'||s==='st'||ccAnnulee(op)||ccTxt(op&&op.operateur_id)==='ST') return null;
+  if(!ccTxt(op&&op.process_id)||ccJour(d)==null) return null;
+  h=ccNum(op.debut); return {date:d.slice(0,10),heure:(h==null?CC_HEURE_DEFAUT:h)};
+}
+function ccDureeBdt(op){ var a=ccNum(op&&op.duree); if(a==null) a=ccNum(op&&op.temps_alloue); return Math.max(0,a==null?0:a); }
+function ccReglage(op){ return ccNum(op&&op.temps_reglage); }
+function ccDebutBds(op){ var d=ccTxt(op&&op.date_debut)||ccTxt(op&&op.date_envoi); return ccJour(d)==null?null:d.slice(0,10); }
+function ccDureeJoursBds(op){ var n=Number(op&&op.duree_days); if(op&&op.duree_days&&isFinite(n)) return Math.ceil(Math.max(1,n)); var a=ccJour(op&&op.date_envoi), b=ccJour(op&&op.date_retour_prevue); if(a!=null&&b!=null) return Math.max(1,b-a); return 5; }
+function ccRetourBds(op){ var eff=ccTxt(op&&op.date_retour_effective); if(ccJour(eff)!=null) return eff.slice(0,10); var d=ccDebutBds(op); return d==null?null:ccIsoJour(ccJour(d)+ccDureeJoursBds(op)); }
+function ccAuPlusTot(cible,opsDuLot){
+  function aucune(r){ return {date:null,heure:null,regle:'aucune',depuis:null,raison:r}; }
+  if(!cible) return aucune('opération inconnue');
+  var k=ccCleLot(cible);
+  if(!k) return aucune('sans lot : pas de gamme à respecter');
+  if(cible.seq==null) return aucune('sans rang dans la gamme');
+  var idC=ccTxt(cible.id);
+  var ops=(opsDuLot||[]).filter(function(o){ return !!o&&ccCleLot(o)===k&&ccTxt(o.id)!==idC; });
+  ops.push(cible);
+  var bdsCible=ccEstBds(cible), cands=[], infos=[], libres=[];
+  function pousser(p,regle,depuis,raison){ if(!p) return; var g=ccGrille(p.date,p.heure); if(g==null) return; cands.push({date:p.date,heure:p.heure,g:g,regle:regle,depuis:depuis,raison:raison}); }
+  var G=ccGroupePrec(cible,ops).slice().sort(ccParId);
+  var bdsG=G.filter(function(o){ return ccEstBds(o); }), bdtG=G.filter(function(o){ return !ccEstBds(o); });
+  bdsG.forEach(function(s){ var r=ccRetourBds(s); if(r) pousser({date:r,heure:CC_DEBUT},'retour_st',ccTxt(s.id),'après le retour de sous-traitance de '+ccTxt(s.id)); else infos.push('sous-traitance '+ccTxt(s.id)+' non planifiée'); });
+  if(bdtG.length){
+    var nonSoldes=bdtG.filter(function(o){ return !ccSoldee(o); });
+    if(!nonSoldes.length) libres.push('étape précédente soldée');
+    else if(bdsCible||!!cible.oas_avant){
+      var manquants=[];
+      nonSoldes.forEach(function(m){ var d=ccDebutBdt(m); var fin=d?ccAjouter(d.date,d.heure,ccDureeBdt(m)):null; if(fin) pousser(fin,'fin_complete',ccTxt(m.id),'après la fin de '+ccTxt(m.id)+(bdsCible?'':' (passage OAS entre les deux)')); else manquants.push(ccTxt(m.id)); });
+      if(manquants.length) infos.push('étape précédente non programmée ('+ccTrierTextes(manquants).join(', ')+')');
+    } else {
+      var porteurs=bdtG.filter(function(o){ var r=ccReglage(o); return (r==null?0:r)>0; });
+      if(porteurs.length){
+        var nonProg=[];
+        porteurs.forEach(function(p){ var R=ccReglage(p); if(ccSoldee(p)){ libres.push('réglage de '+ccTxt(p.id)+' déjà fait'); return; } var d=ccDebutBdt(p); if(!d){ nonProg.push(ccTxt(p.id)); return; } pousser(ccAjouter(d.date,d.heure,R),'reglage',ccTxt(p.id),'après le réglage de '+ccTxt(p.id)+' ('+ccFmtNb(R)+' h)'); });
+        if(nonProg.length){
+          var tot=null;
+          bdtG.forEach(function(m){ if(ccSoldee(m)) return; var d=ccDebutBdt(m); if(!d) return; var g=ccGrille(d.date,d.heure); if(g==null) return; if(!tot||g<tot.g||(g===tot.g&&ccTxt(m.id)<tot.id)) tot={d:d,g:g,id:ccTxt(m.id)}; });
+          var lesP=ccTrierTextes(nonProg).join(', ');
+          if(tot) pousser(ccAjouter(tot.d.date,tot.d.heure,0),'reglage',tot.id,'après le début de '+tot.id+' (réglage de '+lesP+' non programmé)');
+          else infos.push('étape précédente non programmée ('+lesP+', porteur du réglage)');
+        }
+      } else {
+        var inconnu=bdtG.some(function(o){ return ccReglage(o)==null; }), best=null;
+        bdtG.forEach(function(m){ var d=ccDebutBdt(m); if(!d) return; var g=ccGrille(d.date,d.heure); if(g==null) return; if(!best||g<best.g||(g===best.g&&ccTxt(m.id)<best.id)) best={d:d,g:g,id:ccTxt(m.id)}; });
+        if(best) pousser(ccAjouter(best.d.date,best.d.heure,0),'reglage',best.id,'après le début de '+best.id+(inconnu?' (réglage non renseigné, compté 0)':' (sans réglage)'));
+        else infos.push('étape précédente non programmée ('+ccTrierTextes(nonSoldes.map(function(o){ return ccTxt(o.id); })).join(', ')+')');
+      }
+    }
+  }
+  var rc=ccReglage(cible);
+  if(!bdsCible&&!((rc==null?0:rc)>0)){
+    var sc=ccNb(cible.seq);
+    var freres=ops.filter(function(o){ var r=ccReglage(o); return o!==cible&&!ccAnnulee(o)&&!ccEstBds(o)&&o.seq!=null&&ccNb(o.seq)===sc&&(r==null?0:r)>0; }).sort(ccParId);
+    freres.forEach(function(f){ if(ccSoldee(f)) return; var R=ccReglage(f), d=ccDebutBdt(f); if(!d){ infos.push('réglage de '+ccTxt(f.id)+' non programmé (même étape)'); return; } pousser(ccAjouter(d.date,d.heure,R),'reglage',ccTxt(f.id),'après le réglage de '+ccTxt(f.id)+' ('+ccFmtNb(R)+' h, même étape)'); });
+  }
+  if(!cands.length){
+    if(infos.length) return {date:null,heure:null,regle:'inconnu',depuis:null,raison:infos.join(' · ')};
+    return aucune(libres.length?libres[0]:(G.length?'étape précédente soldée':'tête de gamme'));
+  }
+  var b0=cands[0];
+  cands.forEach(function(x){ if(x.g>b0.g||(x.g===b0.g&&x.depuis<b0.depuis)) b0=x; });
+  var pos=bdsCible?{date:b0.date,heure:b0.heure}:ccVersDebut({date:b0.date,heure:b0.heure});
+  return {date:pos.date,heure:pos.heure,regle:b0.regle,depuis:b0.depuis,raison:b0.raison+(infos.length?' · '+infos.join(' · '):'')};
+}
+function ccMessageCalage(h,apt){ return 'Calé à '+ccFmtH(h)+' (chemin critique) : '+apt.raison; }
+function ccControle(cible,opsDuLot){
+  var apt=ccAuPlusTot(cible,opsDuLot);
+  var libre={etat:'libre',au_plus_tot:apt,cale_a:null,message:null};
+  if(apt.regle==='aucune'||apt.regle==='inconnu'||apt.date==null||apt.heure==null) return libre;
+  var jA=ccJour(apt.date);
+  if(ccEstBds(cible)){
+    var db=ccDebutBds(cible);
+    if(db==null) return libre;
+    if(ccJour(db)<jA) return {etat:'refus',au_plus_tot:apt,cale_a:null,message:ccTxt(cible.id)+' : dispo au plus tôt le '+ccJJMM(apt.date)+' ('+apt.raison+'). Planifiez-le ce jour-là ou après.'};
+    return libre;
+  }
+  var j=ccJour(cible.date_prevue);
+  if(j==null||j>jA) return libre;
+  if(j<jA) return {etat:'refus',au_plus_tot:apt,cale_a:null,message:'Au plus tôt le '+ccJJMM(apt.date)+' à '+ccFmtH(apt.heure)+' ('+apt.raison+') : posez '+ccTxt(cible.id)+' ce jour-là ou après.'};
+  var h=ccNum(cible.debut);
+  if(h!=null&&ccGrille(cible.date_prevue,h)>=ccGrille(apt.date,apt.heure)-CC_EPS) return libre;
+  var cale=Math.ceil(ccArr6(apt.heure*100))/100;
+  return {etat:'cale',au_plus_tot:apt,cale_a:cale,message:ccMessageCalage(cale,apt)};
+}
+function ccViolations(bdtRows,bdsRows){
+  var parLot=Object.create(null), out={};
+  function ranger(op){ var k=ccCleLot(op); if(!k) return; (parLot[k]=parLot[k]||[]).push(op); }
+  (bdtRows||[]).forEach(function(b){ if(b) ranger(b); });
+  (bdsRows||[]).forEach(function(s){ if(s) ranger(s); });
+  (bdtRows||[]).forEach(function(b){
+    if(!b||ccAnnulee(b)) return;
+    var k=ccCleLot(b); if(!k) return;
+    var s=ccTxt(b.statut).toLowerCase();
+    if(ccSoldee(b)||s==='recu'||s==='reçu') return;
+    var d=ccDebutBdt(b); if(!d) return;
+    var apt=ccAuPlusTot(b,parLot[k]||[]);
+    if(apt.regle==='aucune'||apt.regle==='inconnu'||apt.date==null||apt.heure==null) return;
+    if(ccGrille(d.date,d.heure)<ccGrille(apt.date,apt.heure)-CC_EPS) out[ccTxt(b.id)]=ccTxt(b.id)+' posé le '+ccJJMM(d.date)+' à '+ccFmtH(d.heure)+' : au plus tôt le '+ccJJMM(apt.date)+' à '+ccFmtH(apt.heure)+' ('+apt.raison+')';
+  });
+  (bdsRows||[]).forEach(function(x){
+    if(!x||ccAnnulee(x)) return;
+    var k=ccCleLot(x); if(!k) return;
+    var st=ccTxt(x.statut).toLowerCase();
+    if(ccTxt(x.date_retour_effective)||['envoye','envoyé','recu','reçu','solde','soldé'].indexOf(st)>=0) return;
+    var d=ccDebutBds(x); if(d==null) return;
+    var apt=ccAuPlusTot(x,parLot[k]||[]);
+    if(apt.regle==='aucune'||apt.regle==='inconnu'||apt.date==null) return;
+    if(ccJour(d)<ccJour(apt.date)) out[ccTxt(x.id)]=ccTxt(x.id)+' planifié le '+ccJJMM(d)+' : dispo au plus tôt le '+ccJJMM(apt.date)+' ('+apt.raison+')';
+  });
+  return out;
+}
+// Adaptateur : carte BDT du planning (projection bdtsForGantt) → ligne au format des colonnes brutes du moteur.
+function ccRowBdt(b){ return {id:b.id,seq:b.seq,statut:b.statut,lot_id:b.cleLot,lot_ref:null,date_prevue:b.datePrevue,debut:(b.sansHeure?null:b.debut),duree:b.duree,temps_alloue:b.tempsAlloue,temps_reglage:b.reglage,debut_reel:b.debutReel,oas_avant:!!b.oasAvant,process_id:(b.process==='pending'?null:b.process),operateur_id:(b.op||null)}; }
+function ccOpsDuLot(k){ var out=[]; if(!k) return out; BDTS.forEach(function(b){ if(b.cleLot===k) out.push(ccRowBdt(b)); }); if(typeof BST_DATA!=='undefined'&&BST_DATA) BST_DATA.forEach(function(s){ if(ccCleLot(s)===k) out.push(s); }); return out; }
+function ccViolationsPage(){ return ccViolations(BDTS.map(ccRowBdt),(typeof BST_DATA!=='undefined'&&BST_DATA)?BST_DATA:[]); }
+// ==CC-MOTEUR-FIN==
+// ── Chemin critique et temps (lot C) : AFFICHAGE — goulotte, barres, info-bulle, glisser-déposer, carte « Enchaînements à revoir » ──
+var CC_VIOL={};   // { id : message } — opérations posées avant leur au plus tôt, recalculées à chaque rendu
+function ccMajViolations(){ try{ CC_VIOL=ccViolationsPage(); }catch(e){ CC_VIOL={}; } return CC_VIOL; }
+function ccEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(ch){ return ch==='&'?'&amp;':ch==='<'?'&lt;':ch==='>'?'&gt;':'&quot;'; }); }
+// Au plus tôt d un BDT du planning : ne dépend ni de son jour ni de son heure, seulement du reste du lot.
+function ccAptBdt(b){ return ccAuPlusTot(ccRowBdt(b),ccOpsDuLot(b.cleLot)); }
+// Durée D = réglage R (fixe, une seule fois) + réalisation V. R null = réglage non renseigné.
+function ccTemps(b){ var D=Number(b&&b.duree); if(!isFinite(D)||D<0) D=0; var R=(b==null||b.reglage==null||b.reglage==='')?null:Number(b.reglage); if(R!=null&&!isFinite(R)) R=null; return {D:D,R:R,V:(R==null?null:Math.max(0,Math.round((D-R)*100)/100))}; }
+function ccMiniBarre(b){
+  var t=ccTemps(b), pct=(t.R!=null&&t.D>0)?Math.min(100,Math.round(t.R/t.D*1000)/10):0;
+  var barre='<div style="display:flex;height:6px;width:100%;max-width:190px;border-radius:3px;overflow:hidden;background:#e2e8f0;margin-top:4px;'+(t.R==null?'outline:1px dashed #cbd5e1;outline-offset:-1px;':'')+'">'
+    +(pct>0?'<div title="Réglage (fixe, une seule fois)" style="width:'+pct+'%;background:repeating-linear-gradient(135deg,#7c3aed 0,#7c3aed 2px,#c4b5fd 2px,#c4b5fd 4px);border-right:1.5px solid #4c1d95;"></div>':'')
+    +'<div title="Réalisation" style="flex:1;background:'+(t.R==null?'#cbd5e1':'#0ea5e9')+';"></div></div>';
+  var lib=(t.R==null)?'<span style="color:#b45309;">réglage non renseigné</span>':('Réglage '+ccFmtNb(t.R)+' h · Réalisation '+ccFmtNb(t.V)+' h');
+  return barre+'<div style="font-size:.6rem;color:#64748b;margin-top:2px;">'+lib+'</div>';
+}
+function ccPastilleMorceau(b){ if(!(b&&b.nbMorceaux>=2)) return ''; return '<span title="Morceau '+b.posMorceau+' sur '+b.nbMorceaux+' de la découpe de '+ccEsc(b.racine)+'" style="background:#ede9fe;color:#6d28d9;font-weight:800;border-radius:999px;padding:1px 7px;"><i class="fas fa-scissors" style="margin-right:3px;"></i>M'+b.rangMorceau+' · '+b.posMorceau+'/'+b.nbMorceaux+'</span>'; }
+function ccAuPlusTotCarte(b){
+  var apt=ccAptBdt(b);
+  if(apt.regle==='aucune') return '';
+  if(apt.regle==='inconnu') return '<div title="'+ccEsc(apt.raison)+'" style="font-size:.6rem;color:#94a3b8;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px;"><i class="fas fa-route" style="margin-right:3px;"></i>au plus tôt : '+ccEsc(apt.raison)+'</div>';
+  return '<div title="'+ccEsc(apt.raison)+'" style="font-size:.6rem;color:#0f766e;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px;"><i class="fas fa-route" style="margin-right:3px;"></i>au plus tôt : '+ccJJMM(apt.date)+' '+ccFmtH(apt.heure)+' · '+ccEsc(apt.raison)+'</div>';
+}
+function ccCellulesTemps(b){ var t=ccTemps(b); return '<div><span style="color:#94a3b8;">Réglage : </span>'+(t.R==null?'<span style="color:#b45309;">non renseigné</span>':'<strong>'+ccFmtNb(t.R)+' h</strong> <span style="color:#94a3b8;font-size:.7rem;">(fixe, une seule fois)</span>')+'</div><div><span style="color:#94a3b8;">Réalisation : </span>'+(t.R==null?'—':'<strong>'+ccFmtNb(t.V)+' h</strong>')+'</div>'; }
+// Carte « Enchaînements à revoir » (même rendu que le serveur, recalculé après chaque pose).
+function ccRenderCarte(){
+  var v=ccMajViolations(), ids=Object.keys(v);
+  var carte=document.getElementById('ccCarte'), liste=document.getElementById('ccCarteListe'), n=document.getElementById('ccCarteN');
+  if(!carte||!liste) return;
+  carte.style.display=ids.length?'':'none'; if(n) n.textContent=String(ids.length);
+  liste.innerHTML=ids.map(function(id){
+    var b=BDTS.find(function(x){ return String(x.id)===String(id); });
+    var s=b?null:((typeof BST_DATA!=='undefined'&&BST_DATA)?BST_DATA.find(function(x){ return String(x.id)===String(id); }):null);
+    var lot=b?(b.cleLot||''):ccCleLot(s);
+    return '<div class="cc-viol-ligne" data-id="'+ccEsc(id)+'" onclick="ccVoir(this.getAttribute(\\'data-id\\'))" title="Voir sur le planning" style="display:flex;align-items:baseline;gap:8px;padding:6px 8px;border-bottom:1px solid #fee2e2;cursor:pointer;font-size:.74rem;"><i class="fas '+(b?'fa-screwdriver-wrench':'fa-industry')+'" style="color:#dc2626;font-size:.66rem;"></i><span style="color:#475569;">'+ccEsc(v[id])+'</span>'+(lot?'<span style="margin-left:auto;font-size:.62rem;color:#0d9488;font-family:monospace;white-space:nowrap;">'+ccEsc(lot)+'</span>':'')+'</div>';
+  }).join('');
+}
+function ccVoir(id){
+  var b=BDTS.find(function(x){ return String(x.id)===String(id); });
+  if(b){
+    if(typeof showProdTab==='function') showProdTab('gantt-bdt');
+    if(b.datePrevue&&b.datePrevue!==currentDate){ currentDate=b.datePrevue; var pd=document.getElementById('planDate'); if(pd) pd.value=currentDate; }
+    focusLot=b.id; updateFocusBanner(); buildAll();
+    return;
+  }
+  var s=(typeof BST_DATA!=='undefined'&&BST_DATA)?BST_DATA.find(function(x){ return String(x.id)===String(id); }):null;
+  if(!s) return;
+  if(typeof showProdTab==='function') showProdTab('gantt-bst');
+  var d=s.date_debut||s.date_envoi; if(d){ bstStartDate=String(d).slice(0,10); var inp=document.getElementById('bstStartDate'); if(inp) inp.value=bstStartDate; }
+  focusLotBst=s.id; updateBstFocusBanner(); bstBuildAll();
+}
+// Glisser-déposer : zone hachurée rouge avant l au plus tôt du jour affiché (calculé une fois par BDT et par jour).
+var _ccDrag=null;
+function ccAptDrag(){
+  if(!dragId) return null;
+  if(_ccDrag&&_ccDrag.id===dragId&&_ccDrag.date===currentDate) return _ccDrag.apt;
+  var b=BDTS.find(function(z){ return z.id===dragId; }); if(!b) return null;
+  _ccDrag={id:dragId,date:currentDate,apt:ccAptBdt(b)};
+  return _ccDrag.apt;
+}
+function ccCacherZone(){ var z=document.getElementById('dropZoneCC'); if(z) z.style.display='none'; var l=document.getElementById('dropZoneCCLbl'); if(l) l.style.display='none'; }
+function ccMontrerZone(lane){
+  var apt=ccAptDrag();
+  var jA=(apt&&apt.date)?ccJour(apt.date):null, jC=ccJour(currentDate);
+  if(!apt||apt.regle==='aucune'||apt.regle==='inconnu'||jA==null||jC==null||jA<jC){ ccCacherZone(); return; }
+  var hFin=(jA>jC)?DAY_END:Math.min(DAY_END,apt.heure);
+  if(hFin<=DAY_START){ ccCacherZone(); return; }
+  var rect=lane.getBoundingClientRect();
+  var z=document.getElementById('dropZoneCC');
+  if(!z){ z=document.createElement('div'); z.id='dropZoneCC'; z.style.cssText='position:fixed;z-index:58;pointer-events:none;background:repeating-linear-gradient(45deg,rgba(220,38,38,.22) 0,rgba(220,38,38,.22) 6px,rgba(220,38,38,.07) 6px,rgba(220,38,38,.07) 12px);border-right:2px solid #dc2626;'; document.body.appendChild(z); }
+  z.style.left=rect.left+'px'; z.style.top=rect.top+'px'; z.style.height=rect.height+'px'; z.style.width=((hFin-DAY_START)*PX_H)+'px'; z.style.display='block';
+  var l=document.getElementById('dropZoneCCLbl');
+  if(!l){ l=document.createElement('div'); l.id='dropZoneCCLbl'; l.style.cssText='position:fixed;z-index:61;pointer-events:none;background:#dc2626;color:white;font-size:.6rem;font-weight:700;padding:1px 6px;border-radius:4px;white-space:nowrap;max-width:460px;overflow:hidden;text-overflow:ellipsis;'; document.body.appendChild(l); }
+  l.textContent='au plus tôt '+(jA>jC?('le '+ccJJMM(apt.date)+' à '):'')+ccFmtH(apt.heure)+' · '+apt.raison;
+  l.style.left=(rect.left+4)+'px'; l.style.top=(rect.top+rect.height-16)+'px'; l.style.display='block';
+}
+// Annuler une découpe (C6) : recolle la famille via POST /api/production/bdt/:id/recoller, après confirmation.
+var CC_RECOLLAGE={};   // racine -> true pendant l appel : un double clic, ou les cartes M1 et M2 d une même famille, n envoient qu une annulation
+function recollerBdt(id){
+  var b=BDTS.find(function(x){ return String(x.id)===String(id); }); if(!b) return;
+  if(CC_RECOLLAGE[b.racine]){ pushNotif('info','fa-hourglass-half',ccEsc('Annulation de la découpe de '+b.racine+' déjà en cours…'),3000); return; }
+  var fam=BDTS.filter(function(x){ return x.racine===b.racine; }).sort(function(x,y){ return (Number(x.rangMorceau)||1)-(Number(y.rangMorceau)||1); });
+  var lignes=fam.map(function(m){ var t=ccTemps(m); return '· M'+m.rangMorceau+' — '+m.id+' : '+ccFmtNb(t.D)+' h'+(t.R!=null&&t.R>0?' (dont réglage '+ccFmtNb(t.R)+' h)':'')+' · '+bdtStatutLabel(m); }).join('\\n');
+  var msg='Annuler la découpe de '+b.racine+' ?\\n\\n'+lignes+'\\n\\nLes '+fam.length+' morceaux seront recollés en un seul BDT (la durée d’origine est reprise si elle est connue). Refusé si un morceau est posé, reçu ou déjà utilisé.';
+  appConfirm(msg,{title:'Annuler la découpe',okLabel:'Recoller les morceaux',icon:'fa-rotate-left'}).then(function(oui){
+    if(!oui||CC_RECOLLAGE[b.racine]) return;
+    CC_RECOLLAGE[b.racine]=true; buildPending();
+    var fini=function(){ delete CC_RECOLLAGE[b.racine]; buildPending(); };
+    fetch('/api/production/bdt/'+encodeURIComponent(b.racine)+'/recoller',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+      .then(function(r){ return r.json().catch(function(){ return {ok:false,error:'Réponse inattendue du serveur (HTTP '+r.status+').'}; }); })
+      .then(function(j){
+        if(!j||!j.ok){ fini(); pushNotif('err','fa-ban',ccEsc((j&&j.error)||'Annulation de la découpe refusée.'),9000); return; }
+        pushNotif('ok','fa-rotate-left',ccEsc('Découpe annulée : '+j.racine+' recollé ('+ccFmtNb(Number(j.duree)||0)+' h'+(j.temps_reglage!=null?', dont réglage '+ccFmtNb(Number(j.temps_reglage))+' h':'')+').'),6000);
+        if(j.avertissement) pushNotif('warn','fa-exclamation-triangle',ccEsc(j.avertissement),9000);
+        setTimeout(function(){ softReload(); },700);
+      }).catch(function(){ fini(); pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
+  });
+}
+// Plage horaire (colonne) d'un opérateur selon sa présence du jour : matin / journee / apmidi / soir / absent.
+// (Avant le 14/09/2026 la journée était rangée dans « Après-midi ».) Créneau inconnu ou vide = colonne Absent.
+function opShiftCol(opId){ var g=presGet(opId,currentDate); return (g.shift && PLAN_CRENEAUX.indexOf(g.shift)>=0) ? g.shift : 'absent'; }
 function opPresent(opId){ var g=presGet(opId,currentDate); return !!(g.shift&&g.shift!=='absent'); }
 // Affecte (ou retire) un opérateur à un process POUR UNE PLAGE HORAIRE — persisté & tracé (affectation_poste)
 // Affecte un opérateur à un process (additif : plusieurs process/créneaux possibles par opérateur)
@@ -2885,7 +3216,7 @@ function procDrop(e,pid,shift){ e.preventDefault(); var el=e.currentTarget; if(e
 function selectOp(opId){
   selBdtId=null;
   selOpId=(selOpId===opId)?null:opId;
-  if(selOpId){ var o=OPS_PRESENCE.find(function(x){return String(x.id)===String(opId);}); pushNotif('info','fa-mouse-pointer','<strong>'+(o?o.nom:opId)+'</strong> sélectionné — cliquez une sous-case (Matin / Après-midi / Soir) d\\'un process dans le planning.'); }
+  if(selOpId){ var o=OPS_PRESENCE.find(function(x){return String(x.id)===String(opId);}); pushNotif('info','fa-mouse-pointer','<strong>'+(o?o.nom:opId)+'</strong> sélectionné — cliquez une sous-case (Matin / Journée / Après-midi / Soirée) d\\'un process dans le planning.'); }
   buildOperatorsByShift();
 }
 function slotClick(e,pid,shift){ if(selOpId){ if(e&&e.stopPropagation) e.stopPropagation(); affecterPoste(selOpId,pid,shift); selOpId=null; } }
@@ -2901,24 +3232,39 @@ function selectPendBdt(bdtId){
 function laneClickPlace(procId){ if(selBdtId){ affectBDT(selBdtId, procId, null); selBdtId=null; } }
 // Opérateurs affectés à (process, plage horaire) le jour courant
 function affOpsForSlot(procId, shift){ var aff=AFFECTATIONS[currentDate]||{}; var out=[]; Object.keys(aff).forEach(function(opId){ (aff[opId]||[]).forEach(function(a){ if(a&&String(a.p)===String(procId)&&(a.s||'matin')===shift) out.push(opId); }); }); return out; }
-// 3 sous-cases (Matin / Après-midi / Soir) à insérer DANS la case process du Gantt
+// Les 4 créneaux du planning, dans l'ordre Matin · Journée · Après-midi · Soirée.
+// Libellés, horaires et couleurs : SHIFTS (src/shared.ts), injecté dans SHIFTS_MAP — seule source.
+var PLAN_CRENEAUX=['matin','journee','apmidi','soir'];
+// [id, libellé, couleur (bordure, fond), horaires, couleur de TEXTE foncée et lisible (PRES_SHIFTS, presences.ts couleurTexteCreneau)]
+function planCreneaux(){ return PLAN_CRENEAUX.map(function(k){ var s=SHIFTS_MAP[k]||{label:k,color:'#64748b',start:0,end:0}; var p=(typeof PRES_SHIFTS!=='undefined'&&PRES_SHIFTS&&PRES_SHIFTS[k])?PRES_SHIFTS[k]:null; return [k, s.label, s.color, (s.start%24)+'h-'+(s.end%24)+'h', p?p[1]:'#334155']; }); }
+// 4 sous-cases (Matin / Journée / Après-midi / Soirée) à insérer DANS la case process du Gantt
 function procSlotsMiniHTML(proc){
-  var SLOTS=[['matin','Matin','#3b82f6'],['apmidi','Ap-m','#8b5cf6'],['soir','Soir','#1e293b']];
+  var SLOTS=planCreneaux();
   return '<div style="display:flex;gap:3px;margin-top:5px;">'+SLOTS.map(function(sl){
     var chips=affOpsForSlot(proc.id,sl[0]).map(function(opId){ var o=OPS_PRESENCE.find(function(x){return String(x.id)===String(opId);})||OPERATEURS.find(function(x){return String(x.id)===String(opId);}); var nm=o?o.nom:opId;
-      return '<span style="display:inline-flex;align-items:center;gap:2px;background:'+sl[2]+'1a;color:'+sl[2]+';border-radius:999px;padding:0 4px;font-size:.54rem;font-weight:700;margin:1px;line-height:1.5;">'+nm+' <i class="fas fa-times" style="cursor:pointer;opacity:.7;" onclick="event.stopPropagation();retirerAffectation(\\''+opId+'\\',\\''+proc.id+'\\',\\''+sl[0]+'\\')"></i></span>'; }).join('');
-    return '<div class="proc-slot" ondragover="event.preventDefault();this.classList.add(\\'drag-over\\')" ondragleave="this.classList.remove(\\'drag-over\\')" ondrop="procDrop(event,\\''+proc.id+'\\',\\''+sl[0]+'\\')" onclick="slotClick(event,\\''+proc.id+'\\',\\''+sl[0]+'\\')" style="flex:1;min-width:0;border:1px dashed #e2e8f0;border-top:2px solid '+sl[2]+';border-radius:5px;padding:2px 3px;min-height:30px;background:#fafafa;cursor:pointer;">'
-      +'<div style="font-size:.5rem;font-weight:800;color:'+sl[2]+';text-transform:uppercase;">'+sl[1]+'</div>'
+      return '<span style="display:inline-flex;align-items:center;gap:2px;background:'+sl[2]+'1a;color:'+sl[4]+';border-radius:999px;padding:0 4px;font-size:.54rem;font-weight:700;margin:1px;line-height:1.5;">'+nm+' <i class="fas fa-times" style="cursor:pointer;opacity:.7;" onclick="event.stopPropagation();retirerAffectation(\\''+opId+'\\',\\''+proc.id+'\\',\\''+sl[0]+'\\')"></i></span>'; }).join('');
+    return '<div class="proc-slot" ondragover="event.preventDefault();this.classList.add(\\'drag-over\\')" ondragleave="this.classList.remove(\\'drag-over\\')" ondrop="procDrop(event,\\''+proc.id+'\\',\\''+sl[0]+'\\')" onclick="slotClick(event,\\''+proc.id+'\\',\\''+sl[0]+'\\')" title="'+sl[1]+' '+sl[3]+'" style="flex:1;min-width:0;border:1px dashed #e2e8f0;border-top:2px solid '+sl[2]+';border-radius:5px;padding:2px 3px;min-height:30px;background:#fafafa;cursor:pointer;">'
+      +'<div style="font-size:.5rem;font-weight:800;color:'+sl[4]+';text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+sl[1]+'</div>'
       +'<div style="line-height:1.3;">'+(chips||'<span style="font-size:.5rem;color:#d1d5db;">—</span>')+'</div></div>';
   }).join('')+'</div>';
 }
-// Tableau des opérateurs classés par plage horaire (colonnes Matin / Après-midi / Soir / Absent), cartes draggables
+// Tableau des opérateurs classés par plage horaire (colonnes Matin / Journée / Après-midi / Soirée / Absent), cartes draggables
 function buildOperatorsByShift(){
   var box=document.getElementById('opsByShift'); if(!box) return;
   var lbl=document.getElementById('rhPosteJour'); if(lbl){ try{ lbl.textContent=new Date(currentDate).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'}); }catch(e){ lbl.textContent=currentDate; } }
-  var COLS=[['matin','Matin','#3b82f6'],['apmidi','Après-midi','#8b5cf6'],['soir','Soir','#1e293b'],['absent','Absent','#ef4444']];
+  // Présences du jour pas encore chargées (jour hors de la fenêtre initiale) : on les lit au lieu de ranger
+  // tout le monde dans « Absent » à tort.
+  if(!presJourCharge(currentDate)){
+    var luP=presLundi(currentDate);
+    if(PRES_CHARGEMENT[luP]!=='encours' && PRES_CHARGEMENT[luP]!=='echec') presChargerSemaine(luP);
+    box.innerHTML='<div style="padding:12px;text-align:center;font-size:.74rem;color:#94a3b8;">'+(PRES_CHARGEMENT[luP]==='echec'
+      ? '<i class="fas fa-exclamation-triangle" style="color:#f59e0b;margin-right:5px;"></i>Présences du jour non chargées. <button type="button" onclick="presChargerSemaine(\\''+luP+'\\')" style="border:none;background:none;color:#4f46e5;font-weight:700;cursor:pointer;text-decoration:underline;">Réessayer</button>'
+      : '<i class="fas fa-spinner fa-spin" style="margin-right:5px;"></i>Chargement des présences du jour…')+'</div>';
+    return;
+  }
+  var COLS=planCreneaux().concat([['absent','Absent','#ef4444','','#b91c1c']]);
   var aff=AFFECTATIONS[currentDate]||{};
-  var byCol={matin:[],apmidi:[],soir:[],absent:[]};
+  var byCol={matin:[],journee:[],apmidi:[],soir:[],absent:[]};
   OPS_PRESENCE.forEach(function(o){ if(filtAct!=='all'&&o.activite!==filtAct) return; var c=opShiftCol(o.id); (byCol[c]=byCol[c]||[]).push(o); });
   var cardOf=function(o,col){
     var draggable=col!=='absent';
@@ -2930,36 +3276,15 @@ function buildOperatorsByShift(){
       +'<div style="flex:1;min-width:0;"><div style="font-size:.74rem;font-weight:700;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+o.nom+'</div>'+(proc?'<div style="font-size:.58rem;color:#6366f1;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">→ '+proc.nom+'</div>':'')+'</div>'
       +(draggable?'<i class="fas fa-grip-vertical" style="color:#cbd5e1;font-size:.62rem;"></i>':'')+'</div>';
   };
-  box.innerHTML='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">'+COLS.map(function(c){
+  box.innerHTML='<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;">'+COLS.map(function(c){
     var list=(byCol[c[0]]||[]).slice().sort(function(a,b){return String(a.nom).localeCompare(String(b.nom));});
     return '<div style="background:#f8fafc;border-radius:9px;padding:7px;border-top:3px solid '+c[2]+';min-height:60px;">'
-      +'<div style="font-size:.66rem;font-weight:800;text-transform:uppercase;color:'+c[2]+';margin-bottom:6px;text-align:center;">'+c[1]+' <span style="color:#cbd5e1;">'+list.length+'</span></div>'
+      +'<div style="font-size:.66rem;font-weight:800;text-transform:uppercase;color:'+c[4]+';margin-bottom:6px;text-align:center;">'+c[1]+' <span style="color:#cbd5e1;">'+list.length+'</span></div>'
       +(list.map(function(o){return cardOf(o,c[0]);}).join('')||'<div style="font-size:.6rem;color:#d1d5db;text-align:center;padding:6px;">—</div>')+'</div>';
   }).join('')+'</div>';
 }
-// Process atelier en zones de drop : 3 sous-cases (Matin / Après-midi / Soir) par process
-function buildProcessBoard(){
-  var box=document.getElementById('processBoard'); if(!box) return;
-  var aff=AFFECTATIONS[currentDate]||{};
-  var byPS={}; Object.keys(aff).forEach(function(opId){ (aff[opId]||[]).forEach(function(a){ if(!a||!a.p) return; var k=a.p+'|'+(a.s||'matin'); (byPS[k]=byPS[k]||[]).push(opId); }); });
-  var procs=PROCESS.filter(function(p){ return procMatchesAct(p); });
-  if(!procs.length){ box.innerHTML='<div style="padding:14px;color:#94a3b8;font-size:.78rem;text-align:center;">Aucun process.</div>'; return; }
-  var SLOTS=[['matin','Matin','#3b82f6'],['apmidi','Après-midi','#8b5cf6'],['soir','Soir','#1e293b']];
-  box.innerHTML=procs.map(function(p){
-    var col=p.activite==='Semrac'?'#ec4899':p.activite==='both'?'#8b5cf6':'#3b82f6';
-    var slots=SLOTS.map(function(sl){
-      var chips=(byPS[p.id+'|'+sl[0]]||[]).map(function(opId){ var o=OPS_PRESENCE.find(function(x){return String(x.id)===String(opId);})||OPERATEURS.find(function(x){return String(x.id)===String(opId);}); var nm=o?o.nom:opId;
-        return '<span style="display:inline-flex;align-items:center;gap:3px;background:'+col+'1a;color:'+col+';border-radius:999px;padding:1px 6px;font-size:.62rem;font-weight:700;margin:1px;">'+nm+' <i class="fas fa-times" title="Retirer" style="cursor:pointer;opacity:.7;" onclick="retirerAffectation(\\''+opId+'\\',\\''+p.id+'\\',\\''+sl[0]+'\\')"></i></span>'; }).join('');
-      return '<div class="proc-slot" ondragover="event.preventDefault();this.classList.add(\\'drag-over\\')" ondragleave="this.classList.remove(\\'drag-over\\')" ondrop="procDrop(event,\\''+p.id+'\\',\\''+sl[0]+'\\')" '
-        +'style="flex:1;min-width:0;border:1px dashed #e2e8f0;border-top:2px solid '+sl[2]+';border-radius:7px;padding:4px 5px;min-height:42px;background:#fafafa;">'
-        +'<div style="font-size:.55rem;font-weight:800;text-transform:uppercase;color:'+sl[2]+';margin-bottom:2px;">'+sl[1]+'</div>'
-        +'<div style="line-height:1.6;">'+(chips||'<span style="font-size:.6rem;color:#d1d5db;">—</span>')+'</div></div>';
-    }).join('');
-    return '<div style="border:1px solid #eef2f7;border-left:4px solid '+col+';border-radius:10px;padding:8px 10px;margin-bottom:8px;background:white;">'
-      +'<div style="font-size:.74rem;font-weight:800;color:#1e293b;display:flex;align-items:center;gap:6px;margin-bottom:6px;"><i class="fas fa-sitemap" style="color:'+col+';font-size:.7rem;"></i>'+p.nom+'<span style="margin-left:auto;font-size:.6rem;color:#94a3b8;font-weight:600;">'+(p.activite==='both'?'Seem/Semrac':p.activite)+'</span></div>'
-      +'<div style="display:flex;gap:6px;">'+slots+'</div></div>';
-  }).join('');
-}
+// (buildProcessBoard supprimé le 14/09/2026 : il remplissait #processBoard, qui n'existe plus dans aucune page —
+//  les sous-cases de créneau sont dans la case poste du Gantt, cf. procSlotsMiniHTML.)
 // ─── Couleurs par lot (file d'attente) + recherche par affaire ───
 // LOT_PALETTE_BDT et LOT_COLORS (partagée avec le planning BST) sont définies en aval ;
 // la map LOT_COLORS est construite côté serveur sur l'ensemble (BDT + BST + lots),
@@ -2984,7 +3309,8 @@ function fmtHour(h){ var H=Math.floor(h); var m=Math.round((h-H)*60); if(m===60)
 function affaireMatch(b){ if(!filtAffaire) return true; var q=filtAffaire.toLowerCase(); return ((''+(b.numAffaire||'')).toLowerCase().indexOf(q)>=0)||((''+(b.lotId||'')).toLowerCase().indexOf(q)>=0)||((''+(b.cmdId||'')).toLowerCase().indexOf(q)>=0)||((''+(b.id||'')).toLowerCase().indexOf(q)>=0); }
 function setAffaireFilter(v){ filtAffaire=(v||'').trim(); var b=document.getElementById('affClear'); if(b) b.style.display=filtAffaire?'inline-flex':'none'; buildAll(); }
 function clearAffaireFilter(){ var i=document.getElementById('affSearch'); if(i) i.value=''; setAffaireFilter(''); }
-// Ordre file d'attente : échéance client au plus tôt, puis chemin critique (lot + séquence d'opérations)
+// Ordre file d'attente : échéance client au plus tôt, puis lot, puis ordre de gamme (seq). C'est un TRI d'affichage,
+// pas le chemin critique : celui-ci (réglage de l'étape précédente) est calculé par le moteur cc… plus bas.
 function pendSort(a,b){ var da=a.dateEcheance||'9999-12-31', db=b.dateEcheance||'9999-12-31'; if(da!==db) return da<db?-1:1; var ka=lotKey(a), kb=lotKey(b); if(ka!==kb) return ka<kb?-1:1; var sa=(a.seq==null?9999:a.seq), sb=(b.seq==null?9999:b.seq); if(sa!==sb) return sa-sb; return String(a.id).localeCompare(String(b.id),undefined,{numeric:true}); }
 // Surbrillance de tous les BDT d'un même lot dans le planning (pour repérer le précédent)
 function highlightLot(key){ var bars=document.querySelectorAll('#ganttBody .bdt-bar'); for(var i=0;i<bars.length;i++){ var el=bars[i]; if(el.dataset.lot===key){ el.style.outline='3px solid #facc15'; el.style.outlineOffset='1px'; el.style.zIndex='25'; el.style.opacity='1'; } else { el.style.opacity='0.28'; } } }
@@ -2996,6 +3322,18 @@ function clearHighlight(){ var bars=document.querySelectorAll('#ganttBody .bdt-b
 // les deux pour que « l etape d avant / d apres » soit juste meme quand c est un ST
 // (zingage, anodisation…). Les BDS n ont pas de poste : ils n entrent pas dans le filtre
 // des lignes du Gantt, mais ils sont nommes dans le bandeau.
+// Les MORCEAUX « -Mk » d un BDT découpé partagent le même seq : ils forment UNE étape (comme gamme.ts
+// groupeEtapePrecedente). Sans ce regroupement, l « étape d avant » d un M2 était son frère M1.
+function grouperEtapesParSeq(items){
+  var l=[];
+  items.forEach(function(x){
+    var der=l.length?l[l.length-1]:null;
+    if(der&&x.seq!=null&&der.seq!=null&&Number(der.seq)===Number(x.seq)){ der.membres.push(x); der.ids.push(x.id); if(!x.st) der.st=false; return; }
+    l.push({ id:x.id, ids:[x.id], seq:x.seq, st:x.st, ref:x.ref, sous_traitant_id:x.sous_traitant_id, membres:[x] });
+  });
+  return l;
+}
+function etapeIndexDe(l,id){ for(var k=0;k<l.length;k++){ if(l[k].ids.indexOf(id)>=0) return k; } return -1; }
 function etapesDuLot(key){
   var l=BDTS.filter(function(b){ return lotKey(b)===key; }).map(function(b){ return { id:b.id, seq:b.seq, ord:(Number(b.debut)||0), st:false, ref:b }; });
   if(typeof BST_DATA!=='undefined' && BST_DATA){
@@ -3009,22 +3347,22 @@ function etapesDuLot(key){
     if(sa!==sb) return sa-sb;
     return a.ord-b.ord;
   });
-  return l;
+  return grouperEtapesParSeq(l);
 }
-// Postes a afficher pour le BDT focalise : etape-1, etape, etape+1 (postes connus seulement).
+// Postes a afficher pour le BDT focalise : etape-1, etape, etape+1 (postes connus seulement, tous morceaux compris).
 function etapePostesSet(bdtId){
   var b=BDTS.find(function(x){return x.id===bdtId;}); if(!b) return null;
   var l=etapesDuLot(lotKey(b));
-  var i=-1; for(var k=0;k<l.length;k++){ if(l[k].id===b.id){ i=k; break; } }
+  var i=etapeIndexDe(l,b.id);
   if(i<0) return null;
   var s={};
   // Seules les etapes INTERNES ont un poste : une etape sous-traitee (x.st) n ajoute
   // aucune ligne au Gantt (elle est signalee dans le bandeau).
-  [l[i-1], l[i], l[i+1]].forEach(function(x){ if(!x || x.st) return; var pid=posteOfBdt(x.ref); if(pid) s[String(pid)]=true; });
+  [l[i-1], l[i], l[i+1]].forEach(function(x){ if(!x) return; x.membres.forEach(function(m){ if(m.st) return; var pid=posteOfBdt(m.ref); if(pid) s[String(pid)]=true; }); });
   return s;
 }
-// Nom lisible d une etape : poste (interne) ou « ST <nom> » (sous-traitance).
-function etapeNom(x){
+// Nom lisible d un membre d etape : poste (interne) ou « ST <nom> » (sous-traitance).
+function etapeNomMembre(x){
   if(!x) return null;
   if(x.st){
     var f=(typeof BST_FOURN!=='undefined'?BST_FOURN:[]).find(function(z){ return String(z.id)===String(x.ref.sous_traitant_id); });
@@ -3034,14 +3372,22 @@ function etapeNom(x){
   var po=(typeof POSTES_JS!=='undefined'?POSTES_JS:[]).find(function(p){ return String(p.id)===String(pid); });
   return po ? po.nom : (x.ref.operation||null);
 }
-// Libelle du bandeau : « LOT · etape 3/6 — Fraisage (avant : Tronconnage · apres : ST Zingage) »
+// Nom d une etape (morceaux posés sur plusieurs postes : noms distincts réunis).
+function etapeNom(x){
+  if(!x) return null;
+  var noms=[]; (x.membres||[x]).forEach(function(m){ var n=etapeNomMembre(m); if(n&&noms.indexOf(n)<0) noms.push(n); });
+  return noms.length?noms.join(' + '):null;
+}
+// Libelle du bandeau : « LOT · etape 3/6 — Fraisage (avant : Tronconnage · apres : ST Zingage) · au plus tôt … »
 function etapeFocusLabel(bdtId){
   var b=BDTS.find(function(x){return x.id===bdtId;}); if(!b) return '';
   var l=etapesDuLot(lotKey(b));
-  var i=-1; for(var k=0;k<l.length;k++){ if(l[k].id===b.id){ i=k; break; } }
+  var i=etapeIndexDe(l,b.id);
   var av=etapeNom(l[i-1]), ap=etapeNom(l[i+1]), moi=etapeNom(l[i])||b.operation||'';
   var ctx=[]; if(av) ctx.push('avant : '+av); if(ap) ctx.push('apres : '+ap);
-  return lotKey(b)+' \\u00b7 etape '+(i+1)+'/'+l.length+' \\u2014 '+moi+(ctx.length?' ('+ctx.join(' \\u00b7 ')+')':' (seule etape)');
+  var apt=ccAptBdt(b), apl='';
+  if(apt.regle!=='aucune') apl=' \\u00b7 au plus tôt : '+(apt.date?ccJJMM(apt.date)+' '+ccFmtH(apt.heure)+' ('+apt.raison+')':apt.raison);
+  return lotKey(b)+' \\u00b7 etape '+(i+1)+'/'+l.length+' \\u2014 '+moi+(ctx.length?' ('+ctx.join(' \\u00b7 ')+')':' (seule etape)')+apl+(CC_VIOL[b.id]?' \\u00b7 \\u26a0 enchaînement à revoir':'');
 }
 function updateFocusBanner(){
   var el=document.getElementById('lotFocusBanner'); if(!el) return;
@@ -3055,8 +3401,8 @@ function focusBdtLot(bdtId){ var b=BDTS.find(function(x){return x.id===bdtId;});
 window.addEventListener('load',function(){ try{ var fb=new URLSearchParams(location.search).get('focusBdt'); if(!fb) return; var b=BDTS.find(function(x){return String(x.id)===String(fb);}); if(!b) return; if(enGoulotte(b)){ selectPendBdt(b.id); return; } if(b.datePrevue&&b.datePrevue!==currentDate){ currentDate=b.datePrevue; var pd=document.getElementById('planDate'); if(pd) pd.value=currentDate; buildAll(); } focusBdtLot(b.id); }catch(e){} });
 function clearFocusLot(){ focusLot=null; updateFocusBanner(); buildGantt(); }
 // Guide visuel de dépôt (ligne + heure cible) pendant le glisser
-function showDropGuide(lane,e){ var rect=lane.getBoundingClientRect(); var t=snapTime(lane,e); var g=document.getElementById('dropGuide'); if(!g){ g=document.createElement('div'); g.id='dropGuide'; g.style.cssText='position:fixed;width:2px;background:#f59e0b;z-index:60;pointer-events:none;box-shadow:0 0 8px #f59e0b;'; document.body.appendChild(g); } var px=rect.left+(t-DAY_START)*PX_H; g.style.left=px+'px'; g.style.top=rect.top+'px'; g.style.height=rect.height+'px'; g.style.display='block'; var lbl=document.getElementById('dropGuideLbl'); if(!lbl){ lbl=document.createElement('div'); lbl.id='dropGuideLbl'; lbl.style.cssText='position:fixed;background:#f59e0b;color:white;font-size:.62rem;font-weight:800;padding:1px 6px;border-radius:4px;z-index:61;pointer-events:none;white-space:nowrap;'; document.body.appendChild(lbl); } lbl.textContent=fmtHour(t); lbl.style.left=(px+4)+'px'; lbl.style.top=(rect.top-16)+'px'; lbl.style.display='block'; }
-function hideDropGuide(){ var g=document.getElementById('dropGuide'); if(g) g.style.display='none'; var l=document.getElementById('dropGuideLbl'); if(l) l.style.display='none'; }
+function showDropGuide(lane,e){ var rect=lane.getBoundingClientRect(); var t=snapTime(lane,e); var g=document.getElementById('dropGuide'); if(!g){ g=document.createElement('div'); g.id='dropGuide'; g.style.cssText='position:fixed;width:2px;background:#f59e0b;z-index:60;pointer-events:none;box-shadow:0 0 8px #f59e0b;'; document.body.appendChild(g); } var px=rect.left+(t-DAY_START)*PX_H; g.style.left=px+'px'; g.style.top=rect.top+'px'; g.style.height=rect.height+'px'; g.style.display='block'; var lbl=document.getElementById('dropGuideLbl'); if(!lbl){ lbl=document.createElement('div'); lbl.id='dropGuideLbl'; lbl.style.cssText='position:fixed;background:#f59e0b;color:white;font-size:.62rem;font-weight:800;padding:1px 6px;border-radius:4px;z-index:61;pointer-events:none;white-space:nowrap;'; document.body.appendChild(lbl); } lbl.textContent=fmtHour(t); lbl.style.left=(px+4)+'px'; lbl.style.top=(rect.top-16)+'px'; lbl.style.display='block'; if(dragId) ccMontrerZone(lane); }
+function hideDropGuide(){ var g=document.getElementById('dropGuide'); if(g) g.style.display='none'; var l=document.getElementById('dropGuideLbl'); if(l) l.style.display='none'; ccCacherZone(); _ccDrag=null; }
 function snapTime(lane,e){ var rect=lane.getBoundingClientRect(); var x=e.clientX-rect.left-_grabDX; var t=DAY_START+x/PX_H; t=Math.round(t/SNAP)*SNAP; var b=dragId?BDTS.find(function(z){return z.id===dragId;}):null; var dur=(b&&b.duree)||1; if(t<DAY_START) t=DAY_START; if(t>DAY_END-dur) t=DAY_END-dur; return t; }
 var PRIO_COLORS={normal:'#22c55e',urgent:'#f59e0b',critique:'#ef4444',st:'#6366f1'};
 var STATUT_COLORS={a_programmer:'#94a3b8',affecte:'#3b82f6',programme:'#3b82f6',recu:'#f59e0b',solde:'#22c55e',st:'#6366f1'};
@@ -3078,26 +3424,9 @@ function bdtStatutLabel(b){
 function procMatchesAct(p){ return filtAct==='all'||p.activite===filtAct||p.activite==='both'; }
 function procMatchesType(p){ return filtType==='all'||(filtType==='machine'?p.requiert_machine:!p.requiert_machine); }
 
-function buildAll(){ computeLotColors(); buildHoursHdr(); buildStats(); buildGantt(); buildPending(); buildOperatorsByShift(); }
-// Présence opérateurs du jour sélectionné (sous le planning BDT), pilotée par PRESENCES + absences RH
-function buildDayPresence(){
-  var cont=document.getElementById('dayPresenceList'); if(!cont) return;
-  var lbl=document.getElementById('dayPresLabel'); if(lbl){ var d=new Date(currentDate); lbl.textContent=d.toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'2-digit'}); }
-  var present=0;
-  var html=OPS_PRESENCE.map(function(o){
-    var g=presGet(o.id,currentDate);
-    var actCol=o.activite==='Seem'?'#3b82f6':'#ec4899';
-    if(g.shift && g.shift!=='absent') present++;
-    var sc=(g.shift&&PRES_SHIFTS[g.shift])?PRES_SHIFTS[g.shift]:['#f8fafc','#94a3b8','Non prog.'];
-    var hours={matin:'06h-14h',journee:'08h-17h',soir:'14h-22h',absent:'—'}[g.shift]||'';
-    return '<div style="display:flex;align-items:center;gap:8px;background:'+sc[0]+';border:1px solid '+sc[0]+';border-radius:10px;padding:6px 10px;min-width:170px;">'
-      +'<span style="width:24px;height:24px;border-radius:50%;background:'+actCol+';color:white;font-size:.6rem;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">'+(o.nom||'').charAt(0)+'</span>'
-      +'<div style="min-width:0;"><div style="font-size:.72rem;font-weight:700;color:#1e293b;white-space:nowrap;">'+o.nom+'</div>'
-      +'<div style="font-size:.62rem;font-weight:700;color:'+sc[1]+';">'+(g.rh?'<i class="fas fa-lock" style="margin-right:3px;"></i>':'')+sc[2]+(hours&&g.shift&&g.shift!=='absent'?' · '+hours:'')+'</div></div></div>';
-  }).join('');
-  cont.innerHTML=html||'<div style="color:#94a3b8;font-size:.74rem;padding:8px;">Aucun opérateur enregistré.</div>';
-  var cnt=document.getElementById('cntPresent'); if(cnt) cnt.textContent=present+' présent'+(present!==1?'s':'');
-}
+function buildAll(){ computeLotColors(); buildHoursHdr(); buildStats(); ccRenderCarte(); buildGantt(); buildPending(); buildOperatorsByShift(); }
+// (buildDayPresence supprimé le 14/09/2026 : code mort — #dayPresenceList n'existe plus, et ses horaires « 08h-17h »
+//  / « 14h-22h » contredisaient SHIFTS. La présence du jour se lit dans « Affectation des ressources aux postes ».)
 function shiftDate(d){ var dt=new Date(currentDate); dt.setDate(dt.getDate()+d); currentDate=dt.toISOString().split('T')[0]; document.getElementById('planDate').value=currentDate; buildAll(); }
 function loadDay(v){ currentDate=v; buildAll(); }
 function setAct(a){ filtAct=a; var ids=['all','Seem','Semrac']; ids.forEach(function(x){ var el=document.getElementById('fa-'+x); if(el) el.classList.toggle('active',x===a); }); buildAll(); }
@@ -3184,7 +3513,19 @@ function makeBdtBar(bdt){
   el.draggable=canDrag; el.dataset.bdtid=bdt.id; el.dataset.lot=lotKey(bdt);
   // Stripe lot à gauche (continuité visuelle avec BST) + couleur de statut sur le corps
   el.style.cssText='left:'+l+'px;width:'+w+'px;background:'+color+';color:white;border-left:5px solid '+lotCol+';'+(canDrag?'cursor:grab;':'');
-  el.innerHTML='<div style="font-size:.58rem;font-weight:800;opacity:.85;">'+oxyBox(bdt.oxydation)+bdt.id+'</div><div style="font-size:.62rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+bdt.operation+'</div><div style="font-size:.58rem;opacity:.75;">'+bdt.client+' · '+fmtHour(bdt.debut)+' · '+bdt.duree+'h</div>';
+  // Réglage (lot C) : segment HACHURÉ en tête de barre, largeur proportionnelle, fin marquée d un trait — c est le repère
+  // du chemin critique (l étape suivante ne démarre pas avant). Badge rouge : barre posée avant son au plus tôt.
+  // Le segment est dessiné dans le REPÈRE DU TEMPS : un enfant positionné part du bord intérieur de la barre, elle-même
+  // décalée de 2 px (l) et bordée du liseré de lot (5 px). Sa fin, trait compris, tombe donc pile sur début + réglage
+  // (avant : 5 à 7 px trop à droite). Bordé à l intérieur de la barre, il laisse toujours 3 px de réalisation visibles.
+  var tps=ccTemps(bdt), viol=CC_VIOL[bdt.id], BORD_G=5, BORD_D=(bdt.statut==='programme'||bdt.statut==='affecte')?2:0;
+  var interieur=Math.max(0,w-BORD_G-BORD_D), rglW=0;
+  if(tps.R!=null&&tps.R>0&&interieur>0){ rglW=Math.round(tps.R*PX_H)-(2+BORD_G); rglW=Math.max(2,Math.min(rglW,interieur-((tps.V!=null&&tps.V>0)?3:0))); rglW=Math.min(rglW,interieur); }
+  var OMBRE='text-shadow:0 0 2px rgba(0,0,0,.6);';   // lisible aussi sur la partie hachurée
+  el.innerHTML=(rglW?'<div class="bdt-rgl" title="Réglage '+ccFmtNb(tps.R)+' h (fixe, une seule fois)" style="position:absolute;left:0;top:0;bottom:0;width:'+rglW+'px;background:repeating-linear-gradient(135deg,rgba(15,23,42,.3) 0,rgba(15,23,42,.3) 3px,transparent 3px,transparent 6px);border-right:2px solid rgba(15,23,42,.85);pointer-events:none;"></div>':'')
+    +(viol?'<span class="bdt-viol" title="'+ccEsc(viol)+'" style="position:absolute;top:2px;right:3px;z-index:3;background:#dc2626;color:white;border-radius:999px;font-size:.52rem;line-height:1;padding:2px 4px;box-shadow:0 0 0 1.5px white;"><i class="fas fa-link-slash"></i></span>':'')
+    +'<div style="position:relative;font-size:.58rem;font-weight:800;opacity:.9;'+OMBRE+'">'+oxyBox(bdt.oxydation)+bdt.id+'</div><div style="position:relative;font-size:.62rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+OMBRE+'">'+bdt.operation+'</div><div style="position:relative;font-size:.58rem;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+OMBRE+'">'+fmtHour(bdt.debut)+' · '+(tps.R!=null?ccFmtNb(tps.R)+' + '+ccFmtNb(tps.V)+' h':bdt.duree+'h')+' · '+bdt.client+'</div>';
+  if(viol) el.style.boxShadow='0 0 0 2px #dc2626';
   if(canDrag){
     el.addEventListener('dragstart',function(e){ dragId=bdt.id; _grabDX=e.clientX-el.getBoundingClientRect().left; if(e.dataTransfer){ e.dataTransfer.setData('text/plain',bdt.id); e.dataTransfer.effectAllowed='move'; } highlightLot(lotKey(bdt)); });
     el.addEventListener('dragend',function(){ clearHighlight(); hideDropGuide(); dragId=null; _grabDX=0; });
@@ -3223,7 +3564,7 @@ function openRecuModal(bdtId){
   if(bdt.statut==='solde'){ pushNotif('info','fa-info-circle','BDT déjà soldé.'); return; }
   if(enGoulotte(bdt)){ pushNotif('warn','fa-exclamation-triangle','Programmez ce BDT avant de le recevoir : glissez-le de la goulotte sur le planning.'); return; }
   var proc=PROCESS.find(function(p){return p.id===bdt.process;});
-  document.getElementById('recuInfo').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.78rem;"><div><span style="color:#94a3b8;">BDT : </span><strong>'+bdt.id+'</strong></div><div><span style="color:#94a3b8;">Opération : </span>'+bdt.operation+'</div><div><span style="color:#94a3b8;">Process : </span>'+(proc?proc.nom:'—')+'</div><div><span style="color:#94a3b8;">Client : </span>'+bdt.client+'</div></div>';
+  document.getElementById('recuInfo').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.78rem;"><div><span style="color:#94a3b8;">BDT : </span><strong>'+bdt.id+'</strong></div><div><span style="color:#94a3b8;">Opération : </span>'+bdt.operation+'</div><div><span style="color:#94a3b8;">Process : </span>'+(proc?proc.nom:'—')+'</div><div><span style="color:#94a3b8;">Client : </span>'+bdt.client+'</div>'+ccCellulesTemps(bdt)+'</div>';
   document.getElementById('r_matricule').value=''; document.getElementById('r_pin').value='';
   var m=document.getElementById('recuModal'); if(m) m.style.display='flex';
 }
@@ -3244,7 +3585,7 @@ function openSoldageModal(bdtId){
   if(bdt.statut==='solde'){ pushNotif('info','fa-info-circle','Déjà soldé.'); return; }
   if(bdt.statut!=='recu'){ pushNotif('warn','fa-exclamation-triangle','Le BDT doit être « Reçu » avant le soldage.'); return; }
   var proc=PROCESS.find(function(p){return p.id===bdt.process;});
-  document.getElementById('soldageInfo').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.78rem;"><div><span style="color:#94a3b8;">BDT : </span><strong>'+bdt.id+'</strong></div><div><span style="color:#94a3b8;">Opération : </span>'+bdt.operation+'</div><div><span style="color:#94a3b8;">Process : </span>'+(proc?proc.nom:'—')+'</div><div><span style="color:#94a3b8;">Client : </span>'+bdt.client+'</div><div><span style="color:#94a3b8;">Durée allouée : </span><strong>'+bdt.tempsAlloue+'h</strong></div><div><span style="color:#94a3b8;">Pièce : </span>'+bdt.piece+'</div></div>';
+  document.getElementById('soldageInfo').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.78rem;"><div><span style="color:#94a3b8;">BDT : </span><strong>'+bdt.id+'</strong></div><div><span style="color:#94a3b8;">Opération : </span>'+bdt.operation+'</div><div><span style="color:#94a3b8;">Process : </span>'+(proc?proc.nom:'—')+'</div><div><span style="color:#94a3b8;">Client : </span>'+bdt.client+'</div><div><span style="color:#94a3b8;">Durée allouée : </span><strong>'+bdt.tempsAlloue+'h</strong></div><div><span style="color:#94a3b8;">Pièce : </span>'+bdt.piece+'</div>'+ccCellulesTemps(bdt)+'</div>';
   var now=new Date(); document.getElementById('s_fin').value=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
   document.getElementById('s_resultat').value='ok'; document.getElementById('s_obs').value=''; document.getElementById('s_matricule').value=''; document.getElementById('s_pin').value='';
   var sg=document.getElementById('s_gravite'); if(sg) sg.value='Majeure';
@@ -3278,12 +3619,27 @@ function affectBDT(bdtId,procId,debut){
   if(bdt.statut==='solde'||bdt.statut==='recu'){ pushNotif('err','fa-ban','BDT déjà '+(bdt.statut==='solde'?'soldé':'reçu')+' : il ne se replanifie plus.'); return; }
   if(!(proc.activite==='both'||proc.activite===bdt.activite)){ pushNotif('err','fa-ban','Incompatibilité activité : process '+proc.nom+' ('+proc.activite+') ≠ BDT '+bdt.activite); return; }
   var hasD=(debut!=null&&!isNaN(debut)); if(hasD) debut=Math.round(debut*100)/100;
+  // CHEMIN CRITIQUE : même contrôle que le serveur (src/gamme.ts controleEnchainement). Jour antérieur à l au plus
+  // tôt → refusé sans appel ; même jour trop tôt (ou sans heure) → calé à l au plus tôt, et on le dit.
+  // Sans heure (pose au clic) : le BDT garde la sienne, sinon il prend l heure où le planning l affiche — comme le serveur.
+  var cib=ccRowBdt(bdt); cib.process_id=procId; cib.statut='programme'; cib.date_prevue=currentDate; if(hasD) cib.debut=debut; else if(cib.debut==null) cib.debut=CC_HEURE_DEFAUT;
+  var ctl=ccControle(cib,ccOpsDuLot(bdt.cleLot));
+  if(ctl.etat==='refus'){ pushNotif('err','fa-route',ccEsc(ctl.message),9000); return; }
+  var noteCale=null;
+  if(ctl.etat==='cale'){ debut=ctl.cale_a; hasD=true; noteCale=ctl.message; }
   var body={process_id:procId, date_prevue:currentDate}; if(hasD) body.debut=debut;
   fetch('/api/production/bdt/'+encodeURIComponent(bdtId)+'/affecter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
-    .then(function(r){return r.json();}).then(function(j){
-      if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Affectation échouée.'); return; }
-      var wasPending=(bdt.process==='pending'); bdt.process=procId; bdt.machineId=proc.machine_id||null; bdt.datePrevue=currentDate; if(hasD) bdt.debut=debut; if(bdt.statut==='a_programmer'||bdt.statut==='pending'||!bdt.statut) bdt.statut='programme';
+    .then(function(r){ return r.json().catch(function(){ return {ok:false,error:'Réponse inattendue du serveur (HTTP '+r.status+').'}; }); }).then(function(j){
+      if(!j||!j.ok){ pushNotif('err','fa-ban',ccEsc((j&&j.error)||'Affectation échouée.'),(j&&j.au_plus_tot)?9000:5000); return; }
+      // Le serveur fait foi : l heure RÉELLEMENT écrite (calage, heure par défaut, arrondi d une colonne entière) est celle affichée.
+      if(j.cale_a!=null&&isFinite(Number(j.cale_a))){ debut=Number(j.cale_a); hasD=true; noteCale=j.avertissement||noteCale; }
+      else if(j.avertissement) noteCale=j.avertissement;
+      if(j.data&&j.data.debut!=null&&j.data.debut!==''&&isFinite(Number(j.data.debut))){ debut=Number(j.data.debut); hasD=true; }
+      var wasPending=(bdt.process==='pending'); bdt.process=procId; bdt.machineId=proc.machine_id||null; bdt.datePrevue=currentDate; if(hasD){ bdt.debut=debut; bdt.sansHeure=false; } if(bdt.statut==='a_programmer'||bdt.statut==='pending'||!bdt.statut) bdt.statut='programme';
       focusLot=null; updateFocusBanner(); buildAll(); pushNotif('ok','fa-check-circle','BDT <strong>'+bdtId+'</strong> '+(wasPending?'affecté au process':'déplacé sur')+' <strong>'+proc.nom+'</strong>'+(hasD?' à '+fmtHour(debut):'')+'.');
+      if(noteCale) pushNotif('warn','fa-route',ccEsc(noteCale),8000);
+      var succ=Array.isArray(j.successeurs_en_violation)?j.successeurs_en_violation:[];
+      if(succ.length) pushNotif('warn','fa-link-slash',ccEsc(succ.length+' étape'+(succ.length>1?'s':'')+' suivante'+(succ.length>1?'s':'')+' à revoir (rien n’a été décalé) : '+succ.map(function(x){ return x.message; }).join(' · ')),12000);
     }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
 function deprogramBDT(bdtId){
@@ -3293,7 +3649,7 @@ function deprogramBDT(bdtId){
   fetch('/api/production/bdt/'+encodeURIComponent(bdtId)+'/deprogrammer',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
     .then(function(r){return r.json();}).then(function(j){
       if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Déprogrammation échouée.'); return; }
-      bdt.process='pending'; bdt.machineId=null; bdt.statut='a_programmer'; bdt.datePrevue=null;
+      bdt.process='pending'; bdt.machineId=null; bdt.statut='a_programmer'; bdt.datePrevue=null; bdt.sansHeure=true;   // le serveur remet debut à vide
       buildAll(); pushNotif('ok','fa-undo','BDT <strong>'+bdtId+'</strong> déprogrammé → retour en file d\\'attente.');
     }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
@@ -3321,13 +3677,23 @@ function oxyBox(o){
   return '';
 }
 function openCmdMere(ref){ if(ref){ window.location.href='/production/commande/'+encodeURIComponent(ref); } else { pushNotif('warn','fa-exclamation-triangle','Aucune commande rattachée à ce BDT.'); } }
-function validerCongeOp(id, decision){
-  fetch('/api/rh/conge/'+encodeURIComponent(id)+'/valider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision:decision,valide_par:'Production'})})
-    .then(function(r){return r.json();}).then(function(j){
-      if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Échec.'); return; }
+// Congé d'un opérateur : route de la famille PRODUCTION (avant : /api/rh/…, refusée au responsable de production).
+// Les deux boutons de la carte sont désactivés pendant l'appel (un double clic affichait le succès PUIS un refus 409) ;
+// ils ne reviennent qu'en cas d'échec.
+function validerCongeOp(id, decision, btn){
+  var carte=btn&&btn.parentNode, boutons=carte?Array.prototype.slice.call(carte.querySelectorAll('button')):[];
+  if(boutons.some(function(b){ return b.disabled; })) return;
+  var activer=function(on){ boutons.forEach(function(b){ b.disabled=!on; b.style.opacity=on?'':'.55'; b.style.cursor=on?'pointer':'wait'; }); };
+  activer(false);
+  fetch('/api/production/conge/'+encodeURIComponent(id)+'/valider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision:decision})})
+    .then(function(r){ return r.json().then(function(j){ return {r:r,j:j}; },function(){ return {r:r,j:null}; }); })
+    .then(function(x){
+      var j=x.j;
+      if(!x.r.ok||!j||!j.ok){ activer(true); pushNotif('err','fa-ban',presEsc((j&&j.error)||('Échec (HTTP '+x.r.status+').')),7000); return; }
       pushNotif(decision==='refuse'?'warn':'ok',decision==='refuse'?'fa-times':'fa-check',decision==='refuse'?'Congé refusé.':('Congé validé · '+(j.absences_creees||0)+' jour(s) posés en absence.'),5000);
+      if(j.warning) pushNotif('warn','fa-exclamation-triangle',presEsc(j.warning),9000);
       setTimeout(function(){ softReload(); },800);
-    }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
+    }).catch(function(){ activer(true); pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
 function presView(which){
   var g=document.getElementById('presView-grid'), c=document.getElementById('presView-conges');
@@ -3346,14 +3712,20 @@ function buildPending(){
       +'<div style="flex:1;min-width:0;">'
         +'<div style="font-weight:700;color:#1e293b;font-size:.75rem;">'+oxyBox(b.oxydation)+b.id+' <span style="color:#94a3b8;font-weight:400;">· '+b.operation+'</span></div>'
         +'<div style="color:#94a3b8;font-size:.68rem;">'+b.client+' · '+b.piece+' · '+b.duree+'h · <span style="color:'+(b.activite==='Seem'?'#3b82f6':'#ec4899')+';font-weight:600;">'+b.activite+'</span></div>'
+        +ccMiniBarre(b)
         +'<div style="font-size:.6rem;margin-top:3px;display:flex;gap:5px;flex-wrap:wrap;align-items:center;">'
           +'<span style="background:'+col+'22;color:'+col+';font-weight:700;border-radius:999px;padding:1px 7px;"><i class="fas fa-layer-group" style="margin-right:3px;"></i>'+lotLabel+'</span>'
+          +ccPastilleMorceau(b)
           +(b.numAffaire?'<span style="color:#94a3b8;">Aff. '+b.numAffaire+'</span>':'')
           +(b.seq!=null?'<span style="color:#94a3b8;">Op.'+b.seq+'</span>':'')
           +(b.dateEcheance?'<span style="color:#ef4444;font-weight:600;"><i class="fas fa-flag-checkered" style="margin-right:3px;"></i>'+b.dateEcheance+'</span>':'')
         +'</div>'
+        +ccAuPlusTotCarte(b)
       +'</div>'
-      +'<button type="button" onclick="event.stopPropagation();splitBdt(\\''+b.id+'\\')" ondblclick="event.stopPropagation()" title="Découper ce BDT en morceaux" style="flex-shrink:0;align-self:center;background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe;border-radius:7px;padding:4px 7px;cursor:pointer;font-size:.72rem;"><i class="fas fa-scissors"></i></button>'
+      +'<div style="flex-shrink:0;align-self:center;display:flex;flex-direction:column;gap:4px;">'
+      +'<button type="button" onclick="event.stopPropagation();splitBdt(\\''+b.id+'\\')" ondblclick="event.stopPropagation()" title="Découper ce BDT en morceaux" style="background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe;border-radius:7px;padding:4px 7px;cursor:pointer;font-size:.72rem;"><i class="fas fa-scissors"></i></button>'
+      +(b.nbMorceaux>=2?'<button type="button" onclick="event.stopPropagation();recollerBdt(\\''+b.id+'\\')" ondblclick="event.stopPropagation()"'+(CC_RECOLLAGE[b.racine]?' disabled':'')+' title="Annuler la découpe ('+b.nbMorceaux+' morceaux)" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:7px;padding:4px 7px;cursor:'+(CC_RECOLLAGE[b.racine]?'wait;opacity:.5':'pointer')+';font-size:.72rem;"><i class="fas '+(CC_RECOLLAGE[b.racine]?'fa-spinner fa-spin':'fa-rotate-left')+'"></i></button>':'')
+      +'</div>'
       +'</div>';
   }).join(''):(filtAffaire?'<div style="text-align:center;padding:20px;color:#d1d5db;font-size:.75rem;"><i class="fas fa-search" style="display:block;font-size:1.5rem;margin-bottom:4px;"></i>Aucun BDT en attente pour « '+filtAffaire+' »</div>':'<div style="text-align:center;padding:20px;color:#d1d5db;font-size:.75rem;"><i class="fas fa-check-circle" style="display:block;font-size:1.5rem;margin-bottom:4px;"></i>Tous les BDT sont affectés</div>');
 }
@@ -3366,7 +3738,15 @@ function populateSTOps(){
   var cont=document.getElementById('stOpsList'); if(cont) cont.innerHTML=OPS_ST_OPS.map(function(op){return '<span style="background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd;border-radius:999px;padding:2px 8px;font-size:.65rem;">'+op+'</span>';}).join('');
   var sel=document.getElementById('st_op'); if(sel) sel.innerHTML=OPS_ST_OPS.map(function(op){return '<option>'+op+'</option>';}).join('');
 }
-function showTT(e,bdt){ var proc=PROCESS.find(function(p){return p.id===bdt.process;}); var tt=document.getElementById('ganttTT'); tt.style.display='block'; tt.innerHTML='<div style="font-weight:700;font-size:.85rem;margin-bottom:4px;">'+bdt.id+'</div><div style="color:#93c5fd;font-size:.72rem;margin-bottom:8px;">'+bdt.operation+' · '+bdt.activite+'</div><div style="font-size:.72rem;line-height:1.6;"><div><span style="opacity:.6;">Client : </span>'+bdt.client+'</div><div><span style="opacity:.6;">Pièce : </span>'+bdt.piece+'</div><div><span style="opacity:.6;">Durée : </span>'+bdt.tempsAlloue+'h</div><div><span style="opacity:.6;">Process : </span>'+(proc?proc.nom:'—')+'</div><div><span style="opacity:.6;">Statut : </span><strong style="color:'+bdtColor(bdt)+';">'+bdtStatutLabel(bdt)+'</strong></div>'+(bdt.oxydation?'<div><span style="opacity:.6;">Oxydation : </span>'+oxyBox(bdt.oxydation)+(bdt.oxydation==='noire'?'noire (carré noir)':'incolore (carré blanc)')+'</div>':'')+'<div style="margin-top:4px;color:#fde68a;font-size:.65rem;">Double-clic : recevoir (matricule + PIN), puis sortie matière · Clic droit : menu</div></div>'; moveTT(e); }
+function showTT(e,bdt){ var proc=PROCESS.find(function(p){return p.id===bdt.process;}); var tt=document.getElementById('ganttTT'); tt.style.display='block';
+  // Lot C : réglage / réalisation, morceau, au plus tôt (chemin critique) et enchaînement à revoir.
+  var tps=ccTemps(bdt), apt=ccAptBdt(bdt), viol=CC_VIOL[bdt.id];
+  var lignesTemps='<div><span style="opacity:.6;">Réglage : </span>'+(tps.R==null?'<span style="color:#fcd34d;">non renseigné</span>':ccFmtNb(tps.R)+' h <span style="opacity:.6;">(fixe, une seule fois)</span>')+'</div>'
+    +'<div><span style="opacity:.6;">Réalisation : </span>'+(tps.R==null?'—':ccFmtNb(tps.V)+' h')+'</div>'
+    +(bdt.nbMorceaux>=2?'<div><span style="opacity:.6;">Morceau : </span>M'+bdt.rangMorceau+' · '+bdt.posMorceau+'/'+bdt.nbMorceaux+'</div>':'')
+    +(apt.regle!=='aucune'?'<div><span style="opacity:.6;">Au plus tôt : </span>'+(apt.date?ccJJMM(apt.date)+' '+ccFmtH(apt.heure)+' <span style="opacity:.6;">· '+ccEsc(apt.raison)+'</span>':ccEsc(apt.raison))+'</div>':'')
+    +(viol?'<div style="color:#fca5a5;font-weight:700;"><i class="fas fa-link-slash" style="margin-right:4px;"></i>'+ccEsc(viol)+'</div>':'');
+  tt.innerHTML='<div style="font-weight:700;font-size:.85rem;margin-bottom:4px;">'+bdt.id+'</div><div style="color:#93c5fd;font-size:.72rem;margin-bottom:8px;">'+bdt.operation+' · '+bdt.activite+'</div><div style="font-size:.72rem;line-height:1.6;"><div><span style="opacity:.6;">Client : </span>'+bdt.client+'</div><div><span style="opacity:.6;">Pièce : </span>'+bdt.piece+'</div><div><span style="opacity:.6;">Durée : </span>'+bdt.tempsAlloue+'h</div>'+lignesTemps+'<div><span style="opacity:.6;">Process : </span>'+(proc?proc.nom:'—')+'</div><div><span style="opacity:.6;">Statut : </span><strong style="color:'+bdtColor(bdt)+';">'+bdtStatutLabel(bdt)+'</strong></div>'+(bdt.oxydation?'<div><span style="opacity:.6;">Oxydation : </span>'+oxyBox(bdt.oxydation)+(bdt.oxydation==='noire'?'noire (carré noir)':'incolore (carré blanc)')+'</div>':'')+'<div style="margin-top:4px;color:#fde68a;font-size:.65rem;">Double-clic : recevoir (matricule + PIN), puis sortie matière · Clic droit : menu</div></div>'; moveTT(e); }
 function moveTT(e){ var tt=document.getElementById('ganttTT'); if(tt){tt.style.left=(e.clientX+16)+'px'; tt.style.top=(e.clientY+10)+'px';} }
 function hideTT(){ var tt=document.getElementById('ganttTT'); if(tt) tt.style.display='none'; }
 function closeModal(id){ var el=document.getElementById(id); if(el) el.style.display='none'; }
@@ -3382,13 +3762,17 @@ function createBDT(){
   var statut=procId==='pending'?'a_programmer':'programme';
   var payload={num_affaire:cmd,client_nom:client,operation:op,piece:piece,duree:duree,debut:debut,priorite:prio,statut:statut,activite:act,temps_alloue:duree};
   if(statut==='programme') payload.date_prevue=currentDate;   // programme = pose sur le jour affiche, sinon il repartirait en goulotte
+  // « dont réglage (h) » facultatif : vide = réglage inconnu (non envoyé) ; jamais supérieur à la durée.
+  var rgEl=document.getElementById('m_reglage'); var rgS=rgEl?String(rgEl.value||'').trim().replace(',','.'):'';
+  if(rgS!==''){ var rgN=Number(rgS); if(!isFinite(rgN)||rgN<0){ pushNotif('err','fa-exclamation-circle','Temps de réglage invalide : nombre d’heures positif ou nul.'); return; } rgN=Math.round(rgN*100)/100; if(rgN>duree){ pushNotif('err','fa-exclamation-circle','Le réglage ('+rgN+' h) ne peut pas dépasser la durée ('+duree+' h).'); return; } payload.temps_reglage=rgN; }
   var pr=null; if(procId!=='pending'){ pr=PROCESS.find(function(p){return p.id===procId;}); payload.process_id=procId; if(pr&&pr.machine_id) payload.machine_id=pr.machine_id; }
   fetch('/api/production/bdts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json();}).then(function(j){
       if(!j||!j.ok){ pushNotif('err','fa-exclamation-circle','Création échouée : '+((j&&j.error)||'')); return; }
       var nid=(j.data&&j.data.id)||('BDT-'+(900+BDTS.length+1));
-      BDTS.push({id:nid,op:'',process:procId,client:client,piece:piece,operation:op,duree:duree,debut:debut,priorite:prio,statut:statut,resultat:null,activite:act,machineId:(pr&&pr.machine_id)||null,tempsAlloue:duree,debutReel:null,finReel:null});
+      BDTS.push({id:nid,op:'',process:procId,client:client,piece:piece,operation:op,duree:duree,debut:debut,priorite:prio,statut:statut,resultat:null,activite:act,machineId:(pr&&pr.machine_id)||null,tempsAlloue:duree,debutReel:null,finReel:null,reglage:(payload.temps_reglage!=null?payload.temps_reglage:null)});
       closeModal('bdtModal'); buildAll(); pushNotif('ok','fa-plus-circle','BDT <strong>'+nid+'</strong> créé.');
+      if(j.avertissement) pushNotif('warn','fa-exclamation-triangle',String(j.avertissement).replace(/[&<>"]/g,function(ch){ return ch==='&'?'&amp;':ch==='<'?'&lt;':ch==='>'?'&gt;':'&quot;'; }),8000);
     }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
 function createST(){ pushNotif('ok','fa-paper-plane','Commande ST envoyée. Fournisseur notifié.'); closeModal('stModal'); }
@@ -3451,57 +3835,246 @@ var OPS_PRESENCE = ${sjX(opsForPresence)};
 var PRESENCES = ${sjX(PRESENCES_JS)};
 var ABSENCES_RH = ${sjX(ABSENCES_RH_JS)};
 var presFiltAct='all';
-var presWeekStart=(function(){ var d=new Date('${TODAY}'); var diff=(d.getDay()+6)%7; d.setDate(d.getDate()-diff); return d.toISOString().slice(0,10); })();
-var PRES_SHIFTS={matin:['#dbeafe','#1d4ed8','Matin'],journee:['#dcfce7','#15803d','Journée'],soir:['#ede9fe','#5b21b6','Soir'],absent:['#fef2f2','#b91c1c','Absent']};
-var PRES_CYCLE=['matin','journee','soir','absent',''];
-function presDays(){ var arr=[]; var d=new Date(presWeekStart); for(var i=0;i<7;i++){ var x=new Date(d); x.setDate(d.getDate()+i); arr.push(x.toISOString().slice(0,10)); } return arr; }
+// Dates calculees en UTC : une date AAAA-MM-JJ reste la meme quel que soit le fuseau du poste (plus de decalage d un jour).
+function presIsoPlus(iso,n){ var d=new Date(iso+'T00:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
+function presLundi(iso){ var d=new Date(iso+'T00:00:00Z'); return presIsoPlus(iso,-((d.getUTCDay()+6)%7)); }
+function presDateFr(iso,opts){ try{ var o=opts||{day:'2-digit',month:'2-digit'}; o.timeZone='UTC'; return new Date(iso+'T00:00:00Z').toLocaleDateString('fr-FR',o); }catch(e){ return iso; } }
+function presEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+var presWeekStart=presLundi('${TODAY}');
+// 4 creneaux (Matin, Journee, Apres-midi, Soiree) + Absent : { id: [fond, texte, libelle, horaires] }, tires de SHIFTS (shared.ts).
+var PRES_SHIFTS=${sjX(PRES_PALETTE)};
+var PRES_ORDRE=${sjX(PRES_ORDRE)};
+// Jours dont les presences viennent REELLEMENT du serveur. La case d un jour non charge est verrouillee :
+// affichee vide et cliquable, elle ecraserait une vraie presence en base.
+var PRES_JOURS_CHARGES=${sjX(PRES_JOURS_CHARGES)};
+var PRES_CHARGEMENT={};   // lundi -> 'encours' | 'ok' | 'echec'
+// Ecritures : UNE requete par choix, en FILE par case (l ordre en base est l ordre des clics), affichage optimiste,
+// retour a la derniere valeur CONFIRMEE par le serveur si la requete echoue.
+// PRES_TOUCHE[case] = horloge au DÉBUT de sa dernière écriture ; PRES_FIN[case] = horloge à la FIN d'une écriture.
+var PRES_FILE={}, PRES_EN_COURS={}, PRES_CONFIRME={}, PRES_SEQ={}, PRES_TOUCHE={}, PRES_FIN={}, PRES_HORLOGE=0;
+function presDays(){ var arr=[]; for(var i=0;i<7;i++) arr.push(presIsoPlus(presWeekStart,i)); return arr; }
 function presKey(op,date){ return op+'|'+date; }
+function presJourCharge(date){ return !!PRES_JOURS_CHARGES[date]; }
+function presSemaineChargee(lundi){ for(var i=0;i<7;i++){ if(!PRES_JOURS_CHARGES[presIsoPlus(lundi,i)]) return false; } return true; }
+function presOp(op){ return OPS_PRESENCE.find(function(o){ return String(o.id)===String(op); })||null; }
 function presGet(op,date){
   // Absence RH prioritaire
-  for(var i=0;i<ABSENCES_RH.length;i++){ if(String(ABSENCES_RH[i].operateur_id)===String(op)&&ABSENCES_RH[i].date===date) return {shift:'absent',rh:true,type:ABSENCES_RH[i].type}; }
-  for(var j=0;j<PRESENCES.length;j++){ if(String(PRESENCES[j].operateur_id)===String(op)&&PRESENCES[j].date===date) return {shift:PRESENCES[j].shift,rh:false}; }
-  return {shift:'',rh:false};
+  for(var i=0;i<ABSENCES_RH.length;i++){ if(String(ABSENCES_RH[i].operateur_id)===String(op)&&ABSENCES_RH[i].date===date) return {shift:'absent',rh:true,type:ABSENCES_RH[i].type,charge:true}; }
+  var charge=presJourCharge(date);
+  for(var j=0;j<PRESENCES.length;j++){ if(String(PRESENCES[j].operateur_id)===String(op)&&PRESENCES[j].date===date) return {shift:PRESENCES[j].shift,rh:false,charge:charge}; }
+  return {shift:'',rh:false,charge:charge};
+}
+function presSetLocal(op,date,shift){
+  PRESENCES=PRESENCES.filter(function(p){ return !(String(p.operateur_id)===String(op)&&p.date===date); });
+  if(shift) PRESENCES.push({operateur_id:op,date:date,shift:shift});
+}
+// Etat de chargement de la semaine affichee, a cote de ses fleches.
+function presMajEtat(){
+  var el=document.getElementById('presWeekEtat'); if(!el) return;
+  var s=PRES_CHARGEMENT[presWeekStart];
+  if(s==='encours') el.innerHTML='<i class="fas fa-spinner fa-spin" style="color:#94a3b8;" title="Chargement des présences de la semaine"></i>';
+  else if(s==='echec') el.innerHTML='<button type="button" onclick="presChargerSemaine(presWeekStart)" title="'+(presSemaineChargee(presWeekStart)?'Relecture impossible : affichage de la dernière lecture (cases modifiables)':'Présences de la semaine non chargées : les cases restent verrouillées')+'" style="border:none;background:#fef3c7;color:#b45309;border-radius:6px;padding:2px 8px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-rotate-right" style="margin-right:4px;"></i>Réessayer</button>';
+  else el.innerHTML='';
 }
 function presBuild(){
   var grid=document.getElementById('presGrid'); if(!grid) return;
+  // Semaine jamais lue (page rendue sans ses presences, ou semaine hors fenetre) : on la lit d abord.
+  if(!PRES_CHARGEMENT[presWeekStart] && !presSemaineChargee(presWeekStart)){ presChargerSemaine(presWeekStart); return; }
+  // Un seul ecouteur pour toute la grille (delegation) : la case porte l operateur et la date en attributs.
+  if(!grid.getAttribute('data-pres-deleg')){
+    grid.setAttribute('data-pres-deleg','1');
+    grid.addEventListener('click',function(e){ var b=(e.target&&e.target.closest)?e.target.closest('button[data-pres-op]'):null; if(!b||b.disabled) return; presOuvrirMenu(b,b.getAttribute('data-pres-op'),b.getAttribute('data-pres-date')); });
+  }
   var days=presDays();
-  var fr=new Date(days[0]), to=new Date(days[6]);
-  var lbl=document.getElementById('presWeekLabel'); if(lbl) lbl.textContent='Sem. du '+fr.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})+' au '+to.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  var lbl=document.getElementById('presWeekLabel'); if(lbl) lbl.textContent='Sem. du '+presDateFr(days[0])+' au '+presDateFr(days[6],{day:'2-digit',month:'2-digit',year:'numeric'});
+  presMajEtat();
   var ops=OPS_PRESENCE.filter(function(o){ return presFiltAct==='all'||o.activite===presFiltAct; });
   var html='<table style="width:100%;border-collapse:collapse;font-size:.78rem;"><thead><tr style="background:#1e293b;color:white;">'
     +'<th style="text-align:left;padding:9px 12px;min-width:200px;position:sticky;left:0;background:#1e293b;">Opérateur</th>';
-  days.forEach(function(iso){ var d=new Date(iso); var we=(d.getDay()===0||d.getDay()===6); html+='<th style="padding:7px 4px;text-align:center;min-width:92px;'+(we?'opacity:.6;':'')+'"><div style="font-size:.62rem;opacity:.7;text-transform:uppercase;">'+d.toLocaleDateString('fr-FR',{weekday:'short'})+'</div><div style="font-weight:800;">'+d.getDate().toString().padStart(2,'0')+'/'+(d.getMonth()+1).toString().padStart(2,'0')+'</div></th>'; });
+  days.forEach(function(iso){ var dw=new Date(iso+'T00:00:00Z').getUTCDay(); var we=(dw===0||dw===6); html+='<th style="padding:7px 4px;text-align:center;min-width:92px;'+(we?'opacity:.6;':'')+'"><div style="font-size:.62rem;opacity:.7;text-transform:uppercase;">'+presDateFr(iso,{weekday:'short'})+'</div><div style="font-weight:800;">'+presDateFr(iso)+'</div></th>'; });
   html+='</tr></thead><tbody>';
-  if(ops.length===0){ html+='<tr><td colspan="8" style="text-align:center;padding:30px;color:#94a3b8;">Aucun opérateur '+(presFiltAct!=='all'?presFiltAct:'')+'.</td></tr>'; }
+  if(ops.length===0){ html+='<tr><td colspan="8" style="text-align:center;padding:30px;color:#94a3b8;">Aucun opérateur '+(presFiltAct!=='all'?presEsc(presFiltAct):'')+'.</td></tr>'; }
   ops.forEach(function(o){
     var actCol=o.activite==='Seem'?'#3b82f6':'#ec4899';
-    html+='<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:8px 12px;position:sticky;left:0;background:white;border-right:1px solid #f1f5f9;"><div style="display:flex;align-items:center;gap:8px;"><span style="width:26px;height:26px;border-radius:50%;background:'+actCol+';color:white;font-size:.62rem;font-weight:800;display:inline-flex;align-items:center;justify-content:center;">'+(o.nom||'').charAt(0)+'</span><div><div style="font-weight:700;color:#1e293b;">'+o.nom+'</div><div style="font-size:.6rem;color:'+actCol+';font-weight:700;">'+o.activite+(o.poste?' · '+o.poste:'')+'</div></div></div></td>';
+    html+='<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:8px 12px;position:sticky;left:0;background:white;border-right:1px solid #f1f5f9;"><div style="display:flex;align-items:center;gap:8px;"><span style="width:26px;height:26px;border-radius:50%;background:'+actCol+';color:white;font-size:.62rem;font-weight:800;display:inline-flex;align-items:center;justify-content:center;">'+presEsc((o.nom||'').charAt(0))+'</span><div><div style="font-weight:700;color:#1e293b;">'+presEsc(o.nom)+'</div><div style="font-size:.6rem;color:'+actCol+';font-weight:700;">'+presEsc(o.activite)+(o.poste?' · '+presEsc(o.poste):'')+'</div></div></div></td>';
     days.forEach(function(iso){
       var g=presGet(o.id,iso);
-      var st=g.shift; var sc=st&&PRES_SHIFTS[st]?PRES_SHIFTS[st]:['#f8fafc','#94a3b8','—'];
-      var lockTitle=g.rh?('Absence RH ('+(g.type||'')+')'):'Cliquer pour changer';
-      html+='<td style="padding:4px;text-align:center;"><button '+(g.rh?'disabled':'')+' onclick="presCycle(\\''+o.id+'\\',\\''+iso+'\\',\\''+(o.nom||'').replace(/\\x27/g,'')+'\\',\\''+o.activite+'\\')" title="'+lockTitle+'" style="width:84px;padding:6px 4px;border-radius:7px;border:1px solid '+sc[0]+';background:'+sc[0]+';color:'+sc[1]+';font-size:.68rem;font-weight:700;cursor:'+(g.rh?'not-allowed':'pointer')+';">'+(g.rh?'<i class=\\'fas fa-lock\\' style=\\'margin-right:3px;font-size:.6rem;\\'></i>':'')+(st?sc[2]:'—')+'</button></td>';
+      var st=g.shift||''; var connu=!!(st&&PRES_SHIFTS[st]);
+      var sc=connu?PRES_SHIFTS[st]:['#f8fafc','#94a3b8',st||'—',''];
+      var verrou=g.rh||!g.charge;
+      var attente=!!PRES_EN_COURS[presKey(o.id,iso)];
+      var titre=g.rh?('Absence RH ('+(g.type||'')+')')
+        :(!g.charge?'Présences de cette semaine non chargées'
+        :((st?(sc[2]+(sc[3]?' '+sc[3]:'')):'Non programmé')+(attente?' · enregistrement en cours':'')+' · cliquer pour choisir'));
+      var txt=g.rh?('<i class="fas fa-lock" style="margin-right:3px;font-size:.6rem;"></i>'+presEsc(sc[2]))
+        :(!g.charge?(PRES_CHARGEMENT[presLundi(iso)]==='encours'?'…':'?'):presEsc(st?sc[2]:'—'));
+      html+='<td style="padding:4px;text-align:center;"><button type="button" '+(verrou?'disabled ':'')+'data-pres-op="'+presEsc(o.id)+'" data-pres-date="'+iso+'" title="'+presEsc(titre)+'" style="width:84px;padding:6px 4px;border-radius:7px;border:1px solid '+(connu?sc[1]+'40':'#e2e8f0')+';background:'+sc[0]+';color:'+sc[1]+';font-size:.68rem;font-weight:700;cursor:'+(verrou?'not-allowed':'pointer')+';'+(attente?'opacity:.65;':'')+'">'+txt+'</button></td>';
     });
     html+='</tr>';
   });
   html+='</tbody></table>';
   grid.innerHTML=html;
 }
-function presCycle(op,date,nom,act){
-  var cur=presGet(op,date); if(cur.rh) return;
-  var idx=PRES_CYCLE.indexOf(cur.shift||''); var nxt=PRES_CYCLE[(idx+1)%PRES_CYCLE.length];
-  // maj locale
-  PRESENCES=PRESENCES.filter(function(p){ return !(String(p.operateur_id)===String(op)&&p.date===date); });
-  if(nxt) PRESENCES.push({operateur_id:op,date:date,shift:nxt});
-  presBuild();
-  fetch('/api/production/presence',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({operateur_id:op,operateur_nom:nom,activite:act,date_presence:date,shift:nxt||'absent'})})
-    .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok) pushNotif('err','fa-ban','Sauvegarde présence échouée.'); }).catch(function(){});
+// ─── Menu d'une case : Matin · Journée · Après-midi · Soirée · Absent · Effacer ───
+// (14/09/2026) Remplace le cycle au clic : atteindre « soir » demandait 3 clics, donc 3 POST en parallèle dont l'ordre
+// d'arrivée n'était pas garanti — la base pouvait garder « matin ». Désormais : un choix = UN appel.
+// Clavier (revue du lot C) : Échap et Tab referment le menu et RENDENT le focus à la case qui l'a ouvert (retrouvée par
+// ses attributs : la grille est reconstruite par innerHTML) ; flèches haut/bas, Début/Fin entre les choix disponibles.
+var PRES_MENU_ORIGINE=null;   // [operateur, date] de la case qui a ouvert le menu
+function presFocusCase(op,date){
+  var bs=document.querySelectorAll('#presGrid button[data-pres-op]');
+  for(var i=0;i<bs.length;i++){ if(bs[i].getAttribute('data-pres-op')===String(op)&&bs[i].getAttribute('data-pres-date')===String(date)){ try{ bs[i].focus({preventScroll:true}); }catch(e){} return true; } }
+  return false;
 }
-function presShiftWeek(d){ var dt=new Date(presWeekStart); dt.setDate(dt.getDate()+d*7); presWeekStart=dt.toISOString().slice(0,10); presBuild(); }
+function presFermerMenu(rendreFocus){
+  var m=document.getElementById('presMenu'); if(m&&m.parentNode) m.parentNode.removeChild(m);
+  document.removeEventListener('mousedown',presMenuDehors,true);
+  document.removeEventListener('keydown',presMenuTouche,true);
+  window.removeEventListener('scroll',presMenuDefile,true);
+  var o=PRES_MENU_ORIGINE; PRES_MENU_ORIGINE=null;
+  if(rendreFocus===true&&o) presFocusCase(o[0],o[1]);
+}
+function presMenuDehors(e){ var m=document.getElementById('presMenu'); if(m&&!m.contains(e.target)) presFermerMenu(); }
+function presMenuTouche(e){
+  var m=document.getElementById('presMenu'); if(!m) return;
+  if(e.key==='Escape'||e.key==='Esc'||e.key==='Tab'){ e.preventDefault(); e.stopPropagation(); presFermerMenu(true); return; }
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'||e.key==='Home'||e.key==='End'){
+    var items=Array.prototype.slice.call(m.querySelectorAll('.pres-choix:not([disabled])')); if(!items.length) return;
+    e.preventDefault();
+    var i=items.indexOf(document.activeElement);
+    var n=e.key==='Home'?0:(e.key==='End'?items.length-1:(e.key==='ArrowDown'?(i+1)%items.length:(i<=0?items.length-1:i-1)));
+    try{ items[n].focus({preventScroll:true}); }catch(err){}
+  }
+}
+function presMenuDefile(e){ var m=document.getElementById('presMenu'); if(m&&!(e&&e.target&&m.contains(e.target))) presFermerMenu(); }
+// Entrées du menu pour une case dont la valeur actuelle est « cur » : [valeur, libellé, horaires, fond, texte, actif]
+function presChoixMenu(cur){
+  return PRES_ORDRE.concat(['']).map(function(k){
+    var sc=k?PRES_SHIFTS[k]:null;
+    return [k, sc?sc[2]:'Effacer', sc?sc[3]:'', sc?sc[0]:'', sc?sc[1]:'#64748b', (cur||'')===k];
+  });
+}
+function presOuvrirMenu(btn,op,date){
+  presFermerMenu();
+  var g=presGet(op,date); if(g.rh||!g.charge) return;
+  var o=presOp(op);
+  var m=document.createElement('div'); m.id='presMenu'; m.setAttribute('role','menu');
+  m.style.cssText='position:fixed;z-index:700;background:white;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 12px 32px rgba(15,23,42,.18);padding:5px;min-width:200px;';
+  var h='<div style="padding:5px 8px 6px;font-size:.66rem;color:#64748b;font-weight:700;border-bottom:1px solid #f1f5f9;margin-bottom:3px;">'+presEsc(o?o.nom:op)+' · '+presEsc(presDateFr(date,{weekday:'short',day:'2-digit',month:'2-digit'}))+'</div>';
+  presChoixMenu(g.shift).forEach(function(c){
+    h+='<button type="button" role="menuitem" class="pres-choix" data-pres-choix="'+c[0]+'"'+(c[5]?' disabled':'')+' style="display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:none;border-radius:7px;background:'+(c[5]?'#f1f5f9':'white')+';cursor:'+(c[5]?'default':'pointer')+';font-size:.76rem;font-weight:700;text-align:left;">'
+      +(c[0]?'<span style="width:12px;height:12px;border-radius:3px;flex-shrink:0;background:'+c[3]+';border:1px solid '+c[4]+';"></span>':'<i class="fas fa-eraser" style="width:12px;color:#94a3b8;"></i>')
+      +'<span style="color:'+c[4]+';">'+presEsc(c[1])+'</span>'
+      +'<span style="margin-left:auto;font-size:.64rem;color:#94a3b8;font-weight:600;">'+presEsc(c[2])+'</span>'
+      +(c[5]&&c[0]?'<i class="fas fa-check" style="color:#10b981;font-size:.66rem;"></i>':'')
+      +'</button>';
+  });
+  m.innerHTML=h;
+  m.addEventListener('click',function(e){ var b=(e.target&&e.target.closest)?e.target.closest('[data-pres-choix]'):null; if(!b||b.disabled) return; var k=b.getAttribute('data-pres-choix')||''; presFermerMenu(true); presChoisir(op,date,k); });
+  document.body.appendChild(m);
+  PRES_MENU_ORIGINE=[String(op),String(date)];
+  var r=btn.getBoundingClientRect(); var top=r.bottom+4, left=r.left;
+  if(top+m.offsetHeight>window.innerHeight-8) top=Math.max(8,r.top-m.offsetHeight-4);
+  if(left+m.offsetWidth>window.innerWidth-8) left=Math.max(8,window.innerWidth-m.offsetWidth-8);
+  m.style.top=top+'px'; m.style.left=left+'px';
+  document.addEventListener('mousedown',presMenuDehors,true);
+  document.addEventListener('keydown',presMenuTouche,true);
+  window.addEventListener('scroll',presMenuDefile,true);
+  var premier=m.querySelector('button:not([disabled])'); if(premier){ try{ premier.focus({preventScroll:true}); }catch(e){} }
+}
+// Reconstruit la grille (innerHTML) sans perdre le focus clavier : la case qui l'avait le retrouve.
+function presRafraichir(){
+  var a=document.activeElement, op=null, dt=null;
+  if(a&&a.getAttribute&&a.getAttribute('data-pres-op')!=null){ op=a.getAttribute('data-pres-op'); dt=a.getAttribute('data-pres-date'); }
+  presBuild(); if(typeof buildOperatorsByShift==='function') buildOperatorsByShift();
+  if(op!=null&&document.activeElement!==a) presFocusCase(op,dt);
+}
+// Un choix dans le menu. Même valeur que l'actuelle : rien à envoyer.
+function presChoisir(op,date,k){
+  var g=presGet(op,date); if(g.rh||!g.charge) return;
+  if((g.shift||'')===(k||'')) return;
+  var o=presOp(op);
+  var p=presEcrire(op,date,k||'',o);
+  presRafraichir();
+  return p.then(function(res){
+    presRafraichir();
+    if(!res.ok) pushNotif('err','fa-ban','Présence non enregistrée — <strong>'+presEsc(o?o.nom:op)+'</strong>, '+presEsc(presDateFr(date,{weekday:'short',day:'2-digit',month:'2-digit'}))+' : '+presEsc(res.error)+'. La case affiche la dernière valeur enregistrée.',8000);
+    return res;
+  });
+}
+// UNE requête : POST (créneau ou absent) ou DELETE (vider la case). Ne rejette jamais : {ok} ou {ok:false,error}.
+function presRequete(op,date,k,o){
+  var corps=k?{operateur_id:op,operateur_nom:o?o.nom:'',activite:o?o.activite:'',date_presence:date,shift:k}:{operateur_id:op,date_presence:date};
+  return fetch('/api/production/presence',{method:k?'POST':'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify(corps)})
+    .then(function(r){
+      return r.json().then(function(j){
+        if(r.ok&&j&&j.ok) return {ok:true};
+        var msg=(j&&j.error)||('HTTP '+r.status);
+        if(r.status===403) msg+=' (droit d\\'écriture Production requis)';
+        return {ok:false,error:msg};
+      },function(){ return {ok:false,error:'réponse illisible (HTTP '+r.status+', session expirée ?)'}; });
+    },function(){ return {ok:false,error:'erreur réseau'}; });
+}
+// Écriture d'une case : affichage optimiste, requêtes EN FILE par case, retour à la dernière valeur confirmée si la
+// dernière requête de la case échoue. Renvoie une promesse {ok,error} qui ne rejette jamais.
+function presEcrire(op,date,k,o){
+  var key=presKey(op,date);
+  if(!PRES_EN_COURS[key]) PRES_CONFIRME[key]=presGet(op,date).shift||'';
+  PRES_EN_COURS[key]=(PRES_EN_COURS[key]||0)+1;
+  var seq=PRES_SEQ[key]=(PRES_SEQ[key]||0)+1;
+  PRES_TOUCHE[key]=++PRES_HORLOGE;
+  presSetLocal(op,date,k);
+  var lancer=function(){ return presRequete(op,date,k,o); };
+  var p=(PRES_FILE[key]||Promise.resolve()).then(lancer,lancer);
+  PRES_FILE[key]=p;
+  return p.then(function(res){
+    PRES_FIN[key]=++PRES_HORLOGE;
+    PRES_EN_COURS[key]--;
+    if(res.ok) PRES_CONFIRME[key]=k;
+    else if(PRES_SEQ[key]===seq) presSetLocal(op,date,PRES_CONFIRME[key]);
+    if(!PRES_EN_COURS[key]){ delete PRES_EN_COURS[key]; delete PRES_CONFIRME[key]; if(PRES_FILE[key]===p) delete PRES_FILE[key]; }
+    return res;
+  });
+}
+// Lecture des présences d'une semaine (GET /api/production/presence?from=&to=) : navigation de semaine, jour du planning
+// hors fenêtre, ou page rendue sans ses présences. Tant qu'elle n'a pas abouti, les cases de la semaine restent verrouillées.
+function presChargerSemaine(lundi){
+  if(PRES_CHARGEMENT[lundi]==='encours') return;
+  PRES_CHARGEMENT[lundi]='encours';
+  var depuis=PRES_HORLOGE, to=presIsoPlus(lundi,6);
+  if(lundi===presWeekStart) presBuild();
+  return fetch('/api/production/presence?from='+lundi+'&to='+to,{headers:{'Accept':'application/json'}})
+    .then(function(r){ return r.json().then(function(j){ return {r:r,j:j}; },function(){ return {r:r,j:null}; }); })
+    .then(function(x){
+      if(!x.r.ok||!x.j||!x.j.ok||!Array.isArray(x.j.presences)) throw new Error((x.j&&x.j.error)||(x.j?('HTTP '+x.r.status):'réponse illisible (session expirée ?)'));
+      presFusionner(lundi,to,x.j.presences,depuis);
+      PRES_CHARGEMENT[lundi]='ok';
+    })
+    .catch(function(e){
+      PRES_CHARGEMENT[lundi]='echec';
+      // Semaine déjà lue auparavant (rendu de la page ou lecture précédente) : ses cases restent utilisables, on le dit.
+      var dejaLue=presSemaineChargee(lundi);
+      pushNotif('err','fa-exclamation-circle','Présences de la semaine du '+presEsc(presDateFr(lundi))+' non '+(dejaLue?'relues':'chargées')+' : '+presEsc((e&&e.message)||'erreur réseau')+'. '+(dejaLue?'Affichage de la dernière lecture : les cases restent modifiables.':'Les cases de cette semaine restent verrouillées.'),8000);
+    })
+    .then(function(){ presRafraichir(); });
+}
+// Fusion d'une lecture dans PRESENCES. Une case garde sa valeur locale si une écriture y est en cours, a DÉMARRÉ après le
+// départ de la lecture, ou s'est TERMINÉE après ce départ : dans les trois cas la lecture a pu être faite par le serveur
+// avant que l'écriture soit validée, et rapporterait l'ancienne valeur. (Le 3ᵉ cas manquait : une écriture lancée juste
+// avant la relecture et terminée avant sa réponse était écrasée à l'écran, et la base gardait l'autre valeur.)
+function presFusionner(from,to,rows,depuis){
+  var garde=function(op,date){ var k=presKey(op,date); return !!PRES_EN_COURS[k] || (PRES_TOUCHE[k]||0)>depuis || (PRES_FIN[k]||0)>depuis; };
+  PRESENCES=PRESENCES.filter(function(p){ return !(p.date>=from&&p.date<=to) || garde(p.operateur_id,p.date); });
+  rows.forEach(function(p){ if(p && p.date>=from && p.date<=to && !garde(p.operateur_id,p.date)) PRESENCES.push({operateur_id:String(p.operateur_id),date:p.date,shift:p.shift}); });
+  for(var d=from; d<=to; d=presIsoPlus(d,1)) PRES_JOURS_CHARGES[d]=true;
+}
+function presShiftWeek(d){ presFermerMenu(); presWeekStart=presIsoPlus(presWeekStart,d*7); presBuild(); presChargerSemaine(presWeekStart); }
 function presSetAct(a,btn){ presFiltAct=a; ['all','Seem','Semrac'].forEach(function(x){ var e=document.getElementById('pres-fa-'+x); if(e) e.classList.toggle('active',x===a); }); presBuild(); }
 
 // ─── Modal : programmer la semaine entière ───────────────────
 function openPresWeekModal(){
+  presFermerMenu();
+  var wl=document.getElementById('presWkLabel'); if(wl){ var dd=presDays(); wl.textContent='du '+presDateFr(dd[0])+' au '+presDateFr(dd[6],{day:'2-digit',month:'2-digit',year:'numeric'}); }
   var list=document.getElementById('presWkOpsList');
   if(list){
     var ops=OPS_PRESENCE.filter(function(o){ return presFiltAct==='all'||o.activite===presFiltAct; });
@@ -3527,28 +4100,39 @@ function applyPresWeek(){
   var jours=document.getElementById('presWkJours').value;
   var picks=Array.prototype.slice.call(document.querySelectorAll('.presWkOp:checked')).map(function(cb){ return cb.value; });
   if(picks.length===0){ pushNotif('err','fa-exclamation-circle','Sélectionnez au moins un opérateur.'); return; }
+  if(shift && !PRES_SHIFTS[shift]){ pushNotif('err','fa-ban','Créneau inconnu.'); return; }
+  // Jamais d'écriture sur une semaine non chargée : la valeur à rétablir en cas d'échec serait inconnue.
+  if(!presSemaineChargee(presWeekStart)){
+    pushNotif('warn','fa-hourglass-half','Les présences de la semaine affichée ne sont pas encore chargées : réessayez dans un instant.',5000);
+    if(PRES_CHARGEMENT[presWeekStart]!=='encours') presChargerSemaine(presWeekStart);
+    return;
+  }
   var days=presDays();
   var ndays=(jours==='ouvres')?5:7;
-  var calls=[];
+  // « Effacer » = vrai DELETE (avant : enregistrait « absent ») ; chaque réponse est LUE (avant : succès affiché d'office).
+  var ecritures=[], dejaAJour=0;
   picks.forEach(function(opId){
-    var opObj=OPS_PRESENCE.find(function(o){ return String(o.id)===String(opId); });
+    var opObj=presOp(opId);
     if(!opObj) return;
     for(var i=0;i<ndays;i++){
-      var iso=days[i];
-      // Ne pas écraser une absence RH
-      var rh=ABSENCES_RH.find(function(a){ return String(a.operateur_id)===String(opId) && a.date===iso; });
-      if(rh) continue;
-      // maj locale
-      PRESENCES=PRESENCES.filter(function(p){ return !(String(p.operateur_id)===String(opId)&&p.date===iso); });
-      if(shift) PRESENCES.push({operateur_id:opId,date:iso,shift:shift});
-      calls.push(fetch('/api/production/presence',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({operateur_id:opId,operateur_nom:opObj.nom,activite:opObj.activite,date_presence:iso,shift:shift||'absent'})}));
+      var g=presGet(opId,days[i]);
+      if(g.rh) continue;                                   // Ne pas écraser une absence RH
+      if((g.shift||'')===shift){ dejaAJour++; continue; }  // rien à envoyer
+      ecritures.push(presEcrire(opId,days[i],shift,opObj));
     }
   });
   closePresWeekModal();
-  presBuild();
-  Promise.all(calls).then(function(){
-    pushNotif('ok','fa-calendar-week','Semaine programmée pour '+picks.length+' opérateur'+(picks.length>1?'s':'')+' ('+calls.length+' jours mis à jour).',5500);
-  }).catch(function(){ pushNotif('err','fa-ban','Certaines mises à jour ont échoué.'); });
+  presRafraichir();
+  if(!ecritures.length){ pushNotif('info','fa-calendar-week','Rien à changer : ces cases avaient déjà cette valeur.',4500); return; }
+  Promise.all(ecritures).then(function(res){
+    presRafraichir();
+    var n=res.length, ko=res.filter(function(x){ return !x.ok; });
+    if(!ko.length){
+      pushNotif('ok','fa-calendar-week','Semaine programmée pour '+picks.length+' opérateur'+(picks.length>1?'s':'')+' · '+n+' case'+(n>1?'s':'')+' enregistrée'+(n>1?'s':'')+(dejaAJour?' ('+dejaAJour+' déjà à jour)':'')+'.',5500);
+    } else {
+      pushNotif('err','fa-ban',ko.length+' case'+(ko.length>1?'s':'')+' sur '+n+' non enregistrée'+(ko.length>1?'s':'')+' : '+presEsc(ko[0].error)+'. Ces cases affichent la dernière valeur enregistrée.',9000);
+    }
+  });
 }
 
 // ─── Planning BST jour-par-jour ──────────────────────────────
@@ -3659,6 +4243,8 @@ function bstBuildBody(){
       var pctWidth=((row.clientWidth-240)*widthDay/BST_DAYS_N - 4);
       bar.style.left='calc(240px + '+leftDay+' * ((100% - 240px) / '+BST_DAYS_N+'))';
       bar.style.width='calc('+widthDay+' * ((100% - 240px) / '+BST_DAYS_N+') - 6px)';
+      // Chemin critique (lot C) : BST planifié avant la fin de l étape précédente → liseré rouge + motif en info-bulle.
+      if(CC_VIOL[b.id]){ bar.style.boxShadow='0 0 0 2px #dc2626'; }   // motif dans l info-bulle bstShowTT (pas de title : 2 bulles se superposaient)
       var stIcon=b.statut==='a_envoyer'?'<i class="fas fa-hourglass-half ic"></i>':b.statut==='envoye'?'<i class="fas fa-paper-plane ic"></i>':(b.statut==='recu'||b.statut==='solde')?'<i class="fas fa-check-double ic"></i>':'<i class="fas fa-industry ic"></i>';
       bar.innerHTML=
         '<div style="font-weight:800;font-size:.66rem;opacity:.95;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+stIcon+b.id+'</div>'+
@@ -3693,6 +4279,7 @@ function bstBuildPending(){
         '<div style="font-size:.7rem;font-weight:800;color:#1e293b;">'+b.id+'</div>'+
         '<div style="font-size:.66rem;color:#475569;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">'+(b.operation||'—')+'</div>'+
         '<div style="font-size:.6rem;color:#94a3b8;">'+(b.lot_ref||'—')+' · '+(b.piece||'—')+' · qté '+(b.qte||'?')+'</div>'+
+        ccDispoBst(b)+
         '<div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;">'+
           '<span style="background:'+col+'22;color:'+col+';font-weight:700;border-radius:999px;padding:1px 6px;font-size:.56rem;"><i class="fas fa-layer-group" style="margin-right:2px;"></i>'+(b.lot_ref||'—')+'</span>'+
           (b.cmd_ref?'<span style="background:#dbeafe;color:#1d4ed8;border-radius:999px;padding:1px 6px;font-size:.56rem;font-weight:700;">'+b.cmd_ref+'</span>':'')+
@@ -3726,29 +4313,30 @@ function bstEtapesDuLot(key){
     if(sa!==sb) return sa-sb;
     return String(a.ord).localeCompare(String(b.ord));
   });
-  return l;
+  return grouperEtapesParSeq(l);   // morceaux « -Mk » d un BDT = une seule étape (cf. etapesDuLot)
 }
 function bstLotFournSet(bstId){
   var b=BST_DATA.find(function(x){return x.id===bstId;}); if(!b) return null;
   var l=bstEtapesDuLot(bstLotKey(b));
-  var i=-1; for(var k=0;k<l.length;k++){ if(l[k].id===b.id){ i=k; break; } }
+  var i=etapeIndexDe(l,b.id);
   if(i<0) return null;
   var s={};
   // Seules les etapes sous-traitees ont une ligne dans ce planning (les etapes internes
   // sont nommees dans le bandeau mais n ajoutent pas de sous-traitant).
-  [l[i-1], l[i], l[i+1]].forEach(function(x){ if(x && x.st && x.sous_traitant_id) s[String(x.sous_traitant_id)]=true; });
+  [l[i-1], l[i], l[i+1]].forEach(function(x){ if(!x) return; x.membres.forEach(function(m){ if(m.st && m.sous_traitant_id) s[String(m.sous_traitant_id)]=true; }); });
   return s;
 }
 function bstEtapeLabel(bstId){
   var b=BST_DATA.find(function(x){return x.id===bstId;}); if(!b) return '';
   var l=bstEtapesDuLot(bstLotKey(b));
-  var i=-1; for(var k=0;k<l.length;k++){ if(l[k].id===b.id){ i=k; break; } }
-  var nomST=function(x){
+  var i=etapeIndexDe(l,b.id);
+  var nomMembre=function(x){
     if(!x) return null;
     if(!x.st) return 'atelier ' + (x.ref.operation || '');            // etape interne
     var f=BST_FOURN.find(function(z){ return String(z.id)===String(x.sous_traitant_id); });
     return f?f.nom:(x.ref.operation||null);
   };
+  var nomST=function(x){ if(!x) return null; var noms=[]; (x.membres||[x]).forEach(function(m){ var n=nomMembre(m); if(n&&noms.indexOf(n)<0) noms.push(n); }); return noms.length?noms.join(' + '):null; };
   var av=nomST(l[i-1]), ap=nomST(l[i+1]), moi=nomST(l[i])||b.operation||'';
   var ctx=[]; if(av) ctx.push('avant : '+av); if(ap) ctx.push('apres : '+ap);
   return bstLotKey(b)+' \\u00b7 etape '+(i+1)+'/'+l.length+' \\u2014 '+moi+(ctx.length?' ('+ctx.join(' \\u00b7 ')+')':' (seule etape)');
@@ -3778,6 +4366,7 @@ function bstShowTT(e, b){
       '<div><span style="opacity:.6;">Qté :</span> '+(b.qte||'?')+'</div>'+
       '<div><span style="opacity:.6;">Durée :</span> '+bstDuration(b)+' jours</div>'+
       '<div><span style="opacity:.6;">Statut :</span> <strong>'+(b.statut||'—')+'</strong></div>'+
+      (CC_VIOL[b.id]?'<div style="color:#fca5a5;font-weight:700;margin-top:4px;"><i class="fas fa-link-slash" style="margin-right:4px;"></i>'+ccEsc(CC_VIOL[b.id])+'</div>':'')+
       '<div style="margin-top:6px;color:#fde68a;font-size:.6rem;">Glisser pour déplacer · Clic droit = menu (commande/lot)</div>'+
     '</div>';
   bstMoveTT(e);
@@ -3821,8 +4410,18 @@ function bstOpenCtxMenu(e, b){
   document.body.appendChild(menu);
   setTimeout(function(){ document.addEventListener('click', function h(){ menu.remove(); document.removeEventListener('click', h); }, {once:true}); }, 50);
 }
+// « Dispo le … » d un BST : jour où l étape précédente est finie (fin complète) ou revenue de sous-traitance.
+function ccDispoBst(b){
+  var apt=ccAuPlusTot(b,ccOpsDuLot(ccCleLot(b)));
+  if(apt.regle==='aucune') return '';
+  if(apt.regle==='inconnu'||!apt.date) return '<div title="'+ccEsc(apt.raison)+'" style="font-size:.58rem;color:#94a3b8;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;"><i class="fas fa-route" style="margin-right:3px;"></i>Dispo : '+ccEsc(apt.raison)+'</div>';
+  return '<div title="'+ccEsc(apt.raison)+'" style="font-size:.6rem;color:#0f766e;font-weight:700;margin-top:3px;"><i class="fas fa-route" style="margin-right:3px;"></i>Dispo le '+ccJJMM(apt.date)+'</div>';
+}
 function bstAssignDay(bstId, fournId, dayIso){
   var b=BST_DATA.find(function(x){return x.id===bstId;}); if(!b) return;
+  // CHEMIN CRITIQUE : contrôle au jour, identique au serveur (/api/production/bst/:id/affecter-st → 409).
+  var ctlB=ccControle(Object.assign({}, b, {sous_traitant_id:fournId, date_envoi:dayIso, date_debut:dayIso}), ccOpsDuLot(ccCleLot(b)));
+  if(ctlB.etat==='refus'){ pushNotif('err','fa-route',ccEsc(ctlB.message),9000); return; }
   var prev={sous_traitant_id:b.sous_traitant_id, date_envoi:b.date_envoi, date_debut:b.date_debut, statut:b.statut, bc_id:b.bc_id};
   b.sous_traitant_id=fournId; b.date_envoi=dayIso; b.date_debut=dayIso;
   // Affecter un BST = en attente d'envoi (le statut sera piloté ensuite par le BC ST).
@@ -3836,12 +4435,14 @@ function bstAssignDay(bstId, fournId, dayIso){
   }).then(function(r){return r.json();}).then(function(j){
     if(!j||!j.ok){
       Object.assign(b, prev); bstBuildBody(); bstBuildPending(); bstBuildKpis();
-      pushNotif('err','fa-ban',(j&&j.error)||'Affectation BST échouée.');
+      pushNotif('err','fa-ban',ccEsc((j&&j.error)||'Affectation BST échouée.'),(j&&j.au_plus_tot)?9000:5000);
       return;
     }
     if(j.bc_id) b.bc_id=j.bc_id;
-    bstBuildBody();
+    ccMajViolations(); bstBuildBody(); bstBuildPending(); ccRenderCarte(); buildGantt(); buildPending();
     pushNotif('ok','fa-check-circle','BST <strong>'+bstId+'</strong> affecté au '+dayIso+'. BC <strong>'+(j.bc_id||'')+'</strong> créé (en attente d\\'envoi).',6000);
+    var succB=Array.isArray(j.successeurs_en_violation)?j.successeurs_en_violation:[];
+    if(succB.length) pushNotif('warn','fa-link-slash',ccEsc(succB.length+' étape'+(succB.length>1?'s':'')+' suivante'+(succB.length>1?'s':'')+' à revoir (rien n’a été décalé) : '+succB.map(function(x){ return x.message; }).join(' · ')),12000);
   }).catch(function(){
     Object.assign(b, prev); bstBuildBody(); bstBuildPending(); bstBuildKpis();
     pushNotif('err','fa-exclamation-circle','Erreur réseau — modification annulée.');
@@ -3869,7 +4470,7 @@ function bstUnschedule(id){
 }
 function bstShiftDate(d){ var dt=new Date(bstStartDate); dt.setDate(dt.getDate()+d); bstStartDate=dt.toISOString().slice(0,10); var i=document.getElementById('bstStartDate'); if(i) i.value=bstStartDate; bstBuildHeader(); bstBuildBody(); }
 function bstReload(v){ bstStartDate=v; bstBuildHeader(); bstBuildBody(); }
-function bstBuildAll(){ bstBuildKpis(); bstBuildHeader(); bstBuildBody(); bstBuildPending(); }
+function bstBuildAll(){ ccMajViolations(); bstBuildKpis(); bstBuildHeader(); bstBuildBody(); bstBuildPending(); }
 function bstOpenNewModal(){
   var ml=document.getElementById('bst_lot'); if(ml) ml.innerHTML='<option value="">— Choisir un lot —</option>'+BST_LOTS_OPTS.map(function(l){return '<option value="'+l.id+'" data-cmd="'+(l.cmd_id||'')+'" data-piece="'+(l.piece||'')+'" data-client="'+(l.client||'')+'" data-qte="'+(l.qte||'')+'">'+l.id+' · '+(l.piece||'')+'</option>';}).join('');
   var mf=document.getElementById('bst_fourn'); if(mf) mf.innerHTML='<option value="">— Choisir un sous-traitant —</option>'+BST_FOURN.map(function(f){return '<option value="'+f.id+'">'+f.nom+' ('+(f.operations&&f.operations[0]||f.operation||'')+')</option>';}).join('');
@@ -3919,9 +4520,11 @@ var _dupBdtId=null;
 var _dupBdtData=${sjX(bdtsToday2.map(b=>({id:b.id,client:b.client,piece:b.piece,operation:b.operation,duree:b.duree,priorite:b.priorite})))};
 function dupBDT(id){ _dupBdtId=id; var bdt=_dupBdtData.find(function(b){return b.id===id;}); if(!bdt) return; document.getElementById('dupInfo').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.78rem;"><div><span style="color:#94a3b8;">BDT: </span><strong>'+bdt.id+'</strong></div><div><span style="color:#94a3b8;">Opération: </span>'+bdt.operation+'</div><div><span style="color:#94a3b8;">Client: </span>'+bdt.client+'</div><div><span style="color:#94a3b8;">Durée: </span>'+bdt.duree+'h</div></div><div style="margin-top:8px;font-size:.72rem;color:#f59e0b;"><i class="fas fa-info-circle" style="margin-right:4px;"></i>Un nouveau BDT sera créé avec un nouvel identifiant.</div>'; var m=document.getElementById('dupModal'); if(m) m.style.display='flex'; }
 function confirmDup(){ var m=document.getElementById('dupModal'); if(m) m.style.display='none'; pushNotif('ok','fa-copy','BDT <strong>'+_dupBdtId+'</strong> dupliqué → Opérateur réaffecté. Nouveau BDT créé.'); _dupBdtId=null; }
-// ── Découpe d un BDT de la GOULOTTE en morceaux : temps LIBRE par morceau ──
+// ── Découpe d un BDT de la GOULOTTE en morceaux : seul le temps de RÉALISATION se découpe ──
 //    Seul point d entrée : les ciseaux d une carte de goulotte (plus rien depuis le planning).
-//    Chaque morceau reçoit EXACTEMENT le temps saisi ; la somme peut différer de la durée
+//    Le réglage (fait une seule fois) reste sur le morceau 1 : lu à l ouverture par
+//    GET /api/production/bdt/:id/temps (verrouillé s il est connu, saisissable sinon).
+//    Chaque morceau reçoit EXACTEMENT le temps saisi ; la somme peut différer de la réalisation
 //    d origine (comparaison purement informative). Le serveur refuse (409) un BDT posé.
 var _splitBdt=null, _splitWired=false, SPLIT_MIN=2, SPLIT_MAX=12;
 function splitEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(ch){ return ch==='&'?'&amp;':ch==='<'?'&lt;':ch==='>'?'&gt;':'&quot;'; }); }
@@ -3930,30 +4533,123 @@ function splitFmtH(x){ var r=Math.round((Number(x)||0)*1000)/1000; return String
 function splitDureeOf(bdt){ var d=(bdt.duree!=null&&bdt.duree!=='')?Number(bdt.duree):Number(bdt.tempsAlloue||0); return (isFinite(d)&&d>0)?d:0; }
 // Précision = le 1/100 d heure : c est ce que garde la colonne duree en base (cf. route /separer).
 function splitR2(x){ return Math.round((Number(x)||0)*100)/100; }
-function splitValid(x){ return isFinite(x)&&Math.round(x*100)>0; }
-// Délégation d événements sur la liste des morceaux (posée une seule fois).
+// Réglage retenu (h) : le connu, sinon la saisie (vide = 0, tout est réalisation) ; NaN si la saisie est invalide.
+function splitReglageVal(){
+  if(!_splitBdt) return 0;
+  if(_splitBdt.reglageConnu) return splitR2(_splitBdt.reglage);
+  if(_splitBdt.saisiePossible===false) return 0;   // morceau d une étape dont le réglage se renseigne sur le BDT d origine
+  var s=String(_splitBdt.reglageSaisi==null?'':_splitBdt.reglageSaisi).trim().replace(',','.');
+  if(s==='') return 0;
+  var n=Number(s); return (isFinite(n)&&n>=0)?splitR2(n):NaN;
+}
+// Réalisation valide : supérieure à 0 au centième ; le morceau 1 peut valoir 0 s il porte un réglage (« réglage seul »).
+function splitValidAt(x,i){ if(!isFinite(x)||x<0) return false; var cts=Math.round(x*100); var R=splitReglageVal(); return (i===0&&isFinite(R)&&R>0)?cts>=0:cts>0; }
+// Délégation d événements sur la liste des morceaux (posée une seule fois) + saisie du réglage.
 function splitWire(){
   if(_splitWired) return; var box=document.getElementById('splitParts'); if(!box) return; _splitWired=true;
-  box.addEventListener('input',function(e){ var t=e.target; if(!_splitBdt||!t||!t.classList||!t.classList.contains('split-part')) return; var i=Number(t.getAttribute('data-i')); if(i>=0&&i<_splitBdt.vals.length){ _splitBdt.vals[i]=t.value; splitTotalCheck(); } });
+  box.addEventListener('input',function(e){ var t=e.target; if(!_splitBdt||!t||!t.classList||!t.classList.contains('split-part')) return; var i=Number(t.getAttribute('data-i')); if(i>=0&&i<_splitBdt.vals.length){ _splitBdt.vals[i]=t.value; _splitBdt.valsTouchees=true; splitTotalCheck(); } });
   box.addEventListener('click',function(e){ var t=(e.target&&e.target.closest)?e.target.closest('.split-del'):null; if(!t||t.disabled||!_splitBdt) return; splitRemove(Number(t.getAttribute('data-i'))); });
+  var rg=document.getElementById('splitReglage');
+  if(rg) rg.addEventListener('input',function(){ if(!_splitBdt||_splitBdt.reglageConnu||_splitBdt.loading||_splitBdt.saisiePossible===false) return; _splitBdt.reglageSaisi=rg.value; splitRecap(); splitTotalCheck(); });
+}
+// Pré-remplissage : la moitié de la RÉALISATION (durée moins réglage) ; le 2ᵉ morceau prend le reste.
+// Jamais par-dessus une saisie de l utilisateur (relecture du réglage, bouton « Utiliser … »).
+function splitPrefill(cur){
+  if(cur.valsTouchees) return;
+  var R=splitReglageVal(); if(!isFinite(R)) R=0;
+  var V=Math.max(0,splitR2(cur.total-R));
+  var h1=V>0?splitR2(V/2):0, h2=V>0?splitR2(V-h1):0;
+  cur.vals=[V>0?String(h1):'',V>0?String(h2):''];
 }
 function splitBdt(id){
   var bdt=BDTS.find(function(b){return String(b.id)===String(id);}); if(!bdt) return;
   if(!enGoulotte(bdt)){ pushNotif('warn','fa-exclamation-triangle','Seul un BDT de la goulotte se découpe : déprogrammez-le d’abord.'); return; }
   splitWire();
-  var total=splitDureeOf(bdt);
-  // Moitié arrondie au 1/100 ; le 2ᵉ morceau prend le reste pour que le total reste identique.
-  var h1=total>0?splitR2(total/2):0, h2=total>0?splitR2(total-h1):0;
-  _splitBdt={id:bdt.id,total:total,vals:[total>0?String(h1):'',total>0?String(h2):''],busy:false};
-  document.getElementById('splitInfo').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.78rem;">'
-    +'<div><span style="color:#94a3b8;">BDT : </span><strong>'+splitEsc(bdt.id)+'</strong></div>'
-    +'<div><span style="color:#94a3b8;">Opération : </span>'+splitEsc(bdt.operation||'—')+'</div>'
-    +'<div><span style="color:#94a3b8;">Pièce : </span>'+splitEsc(bdt.piece||'—')+'</div>'
-    +'<div><span style="color:#94a3b8;">Durée actuelle : </span><strong>'+splitFmtH(total)+' h</strong></div>'
-    +'</div>';
-  splitRender();
+  var cur={id:bdt.id,operation:bdt.operation,piece:bdt.piece,total:splitDureeOf(bdt),vals:['',''],busy:false,loading:true,
+    reglage:null,reglageConnu:false,reglageSaisi:'',source:'',confiance:'',raison:'',erreurTemps:'',famille:[],
+    tempsLus:false,saisiePossible:true,propose:null,porteur:''};
+  _splitBdt=cur;
+  var rg=document.getElementById('splitReglage'); if(rg) rg.value='';
+  splitRecap(); splitRender();
   document.getElementById('splitModal').style.display='flex';
+  splitLireTemps(cur);
+}
+// Lecture du réglage (GET /temps). Relancée par « Relire le réglage » après un échec : tant qu elle n a pas abouti, la
+// découpe n est permise que si l utilisateur saisit lui-même le réglage (sinon le serveur appliquerait un réglage que
+// l écran n a pas vu, et le temps alloué augmenterait d autant).
+function splitLireTemps(cur){
+  cur.loading=true; cur.erreurTemps=''; splitRecap(); splitRender();
+  fetch('/api/production/bdt/'+encodeURIComponent(cur.id)+'/temps')
+    .then(function(r){ return r.json().catch(function(){ return {ok:false,error:'Réponse inattendue du serveur (HTTP '+r.status+').'}; }); })
+    .then(function(j){ if(_splitBdt!==cur) return; splitTempsLus(cur,j); })
+    .catch(function(){ if(_splitBdt!==cur) return; splitTempsLus(cur,{ok:false,error:'Erreur réseau : réglage non lu.'}); });
+}
+function splitRelire(){ if(_splitBdt&&!_splitBdt.loading&&!_splitBdt.busy) splitLireTemps(_splitBdt); }
+function splitTempsLus(cur,j){
+  cur.loading=false;
+  if(!j||!j.ok){ cur.erreurTemps=(j&&j.error)||'Lecture du réglage impossible.'; }
+  else {
+    cur.erreurTemps=''; cur.tempsLus=true;
+    var d=Number(j.duree); if(isFinite(d)&&d>=0) cur.total=d;   // la base fait foi (la page peut dater)
+    cur.source=j.source||''; cur.confiance=j.confiance||''; cur.raison=j.raison||''; cur.famille=Array.isArray(j.famille)?j.famille:[];
+    cur.saisiePossible=(j.saisie_possible!==false); cur.porteur=j.porteur||'';
+    cur.reglageConnu=false; cur.reglage=null;
+    if(j.reglage!=null&&j.confiance==='certain'){ cur.reglageConnu=true; cur.reglage=Number(j.reglage)||0; }
+    // Réglage INCERTAIN proposé par la gamme : jamais pré-saisi (il serait enregistré comme un fait sans que personne
+    // l ait confirmé) — un bouton « Utiliser … » le recopie dans le champ, sur décision de l utilisateur.
+    cur.propose=(!cur.reglageConnu&&cur.saisiePossible&&j.propose!=null&&isFinite(Number(j.propose)))?splitR2(j.propose):null;
+    if(!cur.saisiePossible) cur.reglageSaisi='';
+  }
+  var rg=document.getElementById('splitReglage');
+  if(rg) rg.value=cur.reglageConnu?String(splitR2(cur.reglage)):cur.reglageSaisi;
+  splitPrefill(cur); splitRecap(); splitRender();
   var first=document.querySelector('#splitParts .split-part'); if(first){ try{ first.focus(); }catch(e){} }
+}
+function splitUtiliserPropose(){
+  var cur=_splitBdt; if(!cur||cur.reglageConnu||cur.propose==null||cur.loading) return;
+  cur.reglageSaisi=String(cur.propose);
+  var rg=document.getElementById('splitReglage'); if(rg) rg.value=cur.reglageSaisi;
+  splitPrefill(cur); splitRecap(); splitRender();
+}
+// Réglage saisi plus long que le BDT : refusé (le serveur répond 400), comme à la création manuelle.
+function splitReglageTropGrand(){ var cur=_splitBdt; if(!cur||cur.reglageConnu) return false; var R=splitReglageVal(); return isFinite(R)&&R>splitR2(cur.total)+0.005; }
+// Récapitulatif (durée = réglage + réalisation), champ réglage verrouillé ou non, rappel de famille.
+function splitRecap(){
+  var cur=_splitBdt; if(!cur) return;
+  var R=splitReglageVal(), okR=isFinite(R), V=okR?Math.max(0,splitR2(cur.total-R)):0;
+  var decomp;
+  if(cur.loading) decomp='<span style="color:#64748b;"><i class="fas fa-spinner fa-spin" style="margin-right:5px;"></i>Lecture du réglage…</span>';
+  else if(!okR) decomp='<span style="color:#b91c1c;">Réglage saisi invalide</span>';
+  else decomp='<strong>'+splitFmtH(cur.total)+' h</strong> = Réglage <strong>'+splitFmtH(R)+' h</strong> <span style="color:#64748b;">(fixe, une seule fois, reste sur le morceau 1)</span> + Réalisation <strong>'+splitFmtH(V)+' h</strong>';
+  var info=document.getElementById('splitInfo');
+  if(info) info.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.78rem;">'
+    +'<div><span style="color:#94a3b8;">BDT : </span><strong>'+splitEsc(cur.id)+'</strong></div>'
+    +'<div><span style="color:#94a3b8;">Opération : </span>'+splitEsc(cur.operation||'—')+'</div>'
+    +'<div><span style="color:#94a3b8;">Pièce : </span>'+splitEsc(cur.piece||'—')+'</div>'
+    +'</div>'
+    +'<div style="margin-top:8px;font-size:.8rem;color:#1e293b;"><span style="color:#94a3b8;">Durée : </span>'+decomp+'</div>';
+  var rg=document.getElementById('splitReglage'), aide=document.getElementById('splitReglageAide');
+  var verrou=cur.loading||cur.reglageConnu||cur.saisiePossible===false;
+  if(rg){ rg.readOnly=verrou; rg.style.background=verrou?'#e2e8f0':'white'; rg.style.color=verrou?'#475569':'#1e293b'; rg.style.cursor=verrou?'not-allowed':'text'; }
+  if(aide){
+    var t, BTN='border:1px solid #c4b5fd;background:#f5f3ff;color:#6d28d9;border-radius:6px;padding:1px 7px;font-size:.7rem;font-weight:700;cursor:pointer;margin-left:4px;';
+    if(cur.loading) t='';
+    else if(cur.reglageConnu&&cur.source==='famille') t='<i class="fas fa-lock" style="margin-right:4px;"></i>Réglage de l’étape déjà porté par '+splitEsc(cur.porteur||'un autre morceau')+' (fait une seule fois) : ce morceau ne porte que de la réalisation.';
+    else if(cur.reglageConnu) t='<i class="fas fa-lock" style="margin-right:4px;"></i>'+(cur.source==='gamme'?'Retrouvé depuis la gamme':'Enregistré sur le BDT')+' : non découpable, il reste sur le morceau 1.';
+    else if(cur.erreurTemps) t='<span style="color:#b91c1c;"><i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>'+splitEsc(cur.erreurTemps)+'</span> <button type="button" onclick="splitRelire()" style="'+BTN+'"><i class="fas fa-rotate-right" style="margin-right:3px;"></i>Relire le réglage</button> — ou saisissez-le si vous le connaissez.';
+    else if(cur.saisiePossible===false) t='<i class="fas fa-lock" style="margin-right:4px;"></i>Réglage non renseigné : il se renseigne sur le BDT d’origine (morceau 1). Ce morceau ne porte que de la réalisation.';
+    else t='<span style="color:#b45309;"><i class="fas fa-circle-question" style="margin-right:4px;"></i>Réglage non renseigné'+(cur.raison?' ('+splitEsc(cur.raison)+')':'')+'.</span> Saisissez-le ; vide = tout le temps est traité en réalisation.'
+      +(cur.propose!=null?' <span style="color:#64748b;">La gamme donne '+splitFmtH(cur.propose)+' h, sans certitude :</span><button type="button" onclick="splitUtiliserPropose()" style="'+BTN+'">Utiliser '+splitFmtH(cur.propose)+' h</button>':'');
+    aide.innerHTML=t;
+  }
+  var rap=document.getElementById('splitRappel');
+  if(rap){
+    var fam=cur.famille||[];
+    if(fam.length>=2){
+      rap.innerHTML='<i class="fas fa-rotate-left" style="margin-right:5px;"></i>Ce BDT fait déjà partie d’une découpe ('+fam.length+' morceaux : '+fam.map(function(m){ return 'M'+splitEsc(m.rang); }).join(', ')+'). Tant qu’aucun morceau n’est posé ni reçu, « Annuler la découpe » sur une carte de la goulotte les recolle.';
+      rap.style.display='block';
+    } else { rap.innerHTML=''; rap.style.display='none'; }
+  }
 }
 function splitRender(){
   if(!_splitBdt) return;
@@ -3961,8 +4657,9 @@ function splitRender(){
   for(var i=0;i<n;i++){
     html+='<div style="display:flex;align-items:center;gap:8px;">'
       +'<span style="font-size:.74rem;color:#64748b;width:82px;font-weight:600;">Morceau '+(i+1)+'</span>'
-      +'<input class="split-part" data-i="'+i+'" type="number" step="0.25" min="0" inputmode="decimal" placeholder="heures" value="'+splitEsc(vals[i])+'" style="flex:1;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 9px;font-size:.82rem;"/>'
+      +'<input class="split-part" data-i="'+i+'" type="number" step="0.25" min="0" inputmode="decimal" placeholder="réalisation" value="'+splitEsc(vals[i])+'"'+(_splitBdt.loading?' disabled':'')+' style="flex:1;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 9px;font-size:.82rem;"/>'
       +'<span style="font-size:.72rem;color:#94a3b8;">h</span>'
+      +(i===0?'<span id="splitM1Tot" style="font-size:.7rem;color:#7c3aed;min-width:92px;"></span>':'<span style="min-width:92px;"></span>')
       +'<button type="button" class="split-del" data-i="'+i+'"'+(lock?' disabled':'')+' title="'+(lock?'Il faut au moins 2 morceaux':'Retirer ce morceau')+'" style="background:#fff1f2;color:#e11d48;border:1px solid #fecdd3;border-radius:7px;padding:5px 8px;font-size:.72rem;cursor:'+(lock?'not-allowed':'pointer')+';opacity:'+(lock?'.4':'1')+';"><i class="fas fa-trash-can"></i></button>'
       +'</div>';
   }
@@ -3974,37 +4671,71 @@ function splitRender(){
 // Ajouter / retirer une ligne ne touche PAS aux temps déjà saisis (conservés dans _splitBdt.vals).
 function splitAdd(){
   if(!_splitBdt||_splitBdt.vals.length>=SPLIT_MAX) return;
-  _splitBdt.vals.push(''); splitRender();
+  _splitBdt.vals.push(''); _splitBdt.valsTouchees=true; splitRender();
   var ins=document.querySelectorAll('#splitParts .split-part'); var last=ins[ins.length-1]; if(last){ try{ last.focus(); }catch(e){} }
 }
 function splitRemove(i){
   if(!_splitBdt||_splitBdt.vals.length<=SPLIT_MIN||!(i>=0&&i<_splitBdt.vals.length)) return;
-  _splitBdt.vals.splice(i,1); splitRender();
+  _splitBdt.vals.splice(i,1); _splitBdt.valsTouchees=true; splitRender();
 }
 function splitPartsRead(){ return _splitBdt?_splitBdt.vals.map(function(v){ var s=String(v==null?'':v).trim().replace(',','.'); return s===''?NaN:Number(s); }):[]; }
 function splitTotalCheck(){
   if(!_splitBdt) return;
+  var cur=_splitBdt;
   var parts=splitPartsRead();
-  var ok=parts.length>=SPLIT_MIN&&parts.length<=SPLIT_MAX&&parts.every(splitValid);
-  var sum=splitR2(parts.reduce(function(s,x){ return s+((isFinite(x)&&x>0)?splitR2(x):0); },0));
-  var diff=splitR2(sum-_splitBdt.total);
-  var cmp=diff===0?'identique au BDT d’origine':(diff>0?'+'+splitFmtH(diff)+' h par rapport au BDT d’origine':'−'+splitFmtH(-diff)+' h par rapport au BDT d’origine');
+  var R=splitReglageVal(), okR=isFinite(R);
+  var okParts=parts.length>=SPLIT_MIN&&parts.length<=SPLIT_MAX&&parts.every(function(x,i){ return splitValidAt(x,i); });
+  // Réglage non lu (échec de GET /temps) et rien saisi : on ne découpe pas à l aveugle (le serveur appliquerait le réglage
+  // stocké en plus des réalisations saisies : 10 h devenaient 12 h).
+  var sansLecture=!!cur.erreurTemps&&!cur.reglageConnu&&String(cur.reglageSaisi==null?'':cur.reglageSaisi).trim()==='';
+  var tropGrand=splitReglageTropGrand();
+  var ok=!cur.loading&&okR&&okParts&&!sansLecture&&!tropGrand;
+  var sumV=splitR2(parts.reduce(function(s,x){ return s+((isFinite(x)&&x>0)?splitR2(x):0); },0));
+  var Rn=okR?R:0;
+  var V=Math.max(0,splitR2(cur.total-Rn));
+  var diff=splitR2(sumV-V);
+  var cmp=diff===0?'identique à la réalisation d’origine ('+splitFmtH(V)+' h)':(diff>0?'+'+splitFmtH(diff)+' h par rapport à la réalisation d’origine ('+splitFmtH(V)+' h)':'−'+splitFmtH(-diff)+' h par rapport à la réalisation d’origine ('+splitFmtH(V)+' h)');
+  var m1=document.getElementById('splitM1Tot');
+  if(m1){ var v1=parts.length?parts[0]:NaN; m1.textContent=(Rn>0&&isFinite(v1)&&v1>=0)?'soit '+splitFmtH(splitR2(Rn+splitR2(v1)))+' h au total':''; }
   var el=document.getElementById('splitTotal'), btn=document.getElementById('splitConfirmBtn');
-  if(el) el.innerHTML='<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;"><span style="font-weight:800;color:#1e293b;">Temps alloué total : '+splitFmtH(sum)+' h</span><span style="color:'+(diff===0?'#16a34a':'#64748b')+';font-size:.74rem;">('+cmp+')</span></div>'
-    +(ok?'':'<div style="margin-top:4px;color:#b45309;font-size:.72rem;"><i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>Renseignez un temps supérieur à 0 pour chaque morceau.</div>');
-  if(btn){ var dis=!ok||_splitBdt.busy; btn.disabled=dis; btn.style.opacity=dis?'.5':'1'; btn.style.cursor=dis?'not-allowed':'pointer'; }
+  var msg='';
+  if(cur.loading) msg='';
+  else if(!okR) msg='Le réglage saisi doit être un nombre d’heures positif ou nul.';
+  else if(sansLecture) msg='Réglage non lu : relisez-le, ou saisissez-le, avant de découper.';
+  else if(tropGrand) msg='Le réglage ('+splitFmtH(R)+' h) ne peut pas dépasser la durée du BDT ('+splitFmtH(cur.total)+' h).';
+  else if(!okParts) msg=Rn>0?'Renseignez une réalisation pour chaque morceau : supérieure à 0, sauf le morceau 1 qui peut ne porter que le réglage (0).':'Renseignez une réalisation supérieure à 0 pour chaque morceau.';
+  if(el) el.innerHTML='<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;"><span style="font-weight:800;color:#1e293b;">Réalisation répartie : '+splitFmtH(sumV)+' h</span><span style="color:'+(diff===0?'#16a34a':'#64748b')+';font-size:.74rem;">('+cmp+')</span></div>'
+    +'<div style="margin-top:3px;font-size:.76rem;color:#475569;">Temps alloué total : <strong>'+splitFmtH(splitR2(Rn+sumV))+' h</strong> <span style="color:#94a3b8;">(réglage '+splitFmtH(Rn)+' h + réalisation '+splitFmtH(sumV)+' h)</span></div>'
+    +(msg?'<div style="margin-top:4px;color:#b45309;font-size:.72rem;"><i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>'+msg+'</div>':'');
+  if(btn){ var dis=!ok||cur.busy; btn.disabled=dis; btn.style.opacity=dis?'.5':'1'; btn.style.cursor=dis?'not-allowed':'pointer'; }
 }
 function splitSave(){
-  if(!_splitBdt||_splitBdt.busy) return;
+  if(!_splitBdt||_splitBdt.busy||_splitBdt.loading) return;
   var parts=splitPartsRead();
-  if(parts.length<SPLIT_MIN||parts.length>SPLIT_MAX||!parts.every(splitValid)){ pushNotif('err','fa-ban','Chaque morceau doit avoir un temps supérieur à 0.'); return; }
+  var R=splitReglageVal();
+  if(!isFinite(R)){ pushNotif('err','fa-ban','Réglage invalide : nombre d’heures positif ou nul.'); return; }
+  if(splitReglageTropGrand()){ pushNotif('err','fa-ban','Le réglage ne peut pas dépasser la durée du BDT.'); return; }
+  if(_splitBdt.erreurTemps&&!_splitBdt.reglageConnu&&String(_splitBdt.reglageSaisi==null?'':_splitBdt.reglageSaisi).trim()===''){ pushNotif('err','fa-ban','Réglage non lu : relisez-le, ou saisissez-le, avant de découper.'); return; }
+  if(parts.length<SPLIT_MIN||parts.length>SPLIT_MAX||!parts.every(function(x,i){ return splitValidAt(x,i); })){ pushNotif('err','fa-ban','Chaque morceau doit avoir une réalisation supérieure à 0 (le morceau 1 peut valoir 0 s’il porte le réglage).'); return; }
   var cur=_splitBdt; cur.busy=true; splitTotalCheck();
+  // duree_lue / nb_membres : le serveur refuse (409 « page périmée ») si ce BDT ou sa découpe ont changé depuis la lecture.
+  var body={realisation:parts.map(splitR2), duree_lue:splitR2(cur.total)};
+  if(cur.tempsLus) body.nb_membres=Math.max(1,(cur.famille||[]).length);
+  // Réglage connu : renvoyé tel quel (le serveur refuse s il a changé entre-temps) ; inconnu : la saisie, si elle existe.
+  if(cur.reglageConnu) body.reglage=splitR2(cur.reglage);
+  else if(cur.saisiePossible!==false&&String(cur.reglageSaisi==null?'':cur.reglageSaisi).trim()!=='') body.reglage=R;
   var url='/api/production/bdt/'+encodeURIComponent(cur.id)+'/separer';
-  fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({parts:parts.map(splitR2)})})
+  fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
     .then(function(r){ return r.json().catch(function(){ return {ok:false,error:'Réponse inattendue du serveur (HTTP '+r.status+').'}; }); })
     .then(function(j){
-      if(j&&j.ok){ closeModal('splitModal'); _splitBdt=null; pushNotif('ok','fa-scissors','BDT découpé en '+j.count+' morceaux — total alloué '+splitFmtH(j.total_apres)+' h',4500); setTimeout(function(){ softReload(); },700); }
-      else { cur.busy=false; if(_splitBdt===cur) splitTotalCheck(); pushNotif('err','fa-ban',splitEsc((j&&j.error)||'Découpe échouée.'),5000); }
+      if(j&&j.ok){
+        closeModal('splitModal'); _splitBdt=null;
+        var txt='BDT découpé en '+j.count+' morceaux — '+(j.reglage!=null?'réglage '+splitFmtH(j.reglage)+' h sur le morceau 1 · ':'')+'réalisation répartie '+splitFmtH(j.realisation_apres)+' h · total alloué '+splitFmtH(j.total_apres)+' h';
+        pushNotif('ok','fa-scissors',splitEsc(txt),5000);
+        if(j.avertissement) pushNotif('warn','fa-exclamation-triangle',splitEsc(j.avertissement),8000);
+        setTimeout(function(){ softReload(); },700);
+      }
+      else { cur.busy=false; if(_splitBdt===cur) splitTotalCheck(); pushNotif('err','fa-ban',splitEsc((j&&j.error)||'Découpe échouée.'),6000); }
     }).catch(function(){ cur.busy=false; if(_splitBdt===cur) splitTotalCheck(); pushNotif('err','fa-times','Erreur réseau.',4000); });
 }
 

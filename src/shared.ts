@@ -390,6 +390,356 @@ export function etapeLibreVersEtape(a: any): any {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// RÉGLAGE ET RÉALISATION D'UN BDT (lot C, 14/09/2026)
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// Demande : « quand on découpe un BDT seul le temps variable est découpable, les temps de réglages sont
+// fixes, nous avons besoin de les faire qu'une seule fois » + « pouvoir revenir en arrière ».
+//   · bons_de_travail.temps_reglage (h) : null = inconnu ; réalisation = duree − temps_reglage.
+//   · Une famille découpée (racine + « -Mk ») ne porte le réglage que sur UN bon : le morceau 1 (le BDT
+//     découpé, qui garde son numéro) ; les morceaux créés ont temps_reglage = 0.
+//   · duree_avant_decoupe / temps_machine_avant_decoupe : posées sur la racine à la 1ʳᵉ découpe, elles
+//     permettent un vrai retour arrière (« Annuler la découpe »).
+// Tout ce qui suit est PUR (aucune lecture) : testé par scratchpad/lotc/test_reglage.ts.
+
+/** Temps d'une étape pour la production, en MINUTES : réglage (fixe / lot) et variable (par pièce). */
+export interface TempsEtapeMin { reglageMin: number; varMin: number }
+
+// Réglage total d'une étape au format millièmes d'heure : ROP + RGM quand ils sont renseignés, sinon le
+// champ historique unique.
+function _reglageMilleTotal(e: any): number {
+  if (!e) return 0
+  if (e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null) {
+    return _nb(e.temps_reglage_op_mille) + _nb(e.temps_reglage_machine_mille)
+  }
+  return _nb(e.temps_reglage_mille)
+}
+const _estMillieme = (e: any) => !!e && (e.temps_variable_mille != null || e.temps_reglage_mille != null || e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null)
+
+/**
+ * Formules HISTORIQUES de la durée d'un BDT — figées, ne servent qu'à RETROUVER le réglage d'un BDT créé
+ * avant que le réglage soit stocké (on découpe la durée telle qu'elle a été calculée, pas une formule corrigée).
+ *   v1 (jusqu'au 14/09/2026) : format minutes = ROP seul, variable = THV + TMV, est_fixe ignoré.
+ *   v2 (commit 1c155e46a5, 14/09/2026) : format minutes = ROP + RGM, est_fixe compté, variable = THV + TMV
+ *       quel que soit le type de process. C'est aussi la règle des étapes sous-traitées (durée d'un BDS).
+ *   Format millièmes : identique dans v1 et v2 (ROP + RGM ou champ historique, est_fixe compté).
+ */
+export function etapeTempsMinHistorique(e: any, version: 1 | 2): TempsEtapeMin {
+  if (_estMillieme(e)) {
+    const vmin = _nb(e.temps_variable_mille) * 0.06   // millième d'h → minutes (×60/1000)
+    const rmin = _reglageMilleTotal(e) * 0.06
+    return e.est_fixe ? { reglageMin: rmin + vmin, varMin: 0 } : { reglageMin: rmin, varMin: vmin }
+  }
+  const vmin = _nb(e?.temps_mo_min) + _nb(e?.temps_machine_min)
+  if (version === 1) return { reglageMin: _nb(e?.temps_reglage_min), varMin: vmin }
+  const rmin = _nb(e?.temps_reglage_min) + _nb(e?.temps_reglage_machine_min)
+  return e?.est_fixe ? { reglageMin: rmin + vmin, varMin: 0 } : { reglageMin: rmin, varMin: vmin }
+}
+
+/**
+ * Temps d'une étape pour CRÉER un BDT — alignés sur etapeDecomp (même règle que l'analyse DT et l'OF) :
+ *   réglage = ROP + RGM (fixe / lot) ; variable = THV + TMV (TMV seulement sur un process machine) ;
+ *   une opération `est_fixe` bascule sa part variable dans le réglage (faite une fois par lot).
+ * `tx` sert à connaître le type du process (construireTauxAtelier(process) suffit : aucun taux n'est lu).
+ * Étape sous-traitée / OAS : etapeDecomp n'y lit aucun temps ; la durée d'un BDS (en jours) reste calculée
+ * sur les champs bruts, comme avant (formule v2).
+ */
+export function etapeTempsMin(e: any, tx?: TauxAtelier | null): TempsEtapeMin {
+  if (!e) return { reglageMin: 0, varMin: 0 }
+  const d = etapeDecomp(e, tx ?? null, null)
+  if (d.st) return etapeTempsMinHistorique(e, 2)
+  const variable = d.moMin + d.machineMin
+  return e.est_fixe ? { reglageMin: d.reglageMin + variable, varMin: 0 } : { reglageMin: d.reglageMin, varMin: variable }
+}
+
+/** Durée d'un BDT en heures, exactement comme l'écrivent les créateurs (3 décimales). */
+export function dureeBdtDepuisTemps(t: TempsEtapeMin, qte: number): number {
+  return +(((t.reglageMin + t.varMin * qte)) / 60).toFixed(3)
+}
+
+/** Réglage à stocker (h) : arrondi au centième, jamais supérieur à la durée du bon. */
+export function reglageBdtHeures(reglageMin: number, dureeH: number): number {
+  const r = _r2(Math.max(0, _nb(reglageMin)) / 60)
+  const d = _nb(dureeH)
+  return d > 0 ? Math.min(r, d) : (d === 0 ? 0 : r)
+}
+
+/** Racine d'une famille de BDT (« BDT-…-01-M3 » → « BDT-…-01 »). */
+export function racineBdt(id: any): string { return String(id ?? '').replace(/-M\d+$/, '') }
+/** Rang dans la famille : « -Mk » → k, BDT d'origine → 1. */
+export function rangMorceauBdt(id: any): number { const m = /-M(\d+)$/.exec(String(id ?? '')); return m ? Number(m[1]) : 1 }
+const _libMembre = (id: any) => (rangMorceauBdt(id) === 1 ? 'Le BDT d’origine (M1)' : 'M' + rangMorceauBdt(id))
+const _jjmm = (d: any) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d ?? '')); return m ? m[3] + '/' + m[2] : String(d ?? '') }
+const _nbOuNull = (v: any): number | null => { if (_vide(v)) return null; const n = Number(v); return Number.isFinite(n) ? n : null }
+
+/** Heures saisies : nombre, ou chaîne décimale simple (« 1,5 ») ; NaN sinon (pas d'hexadécimal ni d'exposant). */
+export function lireHeuresSaisie(x: any): number {
+  if (typeof x === 'number') return Number.isFinite(x) ? x : NaN
+  if (typeof x === 'string' && /^\s*\d+([.,]\d+)?\s*$/.test(x)) return Number(x.trim().replace(',', '.'))
+  return NaN
+}
+
+// ─── Retrouver le réglage d'une famille de BDT depuis sa gamme ──────────────────────────────────
+export type ConfianceReglage = 'certain' | 'incertain' | 'inconnu'
+export interface ContexteReglage {
+  lots?: any[]            // id, qte, qte_initiale
+  nomenclatures?: any[]   // code_ref_produit, indice, statut, etapes_production
+  dts?: any[]             // id, num_affaire, pieces_detail
+  process?: any[]         // process_atelier (est_oas, requiert_machine, machine_id)
+}
+export interface ReconstitutionReglage {
+  racine: string
+  confiance: ConfianceReglage
+  /** 'bdt' = déjà stocké ; 'gamme' = retrouvé (certain) ou proposé (incertain) ; 'inconnu' = rien */
+  source: 'bdt' | 'gamme' | 'inconnu'
+  /** h — réglage de l'étape, porté par `porteur` (null si non établi) */
+  reglage: number | null
+  porteur: string | null
+  /** écritures à faire (certain uniquement) : réglage sur le porteur, 0 sur les autres morceaux encore vides */
+  affectations: Array<{ id: string; temps_reglage: number }>
+  raison: string
+  /** durée recalculée depuis la gamme (h), quand une étape a été retrouvée */
+  duree_gamme: number | null
+  nomenclature: string | null
+  formule: string | null
+  /** incertain : réglage de la gamme actuelle, pour pré-remplir une saisie (jamais écrit tel quel) */
+  propose: number | null
+}
+
+/**
+ * Réglage d'une famille de BDT (racine + morceaux « -Mk ») reconstitué depuis sa gamme.
+ * Algorithme (cartoC_decoupe §1.4) :
+ *   1. bons annulés ignorés ; BDT manuel (« BDT-P… ») ou refabrication → inconnu ; BDTP issu d'une gamme → 0 ;
+ *   2. quantité : lot (qte_initiale, qte), sinon la pièce de la DT de l'affaire ;
+ *   3. nomenclatures dont code_ref_produit = pièce, VALIDÉES d'abord ;
+ *   4. étape : ordre (repli rang) == seq, ni sous-traitée ni OAS, libellé identique à `operation` ;
+ *   5. durée recalculée avec les formules historiques v1, v2 et l'actuelle ;
+ *   6. vérification : bon jamais découpé → temps_alloue (± 0,001) et duree (± 0,005, arrondi cloud) ;
+ *      famille découpée → Σ temps alloués (± 0,005 par bon) ; réglage posé sur la racine si sa durée le contient.
+ *   Tous les calculs concordants doivent donner le MÊME réglage, sinon incertain.
+ */
+export function reglageBdtDepuisGamme(famille: any[], ctx: ContexteReglage = {}): ReconstitutionReglage {
+  const tous = (famille || []).filter((b: any) => b && !_vide(b.id))
+  const racine = tous.length ? racineBdt(tous[0].id) : ''
+  const r: ReconstitutionReglage = { racine, confiance: 'inconnu', source: 'inconnu', reglage: null, porteur: null, affectations: [], raison: '', duree_gamme: null, nomenclature: null, formule: null, propose: null }
+  const membres = tous.filter((b: any) => racineBdt(b.id) === racine && !estAnnule(b.statut))
+  if (!membres.length) return { ...r, raison: 'aucun bon actif dans la famille' }
+  const tete = membres.find((b: any) => String(b.id) === racine) || null
+  const renseignes = membres.filter((b: any) => _nbOuNull(b.temps_reglage) != null)
+  if (renseignes.length === membres.length) {
+    const total = _r2(renseignes.reduce((s: number, b: any) => s + (_nbOuNull(b.temps_reglage) as number), 0))
+    const porteurs = renseignes.filter((b: any) => (_nbOuNull(b.temps_reglage) as number) > 0)
+    return { ...r, confiance: 'certain', source: 'bdt', reglage: total, porteur: porteurs.length === 1 ? String(porteurs[0].id) : (tete ? String(tete.id) : null), raison: 'réglage déjà renseigné sur le BDT' }
+  }
+  if (renseignes.some((b: any) => (_nbOuNull(b.temps_reglage) as number) > 0)) {
+    return { ...r, confiance: 'incertain', raison: 'réglage renseigné sur une partie de la famille seulement' }
+  }
+  if (!tete) return { ...r, confiance: 'incertain', raison: 'le BDT d’origine de la famille est introuvable' }
+  const vides = membres.filter((b: any) => _nbOuNull(b.temps_reglage) == null)
+  const affecter = (R: number) => vides.map((b: any) => ({ id: String(b.id), temps_reglage: String(b.id) === racine ? R : 0 }))
+  if (/^BDT-P/i.test(racine)) return { ...r, raison: 'BDT créé à la main : aucune gamme' }
+  if (/^BDTP-/i.test(racine)) {
+    if (/refabrication/i.test(String(tete.operation || ''))) return { ...r, raison: 'refabrication sans gamme : durée forfaitaire' }
+    return { ...r, confiance: 'certain', source: 'gamme', reglage: 0, porteur: racine, affectations: affecter(0), raison: 'commande prioritaire : sa durée ne contient jamais de réglage' }
+  }
+  // 2. Quantités candidates (le réglage n'en dépend pas : seule la vérification de la durée les utilise)
+  const low = (s: any) => String(s ?? '').toLowerCase().trim()
+  const qtes: number[] = []
+  const ajouterQte = (v: any) => { const n = Number(v); if (Number.isFinite(n) && n > 0 && !qtes.includes(n)) qtes.push(n) }
+  const cleLot = String(tete.lot_id || tete.lot_ref || '')
+  const lot = cleLot ? (ctx.lots || []).find((l: any) => String(l.id) === cleLot) : null
+  if (lot) { ajouterQte(lot.qte_initiale); ajouterQte(lot.qte) }
+  for (const dt of (ctx.dts || [])) {
+    if (_vide(tete.num_affaire) || (String(dt.num_affaire ?? '') !== String(tete.num_affaire) && String(dt.id ?? '') !== String(tete.num_affaire))) continue
+    for (const p of (Array.isArray(dt.pieces_detail) ? dt.pieces_detail : [])) {
+      if (low(p?.ref_interne) && low(p.ref_interne) === low(tete.piece)) ajouterQte(Number(p.quantite) || 1)
+    }
+  }
+  if (!qtes.length) return { ...r, raison: 'quantité du lot introuvable' }
+  // 3. Nomenclatures candidates, validées d'abord puis indice décroissant
+  const noms = (ctx.nomenclatures || []).filter((n: any) => low(n.code_ref_produit) && low(n.code_ref_produit) === low(tete.piece))
+    .slice().sort((a: any, b: any) => (a.statut === 'valide' ? 0 : 1) - (b.statut === 'valide' ? 0 : 1) || String(b.indice || 'A').localeCompare(String(a.indice || 'A')))
+  if (!noms.length) return { ...r, raison: 'aucune nomenclature pour la pièce ' + String(tete.piece ?? '') }
+  const tx = construireTauxAtelier(ctx.process || [])
+  const oasIds = new Set((ctx.process || []).filter((p: any) => p && p.est_oas).map((p: any) => String(p.id)))
+  // 4. Étapes candidates
+  const cands: Array<{ nom: any; e: any }> = []
+  for (const n of noms) {
+    let etapes: any[] = []
+    try { etapes = Array.isArray(n.etapes_production) ? n.etapes_production : (typeof n.etapes_production === 'string' ? JSON.parse(n.etapes_production) : []) } catch { etapes = [] }
+    if (!Array.isArray(etapes)) etapes = []
+    etapes = etapes.slice().sort((a: any, b: any) => (Number(a?.ordre) || 0) - (Number(b?.ordre) || 0))
+    etapes.forEach((e: any, i: number) => {
+      if (!e) return
+      const seqE = Number(e.ordre) || (i + 1)
+      if (seqE !== Number(tete.seq)) return
+      if (e.type === 'sous_traite') return
+      if (e.est_oas || (e.process_id && oasIds.has(String(e.process_id)))) return
+      if (String(e.nom || e.process_nom || e.operation_st || 'Process') !== String(tete.operation ?? '')) return
+      cands.push({ nom: n, e })
+    })
+  }
+  if (!cands.length) return { ...r, confiance: 'incertain', raison: 'étape « ' + String(tete.operation ?? '') + ' » (rang ' + String(tete.seq ?? '?') + ') introuvable dans la gamme : gamme modifiée depuis la création du BDT' }
+  // 5–6. Recalcul et vérification
+  const n = membres.length
+  const sommeAllouee = membres.reduce((s: number, b: any) => s + (_nbOuNull(b.temps_alloue) ?? _nbOuNull(b.duree) ?? 0), 0)
+  const concorde = (D0: number): boolean => {
+    if (n > 1) return Math.abs(sommeAllouee - D0) <= 0.0051 * n
+    const ta = _nbOuNull(tete.temps_alloue), du = _nbOuNull(tete.duree)
+    if (ta == null && du == null) return false
+    return (ta == null || Math.abs(ta - D0) <= 0.0011) && (du == null || Math.abs(du - D0) <= 0.0051)
+  }
+  const formules: Array<{ code: string; f: (e: any) => TempsEtapeMin }> = [
+    { code: 'v1', f: (e) => etapeTempsMinHistorique(e, 1) },
+    { code: 'v2', f: (e) => etapeTempsMinHistorique(e, 2) },
+    { code: 'actuelle', f: (e) => etapeTempsMin(e, tx) },
+  ]
+  const trouves: Array<{ R: number; D0: number; nom: any; code: string }> = []
+  for (const cd of cands) {
+    for (const fo of formules) {
+      const t = fo.f(cd.e)
+      for (const q of qtes) {
+        const D0 = dureeBdtDepuisTemps(t, q)
+        if (concorde(D0)) trouves.push({ R: reglageBdtHeures(t.reglageMin, D0), D0, nom: cd.nom, code: fo.code })
+      }
+    }
+  }
+  const dureeTete = _nbOuNull(tete.duree) ?? _nbOuNull(tete.temps_alloue) ?? 0
+  const t0 = etapeTempsMin(cands[0].e, tx)
+  const D00 = dureeBdtDepuisTemps(t0, qtes[0])
+  const propose = Math.min(reglageBdtHeures(t0.reglageMin, D00), dureeTete > 0 ? dureeTete : Infinity)
+  const nomLib = (x: any) => String(x?.num_nom || x?.code_ref_produit || x?.id || '') + ' ind. ' + String(x?.indice || 'A')
+  if (!trouves.length) {
+    return { ...r, confiance: 'incertain', source: 'gamme', propose, duree_gamme: D00, nomenclature: nomLib(cands[0].nom),
+      raison: 'durée actuelle (' + _r2(n > 1 ? sommeAllouee : dureeTete) + ' h) différente de la gamme (' + D00 + ' h) : gamme, quantité ou durée modifiée depuis la création' }
+  }
+  const valeurs = Array.from(new Set(trouves.map((x) => x.R)))
+  if (valeurs.length > 1) {
+    return { ...r, confiance: 'incertain', source: 'gamme', propose, duree_gamme: trouves[0].D0, nomenclature: nomLib(trouves[0].nom),
+      raison: 'plusieurs gammes compatibles donnent des réglages différents (' + valeurs.join(' h, ') + ' h)' }
+  }
+  const R = valeurs[0]
+  if (R > dureeTete + 1e-9) {
+    return { ...r, confiance: 'incertain', source: 'gamme', propose: dureeTete, duree_gamme: trouves[0].D0, nomenclature: nomLib(trouves[0].nom),
+      raison: 'le réglage de la gamme (' + R + ' h) dépasse la durée du BDT d’origine (' + dureeTete + ' h) : découpe antérieure qui l’a réparti' }
+  }
+  return { ...r, confiance: 'certain', source: 'gamme', reglage: R, porteur: racine, affectations: affecter(R), duree_gamme: trouves[0].D0,
+    nomenclature: nomLib(trouves[0].nom), formule: Array.from(new Set(trouves.map((x) => x.code))).join('+'),
+    raison: n > 1 ? 'famille découpée : total alloué conforme à la gamme, réglage posé sur le BDT d’origine' : 'durée conforme à la gamme' }
+}
+
+// ─── Découpe : seul le temps de RÉALISATION se découpe, le réglage reste sur le morceau 1 ─────────
+export interface MorceauDecoupe { duree: number; temps_reglage: number; temps_machine_alloue: number | null }
+export type PlanDecoupe =
+  | { ok: true; morceaux: MorceauDecoupe[]; reglage: number; realisation_avant: number; realisation_apres: number; total_avant: number; total_apres: number }
+  | { ok: false; error: string }
+
+/**
+ * Plan d'une découpe (2 à 12 morceaux).
+ *   Morceau 1 (le BDT découpé) : duree = R + v1, temps_reglage = R (v1 = 0 autorisé si R > 0 : « réglage seul »).
+ *   Morceaux k ≥ 2 : duree = vk (> 0), temps_reglage = 0.
+ *   Temps machine : null sur l'original → rien sur le morceau 1 (null = ne pas écrire), 0 sur les autres ;
+ *   renseigné → même proportion que la durée (rapportée à la durée d'origine, sinon au total découpé).
+ * Précision au centième d'heure (la colonne duree du cloud ne garde que 2 décimales).
+ */
+export function planDecoupeBdt(inp: { duree: any; tempsMachine: any; reglage: any; realisation: any[] }): PlanDecoupe {
+  const brut = Array.isArray(inp.realisation) ? inp.realisation : null
+  if (!brut) return { ok: false, error: 'Indiquez le temps de réalisation de chaque morceau (realisation : tableau d’heures).' }
+  if (brut.length < 2 || brut.length > 12) return { ok: false, error: 'Un BDT se découpe en 2 à 12 morceaux (' + brut.length + ' reçu' + (brut.length > 1 ? 's' : '') + ').' }
+  const R = _r2(Math.max(0, _nb(inp.reglage)))
+  const v: number[] = []
+  for (let i = 0; i < brut.length; i++) {
+    const x = lireHeuresSaisie(brut[i])
+    const zeroPermis = i === 0 && R > 0
+    if (!Number.isFinite(x) || x < 0 || (zeroPermis ? _r2(x) < 0 : _r2(x) <= 0)) {
+      return { ok: false, error: 'Morceau ' + (i + 1) + ' : le temps de réalisation doit être un nombre d’heures ' + (zeroPermis ? 'positif ou nul' : 'supérieur à 0') + ' (au centième d’heure près).' }
+    }
+    v.push(_r2(x))
+  }
+  const total = Math.max(0, _nb(inp.duree))
+  const tMach = _nbOuNull(inp.tempsMachine)
+  const durees = v.map((x, i) => _r2(i === 0 ? R + x : x))
+  const somme = durees.reduce((s, x) => s + x, 0)
+  const r4 = (x: number) => Math.round(x * 10000) / 10000
+  const base = total > 0 ? total : somme
+  const morceaux: MorceauDecoupe[] = durees.map((d, i) => ({
+    duree: d,
+    temps_reglage: i === 0 ? R : 0,
+    temps_machine_alloue: tMach == null ? (i === 0 ? null : 0) : (base > 0 ? r4(tMach * d / base) : 0),
+  }))
+  return { ok: true, morceaux, reglage: R, realisation_avant: _r2(Math.max(0, total - R)), realisation_apres: _r2(v.reduce((s, x) => s + x, 0)), total_avant: r4(total), total_apres: _r2(somme) }
+}
+
+// ─── Annuler une découpe (recoller les morceaux) ─────────────────────────────────────────────────
+/** Raisons qui interdisent de recoller une famille (liste vide = recollable). Traces en base : voir la route. */
+export function blocagesRecollage(membres: any[]): string[] {
+  const out: string[] = []
+  const tri = (membres || []).slice().sort((a: any, b: any) => rangMorceauBdt(a?.id) - rangMorceauBdt(b?.id))
+  for (const m of tri) {
+    if (!m) continue
+    const lib = _libMembre(m.id)
+    const st = String(m.statut ?? '')
+    if (estAnnule(st)) { out.push(lib + ' est annulé : recollage impossible'); continue }
+    if (st === 'st' || String(m.operateur_id ?? '') === 'ST') { out.push(lib + ' est en sous-traitance : recollage impossible'); continue }
+    if (st === 'solde') { out.push(lib + ' déjà soldé : découpe définitive'); continue }
+    if (st === 'recu' || !_vide(m.temps_reel) || !_vide(m.debut_reel)) { out.push(lib + ' déjà reçu : découpe définitive'); continue }
+    if (st !== '' && st !== 'a_programmer') {
+      out.push(m.process_id && m.date_prevue ? lib + ' posé le ' + _jjmm(m.date_prevue) + ' : déprogrammez-le' : lib + ' au statut « ' + st + ' » : remettez-le dans la goulotte')
+      continue
+    }
+    if (!_vide(m.operateur_id)) out.push(lib + ' a un opérateur affecté : déprogrammez-le')
+  }
+  return out
+}
+
+export interface CibleRecollage {
+  duree: number
+  temps_alloue: number
+  /** Σ des réglages renseignés ; null si aucun, ou si des bons sont inconnus et qu'aucun réglage positif n'est connu */
+  temps_reglage: number | null
+  /** temps_machine_avant_decoupe ; sinon null si la durée d'origine est connue (l'original n'en avait pas) ; sinon Σ (null si tout est vide) */
+  temps_machine_alloue: number | null
+  source_duree: 'avant_decoupe' | 'somme'
+  somme_durees: number
+}
+/** Valeurs du BDT recollé : durée d'origine si connue (vrai retour arrière), sinon Σ des durées. */
+export function cibleRecollage(racine: any, membres: any[]): CibleRecollage {
+  const ms = (membres || []).filter(Boolean)
+  const r4 = (x: number) => Math.round(x * 10000) / 10000
+  const somme = _r2(ms.reduce((s: number, b: any) => s + (_nbOuNull(b.duree) ?? _nbOuNull(b.temps_alloue) ?? 0), 0))
+  const avant = _nbOuNull(racine?.duree_avant_decoupe)
+  const regl = ms.map((b: any) => _nbOuNull(b.temps_reglage)).filter((x): x is number => x != null)
+  const mach = ms.map((b: any) => _nbOuNull(b.temps_machine_alloue)).filter((x): x is number => x != null)
+  const machAvant = _nbOuNull(racine?.temps_machine_avant_decoupe)
+  const duree = avant != null ? _r2(avant) : somme
+  const sommeRegl = _r2(regl.reduce((s, x) => s + x, 0))
+  // Des bons « inconnus » et aucun réglage positif ailleurs (découpe faite sans connaître le réglage : morceau 1
+  // vide, morceaux créés à 0) : le réglage recollé reste INCONNU, jamais un 0 déduit des morceaux.
+  const reglInconnu = !regl.length || (regl.length < ms.length && sommeRegl === 0)
+  return {
+    duree, temps_alloue: duree,
+    temps_reglage: reglInconnu ? null : Math.min(sommeRegl, duree),
+    // Durée d'origine connue mais pas de temps machine d'origine : l'original n'en avait pas (la découpe l'aurait
+    // noté) → null, pas le 0 posé sur les morceaux créés.
+    temps_machine_alloue: machAvant != null ? r4(machAvant) : (avant != null ? null : (mach.length ? r4(mach.reduce((s, x) => s + x, 0)) : null)),
+    source_duree: avant != null ? 'avant_decoupe' : 'somme', somme_durees: somme,
+  }
+}
+/** Recollage partiel (des morceaux n'ont pas pu être retirés) : le BDT d'origine = cible − Σ restants. */
+export function ajusterRecollagePartiel(cible: CibleRecollage, restants: any[]): { duree: number; temps_alloue: number; temps_reglage: number | null; temps_machine_alloue: number | null } {
+  const rs = (restants || []).filter(Boolean)
+  const r4 = (x: number) => Math.round(x * 10000) / 10000
+  const sd = rs.reduce((s: number, b: any) => s + (_nbOuNull(b.duree) ?? _nbOuNull(b.temps_alloue) ?? 0), 0)
+  const sr = rs.reduce((s: number, b: any) => s + (_nbOuNull(b.temps_reglage) ?? 0), 0)
+  const sm = rs.reduce((s: number, b: any) => s + (_nbOuNull(b.temps_machine_alloue) ?? 0), 0)
+  const duree = _r2(Math.max(0, cible.duree - sd))
+  return {
+    duree, temps_alloue: duree,
+    temps_reglage: cible.temps_reglage == null ? null : Math.min(duree, _r2(Math.max(0, cible.temps_reglage - sr))),
+    temps_machine_alloue: cible.temps_machine_alloue == null ? null : r4(Math.max(0, cible.temps_machine_alloue - sm)),
+  }
+}
+
 // ─── Coût RÉEL d'un bon de travail (commande, lot, affaire, imputations) ─────────────────────────
 // t = temps_reel ?? duree (h). Homme = t × taux chargé de l'OPÉRATEUR pointé — TOUJOURS (repli : moyenne
 // du site = activite du BDT, puis moyenne de tous les opérateurs, sinon 0 + drapeau). Machine = t × taux
@@ -540,7 +890,7 @@ export const OPERATEURS = [
 export const SHIFTS: Record<string,{label:string;start:number;end:number;color:string;icon:string}> = {
   matin:   { label:'Matin',       start:6,  end:14, color:'#3b82f6', icon:'fa-sun' },
   apmidi:  { label:'Après-midi',  start:14, end:22, color:'#8b5cf6', icon:'fa-cloud-sun' },
-  soir:    { label:'Soirée/Nuit', start:22, end:30, color:'#0f172a', icon:'fa-moon' },
+  soir:    { label:'Soirée',      start:22, end:30, color:'#0f172a', icon:'fa-moon' },   // horaires 22h–6h conservés (14/09/2026 : seul le libellé change)
   journee: { label:'Journée',     start:7,  end:17, color:'#10b981', icon:'fa-briefcase' },
 }
 
@@ -751,7 +1101,7 @@ ${SIDEBAR_V2(active)}
 function pushNotif(type,icon,msg,dur=5000){
   const b=document.getElementById('notifBanner');
   if(!b)return;
-  const id='n'+Date.now();
+  const id='n'+Date.now()+'-'+Math.random().toString(36).slice(2,8);   // plusieurs notifications dans la même milliseconde : ids distincts (la croix fermait la mauvaise)
   const d=document.createElement('div');
   d.id=id;d.className='notif notif-'+type;
   d.innerHTML='<i class="fas '+icon+' mr-2"></i>'+msg+' <button onclick="document.getElementById(\\''+id+'\\').remove()" style="float:right;background:none;border:none;cursor:pointer;color:#9ca3af;margin-left:8px;"><i class="fas fa-times"></i></button>';

@@ -557,7 +557,7 @@ function validerPaiement(id, decision){
 }
 function validerCongeSupport(id, decision){
   fetch('/api/rh/conge/'+encodeURIComponent(id)+'/valider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision:decision,valide_par:'Direction'})})
-    .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Échec.'); return; } pushNotif(decision==='refuse'?'warn':'ok',decision==='refuse'?'fa-times':'fa-check',decision==='refuse'?'Congé refusé.':('Congé validé · '+(j.absences_creees||0)+' jour(s) posés.'),5000); setTimeout(function(){softReload();},800); })
+    .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Échec.'); return; } pushNotif(decision==='refuse'?'warn':'ok',decision==='refuse'?'fa-times':'fa-check',decision==='refuse'?'Congé refusé.':('Congé validé · '+(j.absences_creees||0)+' jour(s) posés.'),5000); if(j.warning) pushNotif('warn','fa-exclamation-triangle',String(j.warning).replace(/&/g,'&amp;').replace(/</g,'&lt;'),9000); setTimeout(function(){softReload();},800); })
     .catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
 function scanAlertes(){

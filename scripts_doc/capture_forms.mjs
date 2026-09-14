@@ -100,14 +100,14 @@ const M = [
   //   ciseaux d'une carte (de préférence un BDT qui a une durée). Goulotte vide : on injecte une
   //   carte d'exemple DANS LE NAVIGATEUR (variable JS locale à la page) — AUCUNE écriture en base.
   //   Un 3e morceau de 1,5 h est ajouté à l'écran pour illustrer le temps libre (rien n'est envoyé).
-  { file: 'form-production-separer',  path: '/production/service', tabClick: '#ptab-gantt-bdt', wait: 900,
+  { file: 'form-production-separer',  path: '/production/service', tabClick: '#ptab-gantt-bdt', wait: 2200,
     fn: "(function(){if(typeof BDTS==='undefined') throw new Error('BDTS absent');"
       + "function carte(){var cs=[].slice.call(document.querySelectorAll('#pendingList .pending-card'));"
       + "return cs.filter(function(c){var b=BDTS.find(function(x){return String(x.id)===c.getAttribute('data-bdtid');});return b&&Number(b.duree||0)>0;})[0]||cs[0]||null;}"
       + "var c=carte();"
       + "if(!c){BDTS.push({id:'BDT-2026-0001-01-01',client:'Client exemple',piece:'Bride alu 7075',operation:'Usinage CN',duree:12,tempsAlloue:12,statut:'a_programmer',process:'pending',datePrevue:null,activite:'Seem',lotId:'LOT-2026-0001-01',numAffaire:'2026-0001',seq:1});buildPending();c=carte();}"
       + "var btn=c&&c.querySelector('button[onclick*=\"splitBdt(\"]');if(!btn) throw new Error('ciseaux introuvables');"
-      + "btn.click();splitAdd();_splitBdt.vals[_splitBdt.vals.length-1]='1.5';splitRender();})()" },
+      + "btn.click();setTimeout(function(){if(_splitBdt&&!_splitBdt.loading){splitAdd();_splitBdt.vals[_splitBdt.vals.length-1]='1.5';splitRender();}},1200);})()" },   // lot C : on attend la lecture du réglage (GET /temps) avant d'ajouter le 3e morceau
   // Production — coût horaire porté par le PROCESS (14/09/2026). Les trois modales vivent dans le panneau
   //   « Process Ateliers » (#ppanel-machines) : tabClick OBLIGATOIRE. Aucune écriture : on ouvre, on capture.
   { file: 'form-production-process',  path: '/production/service', tabClick: '#ptab-machines', fn: "openProcModal()", wait: 700 },

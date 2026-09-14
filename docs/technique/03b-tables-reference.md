@@ -3,6 +3,10 @@
 > **Fichier généré** par `python scripts_doc/gen_db_ref.py` (sonde REST par table). Régénéré le 2026-09-11.
 > `n/c` = table absente ; colonnes listées uniquement si la table contient au moins une ligne.
 > ⚠ 14/09/2026 : `process_atelier.taux_horaire_machine` est ajouté à la main (migration Docker 009, jouée ; **cloud : `cloud-7` pas encore joué**, la sonde REST cloud ne la verra qu'après). Les colonnes `machines.cout_h`, `machines_opex.taux_horaire` / `base_cout_h` et `nomenclatures.taux_mo` / `cout_machine_h` restent en base mais ne sont plus lues (voir `03-base-de-donnees.md`).
+> ⚠ 14/09/2026 (lot C Production), ajouts à la main — la sonde REST cloud ne les verra qu'après les scripts cloud :
+> - `bons_de_travail` **`+ temps_reglage`**, **`+ duree_avant_decoupe`**, **`+ temps_machine_avant_decoupe`** (numeric, heures ; contrainte `bons_de_travail_temps_reglage_positif`) — migration Docker **011** (jouée) ; **cloud : `cloud-9` pas encore joué**, puis `POST /api/production/bdt/reglage/reconstituer`.
+> - Index uniques des upserts (migration Docker **010**, jouée ; cloud : `cloud-8` à contrôler) : `ux_operateur_presence_upsert (operateur_id, date_presence)`, `ux_affectation_poste_upsert (operateur_id, date_affectation, process_id, shift)`, `ux_competences_operateur_upsert (salarie_id, operation)`, `ux_produits_fournisseurs_upsert (fournisseur_id, reference)`, `ux_kpi_objectifs_upsert (code, entite)` — créés seulement sans index équivalent ni doublons.
+> - ⚠ Le générateur sonde `presences` et `affectations_poste`, qui n'existent pas : les vraies tables sont **`operateur_presence`** et **`affectation_poste`** (et `competences_operateur`, non sondée). Détail : `03-base-de-donnees.md`.
 
 
 ## Commercial

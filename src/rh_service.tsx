@@ -3,6 +3,7 @@
 // Gestion unifiée : Employés · Habilitations · Compétences · Temps
 // ══════════════════════════════════════════════════════════════
 import { escX, layout, demandeAchatModal, validationCheckbox, buildValDirMap, valDirBadge } from './shared'
+import { CRENEAUX, libelleCreneau } from './presences'
 import type { Employe, Certification, CompetenceOperateur, Pointage } from './types'
 
 const sjX = (v: any) => JSON.stringify(v).replace(/</g, '\\u003c')
@@ -187,7 +188,8 @@ function roleBadge(role: string, entite?: string) {
   return `<span style="background:#ede9fe;color:#5b21b6;border-radius:6px;padding:2px 8px;font-size:.66rem;font-weight:700;">${RH_ROLE_LABELS[r] || r}</span>`
 }
 function panelEmployes(emps: Employe[], vdMap: Record<string, any> = {}) {
-  const shiftLabel: Record<string,string> = { matin:'Matin 6h-14h', apmidi:'Après-midi 14h-22h', journee:'Journée 7h-17h', soir:'Nuit' }
+  // Libellés des 4 créneaux tirés de SHIFTS (src/shared.ts) : « Soirée 22h-6h » (et non plus « Nuit »)
+  const shiftLabel: Record<string,string> = Object.fromEntries(CRENEAUX.map(k => [k, libelleCreneau(k)]))
   const isOpRole = (r: string) => r === 'operateur' || r === 'oas'   // l'OAS est un opérateur (présence/planning)
   const opsSeem = emps.filter(e => isOpRole((e as any).role) && e.activite === 'Seem')
   const opsSemrac = emps.filter(e => isOpRole((e as any).role) && e.activite === 'Semrac')
@@ -812,7 +814,7 @@ export function pageRHEmployes(dbEmps?: Employe[], dbOrphans?: any[], canWriteRH
           <div id="f_entite_wrap"><label style="${FLBL}">Activité (opérateur)</label><select id="f_entite" style="${FINP}"><option>Seem</option><option>Semrac</option></select></div>
           <div><label style="${FLBL}">Poste</label><input id="f_poste" type="text" placeholder="Ex : Usinage CN" style="${FINP}"/></div>
           <div><label style="${FLBL}">Contrat</label><select id="f_contrat" style="${FINP}"><option value="CDI">CDI</option><option value="CDD">CDD</option><option value="apprenti">Apprenti</option><option value="interim">Intérim</option><option value="stagiaire">Stage</option></select></div>
-          <div><label style="${FLBL}">Shift</label><select id="f_shift" style="${FINP}"><option value="matin">Matin 6h-14h</option><option value="apmidi">Après-midi 14h-22h</option><option value="journee">Journée 7h-17h</option><option value="soir">Nuit</option></select></div>
+          <div><label style="${FLBL}">Shift</label><select id="f_shift" style="${FINP}">${CRENEAUX.map(k => `<option value="${k}">${escX(libelleCreneau(k))}</option>`).join('')}</select></div>
           <div><label style="${FLBL}">Date d'entrée</label><input id="f_date" type="date" style="${FINP}"/></div>
           <div><label style="${FLBL}">Taux horaire chargé (€/h) ${canWriteRH ? '<span title="Confidentiel — maintenir le clic pour révéler" style="color:#94a3b8;"><i class="fas fa-lock"></i></span>' : ''}</label>${canWriteRH
             ? `<input id="f_taux" type="password" step="0.01" autocomplete="off" onmousedown="rhTauxReveal()" onmouseup="rhTauxMask()" onmouseleave="rhTauxMask()" ontouchstart="rhTauxReveal()" ontouchend="rhTauxMask()" style="${FINP}" placeholder="•••"/><div style="font-size:.6rem;color:#94a3b8;margin-top:2px;">Masqué — <strong>maintenez le clic</strong> pour révéler / éditer.</div>`
@@ -1331,7 +1333,7 @@ function rhDemandeConge(){
 function rhValiderConge(id,decision){
   fetch('/api/rh/conge/'+encodeURIComponent(id)+'/valider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision:decision,valide_par:'RH'})})
     .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Échec.'); return; }
-      pushNotif('ok','fa-check-circle',decision==='valide'?('Congé validé · '+(j.absences_creees||0)+' jour(s) posés au planning.'):'Congé refusé.',5000); setTimeout(function(){softReload();},900); }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
+      pushNotif('ok','fa-check-circle',decision==='valide'?('Congé validé · '+(j.absences_creees||0)+' jour(s) posés au planning.'):'Congé refusé.',5000); if(j.warning) pushNotif('warn','fa-exclamation-triangle',String(j.warning).replace(/&/g,'&amp;').replace(/</g,'&lt;'),9000); setTimeout(function(){softReload();},900); }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
 </script>`
 

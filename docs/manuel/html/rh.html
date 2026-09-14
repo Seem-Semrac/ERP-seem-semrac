@@ -51,7 +51,7 @@
       <li>La colonne <b>ERP</b> affiche une clé : <b>verte</b> = identifiant ERP actif (le salarié a un code PIN, il peut se connecter et pointer) · <b>grise</b> = pas de code PIN, donc pas d'accès.</li>
       <li>Statut : <span class="b b-ok">actif</span> ou <span class="b b-crit">inactif</span>. Un second badge apparaît sous le statut si la fiche a été soumise à la Direction (décision de validation).</li>
       <li>Le <b>rôle</b> est affiché en pastille : Opérateur (bleu pour Seem, rose pour Semrac), OAS (opérateur), Qualité, Commercial, Bureau d'Études, Achats, Logistique, Production, Comptable, Maintenance, RH, Direction.</li>
-      <li>Shifts proposés : <b>Matin 6h-14h</b>, <b>Après-midi 14h-22h</b>, <b>Journée 7h-17h</b>, <b>Nuit</b>.</li>
+      <li>Shifts proposés : <b>Matin 6h-14h</b>, <b>Journée 7h-17h</b>, <b>Après-midi 14h-22h</b>, <b>Soirée 22h-6h</b> (les quatre créneaux de la présence opérateurs de la Production).</li>
       <li>Deux boutons par ligne : <b>« Fiche »</b> (ouvre la fiche complète — un clic n'importe où sur la ligne fait la même chose) et la <b>corbeille</b> (supprimer le salarié).</li>
       <li>Un bandeau jaune <b>« Salariés à rattacher »</b> peut s'afficher au-dessus de la liste : ce sont des noms cités ailleurs dans l'ERP (accidents du travail, dotations EPI, habilitations) mais qui n'ont pas de fiche. Chaque ligne indique la provenance (<span class="b b-crit">accident(s)</span>, <span class="b b-info">EPI</span>, <span class="b b-mut">habilit.</span>) et propose <b>« Créer &amp; rattacher »</b>, qui ouvre une fiche vierge préremplie avec le nom.</li>
     </ul>
@@ -91,7 +91,7 @@
         <tr><td>Activité (opérateur)</td><td>Seem / Semrac</td><td>Oui si Opérateur ou OAS</td><td>Site de rattachement ; le champ est masqué pour les fonctions support.</td></tr>
         <tr><td>Poste</td><td>Texte</td><td>Non</td><td>Intitulé métier libre (ex. « Usinage CN ») — visible dans l'organigramme.</td></tr>
         <tr><td>Contrat</td><td>CDI / CDD / Apprenti / Intérim / Stage</td><td>Non (CDI par défaut)</td><td>Nature du contrat.</td></tr>
-        <tr><td>Shift</td><td>Matin / Après-midi / Journée / Nuit</td><td>Non</td><td>Horaire théorique — sert à reconstituer les temps quand il n'y a pas de pointage.</td></tr>
+        <tr><td>Shift</td><td>Matin 6h-14h / Journée 7h-17h / Après-midi 14h-22h / Soirée 22h-6h</td><td>Non</td><td>Horaire théorique — sert à reconstituer les temps quand il n'y a pas de pointage.</td></tr>
         <tr><td>Date d'entrée</td><td>Date</td><td>Non</td><td>Date d'embauche (aujourd'hui par défaut).</td></tr>
         <tr><td>Taux horaire chargé (€/h)</td><td>Nombre, masqué</td><td>Non</td><td>Confidentiel : révélé seulement en maintenant le clic, et seulement avec les droits d'écriture RH. Alimente la masse salariale du Dashboard.</td></tr>
         <tr><td>E-mail · Téléphone · Adresse</td><td>Texte</td><td>Non</td><td>Coordonnées.</td></tr>
@@ -320,7 +320,9 @@
     <ul class="points">
       <li>Le décompte ignore les <b>samedis et dimanches</b> mais pas les jours fériés : ajustez le champ Heures pour une période qui en contient.</li>
       <li>La validation d'un congé est le seul geste qui <b>écrit dans le planning de production</b> : ne la faites qu'une fois la décision prise.</li>
-      <li>Si le message de confirmation annonce moins de jours posés que prévu, un avertissement le signale : vérifiez le planning de présence avant de considérer l'absence comme acquise.</li>
+      <li>Si une conséquence de la validation n'a pas pu se faire — jours d'absence manquants, bons de travail non renvoyés au pool, solde non décompté — un <b>message orange</b> la détaille : vérifiez le planning de présence et le solde avant de considérer l'absence comme acquise.</li>
+      <li>Un congé <b>déjà traité</b> (double clic, validé entre-temps depuis la Production ou la Direction) est refusé avec « Congé déjà traité… rechargez la page » : rien n'est posé ni décompté une seconde fois.</li>
+      <li>Les congés des <b>opérateurs</b> peuvent aussi être approuvés par le responsable de production, depuis l'onglet <b>Présence opérateurs</b> du service Production (jamais sa propre demande).</li>
       <li>Les corrections de pointage sont <b>tracées</b> (motif + matricule autorisant) : c'est ce qui rend l'export de paie défendable.</li>
     </ul>
     <div class="warn"><b>Attention :</b> valider un congé <b>libère les bons de travail</b> affectés à l'opérateur sur la période — ils retournent au pool des bons à affecter. Prévenez la Production, sinon des bons attendront sans titulaire au planning.</div>

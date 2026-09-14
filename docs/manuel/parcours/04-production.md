@@ -21,11 +21,12 @@ Sur cet écran, vous renseignez :
 - **Opération** — le type de travail (pliage, usinage, soudure…). La liste ne se remplit **qu'après** avoir choisi l'activité.
 - **Pièce / Référence** — la référence de la pièce à fabriquer.
 - **Durée estimée (h)** — le temps prévu pour l'opération : il dessine la barre sur le Gantt et sert de repère face au temps réel.
+- **dont réglage (h)** *(facultatif)* — la part de la durée consacrée au réglage, faite une seule fois : elle apparaît hachurée en tête de la barre, reste sur le morceau 1 si le BDT est découpé, et l'étape suivante du lot ne pourra démarrer qu'après elle (chemin critique). Vide = réglage inconnu.
 - **Priorité** — Normal / Urgent / Critique. « Critique » affiche le BDT **en rouge** sur le planning.
 - **Type** — Interne (opérateur) ou Sous-traitance. « Sous-traitance » fait apparaître des cases supplémentaires (sous-traitant, délai retour).
 - **Opérateur assigné** — la personne ou le poste qui fera le travail. La liste ne se remplit **qu'après** avoir choisi l'opération.
 
-**➡️ Ensuite :** le BDT apparaît sur le **planning Gantt**, au statut « Programmé ». Vous pouvez le **glisser** sur la ligne d'un opérateur au bon créneau. Il attend maintenant d'être démarré par l'opérateur.
+**➡️ Ensuite :** le BDT apparaît sur le **planning Gantt**, au statut « Programmé ». Vous pouvez le **glisser** sur la ligne d'un opérateur au bon créneau. Si l'étape précédente du lot est déjà posée, il ne peut pas commencer avant la fin de son réglage : posé trop tôt le même jour, il est **calé** automatiquement ; un jour plus tôt, il est **refusé**. Il attend maintenant d'être démarré par l'opérateur.
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/production.md).
 
@@ -87,16 +88,16 @@ Depuis le panneau « Sous-traitance en cours » → « Nouvelle ST ». Vous rens
 - **Date retour prévue** — la date à laquelle les pièces doivent revenir : elle cadence le suivi.
 - **Priorité** — Normal / Urgent / Critique.
 
-**➡️ Ensuite :** la sous-traitance apparaît sur le **planning Gantt BST** (suivi sur 14 jours). Au retour des pièces, la production reprend son cours. Pour un bon rattaché à un lot précis, on utilise « Nouveau BST » depuis le Gantt sous-traitance (lot lié, quantité, dates d'envoi et durée).
+**➡️ Ensuite :** la sous-traitance apparaît sur le **planning Gantt BST** (vue de 21 jours). Au retour des pièces, la production reprend son cours. Pour un bon rattaché à un lot précis, on utilise « Nouveau BST » depuis le Gantt sous-traitance (lot lié, quantité, dates d'envoi et durée).
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/production.md).
 
 ## Étape 6 — Programmer la présence des opérateurs
-**⬅️ Avant :** Pour affecter des BDT, il faut savoir **qui** est présent et sur quel créneau (matin, journée, soir).
+**⬅️ Avant :** Pour affecter des BDT, il faut savoir **qui** est présent et sur quel créneau (matin, journée, après-midi, soirée).
 **📝 Ici, vous :** définissez d'un coup les plages horaires (shifts) de plusieurs opérateurs sur toute une semaine.
 
 Onglet Présence opérateurs → « Programmer la semaine ». Vous renseignez :
-- **Shift à appliquer** — Matin, Journée, Soir, Absent, ou Effacer (retire la programmation).
+- **Shift à appliquer** — Matin, Journée, Après-midi, Soirée, Absent, ou Effacer (vide réellement les cases).
 - **Jours concernés** — Lun → Ven (5 jours ouvrés) ou Lun → Dim (7 jours).
 - **Opérateurs cibles** — une case par opérateur ; des boutons permettent de tout cocher/décocher ou de sélectionner par site (Seem / Semrac).
 

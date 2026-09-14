@@ -11,7 +11,7 @@ import {
   dashFinance, dashStock, dashFournisseurs, dashEnvironnement, dashHub
 } from './dashboards'
 import { parseFilter } from './dash_filter'
-import { blocagesEnvoiBds, bdsEnvoiBlocage, cleLot } from './gamme'
+import { blocagesEnvoiBds, bdsEnvoiBlocage, cleLot, controleEnchainement, successeursEnViolation, messageCalage, PLAN_HEURE_DEFAUT, fmtHeurePlanning, heureEntiereChemin } from './gamme'
 import { diffNomenclature, diffFournitures } from './nomenclature_journal'
 import type { Changement } from './nomenclature_journal'
 import { pageAffectation, pageCompetences, pageHoraires } from './affectation'
@@ -23,7 +23,7 @@ import {
   pageFournisseursST,
   pageReferencesPiecesACreer
 } from './listes'
-import { layout, pageHeader, afterBox, SIDEBAR_V2, APP_VERSION, computeNomCostForQty, etapeDecomp, etapeLibreVersEtape, construireTauxAtelier, typeProcess, seemMark, STATUT_ANNULE, estAnnule } from './shared'
+import { layout, pageHeader, afterBox, SIDEBAR_V2, APP_VERSION, computeNomCostForQty, etapeDecomp, etapeLibreVersEtape, construireTauxAtelier, typeProcess, seemMark, STATUT_ANNULE, estAnnule, etapeTempsMin, dureeBdtDepuisTemps, reglageBdtHeures, racineBdt, rangMorceauBdt, lireHeuresSaisie, reglageBdtDepuisGamme, planDecoupeBdt, blocagesRecollage, cibleRecollage, ajusterRecollagePartiel } from './shared'
 import { brandBlockHTML, BRAND, BRAND_PRINT_CSS, SOCIETE } from './brand'
 import { buildXlsx } from './xlsx'
 import { computeRisqueChimique, computeExpositionSante, computeExpositionIncendie, computeExpositionEnv, normQuantiteChimique, SEIRICH_NIVEAUX, EXPO_PROCEDE_LBL, EXPO_FREQ_LBL, EXPO_PROT_LBL, EXPO_VOLAT_LBL, codeDechetDangereux, computeBilanGES, ISO14001_DIAGNOSTIC, ISO26000_QUESTIONS, computeEcmePV, ecmeTypeLabel as _ecmeTypeLabel, ecmeStatutLive as _ecmeStatutLive } from './qref'
@@ -58,7 +58,7 @@ import {
   createOffre, updateOffre, deleteOffre, createCommande, updateCommande, recomputeCmdAvancement, recomputeCmdCout, getCommandeDetail, getLotDetail, getAffaireDetail,
   getBeRefs, getDashboardData, getTauxAtelier,
   getPlanningOperateurs, getPlanningBDTs, getPlanningBDS, getSousTraitants, getShifts, getAbsences, getSalariesActifs,
-  updateBDT, createBDTRow, supprimerBDTRow, getBDTStrict, idsMorceauxBDT, retirerBDTRows, updateBDS, createBDSRow,
+  updateBDT, createBDTRow, supprimerBDTRow, getBDTStrict, idsMorceauxBDT, retirerBDTRows, lireFamilleBDT, lireBDTsStrict, lireContexteReglage, lireTracesBDT, majBDTSiInchange, majBDTConditionnelle, retirerMorceauxBDTGardes, ecrireReglageSiVide, lireOperationsDuLot, getBDSStrict, updateBDS, createBDSRow,
   createNonConformiteRow, updateNonConformite, ncHasRetourCols, ncEstClose, ncEstBloquante, ncRattacheeAffaire, ncHasExtCols, ncHasResponsable,
   createCredit, updateCredit, deleteCredit, getCreditsEnCoursForClient, getCommandesPrioritaires, createCommandePrioritaire, updateCommandePrioritaire, createLot,
   getDerogations, createDerogation, updateDerogation,
@@ -137,6 +137,9 @@ import { pageServiceRH, pagePointage, pageRHEmployes, pageRHHabilitations, pageR
 import { pageServiceCompta } from './compta_service'
 import { pageServiceDirection, computeDataHealth } from './direction_service'
 import { pageRapport8D } from './rapport8d'
+// Présences opérateur (lot C · C1, 14/09/2026) : lectures strictes + règles pures
+import { getPresencesFenetre, deletePresence, getSalarieCible, getCongeCible, majCongeSiStatut, getSalarieCompletCible, lireBDTOperateurPeriode } from './queries'
+import { validerCorpsPresence, validerFenetre, fenetreChargementPresences, messageEchecUpsert, CRENEAUX, libelleCreneau } from './presences'
 import { pageLogin, pageAccesRefuse } from './login'
 import { signSession, verifySession, canAccess, isPublicPath, hashPin, navServices, MENU_SERVICES_PUBLIC } from './auth'
 import { MANUELS, manuelsFor, manuelBySlug, pageManuelsHub, pageManuel } from './manuels'
@@ -911,11 +914,32 @@ const _yrOf = (s: any) => { const m = String(s || '').match(/-(\d{4})-/); return
 const fmtLotId = (year: string, aff: string, zz: number) => `LOT-${year}-${aff}-${_pad2(zz)}`
 const fmtBonId = (kind: 'BDT' | 'BDS', year: string, aff: string, zz: number, aa: number) => `${kind}-${year}-${aff}-${_pad2(zz)}-${_pad2(aa)}`
 
+// ── Colonnes du réglage d'un BDT (migration 011 / cloud-9) ──
+// Tant que cloud-9 n'est pas joué, la base refuse toute écriture qui les cite : on réessaie SANS elles
+// (le BDT est créé, son réglage reste inconnu) et on le signale. `etat.sansReglage` évite de retenter à
+// chaque bon d'une même boucle.
+const COLS_REGLAGE_BDT = ['temps_reglage', 'duree_avant_decoupe', 'temps_machine_avant_decoupe']
+const RE_COL_REGLAGE = /temps_reglage|duree_avant_decoupe|temps_machine_avant_decoupe/i
+const AVERT_CLOUD9 = 'Colonnes du temps de réglage absentes de la base (script docker/db/cloud/cloud-9-bdt-temps-reglage.sql à jouer) : réglage non enregistré.'
+const sansColsReglage = (p: Record<string, any>) => { const o: Record<string, any> = { ...p }; for (const k of COLS_REGLAGE_BDT) delete o[k]; return o }
+async function creerBDTAvecReglage(payload: Record<string, any>, etat: { sansReglage: boolean } = { sansReglage: false }) {
+  if (etat.sansReglage) return createBDTRow(sansColsReglage(payload))
+  const r = await createBDTRow(payload)
+  if (r.error && COLS_REGLAGE_BDT.some((k) => k in payload) && RE_COL_REGLAGE.test(String(r.error.message || ''))) {
+    etat.sansReglage = true
+    console.warn('BDT ' + String(payload.id || '') + ' : ' + AVERT_CLOUD9)
+    return createBDTRow(sansColsReglage(payload))
+  }
+  return r
+}
+
 // (c) commande → lots → BDT (interne) + BDS (sous-traité), calqué sur generer-bdt.
 async function cascadeLotsBdtBst(dt: any, cmdId: string, byCode: Record<string, any>) {
   const [existingBdt, existingBds, procs] = await Promise.all([
     getBonsDeTravail().catch(() => [] as any[]), getPlanningBDS().catch(() => [] as any[]), getProcessAtelier().catch(() => [] as any[]),
   ])
+  const txTemps = construireTauxAtelier(procs as any[])   // type des process (temps machine) — aucun taux lu
+  const etatReglage = { sansReglage: false }
   const oasProcIds = new Set((procs as any[]).filter((p: any) => p.est_oas).map((p: any) => String(p.id)))
   const aff = String(dt.num_affaire || dt.id), client = dt.client_nom || '', prio = dt.priorite || 'normal'
   const bdtKey = new Set((existingBdt as any[]).map((b: any) => `${b.num_affaire}|${b.piece}|${b.seq}`))
@@ -938,8 +962,8 @@ async function cascadeLotsBdtBst(dt: any, cmdId: string, byCode: Record<string, 
     for (let i = 0; i < etapes.length; i++) {
       const e = etapes[i], seq = Number(e.ordre) || (i + 1)
       if (oasFlags[i]) continue
-      const { reglageMin: reglage, varMin } = etapeTempsMin(e)
-      const dureeH = +(((reglage + varMin * qte)) / 60).toFixed(3)
+      const tps = etapeTempsMin(e, txTemps)
+      const dureeH = dureeBdtDepuisTemps(tps, qte)
       const op = e.nom || e.process_nom || e.operation_st || 'Process'
       const k = `${aff}|${p.ref_interne || ref}|${seq}`
       const oasAvant = i > 0 && oasFlags[i - 1], oasApres = i < etapes.length - 1 && oasFlags[i + 1]
@@ -950,11 +974,11 @@ async function cascadeLotsBdtBst(dt: any, cmdId: string, byCode: Record<string, 
       } else {
         bdtNum++
         if (bdtKey.has(k)) continue
-        await createBDTRow({ id: fmtBonId('BDT', year, aff, pieceNum, bdtNum), num_affaire: aff, cmd_ref: cmdId, lot_ref: lotRef, client_nom: client, piece: p.ref_interne || ref, operation: op, machine_id: e.machine_id || null, process_id: e.process_id || null, seq, duree: dureeH, temps_alloue: dureeH, statut: 'a_programmer', priorite: prio, activite: act, oas_avant: oasAvant, oas_apres: oasApres, matiere_ok: false }).then((r: any) => { if (r && !r.error) nb++ }).catch(() => {})
+        await creerBDTAvecReglage({ id: fmtBonId('BDT', year, aff, pieceNum, bdtNum), num_affaire: aff, cmd_ref: cmdId, lot_ref: lotRef, client_nom: client, piece: p.ref_interne || ref, operation: op, machine_id: e.machine_id || null, process_id: e.process_id || null, seq, duree: dureeH, temps_alloue: dureeH, temps_reglage: reglageBdtHeures(tps.reglageMin, dureeH), statut: 'a_programmer', priorite: prio, activite: act, oas_avant: oasAvant, oas_apres: oasApres, matiere_ok: false }, etatReglage).then((r: any) => { if (r && !r.error) nb++ }).catch(() => {})
       }
     }
   }
-  return { lots, bdt: nb, bds: ns }
+  return { lots, bdt: nb, bds: ns, avertissement: etatReglage.sansReglage ? AVERT_CLOUD9 : null }
 }
 
 // ── GOULOTTE matière + préparation technique ────────────────────────────────
@@ -1086,7 +1110,7 @@ async function cascadeEngagementDepense(dt: any, cmdId: string, byCode: Record<s
 }
 
 async function cascadeAcceptationOffre(off: any, cmdId: string) {
-  const out = { dt: null as any, prepa: 0, da: 0, lots: 0, bdt: 0, bds: 0, proforma: false, facture: null as any }
+  const out = { dt: null as any, prepa: 0, da: 0, lots: 0, bdt: 0, bds: 0, proforma: false, facture: null as any, avertissement_bdt: null as string | null }
   try {
     const dt = off.dt_ref ? await getDemandeTravaux(String(off.dt_ref)).catch(() => null) : null
     if (!dt) return out
@@ -1106,8 +1130,9 @@ async function cascadeAcceptationOffre(off: any, cmdId: string) {
     // Les lots et bons sont créés dans les deux cas : ils naissent avec matiere_ok = false,
     // donc ils restent hors du planning tant que la matière n'est pas réceptionnée — ce qui,
     // en proforma, suppose que les demandes d'achat aient été débloquées par le paiement.
-    const cc = await cascadeLotsBdtBst(dt, cmdId, byCode).catch(() => ({ lots: 0, bdt: 0, bds: 0 }))
+    const cc = await cascadeLotsBdtBst(dt, cmdId, byCode).catch(() => ({ lots: 0, bdt: 0, bds: 0, avertissement: null as string | null }))
     out.lots = cc.lots; out.bdt = cc.bdt; out.bds = cc.bds
+    if (cc.avertissement) out.avertissement_bdt = cc.avertissement
   } catch {}
   return out
 }
@@ -3910,31 +3935,7 @@ app.get('/api/nomenclature/:id/fournitures', async (c) => {
 // ─── Analyse DT auto-calculée depuis les nomenclatures validées des pièces ───
 // Pour chaque pièce de la DT, retrouve sa nomenclature validée (par code_ref_produit ↔ ref_interne)
 // et calcule tout pour la quantité voulue : matière, MO, machine, réglage, sous-traitance (forfait inclus).
-// Temps d'une étape en minutes — gère le modèle importé (millièmes d'heure, /1000) ET le manuel (minutes).
-// Réglage total d'une étape, en millièmes d'heure : ROP (opérateur) + RGM (machine)
-// quand ils sont renseignés, sinon le champ historique unique.
-function reglageMilleTotal(e: any): number {
-  if (!e) return 0
-  if (e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null) {
-    return (Number(e.temps_reglage_op_mille) || 0) + (Number(e.temps_reglage_machine_mille) || 0)
-  }
-  return Number(e.temps_reglage_mille) || 0
-}
-
-// Réglage = part fixe (par lot) ; varMin = part variable (par pièce). Une op 'est_fixe' bascule en réglage.
-// Format minutes : réglage = ROP (temps_reglage_min) + RGM (temps_reglage_machine_min), comme l'OF et l'analyse DT.
-//   (14/09/2026) Le RGM était oublié ici : depuis que le formulaire BE convertit en minutes une étape importée qu'on
-//   modifie, la durée des BDT générés perdait le réglage machine et multipliait une op fixe par la quantité.
-function etapeTempsMin(e: any): { reglageMin: number; varMin: number } {
-  if (e && (e.temps_variable_mille != null || e.temps_reglage_mille != null || e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null)) {
-    const vmin = (Number(e.temps_variable_mille) || 0) * 0.06   // millième d'h → minutes (×60/1000)
-    const rmin = reglageMilleTotal(e) * 0.06
-    return e.est_fixe ? { reglageMin: rmin + vmin, varMin: 0 } : { reglageMin: rmin, varMin: vmin }
-  }
-  const rmin = (Number(e?.temps_reglage_min) || 0) + (Number(e?.temps_reglage_machine_min) || 0)
-  const vmin = (Number(e?.temps_mo_min) || 0) + (Number(e?.temps_machine_min) || 0)
-  return e?.est_fixe ? { reglageMin: rmin + vmin, varMin: 0 } : { reglageMin: rmin, varMin: vmin }
-}
+// Temps d'une étape pour créer un BDT : etapeTempsMin (src/shared.ts), aligné sur etapeDecomp (14/09/2026).
 app.get('/api/be/analyse-dt/:id', async (c) => {
   const id = c.req.param('id')
   const [dt, noms, produitsAll, stockAll, machinesAll, postesAll, tauxAt] = await Promise.all([getDemandeTravaux(id).catch(() => null), getNomenclatures().catch(() => [] as any[]), getProduitsFournisseursAll().catch(() => [] as any[]), getStockReel().catch(() => [] as any[]), getMachines().catch(() => [] as any[]), getPostes().catch(() => [] as any[]), getTauxAtelier()])
@@ -4174,6 +4175,8 @@ app.post('/api/be/analyse-dt/:id/generer-bdt', async (c) => {
   if (!dt) return c.json({ ok: false, error: 'DT introuvable' }, 404)
   // Process OAS = pas de BDT ; c'est un passage de lot (le BDT précédent soldé → lot à l'OAS).
   const oasProcIds = new Set((procs as any[]).filter((p: any) => p.est_oas).map((p: any) => String(p.id)))
+  const txTemps = construireTauxAtelier(procs as any[])   // type des process (temps machine) — aucun taux lu
+  const etatReglage = { sansReglage: false }
   const byCode: Record<string, any> = {}
   for (const n of (noms as any[])) { if (n.statut !== 'valide') continue; const k = String(n.code_ref_produit || '').toLowerCase().trim(); if (!k) continue; const cur = byCode[k]; if (!cur || String(n.indice || 'A') > String(cur.indice || 'A')) byCode[k] = n }
   const aff = String((dt as any).num_affaire || (dt as any).id)
@@ -4214,8 +4217,8 @@ app.post('/api/be/analyse-dt/:id/generer-bdt', async (c) => {
       idx++
       const seq = Number(e.ordre) || idx
       if (oasFlags[i]) { oasGates++; continue }
-      const { reglageMin: reglage, varMin } = etapeTempsMin(e)
-      const dureeH = +(((reglage + varMin * qte)) / 60).toFixed(3)
+      const tps = etapeTempsMin(e, txTemps)
+      const dureeH = dureeBdtDepuisTemps(tps, qte)
       const op = e.nom || e.process_nom || e.operation_st || 'Process'
       const k = `${aff}|${p.ref_interne || ref}|${seq}`
       const oasAvant = i > 0 && oasFlags[i - 1]   // ce BDT ne peut être reçu qu'une fois le lot passé à l'OAS
@@ -4228,12 +4231,12 @@ app.post('/api/be/analyse-dt/:id/generer-bdt', async (c) => {
       } else {
         bdtNum++
         if (bdtKey.has(k)) { skipped++; continue }
-        await createBDTRow({ id: fmtBonId('BDT', yr, aff, zz, bdtNum), num_affaire: aff, cmd_ref: aff, lot_ref: lotRef, client_nom: client, piece: p.ref_interne || ref, operation: op, machine_id: e.machine_id || null, process_id: e.process_id || null, seq, duree: dureeH, temps_alloue: dureeH, statut: 'a_programmer', priorite: prio, activite: act, oas_avant: oasAvant, oas_apres: oasApres }).catch(() => {})
+        await creerBDTAvecReglage({ id: fmtBonId('BDT', yr, aff, zz, bdtNum), num_affaire: aff, cmd_ref: aff, lot_ref: lotRef, client_nom: client, piece: p.ref_interne || ref, operation: op, machine_id: e.machine_id || null, process_id: e.process_id || null, seq, duree: dureeH, temps_alloue: dureeH, temps_reglage: reglageBdtHeures(tps.reglageMin, dureeH), statut: 'a_programmer', priorite: prio, activite: act, oas_avant: oasAvant, oas_apres: oasApres }, etatReglage).catch(() => {})
         nb++
       }
     }
   }
-  return c.json({ ok: true, bdt: nb, bds: ns, skipped, sansNom, oasGates })
+  return c.json({ ok: true, bdt: nb, bds: ns, skipped, sansNom, oasGates, ...(etatReglage.sansReglage ? { avertissement: AVERT_CLOUD9 } : {}) })
 })
 
 // ══ GED : upload / ouverture / liste / suppression de documents (plans, CAO, FAO) ══
@@ -6113,7 +6116,9 @@ app.get('/production/service', async (c) => {
     getPlanningBDS().catch(() => []),
     getBonsDeCommande().catch(() => []),
     getStockReel().catch(() => []),
-    getPresences(weekFrom, weekTo).catch(() => []),
+    // Présences : lecture STRICTE sur 3 semaines (fenetreChargementPresences) ; null = échec → la page ne déclare
+    // aucun jour chargé et relit la semaine affichée (GET /api/production/presence) au lieu d'afficher des cases vides.
+    (() => { const f = fenetreChargementPresences(new Date().toISOString().slice(0, 10)); return getPresencesFenetre(f.from, f.to).then(r => r.error ? null : r.data, () => null) })(),
     getAbsences().catch(() => []),
     getMouvementsStock().catch(() => []),
     getAffectationsPoste(weekFrom, weekTo).catch(() => []),
@@ -6185,11 +6190,42 @@ app.get('/production/planning', (c) => c.redirect('/production/service'))
 const BDT_COLS = ['operateur_id','machine_id','process_id','poste_id','resultat','cmd_id','lot_id','num_affaire','client_nom','piece','operation','duree','debut','priorite','statut','activite','seq','date_echeance','date_prevue','temps_alloue','debut_reel','fin_reel','temps_reel','temps_machine_alloue','cmd_ref','lot_ref','matiere_ok','pv_requis']
 const pick = (obj: any, cols: string[]) => { const o: Record<string, any> = {}; for (const k of cols) if (obj && k in obj) o[k] = obj[k]; return o }
 
+// PATCH générique : `debut` et `date_prevue` en sont RETIRÉS (lot C, chemin critique). Poser un BDT à une heure
+// ou sur un jour passe par POST /api/production/bdt/:id/affecter, qui contrôle l'enchaînement avec l'étape
+// précédente (calage / 409) ; le retrait se fait par /deprogrammer. Aucun appelant de l'application n'écrivait
+// ces deux colonnes ici : les garder aurait laissé la porte contournable d'un simple appel direct (même piège
+// que la porte d'envoi des BST). Choix plutôt que de dupliquer le contrôle : une seule route pose, une seule règle.
+const BDT_COLS_PATCH = BDT_COLS.filter((k) => k !== 'debut' && k !== 'date_prevue')
+
 app.patch('/api/production/bdts/:id', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json().catch(() => ({}))
-  const patch = pick(body, BDT_COLS)
+  if (body && typeof body === 'object' && ('debut' in body || 'date_prevue' in body)) {
+    return c.json({ ok: false, error: 'Le jour et l’heure d’un BDT se posent par POST /api/production/bdt/:id/affecter (contrôle du chemin critique) et se retirent par /deprogrammer : « debut » et « date_prevue » ne se modifient pas ici.' }, 400)
+  }
+  const patch = pick(body, BDT_COLS_PATCH)
   if (!Object.keys(patch).length) return c.json({ ok: false, error: 'no valid fields' })
+  // Réglage (lot C) : temps_reglage n'est PAS dans BDT_COLS (il ne se modifie pas ici) et ni la durée ni le temps
+  // alloué ne peuvent passer sous le réglage déjà stocké — la réalisation (durée − réglage) serait négative, et tout
+  // écran qui lit temps_alloue avant duree (soldage, reconstitution) verrait moins de temps que le réglage.
+  const heuresPatch = (['duree', 'temps_alloue'] as const).filter((k) => patch[k] != null && patch[k] !== '')
+  if (heuresPatch.length) {
+    const LIB = { duree: 'La durée', temps_alloue: 'Le temps alloué' }
+    for (const k of heuresPatch) {
+      const n = Number(patch[k])
+      if (!Number.isFinite(n) || n < 0) return c.json({ ok: false, error: LIB[k] + ' est invalide : nombre d’heures positif ou nul.' }, 400)
+    }
+    const lu = await getBDTStrict(id)
+    if (lu.error) return c.json({ ok: false, error: 'Lecture du BDT impossible : ' + lu.error + '. Rien n’a été modifié.' }, 503)
+    if (!lu.data) return c.json({ ok: false, error: 'BDT introuvable.' }, 404)
+    const tr = lu.data.temps_reglage
+    for (const k of heuresPatch) {
+      const n = Number(patch[k])
+      if (tr != null && tr !== '' && n < Number(tr) - 1e-9) {
+        return c.json({ ok: false, error: LIB[k] + ' (' + n + ' h) ne peut pas être inférieur' + (k === 'duree' ? 'e' : '') + ' au temps de réglage de ce BDT (' + Number(tr) + ' h).' }, 409)
+      }
+    }
+  }
   const { data, error } = await updateBDT(id, patch)
   if (error) return c.json({ ok: false, error: error.message })
   return c.json({ ok: true, data })
@@ -6206,8 +6242,34 @@ app.post('/api/production/bdts', async (c) => {
   // Programmé = posé sur le planning (process + jour) ; sinon, direction la goulotte.
   if (!payload.statut) payload.statut = (payload.process_id && payload.date_prevue) ? 'programme' : 'a_programmer'
   if (payload.temps_alloue == null) payload.temps_alloue = payload.duree
-  const { data, error } = await createBDTRow(payload)
+  // « dont réglage (h) » facultatif : absent = réglage inconnu (null). Jamais supérieur à la durée.
+  if (body && (body as any).temps_reglage != null && (body as any).temps_reglage !== '') {
+    const tr = lireHeuresSaisie((body as any).temps_reglage)
+    if (!Number.isFinite(tr) || tr < 0) return c.json({ ok: false, error: 'Temps de réglage invalide : nombre d’heures positif ou nul.' }, 400)
+    const d = Number(payload.duree)
+    const tr2 = Math.round(tr * 100) / 100
+    if (Number.isFinite(d) && tr2 > d + 1e-9) return c.json({ ok: false, error: 'Le réglage (' + tr2 + ' h) ne peut pas dépasser la durée du BDT (' + d + ' h).' }, 400)
+    payload.temps_reglage = tr2
+  }
+  // Chemin critique : un BDT créé DÉJÀ POSÉ dans un lot (appel d'API avec lot + rang) suit la même règle que
+  // /affecter. La création manuelle de l'écran n'a ni lot ni rang : aucune lecture supplémentaire.
+  let ctlCreation: ReturnType<typeof controleEnchainement> | null = null
+  const creePose = !!(payload.process_id && payload.date_prevue && !['', 'a_programmer'].includes(String(payload.statut || '')))
+  // Toute pose écrit une heure (même règle que /affecter) : sans heure, celle où le planning affiche le BDT.
+  if (creePose && (payload.debut == null || payload.debut === '' || isNaN(Number(payload.debut)))) payload.debut = PLAN_HEURE_DEFAUT
+  if (creePose && cleLot(payload) && payload.seq != null) {
+    const lo = await lireOperationsDuLot(cleLot(payload))
+    if (lo.error) return c.json({ ok: false, error: 'Lecture des opérations du lot impossible (chemin critique non vérifiable) : ' + lo.error + '. Rien n’a été créé.' }, 503)
+    ctlCreation = controleEnchainement(payload, [...lo.bdts, ...lo.bds])
+    if (ctlCreation.etat === 'refus') return c.json({ ok: false, error: ctlCreation.message, au_plus_tot: ctlCreation.au_plus_tot }, 409)
+    if (ctlCreation.etat === 'cale') payload.debut = ctlCreation.cale_a
+  }
+  const etatReglage = { sansReglage: false }
+  const { data, error } = await creerBDTAvecReglage(payload, etatReglage)
   if (error) return c.json({ ok: false, error: error.message })
+  const avert = [etatReglage.sansReglage ? AVERT_CLOUD9 : '', ctlCreation && ctlCreation.etat === 'cale' ? String(ctlCreation.message) : ''].filter(Boolean).join(' ')
+  const cale = ctlCreation && ctlCreation.etat === 'cale' ? { cale_a: ctlCreation.cale_a } : {}
+  if (avert) return c.json({ ok: true, data, ...cale, avertissement: avert })
   return c.json({ ok: true, data })
 })
 
@@ -6636,7 +6698,10 @@ app.post('/api/production/bdt/:id/affecter', async (c) => {
   const proc = procs.find((p: any) => String(p.id) === String(procId))
   if (!proc) return c.json({ ok: false, error: 'Process introuvable' })
   // Un BDT reçu ou soldé est en cours d'exécution ou terminé : il ne se replanifie plus.
-  const cur: any = ((await getBonsDeTravail().catch(() => [] as any[])) as any[]).find((b: any) => String(b.id) === String(id))
+  // Lecture STRICTE : une panne n'est pas « BDT introuvable » (avant : liste complète non paginée, erreur avalée).
+  const lu = await getBDTStrict(id)
+  if (lu.error) return c.json({ ok: false, error: 'Lecture du BDT impossible : ' + lu.error + '. Rien n’a été modifié.' }, 503)
+  const cur: any = lu.data
   if (!cur) return c.json({ ok: false, error: 'BDT introuvable.' }, 404)
   if (['recu', 'solde'].includes(String(cur.statut || ''))) return c.json({ ok: false, error: 'BDT déjà ' + (cur.statut === 'solde' ? 'soldé' : 'reçu') + ' : il ne se replanifie plus.' }, 409)
   const patch: Record<string, any> = { process_id: procId, statut: 'programme' }
@@ -6644,20 +6709,58 @@ app.post('/api/production/bdt/:id/affecter', async (c) => {
   // machine restait faussée par l'affectation précédente).
   patch.machine_id = (proc.requiert_machine && proc.machine_id) ? proc.machine_id : null
   if (proc.activite && proc.activite !== 'both') patch.activite = proc.activite
-  // Heure de début précise (glisser-déposer sur le Gantt, au quart d'heure)
-  if (body.debut != null && !isNaN(Number(body.debut))) patch.debut = Math.round(Number(body.debut) * 100) / 100
+  // Heure de début précise (glisser-déposer sur le Gantt, au quart d'heure). TOUTE pose écrit une heure (revue du
+  // lot C) : sans heure demandée (pose au clic), le BDT garde la sienne, sinon il prend celle où le planning l'affiche
+  // (PLAN_HEURE_DEFAUT). Avant, un BDT posé au clic restait à debut vide et échappait au chemin critique.
+  const heureValide = (v: any) => v != null && v !== '' && !isNaN(Number(v))
+  patch.debut = heureValide(body.debut) ? Math.round(Number(body.debut) * 100) / 100
+    : (heureValide(cur.debut) ? Number(cur.debut) : PLAN_HEURE_DEFAUT)
   // Programmer, c'est poser sur un JOUR : le Gantt n'affiche que les BDT du jour sélectionné.
   patch.date_prevue = String(body.date_prevue || TODAY_ISO())
+  // ── CHEMIN CRITIQUE (lot C, src/gamme.ts) : l'étape ne démarre pas avant la fin du réglage de l'étape
+  //    précédente du lot. Même jour trop tôt (ou sans heure) → CALÉE à l'au plus tôt ; jour antérieur → 409.
+  //    Opérations du lot lues par requête CIBLÉE et STRICTE (une panne n'autorise rien en silence).
+  const cle = cleLot(cur)
+  let lot: { bdts: any[]; bds: any[] } = { bdts: [], bds: [] }
+  let ctl: ReturnType<typeof controleEnchainement> | null = null
+  if (cle && cur.seq != null) {
+    const lo = await lireOperationsDuLot(cle)
+    if (lo.error) return c.json({ ok: false, error: 'Lecture des opérations du lot ' + cle + ' impossible (chemin critique non vérifiable) : ' + lo.error + '. Rien n’a été modifié.' }, 503)
+    lot = lo
+    ctl = controleEnchainement({ ...cur, ...patch }, [...lo.bdts, ...lo.bds])
+    if (ctl.etat === 'refus') return c.json({ ok: false, error: ctl.message, au_plus_tot: ctl.au_plus_tot }, 409)
+    if (ctl.etat === 'cale') patch.debut = ctl.cale_a
+  }
+  let cale = ctl?.etat === 'cale' ? ctl : null
+  let arrondi: number | null = null
   let { data, error } = await updateBDT(id, patch)
   // ⚠ bons_de_travail.debut était un ENTIER : tout dépôt à h15, h30 ou h45 échouait
   //   (« Affectation échouée »). La migration 005 le passe en décimal ; tant qu'elle n'est pas
-  //   jouée (cloud), on retombe sur l'heure pleine plutôt que d'échouer.
+  //   jouée (cloud-4), on retombe sur l'heure pleine plutôt que d'échouer. L'arrondi ne doit pas CRÉER
+  //   de violation : l'heure entière est recontrôlée, et arrondie au-dessus si elle tombe avant l'au plus tôt.
   if (error && patch.debut != null && /integer/i.test(String(error.message || ''))) {
-    patch.debut = Math.round(Number(patch.debut))
+    const demande = Number(patch.debut)
+    const he = heureEntiereChemin({ ...cur, ...patch }, ctl ? [...lot.bdts, ...lot.bds] : null)
+    if (he.controle) cale = he.controle
+    if (he.heure !== demande) arrondi = he.heure
+    patch.debut = he.heure
     ;({ data, error } = await updateBDT(id, patch))
   }
   if (error) return c.json({ ok: false, error: error.message })
-  return c.json({ ok: true, data })
+  // Étapes suivantes déjà posées que cette pose rend invalides : signalées, JAMAIS décalées en cascade.
+  const apres = { ...cur, ...patch, ...(data || {}) }
+  const successeurs = cle ? successeursEnViolation(apres, [...lot.bdts, ...lot.bds]) : []
+  const ecrit = Number(patch.debut)
+  const avert = [
+    cale && cale.au_plus_tot ? messageCalage(ecrit, cale.au_plus_tot) : '',
+    arrondi != null ? 'Heure enregistrée à ' + fmtHeurePlanning(ecrit) + ' : la colonne « debut » est encore entière sur cette base (migration 005 / cloud-4 à jouer).' : '',
+  ].filter(Boolean).join(' ')
+  return c.json({
+    ok: true, data, au_plus_tot: ctl ? ctl.au_plus_tot : null, successeurs_en_violation: successeurs,
+    // cale_a = heure RÉELLEMENT écrite quand elle diffère de celle demandée (calage ou arrondi) : l'écran l'affiche.
+    ...(cale || arrondi != null ? { cale_a: ecrit } : {}),
+    ...(avert ? { avertissement: avert } : {}),
+  })
 })
 
 // Déprogrammer un BDT : retour dans la file « en attente de programmation »
@@ -6676,9 +6779,15 @@ app.post('/api/production/bdt/:id/deprogrammer', async (c) => {
 // Découpe d'un BDT de la GOULOTTE en plusieurs morceaux (par TEMPS — un BDT n'a pas de quantité).
 // Le morceau 1 = le BDT d'origine réduit ; les morceaux 2..N sont créés (mêmes rattachements),
 // « à programmer », pour être placés séparément sur le planning.
-// Le temps est LIBRE : chaque morceau reçoit exactement les heures saisies (`parts`), la somme peut
-// différer de la durée d'origine — c'est l'utilisateur qui alloue le temps nécessaire. Avant, la
-// saisie était ramenée au prorata de la durée d'origine et les valeurs invalides retirées en silence.
+// Le temps est LIBRE : chaque morceau reçoit exactement les heures saisies, la somme peut différer de la
+// durée d'origine — c'est l'utilisateur qui alloue le temps nécessaire.
+// (lot C, 14/09/2026) Seul le temps de RÉALISATION se découpe : le réglage, fait une seule fois, reste sur
+// le morceau 1 (le BDT découpé, qui garde son numéro). Corps { realisation: number[], reglage?: number } :
+//   R = temps_reglage du BDT ; vide → retrouvé depuis la gamme (certain seulement, shared.ts
+//   reglageBdtDepuisGamme) ; sinon `reglage` saisi dans la fenêtre ; sinon 0 (tout est réalisation) avec un
+//   avertissement — le réglage du morceau 1 reste alors « inconnu » (null), jamais un 0 inventé.
+//   Morceau 1 : duree = temps_alloue = R + v1, temps_reglage = R ; morceaux k ≥ 2 : duree = vk, temps_reglage = 0.
+//   Ancien corps { parts } (onglet resté ouvert) : accepté seulement si R vaut 0 ou est inconnu, sinon 409.
 app.post('/api/production/bdt/:id/separer', async (c) => {
   const id = c.req.param('id')
   // Un corps JSON « null » est valide pour c.req.json() : sans le `|| {}`, body.parts levait (500).
@@ -6696,40 +6805,89 @@ app.post('/api/production/bdt/:id/separer', async (c) => {
   if (stB !== '' && stB !== 'a_programmer' && b.process_id && b.date_prevue) {
     return c.json({ ok: false, error: 'Ce BDT est posé sur le planning : remettez-le dans la goulotte avant de le découper.' }, 409)
   }
-  // `parts` est OBLIGATOIRE : une valeur en heures par morceau (original compris), 2 à 12 morceaux.
-  if (!Array.isArray(body.parts)) return c.json({ ok: false, error: 'Indiquez le temps de chaque morceau (parts : tableau d’heures).' }, 400)
-  const rawParts: any[] = body.parts
-  if (rawParts.length < 2 || rawParts.length > 12) return c.json({ ok: false, error: 'Un BDT se découpe en 2 à 12 morceaux (' + rawParts.length + ' reçu' + (rawParts.length > 1 ? 's' : '') + ').' }, 400)
-  const r4 = (x: number) => Math.round(x * 10000) / 10000
-  // Précision au 1/100 d'heure : la colonne `duree` du cloud ne garde que 2 décimales (1.23456 relu
-  // 1.23). Arrondir ici garde duree = temps_alloue et un total renvoyé égal à ce qui est en base.
+  // `realisation` : heures de RÉALISATION par morceau (original compris), 2 à 12 morceaux.
+  const ancienCorps = !Array.isArray(body.realisation) && Array.isArray(body.parts)
+  if (!Array.isArray(body.realisation) && !ancienCorps) return c.json({ ok: false, error: 'Indiquez le temps de réalisation de chaque morceau (realisation : tableau d’heures).' }, 400)
   const r2 = (x: number) => Math.round(x * 100) / 100
-  const parts: number[] = []
-  for (let i = 0; i < rawParts.length; i++) {
-    const x = rawParts[i]
-    // Nombre, ou chaîne décimale simple (« 1,5 ») — pas d'hexadécimal ni d'exposant que Number() accepterait.
-    const v = typeof x === 'number' ? x : (typeof x === 'string' && /^\s*\d+([.,]\d+)?\s*$/.test(x) ? Number(x.trim().replace(',', '.')) : NaN)
-    if (!Number.isFinite(v) || r2(v) <= 0) return c.json({ ok: false, error: 'Morceau ' + (i + 1) + ' : le temps doit être un nombre d’heures supérieur à 0 (au centième d’heure près).' }, 400)
-    parts.push(r2(v))
-  }
   // Durée d'origine (information et proportion du temps machine). Un BDT à 0 h se découpe aussi.
   const total = Number(b.duree ?? b.temps_alloue ?? 0) || 0
-  const sumParts = parts.reduce((s, x) => s + x, 0)
-  const tMach = b.temps_machine_alloue == null ? null : (Number(b.temps_machine_alloue) || 0)
-  // Temps machine : même proportion que sur l'original (rapporté à la durée d'origine, ou à la somme
-  // saisie si l'original n'avait pas de durée).
-  const machOf = (d: number) => (tMach as number) * d / (total > 0 ? total : sumParts)
+  const colsReglage = Object.prototype.hasOwnProperty.call(b, 'temps_reglage')
+  const avertissements: string[] = []
+  if (!colsReglage) avertissements.push(AVERT_CLOUD9)
   // Numérotation depuis la RACINE : re-séparer un BDT (ou un morceau) prend le suffixe libre
   // suivant. Avant, « -M2 » était recalculé à chaque fois : la 2ᵉ séparation heurtait la clé
   // primaire, ne créait rien, et rognait quand même l'original.
-  const racine = String(id).replace(/-M\d+$/, '')
-  const dejaLa = await idsMorceauxBDT(racine)
-  if (dejaLa.error) return c.json({ ok: false, error: 'Lecture des morceaux existants impossible : ' + dejaLa.error + '. Rien n’a été modifié.' }, 503)
-  let k = 1
-  for (const x of dejaLa.data) {
-    const m = /-M(\d+)$/.exec(x)
-    if (m && x.slice(0, x.length - m[0].length) === racine) k = Math.max(k, Number(m[1]))
+  const racine = racineBdt(id)
+  const famLue = await lireFamilleBDT(racine)
+  if (famLue.error) return c.json({ ok: false, error: 'Lecture des morceaux existants impossible : ' + famLue.error + '. Rien n’a été modifié.' }, 503)
+  const famille = famLue.data
+  // Page périmée : la fenêtre de découpe renvoie la durée qu'elle a lue et le nombre de bons de la famille (GET /temps).
+  // Si l'un a changé (découpe depuis un autre onglet, durée retouchée), les temps saisis ne correspondent plus à ce bon :
+  // appliqués quand même, ils ajoutaient des heures sans le dire. (L'ancien corps { parts } n'envoie rien : non contrôlé.)
+  if (body.duree_lue != null && body.duree_lue !== '') {
+    const dl = Number(body.duree_lue)
+    if (!Number.isFinite(dl) || Math.abs(dl - total) > 0.005) return c.json({ ok: false, error: 'Page périmée : ce BDT dure maintenant ' + r2(total) + ' h (la fenêtre affichait ' + (Number.isFinite(dl) ? r2(dl) : '?') + ' h). Rechargez le planning. Rien n’a été modifié.' }, 409)
   }
+  if (body.nb_membres != null && body.nb_membres !== '' && Number(body.nb_membres) !== Math.max(1, famille.length)) {
+    return c.json({ ok: false, error: 'Page périmée : la découpe de ce BDT a changé entre-temps (' + Math.max(1, famille.length) + ' bon(s) dans la famille, la fenêtre en comptait ' + Number(body.nb_membres) + '). Rechargez le planning. Rien n’a été modifié.' }, 409)
+  }
+  let k = 1
+  for (const x of famille) if (String(x.id) !== racine) k = Math.max(k, rangMorceauBdt(x.id))
+  // ── Réglage R de ce bon ── (fait UNE seule fois par étape : un seul bon de la famille le porte)
+  const saisiBrut = body.reglage
+  const saisi = (saisiBrut != null && saisiBrut !== '') ? lireHeuresSaisie(saisiBrut) : null
+  if (saisi != null && (!Number.isFinite(saisi) || saisi < 0)) return c.json({ ok: false, error: 'Temps de réglage invalide : nombre d’heures positif ou nul.' }, 400)
+  const autresPorteurs = famille.filter((x: any) => String(x.id) !== String(b.id) && !estAnnule(x.statut) && Number(x.temps_reglage) > 0)
+  const racineActive = famille.some((x: any) => String(x.id) === racine && !estAnnule(x.statut))
+  let R = 0
+  let source: 'bdt' | 'gamme' | 'saisi' | 'famille' | 'inconnu' = 'inconnu'
+  // Écritures de réglage sur les AUTRES bons de la famille encore vides, après la découpe (gamme certaine / saisie).
+  let completerFamille: Array<{ id: string; temps_reglage: number }> = []
+  const vide = (v: any) => v == null || v === ''
+  if (colsReglage && !vide(b.temps_reglage)) { R = Number(b.temps_reglage) || 0; source = 'bdt' }
+  else if (colsReglage && autresPorteurs.length) {
+    // Le réglage de l'étape est DÉJÀ porté par un autre bon de la famille : ce bon-ci n'en a pas. Avant (revue du lot C),
+    // la reconstitution rendait « incertain », la fenêtre ouvrait la saisie et le réglage était compté deux fois.
+    R = 0; source = 'famille'
+    if (saisi != null && r2(saisi) > 0) {
+      const p = autresPorteurs.slice().sort((x: any, y: any) => rangMorceauBdt(x.id) - rangMorceauBdt(y.id))
+      return c.json({ ok: false, error: 'Le réglage de cette étape est déjà porté par ' + p.map((x: any) => String(x.id) + ' (' + r2(Number(x.temps_reglage)) + ' h)').join(', ') + ' : ce morceau ne porte que de la réalisation. Laissez le réglage vide. Rien n’a été modifié.' }, 409)
+    }
+  } else {
+    const cx = await lireContexteReglage(famille.find((x: any) => String(x.id) === racine) || b)
+    if (cx.error && saisi == null) return c.json({ ok: false, error: 'Réglage de ce BDT non vérifiable (lecture de la gamme impossible : ' + cx.error + '). Rien n’a été modifié.' }, 503)
+    const rec = cx.error ? null : reglageBdtDepuisGamme(famille.length ? famille : [b], cx.ctx)
+    if (rec && rec.confiance === 'certain') {
+      const aff = rec.affectations.find((a) => a.id === String(b.id))
+      R = aff ? aff.temps_reglage : (rec.porteur === String(b.id) ? (rec.reglage ?? 0) : 0)
+      source = 'gamme'
+      // Toute la famille reçoit son réglage (le porteur R, les autres 0) : sinon elle restait « renseignée en partie »,
+      // donc incertaine pour toujours, et la saisie se rouvrait sur les autres morceaux.
+      if (colsReglage) completerFamille = rec.affectations.filter((a) => a.id !== String(b.id))
+    } else if (saisi != null) {
+      // Un réglage se saisit sur le BDT d'origine (morceau 1), qui le porte : saisi sur un autre morceau, il s'ajoutait
+      // à celui que le BDT d'origine recevra à sa propre découpe.
+      if (racineActive && String(b.id) !== racine && r2(saisi) > 0) {
+        return c.json({ ok: false, error: 'Le réglage d’une étape découpée se renseigne sur le BDT d’origine ' + racine + ' (morceau 1) : ce morceau ne porte que de la réalisation. Laissez le réglage vide, ou découpez le BDT d’origine. Rien n’a été modifié.' }, 409)
+      }
+      if (r2(saisi) > r2(total) + 0.005) {
+        return c.json({ ok: false, error: 'Le réglage (' + r2(saisi) + ' h) ne peut pas dépasser la durée du BDT (' + r2(total) + ' h). Rien n’a été modifié.' }, 400)
+      }
+      R = r2(saisi); source = 'saisi'
+      if (cx.error) avertissements.push('Gamme illisible (' + cx.error + ') : réglage saisi retenu sans vérification.')
+      if (colsReglage && R > 0) completerFamille = famille.filter((x: any) => String(x.id) !== String(b.id) && !estAnnule(x.statut) && vide(x.temps_reglage)).map((x: any) => ({ id: String(x.id), temps_reglage: 0 }))
+    } else {
+      avertissements.push('Réglage inconnu (' + (rec ? rec.raison : 'gamme illisible') + ') : tout le temps a été traité en réalisation, le réglage reste à renseigner.')
+    }
+  }
+  if (saisi != null && (source === 'bdt' || source === 'gamme') && Math.abs(r2(saisi) - r2(R)) > 0.005) {
+    return c.json({ ok: false, error: 'Le réglage de ce BDT est déjà connu (' + r2(R) + ' h) : rechargez la fenêtre de découpe. Rien n’a été modifié.' }, 409)
+  }
+  if (ancienCorps && r2(R) > 0) {
+    return c.json({ ok: false, error: 'Page périmée : le réglage de ce BDT (' + r2(R) + ' h) ne se découpe plus. Rechargez le planning.' }, 409)
+  }
+  const plan = planDecoupeBdt({ duree: total, tempsMachine: b.temps_machine_alloue, reglage: R, realisation: ancienCorps ? body.parts : body.realisation })
+  if (!plan.ok) return c.json({ ok: false, error: plan.error }, 400)
   // Les morceaux vont dans la GOULOTTE : statut « a_programmer », ni jour, ni heure, ni opérateur.
   // Ils GARDENT le process et le poste de l'original (lien à la gamme) : la goulotte (`enGoulotte`)
   // et la réception (`/recu`) se fondent sur le statut et le jour, un process renseigné ne pose donc
@@ -6746,28 +6904,300 @@ app.post('/api/production/bdt/:id/separer', async (c) => {
   //    SANS avoir touché l'original. Avant, l'original était réduit en premier et les échecs
   //    d'insertion avalés : des heures disparaissaient.
   const created: string[] = []
-  for (let i = 1; i < parts.length; i++) {
+  const etatReglage = { sansReglage: !colsReglage }
+  for (let i = 1; i < plan.morceaux.length; i++) {
     k++
     const payload: any = { id: `${racine}-M${k}`, statut: 'a_programmer', operateur_id: null, debut: null, date_prevue: null }
     for (const col of COPY) if (b[col] != null) payload[col] = b[col]
-    payload.duree = parts[i]; payload.temps_alloue = parts[i]
-    if (tMach != null) payload.temps_machine_alloue = r4(machOf(parts[i]))
-    const { error } = await createBDTRow(payload)
+    const m = plan.morceaux[i]
+    payload.duree = m.duree; payload.temps_alloue = m.duree
+    // Temps machine : 0 quand l'original n'en a pas (sinon Maintenance compterait l'étape entière par morceau).
+    if (m.temps_machine_alloue != null) payload.temps_machine_alloue = m.temps_machine_alloue
+    payload.temps_reglage = 0   // le réglage reste sur le morceau 1
+    const { error } = await creerBDTAvecReglage(payload, etatReglage)
     if (error) {
       const reste = await retourArriere(created)
       return c.json({ ok: false, error: 'Création du morceau ' + payload.id + ' refusée : ' + error.message + '.' + (reste || ' Rien n’a été modifié.') }, 400)
     }
     created.push(payload.id)
   }
-  // 2) Réduire l'original au 1ᵉʳ morceau : il garde sa place, son statut et son id.
-  const patchOrig: any = { duree: parts[0], temps_alloue: parts[0] }
-  if (tMach != null) patchOrig.temps_machine_alloue = r4(machOf(parts[0]))
-  const { error: eUpd } = await updateBDT(id, patchOrig)
-  if (eUpd) {
-    const reste = await retourArriere(created)
-    return c.json({ ok: false, error: 'Réduction de l’original refusée : ' + eUpd.message + '.' + (reste || ' Les morceaux ont été retirés.') }, 400)
+  // 2) Réduire l'original au 1ᵉʳ morceau : il garde sa place, son statut et son id, et le réglage.
+  const m1 = plan.morceaux[0]
+  let patchOrig: any = { duree: m1.duree, temps_alloue: m1.duree }
+  if (m1.temps_machine_alloue != null) patchOrig.temps_machine_alloue = m1.temps_machine_alloue
+  if (source !== 'inconnu') patchOrig.temps_reglage = m1.temps_reglage
+  // 1ʳᵉ découpe de la racine (aucun morceau) : sa durée actuelle EST la durée d'origine, gardée pour un vrai retour
+  // arrière (« Annuler la découpe »). Écrasée à chaque fois : une valeur restée d'un recollage précédent serait fausse.
+  const premiereDecoupe = String(b.id) === racine && !famille.some((x: any) => String(x.id) !== racine)
+  if (premiereDecoupe) {
+    patchOrig.duree_avant_decoupe = Math.round(total * 10000) / 10000
+    patchOrig.temps_machine_avant_decoupe = vide(b.temps_machine_alloue) ? null : Number(b.temps_machine_alloue)
   }
-  return c.json({ ok: true, count: created.length + 1, created, total_avant: r4(total), total_apres: r2(sumParts) })
+  if (etatReglage.sansReglage) patchOrig = sansColsReglage(patchOrig)
+  // Réduction CONDITIONNELLE : le bon doit être encore tel qu'il a été lu (même statut, même durée, pas démarré). Sinon
+  // deux découpes simultanées du même BDT s'appliquaient toutes les deux et gonflaient le temps alloué.
+  const attenduOrig = { statut: b.statut ?? null, duree: b.duree ?? null, temps_reel: null }
+  let red = await majBDTConditionnelle(id, patchOrig, attenduOrig)
+  if (red.error && !etatReglage.sansReglage && RE_COL_REGLAGE.test(String(red.error || ''))) {
+    etatReglage.sansReglage = true
+    red = await majBDTConditionnelle(id, sansColsReglage(patchOrig), attenduOrig)
+  }
+  if (red.error || !red.data) {
+    const reste = await retourArriere(created)
+    if (red.error) return c.json({ ok: false, error: 'Réduction de l’original refusée : ' + red.error + '.' + (reste || ' Les morceaux ont été retirés.') }, 400)
+    return c.json({ ok: false, error: 'Ce BDT a changé entre-temps (autre découpe, durée ou statut modifiés) : rechargez le planning.' + (reste || ' Rien n’a été modifié.') }, 409)
+  }
+  if (etatReglage.sansReglage && !avertissements.includes(AVERT_CLOUD9)) avertissements.push(AVERT_CLOUD9)
+  // Le reste de la famille reçoit son réglage (le porteur R, les autres 0), seulement là où il est encore vide.
+  if (!etatReglage.sansReglage && completerFamille.length) {
+    const rates: string[] = []
+    for (const a of completerFamille) {
+      const w = await ecrireReglageSiVide(a.id, a.temps_reglage)
+      if (w.error) rates.push(a.id + ' (' + w.error + ')')
+    }
+    if (rates.length) avertissements.push('Réglage non écrit sur ' + rates.join(', ') + ' : la famille reste à compléter (POST /api/production/bdt/reglage/reconstituer).')
+  }
+  await recalculerCommandeApres(c, b.cmd_id || b.cmd_ref || b.num_affaire)
+  return c.json({ ok: true, count: created.length + 1, created, total_avant: plan.total_avant, total_apres: plan.total_apres,
+    reglage: source === 'inconnu' ? null : plan.reglage, reglage_source: source,
+    realisation_avant: plan.realisation_avant, realisation_apres: plan.realisation_apres,
+    ...(avertissements.length ? { avertissement: avertissements.join(' ') } : {}) })
+})
+
+// Avancement (bdt_total) et coût de la commande après une découpe / un recollage — NON bloquant : sur
+// Cloudflare le calcul continue après la réponse (waitUntil) ; hors Workers (Node, tests) on l'attend.
+async function recalculerCommandeApres(c: any, ref: any) {
+  if (!ref) return
+  const p = Promise.all([recomputeCmdAvancement(String(ref)).catch(() => {}), recomputeCmdCout(String(ref)).catch(() => {})]).then(() => {})
+  try { c.executionCtx.waitUntil(p); return } catch { /* pas de contexte d'exécution Workers */ }
+  await p
+}
+
+// Réglage et réalisation d'un BDT, pour la fenêtre de découpe.
+//   → { duree, reglage (h | null), realisation, source:'bdt'|'gamme'|'inconnu', confiance:'certain'|'incertain'|'inconnu',
+//       raison, propose (incertain : réglage de la gamme pour pré-remplir), porteur, famille[], nb_morceaux, colonne_absente }
+app.get('/api/production/bdt/:id/temps', async (c) => {
+  const id = c.req.param('id')
+  const lu = await getBDTStrict(id)
+  if (lu.error) return c.json({ ok: false, error: 'Lecture du BDT impossible : ' + lu.error }, 503)
+  const b = lu.data
+  if (!b) return c.json({ ok: false, error: 'BDT introuvable.' }, 404)
+  const racine = racineBdt(b.id)
+  const fam = await lireFamilleBDT(racine)
+  if (fam.error) return c.json({ ok: false, error: 'Lecture de la famille du BDT impossible : ' + fam.error }, 503)
+  const famille = fam.data.length ? fam.data : [b]
+  const num = (v: any): number | null => (v == null || v === '' || !Number.isFinite(Number(v))) ? null : Number(v)
+  const r2 = (x: number) => Math.round(x * 100) / 100
+  const duree = num(b.duree) ?? num(b.temps_alloue) ?? 0
+  const colonne_absente = !Object.prototype.hasOwnProperty.call(b, 'temps_reglage')
+  const base = {
+    ok: true, id: String(b.id), racine, duree, temps_alloue: num(b.temps_alloue), colonne_absente,
+    duree_avant_decoupe: num(b.duree_avant_decoupe),
+    nb_morceaux: famille.length,
+    famille: famille.slice().sort((x: any, y: any) => rangMorceauBdt(x.id) - rangMorceauBdt(y.id))
+      .map((x: any) => ({ id: String(x.id), rang: rangMorceauBdt(x.id), duree: num(x.duree), temps_reglage: num(x.temps_reglage), statut: x.statut ?? null })),
+  }
+  // saisie_possible : la fenêtre ouvre le champ réglage (réglage inconnu, et ce bon est celui qui le porterait).
+  const reponse = (reglage: number | null, source: string, confiance: string, raison: string, propose: number | null, porteur: string | null, saisie_possible = false) =>
+    c.json({ ...base, reglage, realisation: reglage == null ? null : r2(Math.max(0, duree - reglage)), source, confiance, raison, propose, porteur, saisie_possible })
+  if (!colonne_absente && num(b.temps_reglage) != null) {
+    return reponse(num(b.temps_reglage), 'bdt', 'certain', 'réglage enregistré sur le BDT', null, String(b.id))
+  }
+  // Même règle que /separer : le réglage de l'étape est déjà porté par un autre bon de la famille → ce bon n'en a pas.
+  const autresPorteurs = colonne_absente ? [] : famille.filter((x: any) => String(x.id) !== String(b.id) && !estAnnule(x.statut) && (num(x.temps_reglage) ?? 0) > 0)
+    .sort((x: any, y: any) => rangMorceauBdt(x.id) - rangMorceauBdt(y.id))
+  if (autresPorteurs.length) {
+    return reponse(0, 'famille', 'certain', 'réglage de l’étape déjà porté par ' + autresPorteurs.map((x: any) => String(x.id) + ' (' + r2(Number(x.temps_reglage)) + ' h)').join(', ') + ' : ce morceau n’en a pas', null, String(autresPorteurs[0].id))
+  }
+  const cx = await lireContexteReglage(famille.find((x: any) => String(x.id) === racine) || b)
+  if (cx.error) return c.json({ ok: false, error: 'Lecture de la gamme impossible : ' + cx.error }, 503)
+  const rec = reglageBdtDepuisGamme(famille, cx.ctx)
+  if (rec.confiance === 'certain') {
+    const aff = rec.affectations.find((a) => a.id === String(b.id))
+    const R = aff ? aff.temps_reglage : (rec.porteur === String(b.id) ? (rec.reglage ?? 0) : 0)
+    return reponse(R, rec.source === 'bdt' ? 'bdt' : 'gamme', 'certain', rec.raison, null, rec.porteur)
+  }
+  const racineActive = famille.some((x: any) => String(x.id) === racine && !estAnnule(x.statut))
+  if (racineActive && String(b.id) !== racine) {
+    return reponse(null, 'inconnu', rec.confiance, 'réglage non renseigné (' + rec.raison + ') : il se renseigne sur le BDT d’origine ' + racine + ' (morceau 1), ce morceau ne porte que de la réalisation', null, null, false)
+  }
+  return reponse(null, rec.source === 'gamme' ? 'gamme' : 'inconnu', rec.confiance, rec.raison, rec.propose, rec.porteur, true)
+})
+
+// Annuler une découpe : recoller une famille (racine + morceaux « -Mk ») en un seul BDT. `id` = n'importe quel membre.
+// Recollable seulement si RIEN n'a commencé : tous les membres dans la goulotte (statut vide ou « a_programmer »),
+// sans temps réel, sans début réel, sans opérateur, ni sous-traités ni annulés, et aucune trace à leur nom
+// (historiques opérateur/machine, NC, sorties de stock, relevés de cotes).
+// Durée recollée = duree_avant_decoupe si connue (vrai retour arrière), sinon Σ des durées ; réglage = Σ des
+// réglages renseignés ; temps machine = temps_machine_avant_decoupe, sinon Σ (null si tout est vide).
+// L'opération est REJOUABLE (revue du lot C) : relancée après un échec à mi-parcours, ou lancée deux fois en même temps,
+// elle retombe sur la même durée. Avant, la racine perdait sa durée d'origine AVANT le retrait des morceaux : un 2ᵉ essai
+// additionnait la racine déjà recollée et les morceaux restés (10 h → 15 h, sans message).
+// Ordre (colonnes du lot C présentes) :
+//   1) racine mise à jour sous condition de l'état LU (statut, pas démarrée, même durée, même durée d'origine), la durée
+//      d'origine étant POSÉE à la valeur recollée et gardée tant qu'un morceau existe ;
+//   2) retrait des morceaux sous garde-fous + RELECTURE ; morceau resté → racine réduite d'autant (« recollage partiel ») ;
+//   3) plus aucun morceau → durée d'origine remise à vide.
+// Base sans ces colonnes (cloud avant cloud-9) : pas de repère possible, donc les morceaux sont retirés D'ABORD et la
+// racine reçoit ensuite exactement les heures des morceaux réellement retirés.
+app.post('/api/production/bdt/:id/recoller', async (c) => {
+  const id = c.req.param('id')
+  const racine = racineBdt(id)
+  const fam = await lireFamilleBDT(racine)
+  if (fam.error) return c.json({ ok: false, error: 'Lecture des morceaux impossible : ' + fam.error + '. Rien n’a été modifié.' }, 503)
+  const famille = fam.data
+  const tete = famille.find((x: any) => String(x.id) === racine)
+  if (!tete) return c.json({ ok: false, error: 'BDT d’origine ' + racine + ' introuvable.' }, 404)
+  const morceaux = famille.filter((x: any) => String(x.id) !== racine)
+  if (!morceaux.length) return c.json({ ok: false, error: 'Ce BDT n’est pas découpé : rien à recoller.' }, 400)
+  const libM = (x: any) => rangMorceauBdt(x) === 1 ? 'Le BDT d’origine (M1)' : 'M' + rangMorceauBdt(x)
+  const bloquants = blocagesRecollage(famille)
+  if (bloquants.length) return c.json({ ok: false, error: 'Annulation de la découpe impossible : ' + bloquants.join(' · ') + '.', bloquants }, 409)
+  const tr = await lireTracesBDT(famille.map((x: any) => String(x.id)))
+  if (tr.error) return c.json({ ok: false, error: 'Vérification des traces impossible (' + tr.error + '). Rien n’a été modifié.' }, 503)
+  if (tr.traces.length) {
+    const LIB: Record<string, string> = { operateur_bdt_historique: 'historique opérateur', machine_bdt_historique: 'historique machine', non_conformites: 'non-conformité', mouvements_stock: 'sortie de stock', controles_cotes: 'relevé de cotes' }
+    const parId: Record<string, Set<string>> = {}
+    for (const t of tr.traces) (parId[t.bdt_id] = parId[t.bdt_id] || new Set<string>()).add(LIB[t.table] || t.table)
+    const traces = Object.keys(parId).sort((a, b2) => rangMorceauBdt(a) - rangMorceauBdt(b2)).map((bid) => libM(bid) + ' déjà utilisé (' + Array.from(parId[bid]).join(', ') + ') : découpe définitive')
+    return c.json({ ok: false, error: 'Annulation de la découpe impossible : ' + traces.join(' · ') + '.', bloquants: traces }, 409)
+  }
+  const colsReglage = Object.prototype.hasOwnProperty.call(tete, 'temps_reglage')
+  const colsAvant = Object.prototype.hasOwnProperty.call(tete, 'duree_avant_decoupe')
+  const cible = cibleRecollage(tete, famille)
+  const lesRestes = (rs: any[]) => rs.map((x: any) => libM(x.id)).join(', ') + ' resté' + (rs.length > 1 ? 's' : '') + ' en base (posé ou modifié entre-temps)'
+  const repondre = async (o: { restants: any[]; duree: number; temps_reglage: number | null; temps_machine_alloue: number | null; avertissements: string[] }) => {
+    const restantsIds = new Set(o.restants.map((x: any) => String(x.id)))
+    await recalculerCommandeApres(c, tete.cmd_id || tete.cmd_ref || tete.num_affaire)
+    return c.json({ ok: true, racine, partiel: o.restants.length > 0,
+      supprimes: morceaux.map((x: any) => String(x.id)).filter((x: string) => !restantsIds.has(x)), restants: Array.from(restantsIds),
+      duree: o.duree, temps_reglage: colsReglage ? o.temps_reglage : null, temps_machine_alloue: o.temps_machine_alloue,
+      source_duree: cible.source_duree, somme_durees: cible.somme_durees,
+      ...(tr.ignorees.length ? { traces_non_verifiees: tr.ignorees } : {}),
+      ...(o.avertissements.length ? { avertissement: o.avertissements.join(' ') } : {}) })
+  }
+  // État LU de la racine : toute écriture sur elle exige qu'il n'ait pas bougé (verrou optimiste).
+  const attenduTete: Record<string, any> = { statut: tete.statut ?? null, temps_reel: null, debut_reel: null, operateur_id: null, duree: tete.duree ?? null }
+
+  if (colsAvant) {
+    // 1) Racine à la valeur recollée ; durée d'origine POSÉE (= durée recollée) tant qu'un morceau existe : un nouvel essai
+    //    ou une requête simultanée la relit et retombe sur la même durée, au lieu d'additionner racine et morceaux.
+    const patch: any = { duree: cible.duree, temps_alloue: cible.temps_alloue, temps_machine_alloue: cible.temps_machine_alloue,
+      duree_avant_decoupe: cible.duree, temps_machine_avant_decoupe: cible.temps_machine_alloue }
+    if (colsReglage) patch.temps_reglage = cible.temps_reglage
+    const maj = await majBDTConditionnelle(racine, patch, { ...attenduTete, duree_avant_decoupe: tete.duree_avant_decoupe ?? null })
+    if (maj.error) return c.json({ ok: false, error: 'Mise à jour du BDT d’origine refusée : ' + maj.error + '. Rien n’a été modifié.' }, 400)
+    if (!maj.data) return c.json({ ok: false, error: 'Le BDT d’origine a changé entre-temps (programmé, reçu, affecté, ou découpe déjà en cours d’annulation) : rechargez le planning. Rien n’a été modifié.' }, 409)
+    // 2) Morceaux retirés sous garde-fous, puis RELUS.
+    const del = await retirerMorceauxBDTGardes(morceaux)
+    if (del.error) {
+      return c.json({ ok: false, error: 'Relecture impossible après le retrait des morceaux (' + del.error + ') : relancez « Annuler la découpe » — l’opération reprend là où elle s’est arrêtée, sans compter deux fois (le BDT d’origine porte déjà ' + cible.duree + ' h).' }, 503)
+    }
+    const avertissements: string[] = []
+    if (del.restants.length) {
+      // Recollage partiel : racine = cible − morceaux restés. La durée d'origine reste posée (la famille existe encore).
+      const adj = ajusterRecollagePartiel(cible, del.restants)
+      const patch2: any = { duree: adj.duree, temps_alloue: adj.temps_alloue, temps_machine_alloue: adj.temps_machine_alloue }
+      if (colsReglage) patch2.temps_reglage = adj.temps_reglage
+      const u2 = await majBDTConditionnelle(racine, patch2, { duree: cible.duree, duree_avant_decoupe: cible.duree })
+      avertissements.push('Recollage partiel : ' + lesRestes(del.restants) + ' — le BDT d’origine a été réduit d’autant.'
+        + (u2.error || !u2.data ? ' ⚠ Réduction du BDT d’origine refusée (' + (u2.error || 'modifié entre-temps') + ') : il porte ' + cible.duree + ' h ; relancez « Annuler la découpe » une fois le morceau resté remis dans la goulotte.' : ''))
+      const ok2 = !u2.error && !!u2.data
+      return repondre({ restants: del.restants, duree: ok2 ? adj.duree : cible.duree, temps_reglage: ok2 ? adj.temps_reglage : cible.temps_reglage, temps_machine_alloue: ok2 ? adj.temps_machine_alloue : cible.temps_machine_alloue, avertissements })
+    }
+    // 3) Plus aucun morceau : la durée d'origine n'a plus lieu d'être (la prochaine découpe la réécrit de toute façon).
+    const fin = await majBDTConditionnelle(racine, { duree_avant_decoupe: null, temps_machine_avant_decoupe: null }, { duree: cible.duree, duree_avant_decoupe: cible.duree })
+    if (fin.error || !fin.data) avertissements.push('Durée d’origine restée inscrite sur ' + racine + ' (' + (fin.error || 'BDT modifié entre-temps') + ') : sans effet, la prochaine découpe la réécrit.')
+    return repondre({ restants: [], duree: cible.duree, temps_reglage: cible.temps_reglage, temps_machine_alloue: cible.temps_machine_alloue, avertissements })
+  }
+
+  // Base sans les colonnes du lot C : aucun repère pour rejouer l'opération. Les morceaux sont retirés D'ABORD ; la racine
+  // reçoit ensuite ses heures + celles des morceaux RÉELLEMENT retirés (jamais celles d'un morceau resté en base).
+  const del = await retirerMorceauxBDTGardes(morceaux)
+  if (del.error) {
+    return c.json({ ok: false, error: 'Relecture impossible après le retrait des morceaux (' + del.error + ') : le BDT d’origine n’a pas été modifié. Si des morceaux ont disparu du planning, ' + racine + ' doit recevoir leurs heures (' + morceaux.map((x: any) => libM(x.id) + ' ' + (Number(x.duree ?? x.temps_alloue) || 0) + ' h').join(', ') + '). ' + AVERT_CLOUD9 }, 503)
+  }
+  const restantsIds = new Set(del.restants.map((x: any) => String(x.id)))
+  const retires = morceaux.filter((x: any) => !restantsIds.has(String(x.id)))
+  const h = (x: any, col: string) => { const v = x?.[col]; return v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v) }
+  const r2 = (x: number) => Math.round(x * 100) / 100
+  const duree = r2((h(tete, 'duree') ?? h(tete, 'temps_alloue') ?? 0) + retires.reduce((s: number, x: any) => s + (h(x, 'duree') ?? h(x, 'temps_alloue') ?? 0), 0))
+  const machs = [tete, ...retires].map((x: any) => h(x, 'temps_machine_alloue')).filter((v): v is number => v != null)
+  const temps_machine_alloue = machs.length ? Math.round(machs.reduce((s, v) => s + v, 0) * 10000) / 10000 : null
+  const avertissements: string[] = []
+  if (!retires.length) return c.json({ ok: false, error: 'Aucun morceau n’a pu être retiré (' + lesRestes(del.restants) + ', ou suppression refusée par la base) : rien n’a été modifié.' }, 409)
+  {
+    const u = await majBDTConditionnelle(racine, { duree, temps_alloue: duree, temps_machine_alloue }, attenduTete)
+    if (u.error || !u.data) {
+      // Une autre annulation simultanée a pu faire le travail : si la racine porte déjà ces heures, c'est un succès.
+      const relu = u.error ? null : await getBDTStrict(racine)
+      const dejaFait = !!relu && !relu.error && !!relu.data && Math.abs((Number(relu.data.duree) || 0) - duree) < 0.005
+      if (!dejaFait) {
+        return c.json({ ok: false, error: 'Morceaux retirés (' + retires.map((x: any) => libM(x.id)).join(', ') + ') mais BDT d’origine non mis à jour (' + (u.error || 'modifié entre-temps') + ') : ' + racine + ' doit porter ' + duree + ' h — à vérifier au planning. ' + AVERT_CLOUD9 }, 409)
+      }
+      avertissements.push('Découpe déjà annulée par une autre demande simultanée.')
+    }
+  }
+  if (del.restants.length) avertissements.push('Recollage partiel : ' + lesRestes(del.restants) + ' — ses heures restent sur le morceau.')
+  avertissements.push(AVERT_CLOUD9)
+  return repondre({ restants: del.restants, duree, temps_reglage: null, temps_machine_alloue, avertissements })
+})
+
+// Réglage des BDT existants retrouvé depuis leur gamme (à lancer une fois après la migration 011 / cloud-9).
+//   { appliquer: false } (défaut) → rapport ligne à ligne : certain / incertain / inconnu, avec la raison ;
+//   { appliquer: true }           → écrit SEULEMENT les certains, sur les bons dont le réglage est encore vide, puis RELIT.
+app.post('/api/production/bdt/reglage/reconstituer', async (c) => {
+  const body = ((await c.req.json().catch(() => null)) || {}) as any
+  const appliquer = body.appliquer === true
+  const lus = await lireBDTsStrict()
+  if (lus.error) return c.json({ ok: false, error: 'Lecture des BDT impossible : ' + lus.error }, 503)
+  if (lus.data.length && !Object.prototype.hasOwnProperty.call(lus.data[0], 'temps_reglage')) return c.json({ ok: false, error: AVERT_CLOUD9 }, 409)
+  const familles = new Map<string, any[]>()
+  for (const x of lus.data) { const r = racineBdt(x.id); const l = familles.get(r) || []; l.push(x); familles.set(r, l) }
+  const vide = (v: any) => v == null || v === ''
+  const aTraiter = Array.from(familles.values()).filter((f) => f.some((x: any) => !estAnnule(x.statut) && vide(x.temps_reglage)))
+  const deja = familles.size - aTraiter.length
+  let ctx: any = { lots: [], nomenclatures: [], dts: [], process: [] }
+  if (aTraiter.length) {
+    const cx = await lireContexteReglage()
+    if (cx.error) return c.json({ ok: false, error: 'Lecture des gammes impossible : ' + cx.error }, 503)
+    ctx = cx.ctx
+  }
+  const lignes = aTraiter.map((f) => {
+    const rec = reglageBdtDepuisGamme(f, ctx)
+    return { racine: rec.racine, bons: f.map((x: any) => String(x.id)).sort((a: string, b2: string) => rangMorceauBdt(a) - rangMorceauBdt(b2)),
+      confiance: rec.confiance, reglage: rec.reglage, porteur: rec.porteur, raison: rec.raison, formule: rec.formule,
+      nomenclature: rec.nomenclature, duree_gamme: rec.duree_gamme, propose: rec.propose, affectations: rec.affectations }
+  }).sort((a, b2) => a.racine.localeCompare(b2.racine))
+  const compte = (cf: string) => lignes.filter((l) => l.confiance === cf).length
+  let ecrits = 0, verifies = 0
+  const echecs: Array<{ id: string; error: string }> = []
+  if (appliquer) {
+    const attendus: Array<{ id: string; temps_reglage: number }> = []
+    for (const l of lignes) {
+      if (l.confiance !== 'certain') continue
+      for (const a of l.affectations) {
+        const w = await ecrireReglageSiVide(a.id, a.temps_reglage)
+        if (w.error) { echecs.push({ id: a.id, error: w.error }); continue }
+        if (w.ecrit) { ecrits++; attendus.push(a) }
+      }
+    }
+    if (attendus.length) {
+      const relus = await lireBDTsStrict()
+      if (relus.error) echecs.push({ id: '*', error: 'relecture impossible : ' + relus.error })
+      else {
+        const parId = new Map(relus.data.map((x: any) => [String(x.id), x]))
+        for (const a of attendus) {
+          const x: any = parId.get(a.id)
+          if (x && !vide(x.temps_reglage) && Math.abs(Number(x.temps_reglage) - a.temps_reglage) < 1e-6) verifies++
+          else echecs.push({ id: a.id, error: 'relu ' + (x ? String(x.temps_reglage) : 'absent') + ' au lieu de ' + a.temps_reglage })
+        }
+      }
+    }
+  }
+  return c.json({ ok: echecs.length === 0, appliquer, familles: familles.size, deja_renseignees: deja, a_traiter: aTraiter.length,
+    certains: compte('certain'), incertains: compte('incertain'), inconnus: compte('inconnu'),
+    ecrits, verifies, echecs, lignes })
 })
 
 // Nom complet d'un opérateur (réception / soldage d'un BDT, historiques).
@@ -7060,11 +7490,27 @@ app.post('/api/production/bst/:id/affecter-st', async (c) => {
   const body = await c.req.json().catch(() => ({} as any))
   const fournId = body.sous_traitant_id
   const day = body.day || new Date().toISOString().slice(0, 10)
-  const [bdsList, sts, bcs] = await Promise.all([
-    getPlanningBDS().catch(() => []), getSousTraitantsAll().catch(() => []), getBonsDeCommande().catch(() => []),
-  ])
-  const bds = (bdsList as any[]).find((x: any) => String(x.id) === String(id))
+  // Lecture STRICTE du BST : une panne n'est pas « BST introuvable ».
+  const luBds = await getBDSStrict(id)
+  if (luBds.error) return c.json({ ok: false, error: 'Lecture du BST impossible : ' + luBds.error + '. Rien n’a été modifié.' }, 503)
+  const bds: any = luBds.data
   if (!bds) return c.json({ ok: false, error: 'BST introuvable' }, 404)
+  // ── CHEMIN CRITIQUE (lot C) : un BST ne part pas avant la fin COMPLÈTE de l'étape précédente (ou le retour
+  //    de la sous-traitance précédente). Contrôle AU JOUR, avant de créer le BC : jour antérieur → 409.
+  const cleBds = cleLot(bds)
+  let lotBds: { bdts: any[]; bds: any[] } = { bdts: [], bds: [] }
+  const cibleBds = { ...bds, date_envoi: day, date_debut: day, ...(body.duree_days ? { duree_days: Number(body.duree_days) } : {}) }
+  let ctlBds: ReturnType<typeof controleEnchainement> | null = null
+  if (cleBds && bds.seq != null) {
+    const lo = await lireOperationsDuLot(cleBds)
+    if (lo.error) return c.json({ ok: false, error: 'Lecture des opérations du lot ' + cleBds + ' impossible (chemin critique non vérifiable) : ' + lo.error + '. Rien n’a été modifié.' }, 503)
+    lotBds = lo
+    ctlBds = controleEnchainement(cibleBds, [...lo.bdts, ...lo.bds])
+    if (ctlBds.etat === 'refus') return c.json({ ok: false, error: ctlBds.message, au_plus_tot: ctlBds.au_plus_tot }, 409)
+  }
+  const [sts, bcs] = await Promise.all([
+    getSousTraitantsAll().catch(() => []), getBonsDeCommande().catch(() => []),
+  ])
   const st = (sts as any[]).find((f: any) => String(f.id) === String(fournId))
   const isUuid = UUID_RE.test(String(fournId || ''))
   let bcId = bds.bc_id || null
@@ -7096,7 +7542,8 @@ app.post('/api/production/bst/:id/affecter-st', async (c) => {
   if (isUuid) patch.sous_traitant_id = String(fournId)
   const { data, error } = await updateBDS(id, patch)
   if (error) return c.json({ ok: false, error: error.message })
-  return c.json({ ok: true, data, bc_id: bcId, fournisseur: st?.nom ?? String(fournId) })
+  const successeurs = cleBds ? successeursEnViolation({ ...cibleBds, ...patch, ...(data || {}) }, [...lotBds.bdts, ...lotBds.bds]) : []
+  return c.json({ ok: true, data, bc_id: bcId, fournisseur: st?.nom ?? String(fournId), au_plus_tot: ctlBds ? ctlBds.au_plus_tot : null, successeurs_en_violation: successeurs })
 })
 
 // ─── API : créer une machine + l'intégrer au planning BDT (process atelier) ───
@@ -7229,24 +7676,56 @@ app.delete('/api/production/machine/:id', async (c) => {
   return c.json({ ok: true, process_detaches: procs.length })
 })
 
-// ─── API : présence opérateur (upsert d'une case jour×opérateur) ───
+// ─── API : présences opérateur (onglet Présence de /production/service) ───
+// Lot C · C1 (14/09/2026) — « un clic sur une case ne s'enregistre pas » :
+//  · Docker/VM : l'upsert exige un index unique (operateur_id, date_presence) que la base n'avait pas (42P10 → 400) —
+//    migration 010 / cloud-8 ; le message le dit désormais au lieu de « Sauvegarde présence échouée ».
+//  · un créneau inconnu est REFUSÉ (avant : repli silencieux sur « journee ») ; vider une case = DELETE (avant : « absent »).
+//  · salarié lu de façon CIBLÉE (avant : toute la table salaries à chaque clic, et une panne passait pour « inconnu »).
+// Lecture d'une fenêtre (navigation de semaine) : ?from=AAAA-MM-JJ&to=AAAA-MM-JJ, 62 jours maximum.
+app.get('/api/production/presence', async (c) => {
+  const f = validerFenetre(c.req.query('from'), c.req.query('to'))
+  if (!f.ok) return c.json({ ok: false, error: f.error }, 400)
+  const { data, error } = await getPresencesFenetre(f.from, f.to)
+  if (error || !data) return c.json({ ok: false, error: 'Lecture des présences impossible : ' + (error ? error.message : 'réponse vide') }, 503)
+  return c.json({
+    ok: true, from: f.from, to: f.to,
+    presences: data.map((p: any) => ({ operateur_id: String(p.operateur_id), date: String(p.date_presence).slice(0, 10), shift: p.shift ?? '' })),
+  })
+})
+
 app.post('/api/production/presence', async (c) => {
   const b = await c.req.json().catch(() => ({} as any))
-  if (!b.operateur_id || !b.date_presence) return c.json({ ok: false, error: 'operateur_id et date_presence requis' }, 400)
-  const shift = ['matin', 'apmidi', 'journee', 'soir', 'absent'].includes(b.shift) ? b.shift : 'journee'
-  // Nom + activité dérivés de la source de vérité (salaries) — jamais le nom figé du front
-  const sals = await getSalaries().catch(() => [] as any[])
-  const s = (sals as any[]).find(x => String(x.id) === String(b.operateur_id))
+  const v = validerCorpsPresence(b, 'ecrire')
+  if (!v.ok) return c.json({ ok: false, error: v.error }, 400)
+  // Nom + activité dérivés de la source de vérité (salaries) — jamais le nom figé du front ; salarié inconnu : nom du front
+  const { data: s, error: eS } = await getSalarieCible(v.operateur_id)
+  if (eS) return c.json({ ok: false, error: 'Lecture du salarié impossible : ' + eS.message }, 503)
   const { data, error } = await upsertPresence({
-    operateur_id: String(b.operateur_id),
-    operateur_nom: s ? (`${s.prenom ?? ''} ${s.nom ?? ''}`.trim() || s.id) : (b.operateur_nom || null),
-    activite: s ? s.entite : (b.activite || null),
-    date_presence: b.date_presence,
-    shift,
-    source: b.source || 'manuel',
+    operateur_id: v.operateur_id,
+    operateur_nom: s ? (`${s.prenom ?? ''} ${s.nom ?? ''}`.trim() || s.id) : (b.operateur_nom ? String(b.operateur_nom) : null),
+    activite: s ? s.entite : (b.activite ? String(b.activite) : null),
+    date_presence: v.date_presence,
+    shift: v.shift,
+    source: b.source ? String(b.source) : 'manuel',
   })
-  if (error) return c.json({ ok: false, error: error.message }, 400)
+  if (error) { const m = messageEchecUpsert(error, 'operateur_id, date_presence'); return c.json({ ok: false, error: m.error }, m.status) }
   return c.json({ ok: true, presence: data })
+})
+
+// Vider une case (opérateur × jour) : corps JSON { operateur_id, date_presence } (ou mêmes paramètres en query).
+// Vider une case déjà vide n'est pas une erreur. La suppression est RELUE : un refus silencieux des droits → 409.
+app.delete('/api/production/presence', async (c) => {
+  const b = await c.req.json().catch(() => ({} as any))
+  const v = validerCorpsPresence({
+    operateur_id: b.operateur_id ?? c.req.query('operateur_id'),
+    date_presence: b.date_presence ?? c.req.query('date_presence'),
+  }, 'effacer')
+  if (!v.ok) return c.json({ ok: false, error: v.error }, 400)
+  const { restantes, error } = await deletePresence(v.operateur_id, v.date_presence)
+  if (error) return c.json({ ok: false, error: 'Effacement impossible : ' + error.message }, 400)
+  if (restantes) return c.json({ ok: false, error: 'Effacement refusé par la base : la présence est toujours enregistrée (droits de suppression ?).' }, 409)
+  return c.json({ ok: true })
 })
 
 // ─── API : affectation opérateur → poste/process (planning, par jour) ───
@@ -9389,16 +9868,15 @@ app.post('/api/pointage/demande-conge', async (c) => {
   return c.json({ ok: true, conge: data, routed, nb_heures: nbHeures })
 })
 
-app.post('/api/rh/conge/:id/valider', async (c) => {
-  const id = c.req.param('id')
-  const b = await c.req.json().catch(() => ({} as any))
-  const decision = b.decision === 'refuse' ? 'refuse' : 'valide'
-  const conges = await getConges().catch(() => [] as any[])
-  const conge = (conges as any[]).find(x => String(x.id) === String(id))
-  if (!conge) return c.json({ ok: false, error: 'Congé introuvable' }, 404)
-  const { data, error } = await updateConge(id, { statut: decision, valide_par: b.valide_par || 'RH', valide_le: new Date().toISOString() })
-  if (error) return c.json({ ok: false, error: error.message }, 400)
+// Effets d'une décision sur un congé, COMMUNS à RH (/api/rh/conge/:id/valider) et à Production
+// (/api/production/conge/:id/valider) — le statut est déjà écrit par l'appelant. Validé : une absence par jour ouvré
+// (planning de présence forcé « absent »), BDT de l'opérateur sur la période renvoyés au pool, décompte du solde.
+// Chaque effet raté est DIT dans `warning` (revue du lot C) : la décision est déjà écrite et un 2ᵉ clic répond 409, un
+// effet silencieusement perdu ne serait donc jamais rejoué. supabase-js ne lève jamais : une lecture en panne n'est pas
+// « aucun BDT » ni « salarié absent ».
+async function effetsDecisionConge(conge: any, decision: 'valide' | 'refuse') {
   let absences = 0, attendues = 0, rerouted = 0
+  const alertes: string[] = []
   if (decision === 'valide') {
     // Crée une absence par jour ouvré → se reflète dans le planning présence (forcé "absent").
     // ⚠ On compte les inserts RÉELS (avant : le compteur s'incrémentait même si l'insert échouait → « N jours posés » mensonger).
@@ -9413,32 +9891,91 @@ app.post('/api/rh/conge/:id/valider', async (c) => {
       }
       d.setDate(d.getDate() + 1)
     }
+    if (absences < attendues) alertes.push(`${absences}/${attendues} jours d'absence réellement posés (droits d'écriture ?)`)
     // Réaffectation : les BDT planifiés de l'opérateur sur la période congé → renvoyés au pool 'pending' (operateur_id null).
-    try {
-      const debut = String(conge.date_debut).slice(0, 10), fin = String(conge.date_fin).slice(0, 10)
-      const allBdt = await getBonsDeTravail().catch(() => [] as any[])
-      for (const bt of (allBdt as any[])) {
-        if (String((bt as any).operateur_id ?? '') !== String(conge.salarie_id)) continue
-        if (/sold|termin/i.test(String((bt as any).statut || ''))) continue
-        const dp = String((bt as any).date_prevue || '').slice(0, 10)
-        if (dp && dp >= debut && dp <= fin) { const r: any = await updateBDT(String((bt as any).id), { operateur_id: null }).catch(() => ({ error: true })); if (r && !r.error) rerouted++ }
+    // Lecture CIBLÉE et STRICTE (avant : tous les BDT, panne = liste vide = rien renvoyé, sans le dire).
+    const debut = String(conge.date_debut).slice(0, 10), fin = String(conge.date_fin).slice(0, 10)
+    const lb = await lireBDTOperateurPeriode(String(conge.salarie_id), debut, fin)
+    if (lb.error) alertes.push('BDT de l’opérateur non renvoyés au pool (lecture impossible : ' + lb.error + ') — à vérifier au planning')
+    else {
+      const rates: string[] = []
+      for (const bt of lb.data) {
+        if (/sold|termin/i.test(String(bt.statut || ''))) continue
+        const r: any = await updateBDT(String(bt.id), { operateur_id: null }).catch((e: any) => ({ error: { message: String(e?.message || e) } }))
+        if (r && !r.error) rerouted++
+        else rates.push(String(bt.id) + (r?.error?.message ? ' (' + r.error.message + ')' : ''))
       }
-    } catch {}
-    // Décrémente le solde correspondant (congés payés → solde_conges, RTT/repos → solde_rtt)
+      if (rates.length) alertes.push(rates.length + ' BDT non renvoyé(s) au pool : ' + rates.join(', '))
+    }
+    // Décrémente le solde correspondant (congés payés → solde_conges, RTT/repos → solde_rtt). Lecture CIBLÉE et STRICTE du
+    // salarié (avant : select * de toute la table, dont une panne rendait [] → solde non décompté, sans le dire).
     if (conge.type === 'conge_paye' || conge.type === 'rtt') {
-      const sals = await getSalaries().catch(() => [] as any[])
-      const s = (sals as any[]).find(x => String(x.id) === String(conge.salarie_id))
-      if (s) {
-        const col = conge.type === 'rtt' ? 'solde_rtt' : 'solde_conges'
-        const cur = Number((s as any)[col] ?? 0)
+      const col = conge.type === 'rtt' ? 'solde_rtt' : 'solde_conges'
+      const ls = await getSalarieCompletCible(String(conge.salarie_id ?? ''))
+      if (ls.error) alertes.push('solde non décompté (lecture du salarié impossible : ' + ls.error.message + ') — à corriger dans RH')
+      else if (!ls.data) alertes.push('solde non décompté : salarié ' + String(conge.salarie_id ?? '') + ' introuvable')
+      else {
+        const cur = Number(ls.data[col] ?? 0)
         // Décompte en HEURES (solde stocké en heures, base 7 h/jour)
         const dec = Number(conge.nb_heures ?? (Number(conge.nb_jours ?? 0) * 7))
-        await updateSalarie(s.id, { [col]: Math.max(0, cur - dec) }).catch(() => {})
+        const u: any = await updateSalarie(String(ls.data.id), { [col]: Math.max(0, cur - dec) }).catch((e: any) => ({ error: { message: String(e?.message || e) } }))
+        if (u?.error) alertes.push('solde non décompté (' + (u.error.message || 'écriture refusée') + ') — à corriger dans RH')
       }
     }
   }
-  const warn = (decision === 'valide' && absences < attendues) ? `Attention : ${absences}/${attendues} jours d'absence réellement posés (droits d'écriture ?).` : null
-  return c.json({ ok: true, conge: data, absences_creees: absences, absences_attendues: attendues, bdt_rerouted: rerouted, ...(warn ? { warning: warn } : {}) })
+  const warn = alertes.length ? 'Attention : ' + alertes.join(' · ') + '.' : null
+  return { absences_creees: absences, absences_attendues: attendues, bdt_rerouted: rerouted, ...(warn ? { warning: warn } : {}) }
+}
+
+// RH et Direction ne traitent que les congés encore « demande » : même décision CONDITIONNELLE que la route Production
+// (revue du lot C) — un double clic posait deux fois les absences et décomptait deux fois le solde.
+app.post('/api/rh/conge/:id/valider', async (c) => {
+  const id = c.req.param('id')
+  const b = await c.req.json().catch(() => ({} as any))
+  const decision = b.decision === 'refuse' ? 'refuse' : 'valide'
+  const { data: conge, error: eC } = await getCongeCible(id)
+  if (eC) return c.json({ ok: false, error: 'Lecture du congé impossible : ' + eC.message }, 503)
+  if (!conge) return c.json({ ok: false, error: 'Congé introuvable' }, 404)
+  if (conge.statut !== 'demande') return c.json({ ok: false, error: `Congé déjà traité (statut « ${conge.statut ?? '—'} ») : rechargez la page.` }, 409)
+  const { data, error } = await majCongeSiStatut(id, 'demande', { statut: decision, valide_par: b.valide_par || 'RH', valide_le: new Date().toISOString() })
+  if (error) return c.json({ ok: false, error: error.message }, 400)
+  if (!data) return c.json({ ok: false, error: 'Congé déjà traité entre-temps, ou modification refusée par la base : rechargez la page.' }, 409)
+  return c.json({ ok: true, conge: data, ...(await effetsDecisionConge(conge, decision)) })
+})
+
+// ─── Congés des OPÉRATEURS traités depuis l'onglet Présence de Production (lot C · C1, 14/09/2026) ───
+// Le bouton « Approuver » de l'onglet Présence appelait /api/rh/conge/:id/valider : famille rh, absente des droits du rôle
+// production → 403 pour le responsable de production (piège « un bouton du service X appelle /api/Y/ »). Cette route,
+// dans la famille production, ne traite QUE le congé d'un salarié est_operateur ; les autres restent à RH / Direction.
+// Décision conditionnelle (statut encore « demande ») : deux clics ne posent pas deux fois les absences ni le décompte.
+app.post('/api/production/conge/:id/valider', async (c) => {
+  const id = c.req.param('id')
+  const b = await c.req.json().catch(() => ({} as any))
+  if (b.decision !== 'valide' && b.decision !== 'refuse') return c.json({ ok: false, error: 'decision attendue : valide ou refuse' }, 400)
+  const decision: 'valide' | 'refuse' = b.decision
+  const { data: conge, error: eC } = await getCongeCible(id)
+  if (eC) return c.json({ ok: false, error: 'Lecture du congé impossible : ' + eC.message }, 503)
+  if (!conge) return c.json({ ok: false, error: 'Congé introuvable' }, 404)
+  const { data: sal, error: eS } = await getSalarieCible(String(conge.salarie_id ?? ''))
+  if (eS) return c.json({ ok: false, error: 'Lecture du salarié impossible : ' + eS.message }, 503)
+  if (!sal || sal.est_operateur !== true) {
+    return c.json({ ok: false, error: "Ce congé n'est pas celui d'un opérateur de production : il se traite dans RH (ou par la Direction)." }, 403)
+  }
+  if (conge.statut !== 'demande') return c.json({ ok: false, error: `Congé déjà traité (statut « ${conge.statut ?? '—'} ») : rechargez la page.` }, 409)
+  const a = auteurDe(c)
+  // Personne ne valide son propre congé : l'écriture Production peut être donnée à un opérateur (chef d'équipe) par sa
+  // fiche RH — sans ce garde-fou il approuvait sa propre demande.
+  if (a.source === 'session' && a.id != null && String(a.id) === String(conge.salarie_id ?? '')) {
+    return c.json({ ok: false, error: 'Un congé ne se valide pas soi-même : il passe par le responsable de production, la RH ou la Direction.' }, 403)
+  }
+  const { data, error } = await majCongeSiStatut(id, 'demande', {
+    statut: decision,
+    valide_par: a.source === 'auth_off' ? 'Production' : `Production · ${a.nom}`,
+    valide_le: new Date().toISOString(),
+  })
+  if (error) return c.json({ ok: false, error: error.message }, 400)
+  if (!data) return c.json({ ok: false, error: 'Congé déjà traité entre-temps, ou modification refusée par la base : rechargez la page.' }, 409)
+  return c.json({ ok: true, conge: data, ...(await effetsDecisionConge(conge, decision)) })
 })
 
 app.get('/rh/temps', async (c) => {
@@ -10077,6 +10614,7 @@ app.post('/api/commandes-p/:id/lancer', async (c) => {
   const nom: any = (noms as any[]).find(n => (n.code_ref_produit && cp.ref_article && String(n.code_ref_produit) === String(cp.ref_article)) || (n.num_affaire && raw && String(n.num_affaire) === String(raw)))
   const etapes: any[] = nom && Array.isArray(nom.etapes_production) ? nom.etapes_production : []
   const bdt: string[] = [], bds: string[] = []
+  const etatReglageP = { sansReglage: false }
   if (etapes.length) {
     let i = 0
     for (const e of etapes) {
@@ -10090,17 +10628,19 @@ app.post('/api/commandes-p/:id/lancer', async (c) => {
       } else {
         const bid = 'BDTP-' + key + '-1-' + i
         const dur = Math.max(0.5, +(((Number(e.temps_unitaire_min || e.temps_mo_min || 30)) * (qte || 1)) / 60).toFixed(2))
-        await createBDTRow({ id: bid, num_affaire: raw || null, cmd_ref: cmdId, lot_ref: lotId, client_nom: client, piece, operation: op, seq: i, duree: dur, temps_alloue: dur, statut: 'a_programmer', priorite: 'critique', activite: 'Seem', prioritaire: true } as any).catch(() => ({}))
+        // Durée = temps unitaire × quantité, SANS réglage : temps_reglage = 0 (connu, pas « inconnu »).
+        await creerBDTAvecReglage({ id: bid, num_affaire: raw || null, cmd_ref: cmdId, lot_ref: lotId, client_nom: client, piece, operation: op, seq: i, duree: dur, temps_alloue: dur, temps_reglage: 0, statut: 'a_programmer', priorite: 'critique', activite: 'Seem', prioritaire: true } as any, etatReglageP).catch(() => ({}))
         bdt.push(bid)
       }
     }
   } else {
     const bid = 'BDTP-' + key + '-1-1'
+    // Refabrication sans gamme : durée forfaitaire (1 h), réglage INCONNU (temps_reglage laissé vide).
     await createBDTRow({ id: bid, num_affaire: raw || null, cmd_ref: cmdId, lot_ref: lotId, client_nom: client, piece, operation: 'Refabrication (retour client)', seq: 1, duree: 1, temps_alloue: 1, statut: 'a_programmer', priorite: 'critique', activite: 'Seem', prioritaire: true } as any).catch(() => ({}))
     bdt.push(bid)
   }
   await updateCommandePrioritaire(id, { statut: 'traitee', cmd_id: cmdId })
-  return c.json({ ok: true, commande: cmdId, lot: lotId, bdt, bds })
+  return c.json({ ok: true, commande: cmdId, lot: lotId, bdt, bds, ...(etatReglageP.sansReglage ? { avertissement: AVERT_CLOUD9 } : {}) })
 })
 
 app.get('/qualite/pv', (c) => {
@@ -10248,7 +10788,7 @@ app.get('/rh/conge', (c) => {
       ${fieldRow(`${field('Employé','select','Antoine D. / Karim B. / Isabelle R. / Marc T. / Sophie L. / Julien M. / Nadia K. / Frédéric G.')} ${field('Type d\'absence','select','Congés payés / RTT / Congé sans solde / Événement familial / Maladie / Formation / Autre')}`)}
       ${sectionTitle('Période')}
       ${fieldRow(`${field('Date début','date','')} ${field('Date fin','date','')}`)}
-      ${fieldRow(`${field('Demi-journée','select','Non / Matin uniquement / Après-midi uniquement',false)} ${field('Shift concerné','select','Matin 6h-14h / Après-midi 14h-22h / Nuit 22h-6h / Journée 7h-17h')}`)}
+      ${fieldRow(`${field('Demi-journée','select','Non / Matin uniquement / Après-midi uniquement',false)} ${field('Shift concerné','select',CRENEAUX.map(libelleCreneau).join(' / '))}`)}
       ${field('Motif / Commentaire','textarea','Précision sur le type d\'absence, demande spéciale…',false,2)}
       ${sectionTitle('Validation RH')}
       ${fieldRow(`${field('Responsable validation','select','RH / Responsable direct / Sylvie (production)')} ${field('Solde congés restants (auto)','text','Auto-calculé',false)}`)}
