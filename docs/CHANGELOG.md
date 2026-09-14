@@ -2,6 +2,140 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-14 — Coût horaire : seul le process en porte un (machine), le temps homme au coût chargé RH
+
+*« Dans les machines et process et postes de travail, seuls les process ont un coût horaire. Quand le
+process est manuel c'est le taux horaire process manuel et pour le process machine c'est le taux
+horaire machine. En fait de manière définitive on le placera manuellement. »*
+*« Le temps de réglage homme c'est du temps MO, le temps réglage machine c'est du temps MO+machine, le
+temps machine variable c'est juste machine et le temps homme variable juste du temps homme. »*
+*« Le process machine porte le taux horaire machine uniquement, et le taux horaire homme c'est son
+coût chargé dans RH. »*
+
+**1 · Un seul endroit porte un taux horaire : le process machine.** Nouvelle colonne
+`process_atelier.taux_horaire_machine` (€/h HT), **saisie à la main** dans Production › Process
+Ateliers (création et crayon du process ; aussi à la création d'une machine avec « Créer aussi un
+nouveau process »). Vide = **« taux à saisir »** : le temps machine compte 0 € et c'est signalé
+partout. Plus aucun taux sur la machine (`machines.cout_h`, champ « Coût machine (€/h) » supprimé),
+sur le poste (`postes.taux_horaire_manuel`, bouton main-euro supprimé) ni tiré de l'OPEX
+(`computePosteRates`, « Taux/h effectif », « OPEX théorique », « coût horaire réel » OPEX ÷ heures,
+« coût absorbé » de la Fiche machine 360 — tous retirés). L'OPEX, la maintenance et les achats restent
+suivis **en euros**. Un process manuel n'a pas de taux ; un process OAS non plus (chiffré au prix).
+
+**2 · Classement des temps d'une étape** (une seule règle, `etapeDecomp` dans `src/shared.ts`, recopiée
+à l'identique dans le navigateur par `BE_ETAPE_COUT_JS`) :
+
+| Temps | Homme | Machine | Nature |
+|---|---|---|---|
+| Réglage homme (ROP) | ✔ | — | fixe / lot |
+| Réglage machine (RGM) | ✔ | ✔ | fixe / lot |
+| Temps homme variable (THV, colonne « MO ») | ✔ | — | par pièce (fixe / lot si opération fixe) |
+| Temps machine variable (TMV, colonne « Mach ») | — | ✔ | par pièce (fixe / lot si opération fixe) |
+
+Coût = heures homme × taux homme + heures machine × taux machine **du process de l'étape**, lu en
+direct (les copies figées `machine_taux_h`, `taux_mo_h`, `nomenclatures.taux_mo` / `cout_machine_h` ne
+sont plus lues). Sur un process manuel, le RGM compte en homme seulement et le TMV ne compte pas.
+Exemple : 0,5 h de réglage homme + 1 h de réglage machine + 0,1 h × 10 pièces homme + 0,2 h × 10 pièces
+machine = **2,5 h homme** et **3 h machine**.
+
+**3 · Taux homme = coût chargé RH** (`salaries.taux_horaire_charge`). Coût **estimé** (nomenclature,
+analyse DT, tableau de bord BE) : moyenne des opérateurs actifs **du site** (repli : tous les
+opérateurs ; aucun → 0 + « coût chargé RH à renseigner »). Coût **réel** d'un BDT : le taux de
+l'opérateur pointé (repli : moyenne du site). Seules des **moyennes** partent au navigateur. Fini les
+taux inventés (30 / 35 / 45 / 50 €/h, 26,83 / 18,50 du simulateur Finances).
+
+**4 · Coût réel d'un BDT** (`coutReelBdt` : commande, lot, affaire, imputations Finances) :
+`t = temps réel, sinon durée` ; homme = t × taux de l'opérateur, **toujours** ; machine = t × taux du
+process **si ce process est de type machine** (le temps pointé d'un BDT machine vaut homme **et**
+machine). Si les taux sont illisibles (panne Supabase), main d'œuvre, machine, coût réel et marge
+s'affichent « — » avec un bandeau rouge, et `recomputeCmdCout` écrit `cout_reel = null` plutôt qu'une
+marge surévaluée ; s'il manque un taux, bandeau orange « coût réel incomplet ».
+
+**Ce qui change pour l'atelier — à lire avant de chiffrer**
+- **Les coûts de revient montent** : le réglage machine compte désormais **aussi** en main-d'œuvre
+  (avant : machine seule), et le taux homme est le coût chargé RH moyen du site au lieu de la copie
+  figée sur la nomenclature. Exemple réel : la nomenclature cloud 7365635125 (Semrac) passe de
+  9,85 € à 23,58 €/pièce à q = 1 à sa réouverture (coût chargé Semrac 35,70 €/h au lieu de 14,52,
+  RGM compté en homme). Le prix enregistré ne change qu'au prochain enregistrement (tracé « recalcul »
+  au journal EN 9100).
+- **Taux de départ = ancien coût horaire de la machine** : la migration recopie `machines.cout_h` dans
+  les process machine, une seule fois. **Beaucoup valaient 35 €/h, la valeur par défaut de l'ancien
+  formulaire** : à vérifier process par process (Production › Process Ateliers, crayon).
+- **Renseigner les coûts chargés** dans les fiches salarié (RH) : sans eux, le temps homme vaut 0 €.
+- Cinq process OAS de la machine MACH-2026-020 (Surtec 650, Désoxydation, Oxydation noire, Oxydation
+  incolore, Lavage) ont `est_oas = false` en base : ils sont vus comme des process machine (90 €/h
+  recopiés). À corriger en base si ce sont bien des process OAS.
+
+**Écrans**
+- **Production › Process Ateliers** : champ « Taux horaire machine (€/h HT) » à la création et à la
+  modification d'un process (sélecteur de **type** ajouté à la modification : le type ne se déduit plus
+  de la machine) ; note « coût chargé RH » (moyenne du site) pour un process manuel ; pastilles
+  « X €/h » / « taux à saisir » / « coût RH » sur les process dépliés des postes ; compteur « N process
+  machine : taux à saisir ». Colonnes Taux/h, OPEX théorique/an, Taux/h effectif et tuile « OPEX annuel
+  estimé » retirées (tuile « OPEX réel conso. (YTD) »). Supprimer une machine **détache** ses process sans
+  les convertir : ils restent des process machine avec leur taux. Tableau de bord Production : plus de
+  taux ni d'OPEX estimé.
+- **BE › nomenclature** : bandeau « Coût chargé RH moyen Seem / Semrac » et « Process machine sans
+  taux » ; indication sous le process (« Machine · X €/h », « (provisoire) » en transition, « taux à
+  saisir », « Manuel · homme au coût chargé RH ») ; encart « Coût de revient incomplet » ; enregistrement
+  **bloqué** si les taux sont illisibles ; infobulles ROP/RGM/MO/Mach ; OAS en série = max(forfait ;
+  q × prix). Une étape importée (millièmes) modifiée passe au format minutes, à coût constant.
+- **Analyse DT** (`/be/analyse`) : étapes ajoutées chiffrées avec la même règle (taux du process choisi,
+  taux homme du site renvoyé par le serveur) ; temps grisés en sous-traitance et sur un process OAS ;
+  alerte par produit ; bandeau rouge **« Chiffrage indisponible »** et enregistrement bloqué si la route
+  répond en erreur.
+- **Finances** : page « Taux machine des process » (par machine, ses process et leurs taux, badges) ;
+  imputations au coût réel homme + machine ; page Coûts réécrite (méthode, moyennes, liens) ;
+  simulateur ROP/RGM/THV/TMV avec process au choix. Boutons factices retirés (Sync Power BI, Exporter,
+  Valider tout, Enregistrer de la page machines, faux sélecteur de date).
+- **Maintenance** : colonne « Taux/h effectif » et « Coût absorbé prod. » retirées ; OPEX de poste =
+  OPEX **saisi**, les machines sans OPEX sont comptées (« N machine(s) sans OPEX saisi ») au lieu d'une
+  estimation ; heures machine = RGM + TMV des étapes de process machine.
+- **Plans / Bâtiment** : la bulle d'un poste ne montre plus taux ni OPEX théorique.
+- **Tableaux de bord** : BE « CRU moyen … dont N au coût incomplet », ⚠ sur les pièces concernées ;
+  Maintenance : plus de « €/h réel ». **Fiches Commande, Lot et Affaire 360** : « — » et bandeau quand le
+  coût réel n'est pas calculable ou incomplet.
+
+**Défauts corrigés au passage** : la durée des BDT générés oubliait le réglage machine
+(`etapeTempsMin`) ; un process OAS importé (drapeau porté par le process) était valorisé au temps ; une
+liste vide d'étapes ajoutées pouvait effacer celles de la DT (409 sans `vider:true`) ; la suppression d'une
+machine basculait ses process en « manuel » en silence (et avalait les échecs) ; `PROCESS` et
+`MACHINES_PROC` passaient par `JSON.stringify` (un nom contenant `</script>` cassait la page) ;
+`erp-docker.sh maj` sortait en erreur sous Git Bash et sa vérification « code servi = dépôt » ne pouvait
+pas réussir (caractère de contrôle dans l'expression `sed`).
+
+- Fichiers : `src/shared.ts`, `src/queries.ts`, `src/index.tsx`, `src/prod.tsx`, `src/be.tsx`,
+  `src/finances.tsx`, `src/maintenance_service.tsx`, `src/plans.tsx`, `src/kpi.ts`, `src/dashboards.tsx`,
+  `src/commercial.tsx`, `src/annulation.ts`, `src/types.ts`, `docker/scripts/erp-docker.sh`
+- Migration DB : **oui** — `docker/db/migrations/009-process-taux-horaire-machine.sql` (Docker/VM, jouée
+  par `erp-docker.sh maj`) · `docker/db/cloud/cloud-7-process-taux-horaire-machine.sql` (**cloud : à
+  jouer à la main dans le Studio Supabase EN LIGNE**, pas dans celui du Docker). Additive, rejouable : la
+  recopie de départ n'a lieu qu'à la création de la colonne. Anciennes colonnes laissées en base, plus
+  lues ni écrites. **Tant que cloud-7 n'est pas joué** : le cloud lit le taux sur la machine
+  (« transition », coût inchangé) et refuse la saisie d'un taux avec un message qui renvoie au script.
+- Vérifié : `tsc` 0 erreur · harnais 60 PASS / 0 FAIL · test du moteur 114 cas · parité navigateur ↔
+  serveur 11 697 comparaisons, 0 écart · Playwright Production (53), `/be/analyse` (20), formulaire
+  nomenclature (21), Finances (17) · fiches 360 et tableau de bord BE (9) · bout en bout sur Docker avec
+  authentification (23, jeu `-TEST-` supprimé et relu) · 009 et cloud-7 joués dans une transaction
+  annulée (17 process alimentés, contrainte vérifiée, second passage sans recopie) · base cloud en
+  transition (lecture seule).
+- Restent ouverts : coût OAS du CRU serveur à 0 (`coutEtapeST` lit les champs de sous-traitance, défaut
+  antérieur) ; une commande au coût incomplet (`cout_reel` null) échappe à l'alerte Direction « marge
+  faible » ; le graphique « Évolution OPEX mensuel » de Production affiche encore des valeurs codées en
+  dur ; `pageFinancesTaux` garde un bouton « Enregistrer » qui n'écrit rien.
+- Doc mise à jour : `technique/03-base-de-donnees.md`, `03b-tables-reference.md`,
+  `technique/06-modules/{production,be,compta,maintenance,plans}.md`, `07-api-reference.md` (contrats),
+  `02-exploitation-runbook.md`, `05-conventions-code.md` (helpers de coût), manuels Production / BE / Maintenance / Plans / Tableaux de bord (HTML +
+  `manuels_contenu.ts`), `manuel/{production,be}.md`, formulaires Production / BE / Compta (+ compteurs de
+  l'index), parcours Production / Compta / Plans, fiches de poste Production / BE,
+  `PLAN-environnement-ISO14001.md`, cerveau · Outillage : manifestes de `capture_screens.mjs` (nouvelle
+  capture `production-machines`, postes dépliés) et `capture_forms.mjs` (nouvelles
+  `form-production-process`, `form-production-process-edit`, `form-production-machine` ; nomenclature
+  d'exemple à deux étapes), onglet « Coûts postes » ajouté au manifeste de `gen_module_fiches.mjs`, tâche
+  « Saisir le taux horaire machine d'un process » dans `gen_fiches_poste.mjs` · Captures refaites sur la
+  stack Docker locale (colonne présente) : Production (9), BE (5 + analyse), Maintenance (7), tableaux de
+  bord BE / Production / Maintenance, formulaires process / machine / nomenclature.
+
 ## 2026-09-13 — Découper un BDT : dans la goulotte seulement, temps libre par morceau
 
 *« Pour découper les BDT je veux pouvoir les découper uniquement dans la goulotte, pas dans le

@@ -99,10 +99,10 @@ case "$cmd" in
       echo
     fi
     _port="$(sed -n 's/^APP_PORT=//p' "$ENV_FILE" | head -1)"; _port="${_port:-3000}"
-    _ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    _ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"   # hostname -I absent (Git Bash) : sous set -euo pipefail, sans || true le script sortait ici en erreur
     echo "✓ Mise a jour terminee. App : http://${_ip:-localhost}:${_port}"
     # Verification finale : le code SERVI est-il bien celui du depot ?
-    _srv="$(curl -s --max-time 5 "http://localhost:${_port}/api/version" 2>/dev/null | sed -n 's/.*"commit":"\([^"]*\)".*//p')"
+    _srv="$(curl -s --max-time 5 "http://localhost:${_port}/api/version" 2>/dev/null | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p' || true)"   # app pas encore prete : curl echoue, sans || true set -e sortait ici
     if [ -n "$_srv" ] && [ -n "$GIT_COMMIT" ]; then
       if [ "$_srv" = "$GIT_COMMIT" ]; then
         echo "  ✓ code servi = code du depot (${_srv:0:10})"

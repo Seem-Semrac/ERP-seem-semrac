@@ -279,11 +279,12 @@
   <!-- ════════ 5. PROCESS ATELIERS ════════ -->
   <section class="tab" id="tab-machines">
     <div class="tab-head"><span class="tab-num">5</span><h2>Process Ateliers (machines + postes &amp; process)</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> C'est le référentiel de l'atelier : les <b>postes de travail</b> regroupent machines et process ; le planning est organisé sur ces postes, et leurs coûts (OPEX, taux horaire effectif) alimentent le calcul du coût de revient des pièces (CRU). On y crée et gère postes, process et machines, on y suit l'OPEX réel, et on y déclare une panne machine.</p>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le référentiel de l'atelier : les <b>postes de travail</b> regroupent machines et process ; le planning est organisé sur ces postes. C'est aussi <b>le seul endroit où se saisit un coût horaire</b> : chaque <b>process machine</b> porte son <b>taux horaire machine</b>, qui sert au calcul du coût de revient des pièces (CRU). On y crée et gère postes, process et machines, on y suit l'OPEX réel, et on y déclare une panne machine.</p>
 
     <h3>Ce que vous voyez</h3>
     <ul class="points">
-      <li><b>4 tuiles KPI</b> : Machines actives, En maintenance, Arrêtées, OPEX annuel estimé.</li>
+      <li><b>4 tuiles KPI</b> : Machines actives, En maintenance, Arrêtées, <b>OPEX réel conso. (YTD)</b> (consommables sortis sur les machines depuis le 1<sup>er</sup> janvier).</li>
+      <li>Sous le titre, un badge orange <span class="b b-warn">N process machine : taux à saisir</span> tant que des process machine actifs n'ont pas de taux.</li>
       <li>Deux volets commutés par les boutons <b>« Postes &amp; Process »</b> (par défaut) et <b>« Machines »</b>.</li>
     </ul>
     <figure class="shot">
@@ -292,14 +293,41 @@
     </figure>
 
     <h3>Volet « Postes &amp; Process »</h3>
-    <p>Le tableau des postes de travail — colonnes : Poste (avec sa pastille couleur et une flèche pour déplier ses process et machines), Code, Activité (Seem / Semrac / both / OAS), Machines, Process, <b>OPEX réel (YTD)</b>, OPEX théorique/an, <b>Taux/h effectif</b> et Actions. Les lignes se réordonnent par glisser-déposer (l'ordre est celui du planning). Boutons d'action par poste : <b>+ Process</b> (créer un process directement dans le poste), main-euro (fixer / réinitialiser un <b>taux horaire manuel</b>, avec confirmation), crayon (modifier), corbeille (supprimer). Le bouton <b>« Nouveau poste »</b> ouvre la modale : Nom*, Code, Activité, Couleur (planning), Ordre d'affichage.</p>
+    <p>Le tableau des postes de travail — colonnes : Poste (avec sa pastille couleur et une flèche pour déplier ses process et machines), Code, Activité (Seem / Semrac / both / OAS), Machines, Process, <b>OPEX réel (YTD)</b> et Actions. Les lignes se réordonnent par glisser-déposer (l'ordre est celui du planning). Boutons d'action par poste : <b>+ Process</b> (créer un process directement dans le poste), crayon (modifier), corbeille (supprimer). Le bouton <b>« Nouveau poste »</b> ouvre la modale : Nom*, Code, Activité, Couleur (planning), Ordre d'affichage.</p>
+    <p>Dépliez un poste (flèche) : chaque process affiche son type et une pastille de coût — <span class="b b-ok">X €/h</span> (taux horaire machine saisi), <span class="b b-warn">taux à saisir</span> (process machine sans taux), <span class="b b-mut">coût RH</span> (process manuel : le temps est valorisé au coût chargé des opérateurs). Le crayon du process ouvre sa fiche.</p>
     <figure class="shot">
       <img src="../../assets/production-postes.png" alt="Capture du volet Postes et Process" loading="lazy">
-      <figcaption><b>Postes de travail</b> — OPEX réel/théorique et colonne « Taux/h effectif » (base machines + achats de l'année) qui alimente le CRU des pièces.</figcaption>
+      <figcaption><b>Postes de travail</b> — trois postes dépliés : chaque process machine montre son taux horaire (« 35 €/h »), chaque process manuel la mention « coût RH ». Ni le poste ni la machine ne portent de taux.</figcaption>
+    </figure>
+
+    <h3>Modales « Nouveau process » et « Modifier le process »</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
+      <tbody>
+        <tr><td>Nom du process</td><td>Texte</td><td>Oui</td><td>Ex. « Tournage CNC », « Ébavurage ».</td></tr>
+        <tr><td>Type</td><td>Machine / Manuel / OAS</td><td>Oui</td><td><b>Machine</b> : le process occupe une machine et porte un taux horaire machine. <b>Manuel</b> : travail à la main, pas de taux (le temps est valorisé au coût chargé RH). <b>OAS</b> : traitement de surface, chiffré au prix, jamais au temps. Le type se choisit aussi à la modification : il ne dépend plus de la machine choisie.</td></tr>
+        <tr><td>Machine rattachée</td><td>Liste des machines</td><td>Non</td><td>Visible pour un process machine. Un process machine <b>sans</b> machine reste « Machine » et garde son taux.</td></tr>
+        <tr><td>Taux horaire machine (€/h HT)</td><td>Nombre ≥ 0</td><td>Non</td><td>Visible et actif pour un process <b>machine</b> seulement. Il valorise les heures machine de ce process : réglage machine et temps machine variable. <b>Vide = « taux à saisir »</b> : le temps machine compte 0 € et le coût est signalé incomplet. Saisi à la main — il ne se calcule pas.</td></tr>
+        <tr><td>Note « coût chargé RH »</td><td>Affichage</td><td>—</td><td>Pour un process <b>manuel</b> : rappelle que le temps homme est valorisé au coût chargé RH de l'opérateur (fiche salarié) et affiche la moyenne du site ou de l'atelier (ex. « moyenne atelier Seem 35,25 €/h »), ou « coût chargé RH à renseigner ».</td></tr>
+        <tr><td>Code · Catégorie · Ordre d'affichage</td><td>Texte / nombre</td><td>Non</td><td>À la création seulement. L'<b>Activité</b> (Seem / Semrac / Seem &amp; Semrac) est obligatoire à la création.</td></tr>
+        <tr><td>Poste de travail</td><td>Liste des postes</td><td>Non</td><td>Le poste où le process est planifié (ses BDT s'y placent).</td></tr>
+      </tbody>
+    </table></div>
+    <figure class="shot">
+      <img src="../../assets/form-production-process.png" alt="Capture de la modale Nouveau process" loading="lazy">
+      <figcaption><b>Nouveau process</b> — type « Machine » par défaut : machine rattachée et <b>taux horaire machine</b> (vide = « taux à saisir »).</figcaption>
+    </figure>
+    <figure class="shot">
+      <img src="../../assets/form-production-process-edit.png" alt="Capture de la modale Modifier le process" loading="lazy">
+      <figcaption><b>Modifier le process</b> — type, machine rattachée et <b>taux horaire machine</b> du process ; en choisissant « Manuel », le taux se grise et la note « coût chargé RH » apparaît.</figcaption>
     </figure>
 
     <h3>Volet « Machines »</h3>
-    <p>Le parc machines — colonnes : Machine, Code, Activité (filtres Tous / SEEM / SEMRAC / OAS), Catégorie, Taux/h, Capa./j, OPEX théorique/an, <b>OPEX réel conso. (YTD)</b>, Postes (bouton ouvrant le détail des postes de dépenses consommables), Statut (✔ Opérationnel / ⚙ Maintenance / ✖ Arrêt) et Actions : <b>« Panne »</b> (déclare la machine en panne → service Maintenance) ou <b>« Réparée »</b> (remise en service), modifier, supprimer. En dessous, le graphique d'évolution mensuelle de l'OPEX.</p>
+    <p>Le parc machines — colonnes : Machine, Code, Activité (filtres Tous / SEEM / SEMRAC / OAS), Catégorie, Capa./j, <b>OPEX réel conso. (YTD)</b>, Postes (bouton ouvrant le détail des postes de dépenses consommables), Statut (✔ Opérationnel / ⚙ Maintenance / ✖ Arrêt) et Actions : <b>« Panne »</b> (déclare la machine en panne → service Maintenance) ou <b>« Réparée »</b> (remise en service), modifier, supprimer. Une machine <b>ne porte plus de taux horaire</b> : il se saisit sur ses process.</p>
+    <figure class="shot">
+      <img src="../../assets/production-machines.png" alt="Capture du volet Machines" loading="lazy">
+      <figcaption><b>Volet Machines</b> — plus de colonne « Taux/h » ni d'OPEX théorique : seul l'OPEX réel des consommables est suivi, en euros.</figcaption>
+    </figure>
     <p>Modale « Nouvelle machine » (bouton orange), champ par champ :</p>
     <div class="tbl"><table>
       <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
@@ -308,32 +336,60 @@
         <tr><td>Code</td><td>Texte</td><td>Non</td><td>Code court (CNC-03…).</td></tr>
         <tr><td>Activité</td><td>Seem / Semrac / both / OAS</td><td>Oui</td><td>Une machine OAS est hors planning (traitement de surface).</td></tr>
         <tr><td>Catégorie</td><td>Texte</td><td>Non</td><td>Usinage, Découpe…</td></tr>
-        <tr><td>Capacité (h/jour)</td><td>Nombre (défaut 8)</td><td>Non</td><td>Base du calcul d'OPEX théorique et d'utilisation.</td></tr>
-        <tr><td>Coût machine (€/h)</td><td>Nombre (défaut 35)</td><td>Non</td><td>Taux horaire — alimente le taux du poste et le CRU.</td></tr>
+        <tr><td>Capacité (h/jour)</td><td>Nombre (défaut 8)</td><td>Non</td><td>Heures disponibles par jour : sert au calcul d'utilisation (charge / capacité).</td></tr>
         <tr><td>Tolérance ± (mm)</td><td>Nombre</td><td>Non</td><td>Sert aux études de capabilité (Qualité).</td></tr>
         <tr><td>Statut</td><td>Opérationnel / Maintenance / Arrêt</td><td>Non</td><td>État courant de la machine.</td></tr>
-        <tr><td>Poste de travail</td><td>Liste des postes</td><td>Non</td><td>Poste de rattachement (planning + OPEX du poste).</td></tr>
+        <tr><td>Poste de travail</td><td>Liste des postes</td><td>Non</td><td>Poste de rattachement (planning + OPEX réel du poste).</td></tr>
         <tr><td>Machine CNC</td><td>Case à cocher</td><td>Non</td><td>Une CNC porte des codes programme (saisis en préparation technique).</td></tr>
         <tr><td>Opérations possibles</td><td>Texte (séparées par virgule)</td><td>Non</td><td>Opérations que la machine sait réaliser.</td></tr>
-        <tr><td>Process rattachés</td><td>Cases (process du poste)</td><td>Non</td><td>Process alimentés par cette machine ; option « créer aussi un nouveau process » au nom de la machine.</td></tr>
+        <tr><td>Process rattachés</td><td>Cases (process du poste)</td><td>Non</td><td>Process alimentés par cette machine ; option « Créer aussi un nouveau process » au nom de la machine.</td></tr>
+        <tr><td>Taux horaire machine du nouveau process (€/h HT)</td><td>Nombre ≥ 0</td><td>Non</td><td>Apparaît quand « Créer aussi un nouveau process » est coché (création seulement). Vide = « taux à saisir » : un message le rappelle après l'enregistrement.</td></tr>
       </tbody>
     </table></div>
+    <figure class="shot">
+      <img src="../../assets/form-production-machine.png" alt="Capture de la modale Nouvelle machine" loading="lazy">
+      <figcaption><b>Nouvelle machine</b> — plus de « Coût machine (€/h) » ; la case « Créer aussi un nouveau process » fait apparaître le taux horaire machine de ce process.</figcaption>
+    </figure>
+    <div class="note"><b>Disparu :</b> le champ « Coût machine (€/h) » (défaut 35) n'existe plus. Le coût horaire de fonctionnement se saisit désormais sur le <b>process</b> machine, pas sur la machine.</div>
+
+    <h3>Comment se calcule le coût d'une étape</h3>
+    <p>Chaque étape de gamme (nomenclature du Bureau d'Études) a quatre temps. Chacun est payé <b>en homme</b>, <b>en machine</b>, ou les deux :</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Temps (colonne de la gamme)</th><th>Homme</th><th>Machine</th><th>Compté</th></tr></thead>
+      <tbody>
+        <tr><td>Réglage homme (ROP)</td><td>✔</td><td>—</td><td>une fois par lot</td></tr>
+        <tr><td>Réglage machine (RGM)</td><td>✔</td><td>✔</td><td>une fois par lot</td></tr>
+        <tr><td>Temps homme variable (MO)</td><td>✔</td><td>—</td><td>par pièce</td></tr>
+        <tr><td>Temps machine variable (Mach)</td><td>—</td><td>✔</td><td>par pièce</td></tr>
+      </tbody>
+    </table></div>
+    <p>Les heures <b>homme</b> sont payées au <b>coût chargé RH</b> (moyenne des opérateurs du site pour un chiffrage ; taux de l'opérateur pointé pour un coût réel). Les heures <b>machine</b> sont payées au <b>taux horaire machine du process</b> de l'étape — seulement si ce process est de type machine.</p>
+    <div class="astuce"><b>Exemple</b> — lot de 10 pièces, process machine à 60 €/h, coût chargé moyen 35 €/h. Réglage homme 0,5 h · réglage machine 1 h · temps homme 0,1 h par pièce · temps machine 0,2 h par pièce.<br>
+      <b>Heures homme</b> = 0,5 + 1 + 0,1 × 10 = <b>2,5 h</b> → 2,5 × 35 = <b>87,50 €</b>.<br>
+      <b>Heures machine</b> = 1 + 0,2 × 10 = <b>3 h</b> → 3 × 60 = <b>180,00 €</b>.<br>
+      Coût de l'étape = <b>267,50 €</b> pour le lot, soit 26,75 € par pièce. Le réglage machine compte deux fois — une fois l'opérateur, une fois la machine — parce qu'il occupe les deux.</div>
 
     <h3>Pas à pas</h3>
     <ol class="steps">
       <li><b>Créer un poste</b> : « Nouveau poste » → nom, activité, couleur → le poste apparaît (vide). Rattachez-y ensuite machines et process.</li>
-      <li><b>Créer un process dans un poste</b> : bouton <b>+ Process</b> de la ligne du poste → nom, type (<b>Machine</b> / <b>Manuel</b> / <b>OAS</b>), machine rattachée le cas échéant. Le crayon d'un process permet ensuite de changer son nom, sa machine, son taux horaire et son poste.</li>
+      <li><b>Créer un process dans un poste</b> : bouton <b>+ Process</b> de la ligne du poste → nom, type (<b>Machine</b> / <b>Manuel</b> / <b>OAS</b>), machine rattachée le cas échéant, et pour un process machine son <b>taux horaire machine</b> (ou vide : « taux à saisir »).</li>
+      <li><b>Saisir ou corriger un taux horaire machine</b> : dépliez le poste → crayon du process → champ « Taux horaire machine (€/h HT) » → Enregistrer. Le nouveau taux s'applique aux chiffrages (nomenclatures, analyse DT) dès leur prochain affichage et aux coûts réels calculés ensuite.</li>
+      <li><b>Changer le type d'un process</b> : crayon → Type. En passant en « Manuel », le taux est grisé (il n'est plus utilisé) ; en revenant en « Machine », votre saisie est restituée.</li>
       <li><b>Déclarer une panne</b> : volet Machines → bouton <b>« Panne »</b> sur la ligne → la machine passe en arrêt et le service Maintenance est saisi ; « Réparée » la remet en service.</li>
-      <li><b>Fixer un taux horaire manuel</b> : bouton main-euro du poste → saisir le taux (ou vider pour revenir à l'automatique) → double confirmation, car ce taux prime en absolu sur le calcul et impacte le CRU.</li>
     </ol>
 
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
-      <li><b>OPEX réel</b> d'une machine = somme des sorties stock « consommable » déclarées sur ses BDT (quantité × prix d'achat HT), en temps réel. L'OPEX d'un <b>poste</b> = somme de ses machines + consommables tirés directement au poste. Ce calcul est repris à l'identique en Maintenance.</li>
-      <li><b>Taux/h effectif</b> d'un poste = moyenne pondérée du coût/h de ses machines + achats machine reçus dans l'année / heures budgétées. C'est ce taux qui alimente le CRU des pièces usinées au poste.</li>
+      <li><b>Seul le process porte un taux horaire</b>, et seulement le process machine. Les machines, les postes et l'OPEX n'en portent plus : fini le « Taux/h effectif » du poste, le taux manuel de poste et l'« OPEX annuel estimé ».</li>
+      <li><b>Taux de départ</b> : à la mise en place, chaque process machine a reçu l'ancien coût horaire de sa machine — <b>souvent 35 €/h, l'ancienne valeur par défaut</b>. Vérifiez-les un par un.</li>
+      <li>Le <b>temps homme</b> vaut le <b>taux horaire chargé</b> de la fiche salarié (service RH). Sans taux chargé renseigné, il compte 0 € et les écrans affichent « coût chargé RH à renseigner ».</li>
+      <li><b>OPEX réel</b> d'une machine = somme des sorties stock « consommable » déclarées sur ses BDT (quantité × prix d'achat HT), en temps réel. L'OPEX d'un <b>poste</b> = somme de ses machines + consommables tirés directement au poste. Ces montants restent en euros ; ils ne se convertissent jamais en €/h.</li>
       <li>Un poste ou process <b>OAS</b> n'apparaît pas au planning ; ses process alimentent les types de bain de l'onglet OAS.</li>
+      <li>Supprimer une machine <b>détache</b> ses process : ils restent des process machine, avec leur taux, à rattacher à une autre machine (la confirmation indique combien).</li>
+      <li>Le graphique « Évolution OPEX mensuel » affiché sous le parc machines n'est pas encore relié aux données réelles : ne vous y fiez pas.</li>
     </ul>
-    <div class="warn"><b>Attention :</b> supprimer un process ou une machine est définitif (confirmation demandée). Un process « Machine » sans machine rattachée est signalé « à rattacher » — faites-le, sinon son coût machine est nul dans le CRU.</div>
+    <div class="warn"><b>Attention :</b> supprimer un process ou une machine est définitif (confirmation demandée). Un process machine sans taux est signalé « taux à saisir » : tant qu'il n'est pas saisi, le temps machine de ce process vaut 0 € dans les coûts de revient — ils sont sous-évalués.</div>
+    <div class="note"><b>Base en ligne pas encore mise à jour :</b> si l'enregistrement d'un taux affiche « Taux horaire machine NON enregistré… jouez cloud-7… », l'administrateur doit d'abord passer le script de mise à jour de la base. En attendant, les taux affichés portent la mention « transition » (repris de la machine) et les coûts ne changent pas.</div>
   </section>
 
   <!-- ════════ 6. DASHBOARD PROGRAMMATION ════════ -->
@@ -372,7 +428,7 @@
     <h3>Ce que vous voyez</h3>
     <ul class="points">
       <li><b>Trois jauges</b> : TRS (Taux de Rendement Synthétique), TRG (Global), TRE (Économique), accompagnées des trois composantes en barres : <b>Disponibilité</b> (machines opérationnelles), <b>Performance</b> (temps alloué / temps réel des BDT soldés) et <b>Qualité</b> (BDT soldés sans NC).</li>
-      <li><b>OPEX Machines · YTD</b> : par machine, le taux/h, l'utilisation (charge BDT / capacité hebdo) et l'OPEX cumulé de l'année, avec le total du parc.</li>
+      <li><b>OPEX réel machines · YTD</b> : par machine, l'utilisation (charge BDT / capacité hebdo) et l'OPEX réel cumulé de l'année (« — » s'il n'y a eu aucune consommation), avec le total du parc. Plus de taux horaire ni d'OPEX estimé.</li>
       <li><b>BDTs du jour</b> : les BDT actifs (client, pièce, opération, priorité, statut, durée) avec un bouton <b>« Dupliquer »</b> pour recréer un BDT identique et le réaffecter.</li>
     </ul>
     <figure class="shot">

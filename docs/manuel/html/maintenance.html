@@ -228,8 +228,8 @@
     <p>Un menu déroulant <b>« Machine : »</b> en haut ; tant qu'aucune machine n'est choisie, l'écran invite à en sélectionner une. Une fois la machine choisie, la fiche se déploie :</p>
     <ul class="points">
       <li>Un <b>bandeau d'identité</b> : nom et code de la machine, atelier, année en cours, et une pastille d'état — <span class="b b-ok">Opérationnel</span> · <span class="b b-warn">En maintenance</span> · <span class="b b-crit">En panne</span>.</li>
-      <li>Une première rangée de tuiles <b>coûts</b> : <b>TCO</b> de l'année (OPEX + maintenance), <b>OPEX annuel</b> (avec le taux horaire de la machine), <b>Maintenance</b> de l'année (avec le nombre d'OM, dont les ouverts), <b>Coût absorbé prod.</b> (heures BDT × taux horaire) et <b>Valeur PDR stock</b> (nombre de pièces, et combien sont sous le stock mini).</li>
-      <li>Une seconde rangée de tuiles <b>fiabilité</b> : <b>Disponibilité</b>, <b>TRS*</b>, <b>MTTR</b>, <b>MTBF</b>, <b>Pannes</b>, <b>Heures machine</b> et <b>SPC cotes</b> (part de relevés de cotes conformes, issus des contrôles Qualité).</li>
+      <li>Une première rangée de tuiles <b>coûts</b> : <b>TCO</b> de l'année (OPEX + maintenance), <b>OPEX annuel</b> (valeur saisie, avec son année, ou « — · non renseigné »), <b>Maintenance</b> de l'année (avec le nombre d'OM, dont les ouverts) et <b>Valeur PDR stock</b> (nombre de pièces, et combien sont sous le stock mini).</li>
+      <li>Une seconde rangée de tuiles <b>fiabilité</b> : <b>Disponibilité</b>, <b>TRS*</b>, <b>MTTR</b>, <b>MTBF</b>, <b>Pannes</b>, <b>Heures machine</b> (total, et heures de l'année) et <b>SPC cotes</b> (part de relevés de cotes conformes, issus des contrôles Qualité).</li>
       <li>Deux tableaux côte à côte : <b>Historique de production</b> — ce qui est passé sur la machine (Date, Opération, Pièce, Client, Temps, Résultat) — et <b>Maintenance</b>, avec le cumul dépensé en titre (OM, Intervention, Date, Coût).</li>
     </ul>
     <figure class="shot">
@@ -242,14 +242,14 @@
       <li>Sélectionnez la machine dans le menu <b>« Machine : »</b>.</li>
       <li>Comparez la tuile <b>Maintenance de l'année</b> à la tuile <b>OPEX annuel</b> : quand la maintenance approche le coût d'exploitation, la machine est en fin de vie économique.</li>
       <li>Regardez la <b>Disponibilité</b> et le nombre de <b>Pannes</b> : une machine peu chère mais souvent arrêtée coûte surtout des retards de livraison.</li>
-      <li>Vérifiez le <b>Coût absorbé prod.</b> et les <b>Heures machine</b> : une machine peu chargée ne justifie pas un investissement de remplacement — elle justifie plutôt un redéploiement.</li>
+      <li>Vérifiez les <b>Heures machine</b> de l'année : une machine peu chargée ne justifie pas un investissement de remplacement — elle justifie plutôt un redéploiement.</li>
       <li>Parcourez le tableau <b>Maintenance</b> pour repérer les interventions répétitives (même titre, même cause) : c'est souvent là que se cache le vrai défaut à traiter.</li>
     </ol>
 
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
-      <li>Les <b>heures machine</b> comptabilisent uniquement le temps machine issu de la gamme (analyse DT), pas le temps homme : elles ne se comparent pas aux heures de présence des opérateurs.</li>
-      <li>Le <b>coût absorbé production</b> (heures × taux) est un indicateur de charge, il n'entre <b>pas</b> dans le TCO — sinon la machine serait comptée deux fois.</li>
+      <li>Les <b>heures machine</b> comptabilisent uniquement le temps machine : le temps machine alloué du BDT, sinon celui de la gamme — <b>réglage machine</b> et <b>temps machine par pièce</b> des étapes d'un process machine. Le réglage homme et le temps homme n'en font pas partie : elles ne se comparent pas aux heures de présence des opérateurs.</li>
+      <li><b>Plus de taux horaire ni de « coût absorbé »</b> sur la fiche (depuis le 14/09/2026) : le coût horaire se saisit sur les <b>process</b> machine, en Production. La fiche reste en euros : OPEX, maintenance, pièces.</li>
       <li>Le <b>TRS</b> affiché est <b>partiel</b> : c'est Disponibilité × Qualité. La composante Performance (cadence réelle rapportée à la cadence théorique) n'est pas encore mesurée — d'où l'astérisque.</li>
       <li>L'historique de production affiche les derniers passages, et le bloc maintenance les derniers OM : pour l'exhaustivité comptable, appuyez-vous sur les tuiles, qui portent les cumuls.</li>
     </ul>
@@ -259,36 +259,35 @@
   <!-- ══════════════ 5. COÛTS POSTES ══════════════ -->
   <section class="tab" id="tab-postes">
     <div class="tab-head"><span class="tab-num">5</span><h2>Coûts postes</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> Voir le coût de l'atelier non plus machine par machine, mais <b>poste de travail par poste de travail</b> — un poste regroupant plusieurs machines. L'onglet additionne, pour chaque poste, l'<b>OPEX annuel</b> de ses machines et le <b>coût des OM</b> de ces mêmes machines, pour donner le <b>TCO annuel</b> du poste. C'est le chaînon entre la maintenance et le prix de revient : le taux horaire du poste sert directement au calcul du coût de revient unitaire des pièces.</p>
+    <p class="tab-but"><b>À quoi ça sert.</b> Voir le coût de l'atelier non plus machine par machine, mais <b>poste de travail par poste de travail</b> — un poste regroupant plusieurs machines. L'onglet additionne, pour chaque poste, l'<b>OPEX annuel</b> de ses machines et le <b>coût des OM</b> de ces mêmes machines, pour donner le <b>TCO annuel</b> du poste, en euros. Il ne produit <b>aucun taux horaire</b> : depuis le 14/09/2026, le coût horaire qui entre dans le prix de revient se saisit sur les <b>process</b> machine (Production › Process Ateliers).</p>
 
     <h3>Ce que vous voyez</h3>
     <p>Une seule carte, <b>« Coûts par poste — OPEX + maintenance (TCO annuel) »</b>, avec un tableau dont chaque ligne est un poste actif :</p>
     <ul class="points">
       <li><b>Poste</b> — le nom, précédé de la pastille de couleur du poste (la même qu'au planning de Production).</li>
       <li><b>Machines</b> — combien de machines composent le poste.</li>
-      <li><b>OPEX annuel</b> — le coût d'exploitation annuel cumulé des machines du poste (valeur réelle si elle a été saisie, sinon estimation à partir du taux horaire et de la capacité).</li>
+      <li><b>OPEX annuel</b> — le coût d'exploitation annuel <b>saisi</b> des machines du poste (dernière année renseignée). Une machine sans OPEX saisi n'est plus estimée : la mention orange « N machine(s) sans OPEX saisi » le signale.</li>
       <li><b>Maintenance <i>année en cours</i></b> — le cumul des coûts réels des OM des machines du poste sur l'exercice.</li>
       <li><b>TCO annuel</b> — la somme des deux colonnes précédentes.</li>
-      <li><b>Taux/h effectif</b> — le taux horaire qui alimente le coût de revient, en €/h. La mention <span class="b b-warn">manuel</span> signale un taux forcé à la main ; la mention « dont +X achats » signale la part provenant des achats machine reçus dans l'année.</li>
       <li>Une ligne <b>TOTAL POSTES</b> en bas récapitule l'OPEX, la maintenance et le TCO de tout l'atelier.</li>
       <li>Si aucun poste n'est défini, l'écran renvoie vers <b>Production → onglet Machines → « Postes de travail »</b>, où les postes se créent.</li>
     </ul>
     <figure class="shot">
       <img src="../../assets/maintenance-postes.png" alt="Capture de l'onglet Coûts postes" loading="lazy">
-      <figcaption><b>Coûts postes</b> — l'onglet se situe entre « Fiche 360 » et « Pièces &amp; PDR » ; son compteur indique le nombre de postes actifs pris en compte.</figcaption>
+      <figcaption><b>Coûts postes</b> — l'onglet se situe entre « Fiche 360 » et « Pièces &amp; PDR » ; son compteur indique le nombre de postes actifs pris en compte. Plus de colonne « Taux/h effectif » ; les machines sans OPEX saisi sont signalées sous le montant.</figcaption>
     </figure>
 
     <h3>Pas à pas — contrôler le coût d'un poste</h3>
     <ol class="steps">
-      <li>Repérez la ligne du poste concerné et lisez son nombre de <b>machines</b> : un poste sans machine rattachée n'a ni OPEX ni taux (colonnes à « — »).</li>
+      <li>Repérez la ligne du poste concerné et lisez son nombre de <b>machines</b> : un poste sans machine rattachée n'a pas d'OPEX (colonne machines à « — »).</li>
       <li>Comparez <b>Maintenance</b> et <b>OPEX annuel</b> : une maintenance qui pèse lourd face à l'OPEX signale un poste à fiabiliser.</li>
-      <li>Vérifiez le <b>Taux/h effectif</b> : c'est lui qui est facturé au prix de revient. S'il porte la mention « manuel », le taux a été forcé en Production — assurez-vous qu'il est toujours d'actualité.</li>
-      <li>En cas d'écart, corrigez à la source : le rattachement des machines aux postes et le taux se règlent en <b>Production</b>, les coûts d'intervention se corrigent dans l'OM concerné (onglet « Interventions / OM »).</li>
+      <li>Repérez les mentions « machine(s) sans OPEX saisi » : le TCO de ces postes est incomplet tant que l'OPEX annuel de leurs machines n'est pas renseigné.</li>
+      <li>En cas d'écart, corrigez à la source : le rattachement des machines aux postes (et le taux horaire des process) se règle en <b>Production</b>, les coûts d'intervention se corrigent dans l'OM concerné (onglet « Interventions / OM »).</li>
     </ol>
 
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
-      <li>L'agrégation est <b>exactement la même qu'en Production</b> : les deux services doivent afficher les mêmes chiffres. Un écart signale une donnée saisie deux fois ou un rattachement de machine incohérent.</li>
+      <li>Ne comparez pas directement avec la Production : ici l'OPEX est la valeur <b>saisie</b> (annuelle), en Production c'est l'OPEX <b>réel</b> des consommables sortis du stock depuis le 1<sup>er</sup> janvier.</li>
       <li>Seuls les postes <b>actifs</b> sont listés ; un poste passé inactif disparaît du tableau et du total.</li>
       <li>Une machine <b>sans poste</b> n'est comptée nulle part ici : elle n'apparaît que dans sa Fiche 360. Rattachez chaque machine à un poste pour que le TCO de l'atelier soit complet.</li>
       <li>La colonne Maintenance ne retient que les OM de l'<b>année civile en cours</b> : elle repart à zéro au 1<sup>er</sup> janvier, contrairement au cumul affiché dans la Fiche 360.</li>

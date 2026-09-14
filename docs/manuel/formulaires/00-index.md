@@ -20,9 +20,9 @@ Chaque formulaire se termine par 💡 une astuce et ⚠️ un point d'attention.
 | Service | Guide | Formulaires | Champs | Qui l'utilise surtout |
 |---|---|---|---|---|
 | Commercial | [commercial.md](commercial.md) | 13 | 78 | Commercial |
-| Bureau d'Études | [be.md](be.md) | 12 | 57 | BE (bei) |
+| Bureau d'Études | [be.md](be.md) | 12 | 73 | BE (bei) |
 | Achats | [achats.md](achats.md) | 12 | 76 | Achats |
-| Production | [production.md](production.md) | 11 | 62 | Production, Opérateur |
+| Production | [production.md](production.md) | 11 | 68 | Production, Opérateur |
 | OAS (traitement de surface) | [oas.md](oas.md) | 5 | 40 | OAS |
 | Qualité | [qualite.md](qualite.md) | 22 | 152 | Qualité, Opérateur |
 | Sécurité (HSE/RSE) | [securite.md](securite.md) | 17 | 173 | Qualité / HSE |
@@ -30,10 +30,10 @@ Chaque formulaire se termine par 💡 une astuce et ⚠️ un point d'attention.
 | Stock | [stock.md](stock.md) | 6 | 37 | Logistique, Magasin |
 | Maintenance | [maintenance.md](maintenance.md) | 3 | 27 | Maintenance |
 | RH | [rh.md](rh.md) | 9 | 54 | RH |
-| Comptabilité | [compta.md](compta.md) | 6 | 36 | Comptable |
+| Comptabilité | [compta.md](compta.md) | 6 | 43 | Comptable |
 | Direction | [direction.md](direction.md) | 5 | 6 | Direction |
 | Plan / Bâtiment | [plans.md](plans.md) | 5 | 16 | BE / Maintenance / Prod / Qualité |
 
-**Total : 132 formulaires · 848 champs documentés.**
+**Total : 132 formulaires · 877 champs documentés.**
 
 > Guides générés depuis le code source (les champs réels des formulaires) puis relus. À régénérer si les formulaires changent — voir le skill `erp-doc-sync`.

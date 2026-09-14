@@ -136,6 +136,88 @@ allouant **librement** le temps de chaque morceau.
   planning (`#ptab-gantt-bdt`) et clique les ciseaux d'une carte de goulotte (carte d'exemple
   injectée dans le navigateur seulement si la goulotte est vide).
 
+## Coût horaire porté par le process (14/09/2026)
+
+**Demande** : « seuls les process ont un coût horaire […] le process machine porte le taux horaire
+machine uniquement, et le taux horaire homme c'est son coût chargé dans RH ». Le moteur est dans
+`src/shared.ts` (règle **unique**, partagée par BE, analyse DT, Finances, Maintenance, fiches 360) ;
+cette section décrit ce que Production en expose.
+
+**Modèle** : `process_atelier.taux_horaire_machine` (€/h HT, `null` = « taux à saisir », migration
+**009** / `cloud-7`). Ni la machine (`cout_h`), ni le poste (`taux_horaire_manuel`), ni l'OPEX ne
+portent plus de taux. Le **type** d'un process vient de `typeProcess(p)` : `est_oas` → `oas` ;
+`requiert_machine === true` → `machine` ; `=== false` → `manuel` ; non renseigné → `machine` s'il a
+une `machine_id`. Un process machine **sans** machine rattachée reste `machine`.
+
+**Classement des temps d'une étape** (`etapeDecomp(e, tx, site)`) :
+
+| Temps | Champ minutes (BE) | Champ millièmes (import) | Homme | Machine | Nature |
+|---|---|---|---|---|---|
+| ROP — réglage homme | `temps_reglage_min` | `temps_reglage_op_mille` | ✔ | — | fixe / lot |
+| RGM — réglage machine | `temps_reglage_machine_min` | `temps_reglage_machine_mille` | ✔ | ✔ (process machine) | fixe / lot |
+| THV — homme variable | `temps_mo_min` | `temps_variable_mille` si process non machine | ✔ | — | par pièce (lot si `est_fixe`) |
+| TMV — machine variable | `temps_machine_min` | `temps_variable_mille` si process machine | — | ✔ (process machine) | par pièce (lot si `est_fixe`) |
+
+Réglage historique `temps_reglage_mille` sans découpe = RGM sur un process machine, ROP sinon.
+Repli ancien format `temps_unitaire_min` = TMV sur une étape machine, THV sinon. Sur un process manuel,
+un TMV ne compte pas (signalé `sans_process` s'il n'y a aucun process). Process ou étape **OAS** et
+sous-traitance : un prix (`max(forfait ; q × unitaire)`), jamais un temps. Coût = heures homme ×
+`tx.tauxHomme(site)` + heures machine × `tx.tauxMachine(process_id, machine_id).taux`.
+
+**Résolveur `construireTauxAtelier(process, salaries, machines)`** — à nourrir avec les lignes
+**brutes** de `process_atelier` (`select *`) :
+- `tauxMachine(pid, machineIdRepli)` → `{ taux, source }`, source `process` | `manquant` (taux vide) |
+  `transition_machine` (propriété absente = cloud avant cloud-7 : `cout_h` de la machine) |
+  `sans_process` | `manuel` | `oas`. Étape sans process : process machine **unique** de sa machine (si
+  plusieurs, le seul non `inactif`), sinon `sans_process`.
+- `tauxHomme(site)` : moyenne des `taux_horaire_charge > 0` des salariés `actif` et `est_operateur` du
+  site (`entite`, casse ignorée), repli tous opérateurs, sinon 0 et `hommeManquant`. `hommeParSite`
+  (moyennes seules) est ce qui part au navigateur.
+- Côté serveur, `getTauxAtelier()` (`src/queries.ts`) lit process, salariés et machines et **remonte
+  l'erreur** (`{ tx, salById, error }`) : une panne n'est jamais confondue avec un taux absent.
+
+**Coût réel d'un BDT** (`coutReelBdt`) : `t = temps_reel ?? duree` ; homme = t × taux de l'opérateur
+(repli moyenne du site = `activite`) — toujours ; machine = t × taux du process du BDT s'il est de type
+machine. Consommé par `recomputeCmdCout`, `getCommandeDetail`, `getLotDetail`, `getAffaireDetail` et
+les imputations Finances. Taux illisibles ⇒ `kpi.tauxErreur` et coûts `null` (« — », bandeau rouge
+`alerteCoutReel`) ; donnée manquante ⇒ `kpi.manquants` (bandeau orange) et `recomputeCmdCout` écrit
+`cout_reel = marge_reelle = null`.
+
+**Écran « Process Ateliers »** (`pageServiceProd`, 19ᵉ paramètre `dbSalaries` pour les moyennes) :
+- `procModal` : champ `p_taux` visible pour le type machine ; note RH (`_noteProcessManuel`, moyenne du
+  site) pour un manuel, note OAS sinon. `createProcess` n'envoie `taux_horaire_machine` que s'il est
+  saisi (vide ⇒ `null` en base).
+- `procEditModal` : **sélecteur de type** `pe_type` (ajouté : le type ne se déduit plus de la
+  machine), machine, taux `pe_taux` (actif en machine, grisé en manuel, masqué en OAS ; la saisie est
+  restituée si l'on repasse en machine), poste. `saveProcEdit` fait **un seul** `PATCH
+  /api/production/process/:id` (plus aucun `PATCH` machine `cout_h`). En transition, le taux venu de la
+  machine est pré-rempli pour information et n'est renvoyé que s'il a été modifié.
+- `machineModal` : champ « Coût machine (€/h) » (`mc_couth`) **supprimé** ; avec « Créer aussi un nouveau
+  process », champ `mc_proc_taux` (création seulement). Suppression d'une machine : la confirmation
+  annonce le nombre de process détachés, qui **restent** machine avec leur taux.
+- Lignes dépliées des postes : pastille `procTauxBadge` — « X €/h », « X €/h · transition », « taux à
+  saisir » ou « coût RH ». En-tête : « N process machine : taux à saisir » (process non inactifs).
+- Retirés : colonnes Taux/h, OPEX théorique/an et Taux/h effectif, bouton `posteSetTaux`, tuile « OPEX
+  annuel estimé » (remplacée par « OPEX réel conso. (YTD) »), badge « Coût total parc », colonne Taux/h
+  du tableau de bord Production et son OPEX estimé. Code mort retiré : `procMgmtRows`, `proc_filter`,
+  `toggleProcMachine`, `editProcMachineLink`, `peMachineChange`, branche `proc` de `persistRowOrder`.
+- `PROCESS` et `MACHINES_PROC` passent désormais par `sjX` (un nom contenant `</script>` cassait la page).
+- Avertissement `cloud-7` renvoyé par le serveur : notification longue **et** conservée en
+  `sessionStorage.__erpAvertTaux`, réaffichée après le rechargement (une fois, 60 s max).
+
+**Génération des BDT** (`etapeTempsMin`, `src/index.tsx`) : au format minutes, le réglage = ROP **+
+RGM** et une opération `est_fixe` passe dans le réglage. Le RGM était oublié : la durée des BDT générés
+à partir d'une étape convertie en minutes perdait le réglage machine.
+
+⚠ **Données** : 5 process de la machine MACH-2026-020 (Surtec 650, Désoxydation, Oxydation noire,
+Oxydation incolore, Lavage) ont `est_oas = false` : `typeProcess` les classe `machine` (taux 90 €/h
+recopiés). Le formulaire BE, lui, les reconnaît OAS par leur nom (`nomEstProcessOAS`). À corriger en
+base (`est_oas = true`, `taux_horaire_machine = null`) si ce sont bien des process OAS.
+⚠ Le texte de légende des postes dit encore « ce calcul est repris à l'identique en Maintenance » : ce
+n'est plus exact (Production additionne l'OPEX **réel** des consommables, Maintenance l'OPEX **saisi**
+dans `machines_opex`). ⚠ Le graphique « Évolution OPEX mensuel » du volet Machines affiche des valeurs
+codées en dur.
+
 ## Mission
 <!-- auto:mission -->
 Planning Gantt BDT/BST, présence opérateurs, commandes & lots, process ateliers.

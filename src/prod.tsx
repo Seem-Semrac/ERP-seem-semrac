@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════════════════════
 // PRODUCTION – Planning Gantt BDT/BST · Commandes · Lots · Dashboards
 // ══════════════════════════════════════════════════════════════
-import { escX, layout, serviceHeader, OPERATEURS as OPS_FB, BDT_DATA, SHIFTS, ABSENCES, MACHINES, computePosteRates, estAnnule, badgeAnnule } from './shared'
+import { escX, layout, serviceHeader, OPERATEURS as OPS_FB, BDT_DATA, SHIFTS, ABSENCES, MACHINES, estAnnule, badgeAnnule, construireTauxAtelier, typeProcess, alerteCoutReel } from './shared'
 import { LOGO_SVG, BRAND } from './brand'
 import type { BonDeTravail, Machine, Operateur, Lot, Commande, FournisseurSt } from './types'
 
@@ -1047,14 +1047,15 @@ export const pageLotDetail = (
   const lot360 = _LD ? `<div class="card" style="padding:18px 20px;margin-top:16px;">
     <div style="font-weight:800;color:#1e293b;font-size:.95rem;margin-bottom:12px;"><i class="fas fa-clipboard-check" style="color:#7c3aed;margin-right:7px;"></i>Pilotage qualité &amp; coût 360</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:10px;">
-      ${lkpi('Coût engagé', eur0(_LD.kpi.coutEngage), '#7c3aed', 'matière+MO+machine')}
+      ${lkpi('Coût engagé', _LD.kpi.coutEngage != null ? eur0(_LD.kpi.coutEngage) : '—', '#7c3aed', 'matière+MO+machine' + ((_LD.kpi.manquants || []).length ? ' · incomplet' : ''))}
       ${lkpi('Matière', eur0(_LD.kpi.coutMat), '#d97706')}
-      ${lkpi('MO', eur0(_LD.kpi.coutMO), '#6366f1', _LD.kpi.moH + ' h')}
-      ${lkpi('Machine', eur0(_LD.kpi.coutMach), '#0d9488', _LD.kpi.machH + ' h')}
+      ${lkpi('MO', _LD.kpi.coutMO != null ? eur0(_LD.kpi.coutMO) : '—', '#6366f1', _LD.kpi.moH + ' h' + ((_LD.kpi.manquants || []).includes('taux_homme') ? ' · incomplet' : ''))}
+      ${lkpi('Machine', _LD.kpi.coutMach != null ? eur0(_LD.kpi.coutMach) : '—', '#0d9488', _LD.kpi.machH + ' h' + (((_LD.kpi.manquants || []).includes('taux_machine') || (_LD.kpi.manquants || []).includes('sans_process')) ? ' · incomplet' : ''))}
       ${lkpi('NC', String(_LD.kpi.nbNC), _LD.kpi.ncBloq ? '#dc2626' : '#94a3b8', _LD.kpi.ncBloq + ' bloquante(s)')}
       ${lkpi('Quarantaine', String(_LD.kpi.enQuar), _LD.kpi.enQuar ? '#dc2626' : '#22c55e', _LD.kpi.nbPV + ' PV · ' + _LD.kpi.nb8d + ' 8D')}
     </div>
-    ${(_LD.kpi.ncBloq > 0 || _LD.kpi.enQuar > 0) ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;font-size:.74rem;color:#b91c1c;margin-top:12px;"><i class="fas fa-triangle-exclamation" style="margin-right:5px;"></i>Lot à risque : ${eur0(_LD.kpi.coutEngage)} déjà engagés, lot bloqué (NC/quarantaine) — coût caché en cas de rebut.</div>` : ''}
+    ${alerteCoutReel(_LD.kpi)}
+    ${(_LD.kpi.ncBloq > 0 || _LD.kpi.enQuar > 0) ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;font-size:.74rem;color:#b91c1c;margin-top:12px;"><i class="fas fa-triangle-exclamation" style="margin-right:5px;"></i>Lot à risque : ${_LD.kpi.coutEngage != null ? eur0(_LD.kpi.coutEngage) + ' déjà engagés' : 'coût engagé non calculé'}, lot bloqué (NC/quarantaine) — coût caché en cas de rebut.</div>` : ''}
     ${ltbl('Contrôles (PV)', 'fa-vial', [{ t: 'PV' }, { t: 'Type' }, { t: 'Décision', a: 'center' }, { t: 'Cpk', a: 'center' }, { t: 'Date', a: 'center' }], pvRows)}
     ${ltbl('Non-conformités', 'fa-circle-exclamation', [{ t: 'NC' }, { t: 'Gravité' }, { t: 'Statut' }, { t: 'Date' }], ncRows)}
     ${_LD.quarantaines.length ? ltbl('Quarantaines', 'fa-box-archive', [{ t: 'ID' }, { t: 'Statut' }, { t: 'Motif' }, { t: 'Date' }], qRows) : ''}
@@ -1219,9 +1220,14 @@ export const pageServiceProd = (
   dbPostes?:     any[],
   dbMachinesOpex?: any[],
   dbBdtsVigilance?: { id: string; piece: string; operation: string; lot_ref: string; num_affaire: string; cmd_ref: string; raison: string }[],
+  // Salariés (lignes brutes : taux_horaire_charge, entite, actif, est_operateur) — servent UNIQUEMENT à calculer, côté
+  // serveur, la MOYENNE du coût chargé RH affichée pour un process manuel. Aucun taux individuel ne part au navigateur.
+  // Absent (appelant pas encore à jour) → la moyenne n'est simplement pas affichée.
+  dbSalaries?:   any[],
 ) => {
   const TODAY = new Date().toISOString().slice(0,10)
-  const POSTES: any[] = (dbPostes ?? []).map((p:any) => ({ id:p.id, nom:p.nom, code:p.code||'', activite:p.activite||'', couleur:p.couleur||'#6366f1', ordre:p.ordre??100, statut:p.statut||'actif', taux_horaire_manuel:(p.taux_horaire_manuel ?? null) }))
+  // Postes : plus aucun taux (14/09/2026) — `taux_horaire_manuel` n'est plus ni lu ni écrit.
+  const POSTES: any[] = (dbPostes ?? []).map((p:any) => ({ id:p.id, nom:p.nom, code:p.code||'', activite:p.activite||'', couleur:p.couleur||'#6366f1', ordre:p.ordre??100, statut:p.statut||'actif' }))
   const CONGES_OPS: any[] = dbCongesOps ?? []
   const BDS_ROWS: any[] = (dbBDS && dbBDS.length > 0) ? dbBDS : []
   const BC_ST_BY_ID: Record<string, any> = dbBCst || {}
@@ -1255,26 +1261,23 @@ export const pageServiceProd = (
     pst.qte += qte; pst.cout += cout
   }
   const opexTotalReel = Object.values(machOpex).reduce((s, m) => s + m.total, 0)
-  // ─── OPEX PAR POSTE = somme des machines du poste (réel conso + théorique cout_h×capacité×220) + conso tirées au poste (postes manuels) ───
+  // ─── OPEX PAR POSTE = somme de l'OPEX RÉEL des machines du poste (consommables) + conso tirées au poste (postes manuels) ───
   // C'est LE calcul régularisé : agrégation du même machOpex, réutilisé à l'identique en maintenance (fiche 360 / TCO par poste).
-  const posteOpex: Record<string, { reel: number; theorique: number; machines: string[] }> = {}
-  const _posteInit = (pid: string) => (posteOpex[pid] = posteOpex[pid] || { reel: 0, theorique: 0, machines: [] })
+  // (14/09/2026) Plus d'OPEX « théorique » cout_h × capacité × 220 : aucun taux n'est porté par la machine ni par le poste.
+  const posteOpex: Record<string, { reel: number; machines: string[] }> = {}
+  const _posteInit = (pid: string) => (posteOpex[pid] = posteOpex[pid] || { reel: 0, machines: [] })
   for (const m of MACH_REAL) {
     const pid = m.poste_id ? String(m.poste_id) : ''
     if (!pid) continue
     const e = _posteInit(pid)
     e.machines.push(String(m.id))
     e.reel += (machOpex[String(m.id)]?.total || 0)
-    e.theorique += (Number(m.cout_h) || 0) * (Number(m.capacite_h) || 0) * 220
   }
   for (const mv of MOUV_ALL) {   // consommables rattachés directement à un poste (postes manuels, sans machine)
     if (String(mv.categorie || '') !== 'consommable' || !mv.poste_id) continue
     const pu = stockPrice[String(mv.article_id)] ?? stockPrice[String(mv.stock_id)] ?? 0
     _posteInit(String(mv.poste_id)).reel += Math.abs(Number(mv.quantite) || 0) * pu
   }
-  // Phase E — taux horaire EFFECTIF par poste : base (moyenne pondérée cout_h) + incrément OPEX achats machine
-  //   reçus (année civile) / heures budgétées, ou override manuel (postes.taux_horaire_manuel). Même moteur que le CRU.
-  const POSTE_RATES = computePosteRates(MACH_REAL, (dbMachinesOpex ?? []) as any[], POSTES, Number(TODAY.slice(0, 4)))
   // Comptage + LISTES machines / process par poste (pour l'admin postes + la vue imbriquée)
   const PROC_ALL: any[] = (dbProcess ?? [])
   const machCountByPoste: Record<string, number> = {}
@@ -1283,7 +1286,29 @@ export const pageServiceProd = (
   const procListByPoste: Record<string, any[]> = {}
   for (const m of MACH_REAL) if (m.poste_id) { const k = String(m.poste_id); machCountByPoste[k] = (machCountByPoste[k] || 0) + 1; (machListByPoste[k] = machListByPoste[k] || []).push(m) }
   for (const p of PROC_ALL) if (p.poste_id) { const k = String(p.poste_id); procCountByPoste[k] = (procCountByPoste[k] || 0) + 1; (procListByPoste[k] = procListByPoste[k] || []).push(p) }
-  const procType = (p: any) => p.est_oas ? 'OAS' : (p.requiert_machine ? 'Machine' : 'Manuel')
+  // ─── Coût horaire porté par le PROCESS (14/09/2026, shared.ts construireTauxAtelier / typeProcess) ───
+  //   · process machine : taux horaire machine SAISI sur le process (process_atelier.taux_horaire_machine), null = « à saisir » ;
+  //     transition (colonne absente, base cloud avant cloud-7) : repris du cout_h de SA machine, en lecture seule ;
+  //   · process manuel : aucun taux — le temps homme est valorisé au coût chargé RH (moyenne des opérateurs actifs) ;
+  //   · process OAS : chiffré au prix, jamais au temps.
+  // ⚠ construireTauxAtelier reçoit les lignes process BRUTES (select '*') : l'ABSENCE de la propriété est le signal de transition.
+  const TX = construireTauxAtelier(PROC_ALL, dbSalaries ?? [], MACH_REAL)
+  const LBL_TYPE: Record<string, string> = { machine: 'Machine', manuel: 'Manuel', oas: 'OAS' }
+  const procType = (p: any) => LBL_TYPE[typeProcess(p)]
+  // Moyennes du coût chargé RH (JAMAIS un taux individuel) — null si les salariés ne sont pas fournis à la page.
+  const TAUX_HOMME_ATELIER = dbSalaries ? { ...TX.hommeParSite, manquant: TX.hommeManquant } : null
+  const _hasOwn = (o: any, k: string) => !!o && Object.prototype.hasOwnProperty.call(o, k)
+  const fmtTaux = (v: number) => (Math.round((Number(v) || 0) * 100) / 100).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  // Pastille « taux » d'un process (lignes dépliées des postes) — valeurs issues de TX.tauxMachine (transition comprise).
+  const procTauxBadge = (p: any): string => {
+    const t = typeProcess(p)
+    if (t === 'oas') return ''
+    if (t === 'manuel') return '<span style="font-size:.58rem;color:#64748b;border:1px dashed #cbd5e1;border-radius:5px;padding:1px 6px;" title="Process manuel : le temps homme est valorisé au coût chargé RH de l\'opérateur (fiche salarié)"><i class="fas fa-user" style="margin-right:3px;"></i>coût RH</span>'
+    const r = TX.tauxMachine(p.id)
+    if (r.source === 'process') return `<span style="font-size:.6rem;background:#ccfbf1;color:#0f766e;border-radius:5px;padding:1px 6px;font-weight:700;" title="Taux horaire machine saisi sur le process"><i class="fas fa-euro-sign" style="margin-right:3px;"></i>${fmtTaux(r.taux)} €/h</span>`
+    if (r.source === 'transition_machine') return `<span style="font-size:.6rem;background:#fef3c7;color:#92400e;border-radius:5px;padding:1px 6px;font-weight:700;" title="Transition : repris du coût horaire de la machine — la colonne du taux process n'existe pas encore sur cette base (docker/db/cloud/cloud-7)"><i class="fas fa-euro-sign" style="margin-right:3px;"></i>${fmtTaux(r.taux)} €/h · transition</span>`
+    return '<span style="font-size:.58rem;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:5px;padding:1px 6px;font-weight:800;" title="Process machine sans taux horaire : le coût machine vaut 0 tant que le taux n\'est pas saisi (crayon du process)"><i class="fas fa-triangle-exclamation" style="margin-right:3px;"></i>taux à saisir</span>'
+  }
   const fmtEur = (v: number) => {
     const parts = (Math.round((Number(v) || 0) * 100) / 100).toFixed(2).split('.')
     return parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ',' + parts[1] + ' €'
@@ -1292,8 +1317,22 @@ export const pageServiceProd = (
   // ─── Gantt BDT data ──────────────────────────────────────
   // Les lignes du planning sont désormais les PROCESS atelier (machine ou manuel),
   // séparés Seem / Semrac. Les BDT sont colorés par statut.
+  // Projection process envoyée au navigateur (sjX). Le type vient de typeProcess (règle unique) : `requiert_machine`
+  // en est le reflet (un process à requiert_machine null mais porteur d'une machine est « machine »).
+  //   type                 : 'machine' | 'manuel' | 'oas'
+  //   taux_horaire_machine : valeur SAISIE sur le process (null = à saisir ; null aussi si la colonne n'existe pas)
+  //   taux_col             : la colonne existe sur cette base (false = base cloud avant cloud-7 → transition)
+  //   taux_machine         : taux RÉSOLU par TX.tauxMachine (transition comprise), 0 si manquant / manuel / OAS
+  //   taux_source          : 'process' | 'transition_machine' | 'manquant' | 'manuel' | 'oas' | 'sans_process'
   const procForGantt = (dbProcess && dbProcess.length > 0)
-    ? dbProcess.map((p:any) => ({id:p.id,nom:p.nom,activite:p.activite||'Seem',requiert_machine:!!p.requiert_machine,est_oas:!!p.est_oas,machine_id:p.machine_id||null,poste_id:p.poste_id||null,categorie:p.categorie||'',couleur:p.couleur||'#64748b',operations:Array.isArray(p.operations)?p.operations:[]}))
+    ? dbProcess.map((p:any) => {
+        const t = typeProcess(p)
+        const r = TX.tauxMachine(p.id)
+        const col = _hasOwn(p, 'taux_horaire_machine')
+        return {id:p.id,nom:p.nom,activite:p.activite||'Seem',type:t,requiert_machine:t==='machine',est_oas:t==='oas',machine_id:p.machine_id||null,poste_id:p.poste_id||null,categorie:p.categorie||'',couleur:p.couleur||'#64748b',operations:Array.isArray(p.operations)?p.operations:[],
+          taux_horaire_machine:(col && p.taux_horaire_machine != null && p.taux_horaire_machine !== '') ? Number(p.taux_horaire_machine) : null,
+          taux_col:col, taux_machine:r.taux, taux_source:r.source}
+      })
     : []
   const opsForGantt = (dbOps && dbOps.length > 0)
     ? dbOps.map(o => ({id:o.id,nom:o.nom,activite:o.activite,poste:o.poste||'',shift:deriveShift(o.shift_id),competences:o.competences||[]}))
@@ -1301,49 +1340,25 @@ export const pageServiceProd = (
   const bdtsForGantt = (dbBDTs && dbBDTs.length > 0)
     ? dbBDTs.map(b => ({id:b.id,op:b.operateur_id||'',process:(b as any).process_id||'pending',client:b.client_nom||'',piece:b.piece,operation:b.operation,duree:b.duree,debut:b.debut!=null?Number(b.debut):6,priorite:b.priorite,statut:b.statut,resultat:(b as any).resultat||null,activite:b.activite||'Seem',machineId:b.machine_id||null,tempsAlloue:(b as any).temps_alloue||b.duree,debutReel:(b as any).debut_reel||null,finReel:(b as any).fin_reel||null,lotId:(b as any).lot_id||(b as any).lot_ref||null,numAffaire:(b as any).num_affaire||null,dateEcheance:(b as any).date_echeance||null,seq:(b as any).seq!=null?(b as any).seq:null,cmdId:(b as any).cmd_id||null,datePrevue:(b as any).date_prevue||null,oxydation:(b as any).oxydation||null}))
     : BDT_DEFAULT
-  const PROCESS_J = JSON.stringify(procForGantt)
+  const PROCESS_J = sjX(procForGantt)   // sjX (et non JSON.stringify) : un nom contenant « </script> » ne casse plus la page
   const OPS_J  = JSON.stringify(opsForGantt)
   const SHIFTS_J = JSON.stringify(SHIFTS)
   const ABS_J  = JSON.stringify(ABSENCES)
   const OPS_SE = JSON.stringify(OPS_SEEM_LIST)
   const OPS_SM = JSON.stringify(OPS_SEMRAC_LIST)
   const OPS_ST_J = JSON.stringify(OPS_ST_LIST)
-  // Machines réelles (pour rattacher un process à une machine dans l'onglet Process Ateliers)
+  // Machines réelles (pour rattacher un process à une machine dans l'onglet Process Ateliers) — sans aucun taux (14/09/2026).
   const machinesForProc = (dbMachines && dbMachines.length > 0)
-    ? dbMachines.map((m:any) => ({id:m.id,nom:m.nom,code:m.code,activite:m.activite,cout_h:(m.cout_h ?? m.taux_horaire ?? 35)}))
+    ? dbMachines.map((m:any) => ({id:m.id,nom:m.nom,code:m.code,activite:m.activite}))
     : []
-  const MACHINES_PROC_J = JSON.stringify(machinesForProc)
-  // ─── Référentiel Process Ateliers (onglet de gestion) ────
+  const MACHINES_PROC_J = sjX(machinesForProc)
+  // ─── Référentiel Process Ateliers ────
   const PROC_LIST: any[] = dbProcess ?? []
   const machNameById: Record<string,string> = {}
   ;(dbMachines ?? []).forEach((m:any)=>{ machNameById[m.id]=m.nom })
-  const procMgmtRows = PROC_LIST.map((p:any)=>{
-    const isOas = !!p.est_oas
-    const isMach = !isOas && !!p.requiert_machine
-    const actColor = p.activite==='Semrac' ? '#be185d' : p.activite==='both' ? '#5b21b6' : '#1d4ed8'
-    const actBg    = p.activite==='Semrac' ? '#fce7f3' : p.activite==='both' ? '#f3e8ff' : '#dbeafe'
-    const typeBadge = isOas
-      ? '<span style="background:#cffafe;color:#0e7490;border-radius:6px;padding:2px 8px;font-size:.68rem;font-weight:700;"><i class="fas fa-flask" style="margin-right:4px;"></i>OAS</span>'
-      : isMach
-      ? '<span style="background:#e0f2fe;color:#0369a1;border-radius:6px;padding:2px 8px;font-size:.68rem;font-weight:700;"><i class="fas fa-cog" style="margin-right:4px;"></i>Machine</span>'
-      : '<span style="background:#f1f5f9;color:#475569;border-radius:6px;padding:2px 8px;font-size:.68rem;font-weight:700;"><i class="fas fa-hand-paper" style="margin-right:4px;"></i>Manuel</span>'
-    const machTxt = isMach ? (machNameById[p.machine_id] != null ? escX(machNameById[p.machine_id]) : '<span style="color:#ef4444;">— à rattacher —</span>') : '<span style="color:#cbd5e1;">n/a</span>'
-    const statBg = p.statut==='actif' ? 'background:#dcfce7;color:#16a34a;' : 'background:#f1f5f9;color:#64748b;'
-    return `<tr data-type="${isOas?'oas':isMach?'machine':'manuel'}" data-act="${p.activite}" data-pid="${p.id}" draggable="true" ondragstart="rowDragStart(event,'${p.id}','proc')" ondragover="rowDragOver(event)" ondrop="rowDrop(event,'${p.id}','proc')" ondragend="rowDragEnd(event)" style="border-bottom:1px solid #f9fafb;cursor:move;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
-      <td style="padding:9px 14px;font-weight:700;color:#1e293b;"><i class="fas fa-grip-vertical" style="color:#cbd5e1;margin-right:7px;cursor:grab;" title="Glisser pour réordonner"></i>${escX(p.nom)}</td>
-      <td style="padding:9px 14px;font-family:monospace;font-size:.72rem;color:#6b7280;">${escX(p.code ?? '—')}</td>
-      <td style="padding:9px 14px;"><span style="background:${actBg};color:${actColor};border-radius:6px;padding:2px 8px;font-size:.68rem;font-weight:700;">${p.activite}</span></td>
-      <td style="padding:9px 14px;">${typeBadge}</td>
-      <td style="padding:9px 14px;font-size:.78rem;color:#374151;">${machTxt}</td>
-      <td style="padding:9px 14px;font-size:.78rem;color:#6b7280;">${escX(p.categorie ?? '—')}</td>
-      <td style="padding:9px 14px;text-align:center;"><span style="border-radius:999px;padding:3px 10px;font-size:.66rem;font-weight:700;${statBg}">${p.statut ?? 'actif'}</span></td>
-      <td style="padding:9px 14px;text-align:center;white-space:nowrap;">
-        <button onclick="toggleProcMachine('${p.id}',${isMach?'false':'true'})" title="Basculer machine / manuel" style="background:#eff6ff;color:#2563eb;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:.7rem;font-weight:700;margin-right:4px;"><i class="fas fa-exchange-alt"></i></button>
-        <button onclick="openProcEdit('${p.id}')" title="Modifier le nom / la machine rattachée" style="background:#eef2ff;color:#4338ca;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:.7rem;font-weight:700;margin-right:4px;"><i class="fas fa-pen"></i></button>
-        <button onclick="deleteProc('${p.id}','${(p.nom||'').replace(/'/g,'')}')" title="Supprimer" style="background:#fef2f2;color:#dc2626;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:.7rem;font-weight:700;"><i class="fas fa-trash"></i></button>
-      </td>
-    </tr>`
-  }).join('')
+  // (procMgmtRows supprimé le 14/09/2026 : tableau à plat des process calculé mais jamais injecté depuis le retrait du
+  //  référentiel à plat — les process se gèrent dans les postes. Ses fonctions clientes proc_filter / toggleProcMachine /
+  //  editProcMachineLink et la branche « proc » de persistRowOrder, sans plus aucun appelant, sont retirées avec lui.)
 
   // ─── BST data (planning jour-par-jour) ───────────────────
   const LOTS_BST  = dbLots ?? LOTS_DEFAULT
@@ -1514,19 +1529,17 @@ export const pageServiceProd = (
   const opsForModal2 = (dbOps&&dbOps.length>0)
     ? dbOps.map(o=>({id:o.id,nom:o.nom,activite:o.activite,shift:deriveShift(o.shift_id)}))
     : OPS_DEFAULT
-  const now2=new Date(); const startOfYear=new Date(now2.getFullYear(),0,1)
-  const joursOuvres=Math.round((now2.getTime()-startOfYear.getTime())/86400000*5/7)
-  // OPEX par machine = données réelles du parc (MACH_REAL) : taux horaire réel, OPEX consommables réel (machOpex),
-  // utilisation = charge BDT affectée à la machine / capacité hebdo.
+  // OPEX par machine = données réelles du parc (MACH_REAL) : OPEX consommables RÉEL (machOpex), utilisation = charge BDT
+  // affectée à la machine / capacité hebdo. (14/09/2026) Plus de colonne « Taux/h » ni d'OPEX estimé taux × capacité ×
+  // jours ouvrés quand aucun consommable n'est sorti : le taux horaire est porté par le process, l'OPEX reste en euros réels.
   const _dpPalette = ['#3b82f6','#0ea5e9','#ec4899','#a855f7','#f97316','#8b5cf6','#06b6d4','#6366f1','#14b8a6','#e11d48']
   const _machLoadH: Record<string, number> = {}
   ;(dbBDTs ?? []).forEach((b:any) => { if (b.machine_id) _machLoadH[String(b.machine_id)] = (_machLoadH[String(b.machine_id)]||0) + Number(b.duree||0) })
   const machinesOpex = (MACH_REAL as any[]).filter((m:any) => m.statut !== 'arret').map((m:any, i:number) => {
-    const tauxH = Number(m.cout_h ?? m.taux_horaire ?? 0)
     const capaH = Number(m.capacite_h ?? 8)
     const opReel = machOpex[String(m.id)]
     const utilisation = capaH > 0 ? Math.min(100, Math.round((_machLoadH[String(m.id)]||0) / (capaH * 5) * 100)) : 0
-    return { nom: m.nom, code: m.code ?? '—', tauxH, utilisation, opex: opReel ? Math.round(opReel.total) : Math.round(tauxH * capaH * joursOuvres), couleur: _dpPalette[i % _dpPalette.length] }
+    return { nom: m.nom, code: m.code ?? '—', utilisation, opex: opReel ? Math.round(opReel.total) : 0, couleur: _dpPalette[i % _dpPalette.length] }
   })
   const totalOpex = machinesOpex.reduce((s,m)=>s+m.opex,0)
   // TRS calculé sur données réelles : Qualité = BDT soldés sans NC ; Performance = temps alloué/réel ; Disponibilité = machines opérationnelles
@@ -1546,7 +1559,7 @@ export const pageServiceProd = (
     const pc=({critique:'#ef4444',urgent:'#f59e0b',normal:'#22c55e'} as Record<string,string>)[b.priorite]||'#22c55e'
     return `<tr>${TD(`<span style="font-weight:700;color:#1e293b;">${b.id}</span>`)}${TD(escX(b.client))}${TD(escX(b.piece))}${TD(escX(b.operation))}${TD(`<span style="border-radius:999px;padding:2px 8px;font-size:.62rem;font-weight:700;background:${pc}22;color:${pc};">${b.priorite}</span>`)}${TD(STATUT_BADGE(b.statut))}${TD(`<span style="color:#64748b;">${b.duree}h</span>`)}${TD(`<button onclick="dupBDT('${b.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:7px;background:#f1f5f9;border:1.5px solid #e2e8f0;font-size:.68rem;font-weight:700;cursor:pointer;color:#374151;"><i class="fas fa-copy"></i> Dupliquer</button>`)}</tr>`
   }).join('')
-  const opexRows2=machinesOpex.map(m=>`<tr>${TD(`<div style="display:flex;align-items:center;gap:8px;"><span style="width:10px;height:10px;border-radius:50%;background:${m.couleur};flex-shrink:0;"></span><span style="font-weight:700;">${escX(m.nom)}</span></div>`)}${TD(`<span style="color:#64748b;">${escX(m.code)}</span>`)}${TD(`${m.tauxH} €/h`)}${TD(`<div style="display:flex;align-items:center;gap:6px;"><div style="flex:1;height:5px;background:#e2e8f0;border-radius:3px;min-width:60px;"><div style="height:100%;width:${m.utilisation}%;background:${m.couleur};border-radius:3px;"></div></div><span style="font-size:.7rem;">${m.utilisation}%</span></div>`)}${TD(`<span style="font-weight:700;color:#1e293b;">${m.opex.toLocaleString('fr-FR')} €</span>`)}</tr>`).join('')
+  const opexRows2=machinesOpex.map(m=>`<tr>${TD(`<div style="display:flex;align-items:center;gap:8px;"><span style="width:10px;height:10px;border-radius:50%;background:${m.couleur};flex-shrink:0;"></span><span style="font-weight:700;">${escX(m.nom)}</span></div>`)}${TD(`<span style="color:#64748b;">${escX(m.code)}</span>`)}${TD(`<div style="display:flex;align-items:center;gap:6px;"><div style="flex:1;height:5px;background:#e2e8f0;border-radius:3px;min-width:60px;"><div style="height:100%;width:${m.utilisation}%;background:${m.couleur};border-radius:3px;"></div></div><span style="font-size:.7rem;">${m.utilisation}%</span></div>`)}${TD(m.opex > 0 ? `<span style="font-weight:700;color:#1e293b;">${m.opex.toLocaleString('fr-FR')} €</span>` : '<span style="color:#cbd5e1;">—</span>')}</tr>`).join('')
 
   const content = `
 <style>
@@ -2119,8 +2132,8 @@ ${serviceHeader({
       </div>
     </div>
     <div class="card" style="overflow:hidden;margin-bottom:20px;">
-      <div style="padding:14px 18px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;"><div style="font-weight:700;color:#1e293b;font-size:.88rem;display:flex;align-items:center;gap:8px;"><i class="fas fa-euro-sign" style="color:#f59e0b;"></i>OPEX Machines · YTD ${new Date().getFullYear()} (${joursOuvres} jours ouvrés)</div><div style="font-size:.88rem;font-weight:900;color:#1e293b;">${totalOpex.toLocaleString('fr-FR')} € total</div></div>
-      <table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f8fafc;">${TH('Machine')}${TH('Code')}${TH('Taux/h')}${TH('Utilisation')}${TH('OPEX YTD')}</tr></thead><tbody>${opexRows2}</tbody></table>
+      <div style="padding:14px 18px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;"><div style="font-weight:700;color:#1e293b;font-size:.88rem;display:flex;align-items:center;gap:8px;"><i class="fas fa-euro-sign" style="color:#f59e0b;"></i>OPEX réel machines (consommables) · YTD ${new Date().getFullYear()}</div><div style="font-size:.88rem;font-weight:900;color:#1e293b;">${totalOpex.toLocaleString('fr-FR')} € total</div></div>
+      <table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f8fafc;">${TH('Machine')}${TH('Code')}${TH('Utilisation')}${TH('OPEX réel YTD')}</tr></thead><tbody>${opexRows2}</tbody></table>
     </div>
     <div class="card" style="overflow:hidden;">
       <div style="padding:14px 18px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;"><div style="font-weight:700;color:#1e293b;font-size:.88rem;display:flex;align-items:center;gap:8px;"><i class="fas fa-hard-hat" style="color:#f97316;"></i>BDTs du jour — ${TODAY}</div><span style="font-size:.72rem;color:#64748b;">${bdtsToday2.length} BDT actifs · Double-cliquez pour dupliquer et réaffecter</span></div>
@@ -2143,11 +2156,15 @@ ${serviceHeader({
     <div style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
       <div>
         <h1 style="font-size:1.2rem;font-weight:900;color:#1e293b;margin:0;"><i class="fas fa-sitemap" style="color:#f97316;margin-right:10px;"></i>Process Ateliers</h1>
-        <div style="font-size:.78rem;color:#64748b;margin-top:2px;">Postes de travail · machines &amp; process regroupés · Seem &amp; Semrac · Coûts machines OPEX — ${new Date().getFullYear()}</div>
+        <div style="font-size:.78rem;color:#64748b;margin-top:2px;">Postes de travail · machines &amp; process regroupés · Seem &amp; Semrac · Taux horaire machine porté par le process · OPEX réel — ${new Date().getFullYear()}</div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <span style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:8px;padding:6px 14px;font-size:.75rem;font-weight:700;"><i class="fas fa-euro-sign" style="margin-right:5px;"></i>Coût total parc : ${MACH_REAL.reduce((s: number, m: any) => s + (Number(m.cout_h ?? m.taux_horaire ?? 0) || 0), 0).toLocaleString('fr-FR')} €/h</span>
-      </div>
+      ${(() => {
+        // Process machine sans taux horaire saisi : signalés (le coût machine de leurs étapes vaut 0 tant que le taux manque).
+        const nbASaisir = PROC_ALL.filter((p: any) => p.statut !== 'inactif' && typeProcess(p) === 'machine' && TX.tauxMachine(p.id).source === 'manquant').length
+        return nbASaisir > 0 ? `<div style="display:flex;gap:8px;align-items:center;">
+        <span style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:8px;padding:6px 14px;font-size:.75rem;font-weight:700;" title="Process machine sans taux horaire machine : saisissez-le avec le crayon du process (lignes dépliées des postes)"><i class="fas fa-triangle-exclamation" style="margin-right:5px;"></i>${nbASaisir} process machine : taux à saisir</span>
+      </div>` : ''
+      })()}
     </div>
 
     <!-- KPIs synthèse -->
@@ -2156,7 +2173,7 @@ ${serviceHeader({
         ['fa-cogs',        'Machines actives',    String(MACH_REAL.filter((m: any) => m.statut === 'operationnel' || m.statut === 'actif').length) + ' / ' + MACH_REAL.length, '#10b981'],
         ['fa-wrench',      'En maintenance',      String(MACH_REAL.filter((m: any) => m.statut === 'maintenance').length), '#f59e0b'],
         ['fa-times-circle','Arrêtées',            String(MACH_REAL.filter((m: any) => m.statut === 'arret').length), '#ef4444'],
-        ['fa-euro-sign',   'OPEX annuel estimé',  (MACH_REAL.reduce((s: number, m: any) => s + (Number(m.cout_h ?? m.taux_horaire ?? 0) || 0) * (Number(m.capacite_h ?? 8) || 8) * 220, 0)).toLocaleString('fr-FR') + ' €', '#6366f1'],
+        ['fa-euro-sign',   'OPEX réel conso. (YTD)', fmtEur(opexTotalReel), '#16a34a'],
       ].map(([ic, lbl, val, col]) => `
       <div style="background:white;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.07);border-top:3px solid ${col};text-align:center;">
         <i class="fas ${ic}" style="color:${col};font-size:1.2rem;margin-bottom:8px;display:block;"></i>
@@ -2191,20 +2208,13 @@ ${serviceHeader({
           <th style="text-align:center;padding:10px 14px;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#6b7280;">Machines</th>
           <th style="text-align:center;padding:10px 14px;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#6b7280;">Process</th>
           <th style="text-align:center;padding:10px 14px;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#16a34a;">OPEX réel (YTD)</th>
-          <th style="text-align:center;padding:10px 14px;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#6b7280;">OPEX théorique/an</th>
-          <th style="text-align:center;padding:10px 14px;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#0d9488;" title="Taux horaire qui alimente le CRU des pièces : base + achats machine reçus / heures budgétées (ou override manuel)">Taux/h effectif</th>
           <th style="text-align:center;padding:10px 14px;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#6b7280;">Actions</th>
         </tr></thead>
         <tbody id="poste-tbody">${POSTES.map((p:any) => {
-          const ox = posteOpex[String(p.id)] || { reel: 0, theorique: 0, machines: [] }
+          const ox = posteOpex[String(p.id)] || { reel: 0, machines: [] }
           const nbM = machCountByPoste[String(p.id)] || 0, nbP = procCountByPoste[String(p.id)] || 0
           const dm = machListByPoste[String(p.id)] || [], dp = procListByPoste[String(p.id)] || []
           const canExpand = (dm.length + dp.length) > 0
-          const pr = POSTE_RATES.byPoste[String(p.id)] || null
-          const tauxEff = pr ? pr.tauxEffectif : 0
-          const tauxManuel = pr && pr.manuel != null
-          const tauxIncr = pr ? pr.increment : 0
-          const autoTaux = pr ? (pr.baseWeighted + pr.increment) : 0
           return `<tr data-poid="${p.id}" draggable="true" ondragstart="rowDragStart(event,'${p.id}','poste')" ondragover="rowDragOver(event)" ondrop="rowDrop(event,'${p.id}','poste')" ondragend="rowDragEnd(event)" style="border-bottom:1px solid #f9fafb;cursor:move;">
             <td style="padding:10px 14px;font-weight:700;color:#1e293b;"><i class="fas fa-grip-vertical" style="color:#cbd5e1;margin-right:6px;cursor:grab;" title="Glisser pour réordonner les postes"></i>${canExpand ? `<button id="postexp-${p.id}" onclick="postToggleDet('${p.id}')" title="Voir process & machines du poste" style="border:none;background:none;cursor:pointer;color:#94a3b8;margin-right:5px;font-size:.78rem;"><i class="fas fa-chevron-right"></i></button>` : '<span style="display:inline-block;width:15px;"></span>'}<span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${p.couleur};margin-right:7px;"></span>${escX(p.nom)}</td>
             <td style="padding:10px 14px;font-family:monospace;font-size:.75rem;color:#6b7280;">${escX(p.code||'—')}</td>
@@ -2212,32 +2222,25 @@ ${serviceHeader({
             <td style="padding:10px 14px;text-align:center;font-weight:700;color:${nbM>0?'#0ea5e9':'#cbd5e1'};">${nbM||'—'}</td>
             <td style="padding:10px 14px;text-align:center;font-weight:700;color:${nbP>0?'#8b5cf6':'#cbd5e1'};">${nbP||'—'}</td>
             <td style="padding:10px 14px;text-align:center;font-weight:800;color:${ox.reel>0?'#16a34a':'#cbd5e1'};">${ox.reel>0?fmtEur(ox.reel):'—'}</td>
-            <td style="padding:10px 14px;text-align:center;font-weight:600;color:#94a3b8;">${ox.theorique>0?Math.round(ox.theorique).toLocaleString('fr-FR')+' €':'—'}</td>
-            <td style="padding:10px 14px;text-align:center;white-space:nowrap;">
-              ${nbM>0?`<span style="font-weight:800;color:${tauxManuel?'#b45309':(tauxIncr>0?'#0d9488':'#475569')};">${tauxEff.toFixed(2)} €/h</span>${tauxManuel?`<div style="font-size:.56rem;color:#b45309;font-weight:700;">manuel</div>`:(tauxIncr>0?`<div style="font-size:.56rem;color:#0d9488;font-weight:700;">dont +${tauxIncr.toFixed(2)} achats</div>`:'')}`:'<span style="color:#cbd5e1;">—</span>'}
-            </td>
             <td style="padding:10px 14px;text-align:center;white-space:nowrap;">
               <button onclick="openProcModalForPoste('${p.id}')" title="Créer un process dans ce poste" style="background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:.68rem;font-weight:700;margin-right:8px;"><i class="fas fa-plus" style="margin-right:3px;"></i>Process</button>
-              <button onclick="posteSetTaux('${p.id}', ${autoTaux.toFixed(4)}, ${tauxManuel?pr.manuel:'null'})" title="Fixer / réinitialiser le taux horaire manuel du poste (override)" style="background:${tauxManuel?'#fffbeb':'#ecfeff'};color:${tauxManuel?'#b45309':'#0d9488'};border:none;border-radius:6px;padding:4px 9px;cursor:pointer;font-size:.7rem;font-weight:700;margin-right:4px;"><i class="fas fa-hand-holding-usd"></i></button>
               <button onclick="openPosteEdit('${p.id}')" title="Modifier" style="background:#f5f3ff;color:#7c3aed;border:none;border-radius:6px;padding:4px 9px;cursor:pointer;font-size:.7rem;font-weight:700;margin-right:4px;"><i class="fas fa-edit"></i></button>
               <button onclick="deletePosteFn('${p.id}','${(p.nom||'').replace(/[<>"'\\]/g,'')}')" title="Supprimer" style="background:#fef2f2;color:#dc2626;border:none;border-radius:6px;padding:4px 9px;cursor:pointer;font-size:.7rem;font-weight:700;"><i class="fas fa-trash"></i></button>
             </td>
-          </tr>${canExpand ? `<tr id="postdet-${p.id}" style="display:none;background:#faf9ff;"><td colspan="9" style="padding:2px 14px 12px 42px;">
+          </tr>${canExpand ? `<tr id="postdet-${p.id}" style="display:none;background:#faf9ff;"><td colspan="7" style="padding:2px 14px 12px 42px;">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;padding-top:6px;">
-              <div><div style="font-size:.62rem;font-weight:800;text-transform:uppercase;color:#8b5cf6;margin-bottom:5px;"><i class="fas fa-sitemap" style="margin-right:4px;"></i>Process (${dp.length})</div>${dp.length ? dp.map((x:any)=>`<div style="display:flex;align-items:center;gap:6px;font-size:.74rem;color:#374151;padding:3px 0;border-bottom:1px solid #f1f5f9;"><span style="font-weight:600;">${escX(x.nom)}</span><span style="font-size:.6rem;background:#ede9fe;color:#6d28d9;border-radius:5px;padding:1px 6px;">${procType(x)}</span>${x.machine_id && machNameById[x.machine_id] ? `<span style="font-size:.6rem;background:#e0f2fe;color:#0369a1;border-radius:5px;padding:1px 6px;" title="Machine rattachée à ce process"><i class="fas fa-cog" style="margin-right:3px;"></i>${escX(machNameById[x.machine_id])}</span>` : (x.requiert_machine ? '<span style="font-size:.58rem;color:#f59e0b;font-weight:700;" title="Ce process nécessite une machine — aucune rattachée"><i class="fas fa-triangle-exclamation" style="margin-right:2px;"></i>machine à rattacher</span>' : '')}<button onclick="openProcEdit('${x.id}')" title="Modifier ce process (nom, taux horaire, machine, poste)" style="margin-left:auto;background:#eef2ff;color:#4f46e5;border:none;border-radius:5px;padding:2px 8px;cursor:pointer;font-size:.66rem;font-weight:700;"><i class="fas fa-pen"></i></button><button onclick="deleteProc('${x.id}','${(x.nom||'').replace(/[<>"'\\]/g,'')}')" title="Supprimer ce process" style="background:#fef2f2;color:#dc2626;border:none;border-radius:5px;padding:2px 8px;cursor:pointer;font-size:.66rem;font-weight:700;"><i class="fas fa-trash"></i></button></div>`).join('') : '<div style="font-size:.7rem;color:#cbd5e1;">Aucun process rattaché</div>'}</div>
+              <div><div style="font-size:.62rem;font-weight:800;text-transform:uppercase;color:#8b5cf6;margin-bottom:5px;"><i class="fas fa-sitemap" style="margin-right:4px;"></i>Process (${dp.length})</div>${dp.length ? dp.map((x:any)=>`<div style="display:flex;align-items:center;gap:6px;font-size:.74rem;color:#374151;padding:3px 0;border-bottom:1px solid #f1f5f9;"><span style="font-weight:600;">${escX(x.nom)}</span><span style="font-size:.6rem;background:#ede9fe;color:#6d28d9;border-radius:5px;padding:1px 6px;">${procType(x)}</span>${typeProcess(x) === 'machine' && x.machine_id && machNameById[x.machine_id] ? `<span style="font-size:.6rem;background:#e0f2fe;color:#0369a1;border-radius:5px;padding:1px 6px;" title="Machine rattachée à ce process"><i class="fas fa-cog" style="margin-right:3px;"></i>${escX(machNameById[x.machine_id])}</span>` : (typeProcess(x) === 'machine' ? '<span style="font-size:.58rem;color:#f59e0b;font-weight:700;" title="Ce process nécessite une machine — aucune rattachée"><i class="fas fa-triangle-exclamation" style="margin-right:2px;"></i>machine à rattacher</span>' : '')}${procTauxBadge(x)}<button onclick="openProcEdit('${x.id}')" title="Modifier ce process (nom, type, machine, taux horaire machine, poste)" style="margin-left:auto;background:#eef2ff;color:#4f46e5;border:none;border-radius:5px;padding:2px 8px;cursor:pointer;font-size:.66rem;font-weight:700;"><i class="fas fa-pen"></i></button><button onclick="deleteProc('${x.id}','${(x.nom||'').replace(/[<>"'\\]/g,'')}')" title="Supprimer ce process" style="background:#fef2f2;color:#dc2626;border:none;border-radius:5px;padding:2px 8px;cursor:pointer;font-size:.66rem;font-weight:700;"><i class="fas fa-trash"></i></button></div>`).join('') : '<div style="font-size:.7rem;color:#cbd5e1;">Aucun process rattaché</div>'}</div>
               <div><div style="font-size:.62rem;font-weight:800;text-transform:uppercase;color:#0ea5e9;margin-bottom:5px;"><i class="fas fa-cogs" style="margin-right:4px;"></i>Machines (${dm.length})</div>${dm.length ? dm.map((x:any)=>`<div style="font-size:.74rem;color:#374151;padding:3px 0;border-bottom:1px solid #f1f5f9;"><span style="font-weight:600;">${escX(x.nom)}</span>${x.cnc?' <span style="font-size:.58rem;background:#e0f2fe;color:#0369a1;border-radius:5px;padding:1px 6px;font-weight:700;">CNC</span>':''}<span style="float:right;color:${machOpex[String(x.id)]?'#16a34a':'#cbd5e1'};font-weight:700;">${machOpex[String(x.id)]?fmtEur(machOpex[String(x.id)].total):'—'}</span></div>`).join('') : '<div style="font-size:.7rem;color:#cbd5e1;">Aucune machine rattachée</div>'}</div>
             </div></td></tr>` : ''}`
         }).join('')}</tbody>
         <tfoot><tr style="background:#faf5ff;border-top:2px solid #ede9fe;">
           <td colspan="5" style="padding:10px 14px;font-weight:800;color:#7c3aed;">TOTAL POSTES</td>
           <td style="padding:10px 14px;text-align:center;font-weight:800;color:#16a34a;">${fmtEur(Object.values(posteOpex).reduce((s:number,o:any)=>s+o.reel,0))}</td>
-          <td style="padding:10px 14px;text-align:center;font-weight:800;color:#7c3aed;">${Math.round(Object.values(posteOpex).reduce((s:number,o:any)=>s+o.theorique,0)).toLocaleString('fr-FR')} €</td>
-          <td></td>
           <td></td>
         </tr></tfoot>
       </table></div>`}
       <div style="padding:10px 18px;border-top:1px solid #f1f5f9;font-size:.7rem;color:#64748b;">
-        <i class="fas fa-bolt" style="color:#8b5cf6;margin-right:5px;"></i><strong>OPEX poste</strong> = somme de l'OPEX de ses machines (consommables réels + théorique coût/h × capacité) + consommables tirés directement au poste (postes manuels). Ce calcul est repris à l'identique en Maintenance.<br><i class="fas fa-hand-holding-usd" style="color:#0d9488;margin-right:5px;"></i><strong>Taux/h effectif</strong> = base (moyenne pondérée coût/h des machines) + <strong>achats machine reçus</strong> de l'année / heures budgétées (Σ capacité × 220 j). C'est ce taux qui alimente le <strong>CRU</strong> des pièces usinées au poste. Le bouton <i class="fas fa-hand-holding-usd" style="color:#0d9488;"></i> fixe un <strong>taux manuel</strong> (override, avec confirmation) qui prime en absolu.
+        <i class="fas fa-bolt" style="color:#8b5cf6;margin-right:5px;"></i><strong>OPEX poste</strong> = somme de l'OPEX réel de ses machines (consommables sortis du stock) + consommables tirés directement au poste (postes manuels). Ce calcul est repris à l'identique en Maintenance.<br><i class="fas fa-euro-sign" style="color:#0d9488;margin-right:5px;"></i><strong>Coût horaire</strong> : seul le <strong>process</strong> en porte un. Un process <strong>machine</strong> porte son <strong>taux horaire machine</strong>, saisi à la main (crayon du process) ; le temps homme est valorisé au <strong>coût chargé RH</strong> des opérateurs (fiche salarié)${TAUX_HOMME_ATELIER && TAUX_HOMME_ATELIER.moyen != null ? ` — moyenne atelier ${fmtTaux(TAUX_HOMME_ATELIER.moyen)} €/h` : ''}. Ni la machine ni le poste ne portent de taux.
       </div>
     </div>
 
@@ -2249,7 +2252,7 @@ ${serviceHeader({
     <!-- Liste machines -->
     <div class="card" style="overflow:hidden;margin-bottom:20px;">
       <div style="padding:14px 18px;border-bottom:1px solid #f1f5f9;font-weight:700;color:#1e293b;font-size:.88rem;display:flex;align-items:center;justify-content:space-between;">
-        <span><i class="fas fa-table" style="color:#f97316;margin-right:7px;"></i>Parc machines — Détail coûts & OPEX</span>
+        <span><i class="fas fa-table" style="color:#f97316;margin-right:7px;"></i>Parc machines — Détail OPEX réel</span>
         <div style="display:flex;gap:6px;align-items:center;">
           <button onclick="mach_filter('all',this)" id="mf-all" style="padding:5px 12px;border-radius:6px;border:1.5px solid #f97316;background:#f97316;color:white;cursor:pointer;font-size:.72rem;font-weight:700;">Tous</button>
           <button onclick="mach_filter('Seem',this)" id="mf-seem" style="padding:5px 12px;border-radius:6px;border:1.5px solid #e2e8f0;background:white;color:#374151;cursor:pointer;font-size:.72rem;font-weight:600;">SEEM</button>
@@ -2265,18 +2268,14 @@ ${serviceHeader({
             <th style="text-align:left;padding:10px 14px;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#6b7280;">Code</th>
             <th style="text-align:left;padding:10px 14px;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#6b7280;">Activité</th>
             <th style="text-align:left;padding:10px 14px;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#6b7280;">Catégorie</th>
-            <th style="text-align:center;padding:10px 14px;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#6b7280;">Taux/h</th>
             <th style="text-align:center;padding:10px 14px;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#6b7280;">Capa./j</th>
-            <th style="text-align:center;padding:10px 14px;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#6b7280;">OPEX théorique/an</th>
             <th style="text-align:center;padding:10px 14px;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#16a34a;">OPEX réel conso. (YTD)</th>
             <th style="text-align:center;padding:10px 14px;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#6b7280;">Postes</th>
             <th style="text-align:center;padding:10px 14px;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#6b7280;">Statut</th>
             <th style="text-align:center;padding:10px 14px;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#6b7280;">Actions</th>
           </tr></thead>
           <tbody id="mach-tbody">
-            ${MACH_REAL.length === 0 ? '<tr><td colspan="11" style="text-align:center;padding:28px;color:#94a3b8;">Aucune machine. Cliquez sur « Nouvelle machine ».</td></tr>' : MACH_REAL.map((m: any) => {
-              const coutH = m.cout_h ?? m.taux_horaire ?? 35
-              const opexAnnuel = coutH * (m.capacite_h ?? 8) * 220
+            ${MACH_REAL.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:28px;color:#94a3b8;">Aucune machine. Cliquez sur « Nouvelle machine ».</td></tr>' : MACH_REAL.map((m: any) => {
               const op = machOpex[String(m.id)]
               const opexReel = op ? op.total : 0
               const nbPostes = op ? Object.keys(op.postes).length : 0
@@ -2288,9 +2287,7 @@ ${serviceHeader({
                 <td style="padding:10px 14px;font-family:monospace;font-size:.75rem;color:#6b7280;">${escX(m.code ?? '—')}</td>
                 <td style="padding:10px 14px;"><span style="background:${m.activite==='Seem'?'#dbeafe':m.activite==='Semrac'?'#fce7f3':m.activite==='OAS'?'#ccfbf1':'#f3e8ff'};color:${m.activite==='Seem'?'#1d4ed8':m.activite==='Semrac'?'#be185d':m.activite==='OAS'?'#0f766e':'#5b21b6'};border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;">${m.activite}</span>${m.activite==='OAS'?' <span title="Traitement de surface — hors planning" style="font-size:.58rem;color:#0f766e;"><i class="fas fa-flask"></i></span>':''}</td>
                 <td style="padding:10px 14px;font-size:.78rem;color:#374151;">${escX(m.categorie ?? '—')}</td>
-                <td style="padding:10px 14px;text-align:center;font-weight:700;color:#1e293b;">${coutH} €/h</td>
                 <td style="padding:10px 14px;text-align:center;color:#6b7280;">${m.capacite_h ?? 8} h</td>
-                <td style="padding:10px 14px;text-align:center;font-weight:600;color:#94a3b8;">${opexAnnuel.toLocaleString('fr-FR')} €</td>
                 <td style="padding:10px 14px;text-align:center;font-weight:800;color:${opexReel>0?'#16a34a':'#cbd5e1'};">${opexReel>0?fmtEur(opexReel):'—'}</td>
                 <td style="padding:10px 14px;text-align:center;">${nbPostes>0?`<button onclick="machShowPostes('${m.id}')" style="background:#ecfdf5;color:#16a34a;border:1px solid #a7f3d0;border-radius:6px;padding:3px 9px;cursor:pointer;font-size:.68rem;font-weight:700;">${nbPostes} poste${nbPostes>1?'s':''}</button>`:'<span style="color:#cbd5e1;font-size:.72rem;">—</span>'}</td>
                 <td style="padding:10px 14px;text-align:center;"><span style="border-radius:999px;padding:3px 10px;font-size:.68rem;font-weight:700;${statutStyle}">${statutTxt}</span></td>
@@ -2306,8 +2303,7 @@ ${serviceHeader({
           </tbody>
           <tfoot>
             <tr style="background:#fff7ed;border-top:2px solid #fed7aa;">
-              <td colspan="6" style="padding:10px 14px;font-weight:800;color:#c2410c;">TOTAL PARC</td>
-              <td style="padding:10px 14px;text-align:center;font-weight:800;color:#c2410c;">${MACH_REAL.reduce((s: number, m: any) => s + (m.cout_h ?? m.taux_horaire ?? 35) * (m.capacite_h ?? 8) * 220, 0).toLocaleString('fr-FR')} €/an</td>
+              <td colspan="5" style="padding:10px 14px;font-weight:800;color:#c2410c;">TOTAL PARC</td>
               <td style="padding:10px 14px;text-align:center;font-weight:800;color:#16a34a;">${fmtEur(opexTotalReel)}</td>
               <td colspan="3"></td>
             </tr>
@@ -2375,9 +2371,12 @@ ${serviceHeader({
       <div style="padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div style="grid-column:span 2;"><label class="form-label">Nom du process *</label><input id="p_nom" type="text" placeholder="Ex : Tournage CNC, Ébavurage…" class="form-input"/></div>
         <div><label class="form-label">Code</label><input id="p_code" type="text" placeholder="PROC-XX" class="form-input"/></div>
-        <div><label class="form-label">Activité *</label><select id="p_activite" class="form-input"><option value="Seem">Seem</option><option value="Semrac">Semrac</option><option value="both">Seem &amp; Semrac</option></select></div>
+        <div><label class="form-label">Activité *</label><select id="p_activite" class="form-input" onchange="procTypeChange()"><option value="Seem">Seem</option><option value="Semrac">Semrac</option><option value="both">Seem &amp; Semrac</option></select></div>
         <div><label class="form-label">Type *</label><select id="p_type" class="form-input" onchange="procTypeChange()"><option value="machine">Machine</option><option value="manuel">Manuel</option><option value="oas">OAS (traitement de surface)</option></select></div>
         <div id="p_machine_wrap"><label class="form-label">Machine rattachée</label><select id="p_machine" class="form-input"></select></div>
+        <div id="p_taux_wrap" style="grid-column:span 2;"><label class="form-label">Taux horaire machine <span style="color:#0d9488;font-weight:600;">(€/h HT)</span></label><input id="p_taux" type="number" step="0.01" min="0" placeholder="À saisir — ex : 55" class="form-input"/>
+          <div style="font-size:.66rem;color:#94a3b8;margin-top:4px;"><i class="fas fa-info-circle" style="margin-right:3px;"></i>Porté par le <strong>process</strong> (et non par la machine) : il valorise les heures machine (réglage machine + temps machine variable). Vide = « taux à saisir » (coût machine à 0 en attendant).</div></div>
+        <div id="p_taux_note" style="grid-column:span 2;display:none;font-size:.7rem;color:#475569;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;padding:8px 10px;"></div>
         <div><label class="form-label">Catégorie</label><input id="p_categorie" type="text" placeholder="Usinage, Finition…" class="form-input"/></div>
         <div><label class="form-label">Poste <span style="color:#8b5cf6;font-weight:600;">de travail</span></label><select id="p_poste" class="form-input"></select></div>
         <div><label class="form-label">Ordre d'affichage</label><input id="p_ordre" type="number" value="100" class="form-input"/></div>
@@ -2385,17 +2384,18 @@ ${serviceHeader({
       <div style="padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;"><button onclick="closeModal('procModal')" class="btn btn-secondary">Annuler</button><button onclick="createProcess()" class="btn btn-primary"><i class="fas fa-plus"></i> Créer le process</button></div>
     </div>
   </div>
-  <!-- Modal Modifier process (nom + machine rattachée) -->
+  <!-- Modal Modifier process (nom, type, machine rattachée, taux horaire machine, poste) -->
   <div id="procEditModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center;z-index:520;">
-    <div style="background:white;border-radius:18px;box-shadow:0 24px 64px rgba(0,0,0,.25);width:100%;max-width:440px;margin:1rem;overflow:hidden;">
+    <div style="background:white;border-radius:18px;box-shadow:0 24px 64px rgba(0,0,0,.25);width:100%;max-width:460px;margin:1rem;overflow:hidden;">
       <div style="padding:14px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#6366f1,#4f46e5);"><h3 style="font-weight:700;color:white;font-size:.95rem;"><i class="fas fa-pen" style="margin-right:8px;"></i>Modifier le process</h3><button onclick="closeModal('procEditModal')" style="color:rgba(255,255,255,.7);background:none;border:none;font-size:1.2rem;cursor:pointer;"><i class="fas fa-times"></i></button></div>
       <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
         <input type="hidden" id="pe_id"/>
         <div><label class="form-label">Nom du process *</label><input id="pe_nom" type="text" class="form-input"/></div>
-        <div><label class="form-label">Machine rattachée</label><select id="pe_machine" class="form-input" onchange="peMachineChange()"></select>
-          <div style="font-size:.66rem;color:#94a3b8;margin-top:4px;"><i class="fas fa-info-circle" style="margin-right:3px;"></i>Choisir une machine bascule le process en « Machine » ; « Aucune » le laisse manuel.</div></div>
-        <div><label class="form-label">Taux horaire <span style="color:#0d9488;font-weight:600;">(€/h)</span></label><input id="pe_taux" type="number" step="0.5" min="0" class="form-input"/>
-          <div id="pe_taux_note" style="font-size:.66rem;color:#94a3b8;margin-top:4px;"><i class="fas fa-info-circle" style="margin-right:3px;"></i>Coût horaire de la machine associée (alimente le CRU des pièces via le taux du poste).</div></div>
+        <div><label class="form-label">Type *</label><select id="pe_type" class="form-input" onchange="peTypeChange()"><option value="machine">Machine</option><option value="manuel">Manuel</option><option value="oas">OAS (traitement de surface)</option></select></div>
+        <div id="pe_machine_wrap"><label class="form-label">Machine rattachée</label><select id="pe_machine" class="form-input"></select>
+          <div style="font-size:.66rem;color:#94a3b8;margin-top:4px;"><i class="fas fa-info-circle" style="margin-right:3px;"></i>Un process machine sans machine rattachée reste « Machine » (signalé « machine à rattacher »).</div></div>
+        <div id="pe_taux_wrap"><label id="pe_taux_lbl" class="form-label">Taux horaire machine <span style="color:#0d9488;font-weight:600;">(€/h HT)</span></label><input id="pe_taux" type="number" step="0.01" min="0" placeholder="À saisir — ex : 55" class="form-input"/>
+          <div id="pe_taux_note" style="font-size:.66rem;color:#94a3b8;margin-top:4px;"></div></div>
         <div><label class="form-label">Poste <span style="color:#8b5cf6;font-weight:600;">de travail</span></label><select id="pe_poste" class="form-input"></select>
           <div style="font-size:.66rem;color:#94a3b8;margin-top:4px;"><i class="fas fa-info-circle" style="margin-right:3px;"></i>Le poste où ce process est planifié (les BDT de ce process s'y placent).</div></div>
       </div>
@@ -2413,13 +2413,12 @@ ${serviceHeader({
         <div><label class="form-label">Activité *</label><select id="mc_activite" class="form-input"><option value="Seem">Seem</option><option value="Semrac">Semrac</option><option value="both">Seem &amp; Semrac</option><option value="OAS">OAS (traitement de surface)</option></select></div>
         <div><label class="form-label">Catégorie</label><input id="mc_categorie" type="text" placeholder="Usinage, Découpe…" class="form-input"/></div>
         <div><label class="form-label">Capacité (h/jour)</label><input id="mc_capacite" type="number" step="0.5" value="8" class="form-input"/></div>
-        <div><label class="form-label">Coût machine (€/h)</label><input id="mc_couth" type="number" step="0.5" value="35" class="form-input"/></div>
         <div><label class="form-label">Tolérance ± (mm) <span style="color:#0d9488;font-weight:600;">capabilité</span></label><input id="mc_tolerance" type="number" step="any" placeholder="ex : 0.05" class="form-input"/></div>
         <div><label class="form-label">Statut</label><select id="mc_statut" class="form-input"><option value="operationnel">Opérationnel</option><option value="maintenance">Maintenance</option><option value="arret">Arrêt</option></select></div>
         <div><label class="form-label">Poste <span style="color:#8b5cf6;font-weight:600;">de travail</span></label><select id="mc_poste" class="form-input" onchange="mcPosteChange()"></select></div>
         <div style="grid-column:span 2;"><label style="display:flex;align-items:center;gap:8px;font-size:.82rem;color:#374151;cursor:pointer;"><input id="mc_cnc" type="checkbox" style="width:15px;height:15px;"/> <i class="fas fa-microchip" style="color:#0ea5e9;"></i> Machine <strong>CNC</strong> <span style="font-size:.7rem;color:#94a3b8;font-weight:600;">— porte des codes programme (saisis en préparation technique) ; les machines non-CNC n'en ont pas</span></label></div>
         <div style="grid-column:span 2;"><label class="form-label">Opérations possibles (séparées par virgule)</label><input id="mc_operations" type="text" placeholder="Usinage CN, Tronçonnage…" class="form-input"/></div>
-        <div style="grid-column:span 2;" id="mc_process_wrap"><label class="form-label">Process rattachés <span style="color:#8b5cf6;font-weight:600;">(du poste — plusieurs possibles)</span></label><div id="mc_proc_list" style="max-height:130px;overflow:auto;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 11px;background:#f8fafc;"></div><label id="mc_proc_new_wrap" style="display:flex;align-items:center;gap:6px;margin-top:7px;font-size:.76rem;color:#374151;cursor:pointer;"><input id="mc_proc_new" type="checkbox"/> Créer aussi un nouveau process (au nom de la machine)</label><div style="font-size:.66rem;color:#94a3b8;margin-top:3px;"><i class="fas fa-bolt" style="margin-right:3px;color:#f59e0b;"></i>La machine est rattachée à <strong>ces</strong> process ; son <strong>taux horaire (€/h)</strong> alimente le coût machine du CRU. Synchronisé avec l'édition du process.</div></div>
+        <div style="grid-column:span 2;" id="mc_process_wrap"><label class="form-label">Process rattachés <span style="color:#8b5cf6;font-weight:600;">(du poste — plusieurs possibles)</span></label><div id="mc_proc_list" style="max-height:130px;overflow:auto;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 11px;background:#f8fafc;"></div><label id="mc_proc_new_wrap" style="display:flex;align-items:center;gap:6px;margin-top:7px;font-size:.76rem;color:#374151;cursor:pointer;"><input id="mc_proc_new" type="checkbox" onchange="mcProcNewChange()"/> Créer aussi un nouveau process (au nom de la machine)</label><div id="mc_proc_taux_wrap" style="display:none;margin-top:6px;"><label class="form-label">Taux horaire machine du nouveau process <span style="color:#0d9488;font-weight:600;">(€/h HT)</span></label><input id="mc_proc_taux" type="number" step="0.01" min="0" placeholder="À saisir — ex : 55" class="form-input"/></div><div style="font-size:.66rem;color:#94a3b8;margin-top:3px;"><i class="fas fa-bolt" style="margin-right:3px;color:#f59e0b;"></i>La machine est rattachée à <strong>ces</strong> process. La machine ne porte <strong>aucun taux</strong> : le <strong>taux horaire machine (€/h)</strong> se saisit sur chaque <strong>process</strong> (crayon du process, volet « Postes &amp; Process »).</div></div>
       </div>
       <div style="padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;"><button onclick="closeModal('machineModal')" class="btn btn-secondary">Annuler</button><button id="mc_save_btn" onclick="createMachineFn()" class="btn btn-primary"><i class="fas fa-plus"></i> Créer la machine</button></div>
     </div>
@@ -2427,22 +2426,50 @@ ${serviceHeader({
 </div>
 
 <script>
-var MACH_DATA = ${sjX(MACH_REAL.map((m:any)=>({id:m.id,nom:m.nom,code:m.code,activite:m.activite,categorie:m.categorie,capacite_h:m.capacite_h,cout_h:(m.cout_h ?? m.taux_horaire ?? 35),tolerance_defaut:(m.tolerance_defaut ?? null),poste_id:(m.poste_id ?? null),cnc:!!m.cnc,operations:Array.isArray(m.operations)?m.operations.join(', '):(m.operations||''),statut:m.statut})))};
+// Machines : plus aucun taux (14/09/2026) — le taux horaire machine est porté par le PROCESS.
+var MACH_DATA = ${sjX(MACH_REAL.map((m:any)=>({id:m.id,nom:m.nom,code:m.code,activite:m.activite,categorie:m.categorie,capacite_h:m.capacite_h,tolerance_defaut:(m.tolerance_defaut ?? null),poste_id:(m.poste_id ?? null),cnc:!!m.cnc,operations:Array.isArray(m.operations)?m.operations.join(', '):(m.operations||''),statut:m.statut})))};
 var POSTES_JS = ${sjX(POSTES)};
+// Moyennes du coût chargé RH des opérateurs actifs { moyen, seem, semrac, manquant } — null si non fournies à la page.
+var TAUX_HOMME_ATELIER = ${sjX(TAUX_HOMME_ATELIER)};
 function _posteOptions(sel){ return '<option value="">— Aucun poste —</option>'+(POSTES_JS||[]).map(function(p){ return '<option value="'+p.id+'"'+(String(sel)===String(p.id)?' selected':'')+'>'+String(p.nom||'').replace(/</g,'&lt;')+'</option>'; }).join(''); }
 function postToggleDet(id){ var r=document.getElementById('postdet-'+id), b=document.getElementById('postexp-'+id); if(!r) return; var open=(r.style.display==='none'); r.style.display=open?'':'none'; if(b) b.innerHTML=open?'<i class="fas fa-chevron-down"></i>':'<i class="fas fa-chevron-right"></i>'; }
-// ── Override manuel du taux horaire d'un poste (Phase E) — fenêtre de confirmation obligatoire ──
-async function posteSetTaux(id, autoTaux, currentManuel){
-  var msg='Taux horaire MANUEL du poste (€/h). Laisser vide pour revenir au taux automatique ('+Number(autoTaux).toFixed(2)+' €/h). Ce taux prime en absolu et impacte le CRU des pieces usinees au poste.';
-  var v=window.prompt(msg, (currentManuel!=null?String(currentManuel):''));
-  if(v===null) return;
-  v=String(v).trim().replace(',', '.');
-  var payload;
-  if(v===''){ if(!await appConfirm('Reinitialiser au taux automatique ('+Number(autoTaux).toFixed(2)+' €/h) ?')) return; payload={taux_horaire_manuel:null}; }
-  else { var num=parseFloat(v); if(isNaN(num)||num<0){ if(window.pushNotif) pushNotif('err','fa-ban','Taux invalide.'); return; } if(!await appConfirm('Etes-vous sur ? Fixer le taux du poste a '+num.toFixed(2)+' €/h (override manuel) — impacte le CRU des pieces.')) return; payload={taux_horaire_manuel:num}; }
-  fetch('/api/production/poste/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ if(window.pushNotif) pushNotif('ok','fa-check-circle','Taux du poste mis a jour.'); setTimeout(function(){softReload();},700); } else { if(window.pushNotif) pushNotif('err','fa-times',(j&&j.error)||'Erreur.'); } }).catch(function(e){ if(window.pushNotif) pushNotif('err','fa-times',e.message); });
+// ── Taux horaire (14/09/2026) : seul le PROCESS porte un taux, et seulement le process machine. ──
+function _fmtTauxH(v){ return (Math.round((Number(v)||0)*100)/100).toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:2}); }
+// Note d un process manuel : le temps homme est valorisé au coût chargé RH (moyenne du site si connue, sinon de l atelier).
+function _noteProcessManuel(activite){
+  var t=TAUX_HOMME_ATELIER, site=String(activite||'').toLowerCase(), moy=null, lib='atelier';
+  if(t){ if((site==='seem'||site==='semrac') && t[site]!=null){ moy=t[site]; lib='atelier '+(site==='seem'?'Seem':'Semrac'); } else if(t.moyen!=null){ moy=t.moyen; } }
+  var txt='Process manuel : le temps homme est valorisé au coût chargé RH de l\\'opérateur (fiche salarié)';
+  if(moy!=null) txt+=' — moyenne '+lib+' '+_fmtTauxH(moy)+' €/h.';
+  else if(t && t.manquant) txt+=' — <strong style="color:#c2410c;">coût chargé RH à renseigner</strong> (aucun opérateur actif n\\'a de coût chargé).';
+  else txt+='.';
+  return '<i class="fas fa-user" style="margin-right:4px;color:#64748b;"></i>'+txt;
 }
-window.posteSetTaux=posteSetTaux;
+// Lecture d un champ taux : { ok, val } — val = null (vide = à saisir) ou nombre ≥ 0 ; ok=false si saisie invalide.
+function _lireTaux(el){
+  if(!el) return {ok:true,val:null};
+  if(el.validity && el.validity.badInput) return {ok:false,val:null};
+  var s=String(el.value==null?'':el.value).trim().replace(',', '.');
+  if(s==='') return {ok:true,val:null};
+  var n=Number(s);
+  if(!isFinite(n)||n<0) return {ok:false,val:null};
+  return {ok:true,val:n};
+}
+// Avertissement serveur (base cloud sans la colonne process_atelier.taux_horaire_machine : jouer cloud-7) — affiché longtemps.
+// Le rechargement qui suit l enregistrement effacerait la notification avant qu elle soit lue : le message est aussi
+// gardé en sessionStorage et RÉAFFICHÉ au chargement suivant de la page (voir l IIFE ci-dessous).
+function _avertTaux(j){
+  if(!(j && j.avertissement)) return;
+  var m=String(j.avertissement).replace(/</g,'&lt;');
+  pushNotif('warn','fa-triangle-exclamation',m,12000);
+  try{ sessionStorage.setItem('__erpAvertTaux', JSON.stringify({ m:m, p:location.pathname, t:Date.now() })); }catch(e){}
+}
+(function(){ try{
+  var raw=sessionStorage.getItem('__erpAvertTaux'); if(!raw) return; sessionStorage.removeItem('__erpAvertTaux');
+  var o=JSON.parse(raw); if(!o||!o.m||o.p!==location.pathname||(Date.now()-(o.t||0))>60000) return;
+  var show=function(){ if(typeof pushNotif==='function') pushNotif('warn','fa-triangle-exclamation',o.m,20000); };
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ setTimeout(show,400); }); else setTimeout(show,400);
+}catch(e){} })();
 // ── Création d'un process DANS un poste (poste pré-rempli). Les MACHINES ne se créent QUE dans le volet « Machines ».
 //    Le rattachement/déplacement d'un process se fait via sa modale d'édition (champ « Poste ») — plus de glisser-déposer.
 function openProcModalForPoste(pid){ openProcModal(); var pp=document.getElementById('p_poste'); if(pp) pp.value=pid; }
@@ -2513,11 +2540,13 @@ function openMachineModal(){
   document.getElementById('mc_modal_title').innerHTML='<i class="fas fa-cog" style="margin-right:8px;"></i>Nouvelle machine';
   document.getElementById('mc_save_btn').innerHTML='<i class="fas fa-plus"></i> Créer la machine';
   ['mc_nom','mc_code','mc_categorie','mc_operations'].forEach(function(id){document.getElementById(id).value='';});
-  document.getElementById('mc_capacite').value='8'; document.getElementById('mc_couth').value='35';
+  document.getElementById('mc_capacite').value='8';
   document.getElementById('mc_activite').value='Seem'; document.getElementById('mc_statut').value='operationnel';
   var mp=document.getElementById('mc_poste'); if(mp) mp.innerHTML=_posteOptions('');
   var pnw=document.getElementById('mc_proc_new_wrap'); if(pnw) pnw.style.display='';
   var pn=document.getElementById('mc_proc_new'); if(pn) pn.checked=true;   // création : propose un nouveau process par défaut
+  var pt=document.getElementById('mc_proc_taux'); if(pt) pt.value='';
+  mcProcNewChange();
   mcFillProcess([]);
   var cc=document.getElementById('mc_cnc'); if(cc) cc.checked=false;
   var m=document.getElementById('machineModal'); if(m) m.style.display='flex';
@@ -2529,7 +2558,7 @@ function editMachine(id){
   document.getElementById('mc_save_btn').innerHTML='<i class="fas fa-save"></i> Enregistrer';
   document.getElementById('mc_nom').value=m.nom||''; document.getElementById('mc_code').value=m.code||'';
   document.getElementById('mc_activite').value=m.activite||'Seem'; document.getElementById('mc_categorie').value=m.categorie||'';
-  document.getElementById('mc_capacite').value=m.capacite_h!=null?m.capacite_h:8; document.getElementById('mc_couth').value=m.cout_h!=null?m.cout_h:35;
+  document.getElementById('mc_capacite').value=m.capacite_h!=null?m.capacite_h:8;
   document.getElementById('mc_tolerance').value=m.tolerance_defaut!=null?m.tolerance_defaut:'';
   document.getElementById('mc_operations').value=m.operations||'';
   document.getElementById('mc_statut').value=(m.statut==='maintenance'||m.statut==='arret')?m.statut:'operationnel';
@@ -2537,28 +2566,51 @@ function editMachine(id){
   var mp=document.getElementById('mc_poste'); if(mp) mp.innerHTML=_posteOptions(m.poste_id||'');
   var pnw=document.getElementById('mc_proc_new_wrap'); if(pnw) pnw.style.display='none';   // édition : pas de création de process ici
   var pn=document.getElementById('mc_proc_new'); if(pn) pn.checked=false;
+  mcProcNewChange();
   var _att=(PROCESS||[]).filter(function(p){ return String(p.machine_id||'')===String(m.id) && String(p.poste_id||'')===String(m.poste_id||''); }).map(function(p){return p.id;});   // TOUS les process du poste déjà rattachés à cette machine
   mcFillProcess(_att);
   var cc=document.getElementById('mc_cnc'); if(cc) cc.checked=!!m.cnc;
   document.getElementById('machineModal').style.display='flex';
 }
+// Case « Créer aussi un nouveau process » : le taux horaire machine de ce process peut être saisi tout de suite (création seulement).
+function mcProcNewChange(){
+  var pn=document.getElementById('mc_proc_new'), w=document.getElementById('mc_proc_taux_wrap');
+  var creation=!((document.getElementById('mc_id')||{}).value);
+  if(w) w.style.display=(creation && pn && pn.checked)?'':'none';
+}
+window.mcProcNewChange=mcProcNewChange;
 function createMachineFn(){
   var nom=(document.getElementById('mc_nom').value||'').trim(); if(!nom){ pushNotif('err','fa-exclamation-circle','Nom de la machine requis.'); return; }
   var id=document.getElementById('mc_id').value;
-  var payload={ nom:nom, code:(document.getElementById('mc_code').value||'').trim(), activite:document.getElementById('mc_activite').value, categorie:(document.getElementById('mc_categorie').value||'').trim(), capacite_h:parseFloat(document.getElementById('mc_capacite').value)||8, cout_h:parseFloat(document.getElementById('mc_couth').value)||35, tolerance_defaut:(document.getElementById('mc_tolerance').value!==''?parseFloat(document.getElementById('mc_tolerance').value):null), statut:document.getElementById('mc_statut').value, operations:document.getElementById('mc_operations').value };
+  // Plus de cout_h (14/09/2026) : la machine ne porte aucun taux, le taux horaire machine se saisit sur le process.
+  var payload={ nom:nom, code:(document.getElementById('mc_code').value||'').trim(), activite:document.getElementById('mc_activite').value, categorie:(document.getElementById('mc_categorie').value||'').trim(), capacite_h:parseFloat(document.getElementById('mc_capacite').value)||8, tolerance_defaut:(document.getElementById('mc_tolerance').value!==''?parseFloat(document.getElementById('mc_tolerance').value):null), statut:document.getElementById('mc_statut').value, operations:document.getElementById('mc_operations').value };
   if(POSTES_JS && POSTES_JS.length){ var _mp=document.getElementById('mc_poste'); if(_mp) payload.poste_id=_mp.value||''; }   // rattachement poste (seulement si des postes existent → compat pré-migration)
   var _cc=document.getElementById('mc_cnc'); if(_cc) payload.cnc=_cc.checked;   // CNC (le serveur réessaie sans si colonne absente)
   var poste=(document.getElementById('mc_poste')||{}).value||'';
   var checked=[].slice.call(document.querySelectorAll('#mc_proc_list .mc-proc-cb:checked')).map(function(cb){return String(cb.value);});   // process cochés (rattachés)
   var makeNew=!!((document.getElementById('mc_proc_new')||{}).checked);
-  var url, method;
+  var url, method, tauxNouveau=null;
   if(id){ url='/api/production/machine/'+encodeURIComponent(id); method='PATCH'; }
-  else { url='/api/production/machine'; method='POST'; payload.create_process=makeNew; }   // « nouveau process » = create_process serveur (POST)
+  else {
+    url='/api/production/machine'; method='POST'; payload.create_process=makeNew;   // « nouveau process » = create_process serveur (POST)
+    if(makeNew){   // taux horaire machine du process créé avec la machine (optionnel : vide = « taux à saisir »)
+      var lt=_lireTaux(document.getElementById('mc_proc_taux'));
+      if(!lt.ok){ pushNotif('err','fa-ban','Taux horaire machine invalide : un nombre positif ou nul (€/h), ou vide.'); return; }
+      if(lt.val!=null){ payload.taux_horaire_machine=lt.val; tauxNouveau=lt.val; }
+    }
+  }
   fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json();}).then(function(j){
     if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Enregistrement échoué.'); return; }
     var mid=(j.machine&&j.machine.id)||id;
-    var done=function(){ pushNotif('ok','fa-cog','Machine <strong>'+nom+'</strong> '+(id?'modifiée':'créée')+'.',5000); setTimeout(function(){ softReload(); },750); };
-    // SYNCHRONISATION machine ↔ process (le taux horaire machine → coût du CRU) : pour chaque process DU POSTE,
+    var done=function(){
+      var suite='';
+      if(!id && makeNew && j.process_id && tauxNouveau==null && !j.avertissement) suite=' Process créé : <strong>taux horaire machine à saisir</strong> (crayon du process).';
+      else if(!id && makeNew && !j.process_id) suite=' Le process associé n\\'a pas pu être créé.';
+      pushNotif('ok','fa-cog','Machine <strong>'+String(nom).replace(/</g,'&lt;')+'</strong> '+(id?'modifiée':'créée')+'.'+suite,6000);
+      _avertTaux(j);
+      setTimeout(function(){ softReload(); },j.avertissement?2500:750);
+    };
+    // SYNCHRONISATION machine ↔ process : pour chaque process DU POSTE,
     //   coché & non rattaché → rattacher ; décoché & rattaché à CETTE machine → détacher. Les autres postes/machines intacts.
     var posteProcs=(PROCESS||[]).filter(function(p){ return String(p.poste_id||'')===String(poste); });
     var _pp=function(pid,body){ return fetch('/api/production/process/'+encodeURIComponent(pid),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(function(){}); };
@@ -2573,10 +2625,13 @@ function createMachineFn(){
   }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
 async function deleteMachineFn(id,nom){
-  if(!await appConfirm('Supprimer la machine '+nom+' ? Cette action est irréversible.')) return;
+  // Ses process sont détachés, PAS convertis : un process machine reste machine, avec son taux horaire (à rattacher).
+  var nbP=(typeof PROCESS!=='undefined'?PROCESS:[]).filter(function(p){ return String(p.machine_id||'')===String(id); }).length;
+  var suiteP=nbP?(' Ses '+nbP+' process restent des process machine, avec leur taux horaire : ils seront à rattacher à une autre machine.'):'';
+  if(!await appConfirm('Supprimer la machine '+nom+' ?'+suiteP+' Cette action est irréversible.')) return;
   fetch('/api/production/machine/'+encodeURIComponent(id),{method:'DELETE'}).then(function(r){return r.json();}).then(function(j){
-    if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Suppression échouée.'); return; }
-    pushNotif('ok','fa-trash','Machine supprimée.',3500); setTimeout(function(){ softReload(); },650);
+    if(!j||!j.ok){ pushNotif('err','fa-ban',_escH((j&&j.error)||'Suppression échouée.'),8000); return; }
+    pushNotif('ok','fa-trash','Machine supprimée.'+(j.process_detaches?(' '+j.process_detaches+' process détaché(s), toujours de type machine.'):''),4500); setTimeout(function(){ softReload(); },900);
   }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
 function machDeclarerPanne(id,nom){
@@ -2636,41 +2691,42 @@ function showCmdSub(w){
   });
   try{ sessionStorage.setItem('prodCmdSub', w); }catch(e){}
 }
-// ─── Process Ateliers (référentiel machine / manuel) ─────────
-function proc_filter(type, btn){
-  document.querySelectorAll('#ppanel-machines button[id^="pf-"]').forEach(function(b){ b.style.background='white'; b.style.color='#374151'; b.style.borderColor='#e2e8f0'; });
-  if(btn){ btn.style.background='#f97316'; btn.style.color='white'; btn.style.borderColor='#f97316'; }
-  document.querySelectorAll('#proc-table tbody tr').forEach(function(r){ r.style.display=(type==='all'||r.dataset.type===type)?'':'none'; });
+// ─── Process Ateliers (référentiel machine / manuel / OAS) ─────────
+// (14/09/2026) Seul le PROCESS porte un taux horaire, et seulement le process MACHINE (taux_horaire_machine, saisi à la main).
+function _escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+var NOTE_PROCESS_OAS='<i class="fas fa-flask" style="margin-right:4px;color:#0e7490;"></i>Process OAS : chiffré au prix (forfait / prix unitaire), jamais au temps — aucun taux horaire.';
+var MSG_TAUX_INVALIDE='Taux horaire machine invalide : un nombre positif ou nul (€/h), ou vide pour « taux à saisir ».';
+function fillProcMachineSelect(){ var sel=document.getElementById('p_machine'); if(!sel) return; sel.innerHTML='<option value="">— Choisir une machine —</option>'+MACHINES_PROC.map(function(m){return '<option value="'+_escH(m.id)+'">'+_escH(m.nom)+' ('+_escH(m.activite)+')</option>';}).join(''); }
+// Création : machine rattachée + taux horaire machine seulement pour un process MACHINE ; manuel = note coût chargé RH ; OAS = pas de taux.
+function procTypeChange(){
+  var t=document.getElementById('p_type').value;
+  var w=document.getElementById('p_machine_wrap'); if(w) w.style.display=(t==='machine')?'':'none';
+  var tw=document.getElementById('p_taux_wrap'); if(tw) tw.style.display=(t==='machine')?'':'none';
+  var n=document.getElementById('p_taux_note');
+  if(n){
+    if(t==='manuel'){ n.innerHTML=_noteProcessManuel((document.getElementById('p_activite')||{}).value); n.style.display=''; }
+    else if(t==='oas'){ n.innerHTML=NOTE_PROCESS_OAS; n.style.display=''; }
+    else { n.innerHTML=''; n.style.display='none'; }
+  }
 }
-function fillProcMachineSelect(){ var sel=document.getElementById('p_machine'); if(!sel) return; sel.innerHTML='<option value="">— Choisir une machine —</option>'+MACHINES_PROC.map(function(m){return '<option value="'+m.id+'">'+m.nom+' ('+m.activite+')</option>';}).join(''); }
-function procTypeChange(){ var t=document.getElementById('p_type').value; var w=document.getElementById('p_machine_wrap'); if(w) w.style.display=(t==='machine')?'':'none'; }
-function openProcModal(){ document.getElementById('p_nom').value=''; document.getElementById('p_code').value=''; document.getElementById('p_activite').value='Seem'; document.getElementById('p_type').value='machine'; document.getElementById('p_categorie').value=''; document.getElementById('p_ordre').value='100'; var pp=document.getElementById('p_poste'); if(pp) pp.innerHTML=_posteOptions(''); fillProcMachineSelect(); procTypeChange(); var m=document.getElementById('procModal'); if(m) m.style.display='flex'; }
+function openProcModal(){ document.getElementById('p_nom').value=''; document.getElementById('p_code').value=''; document.getElementById('p_activite').value='Seem'; document.getElementById('p_type').value='machine'; document.getElementById('p_categorie').value=''; document.getElementById('p_ordre').value='100'; var pt=document.getElementById('p_taux'); if(pt) pt.value=''; var pp=document.getElementById('p_poste'); if(pp) pp.innerHTML=_posteOptions(''); fillProcMachineSelect(); procTypeChange(); var m=document.getElementById('procModal'); if(m) m.style.display='flex'; }
 function createProcess(){
   var nom=(document.getElementById('p_nom').value||'').trim(); if(!nom){ pushNotif('err','fa-exclamation-circle','Nom du process requis.'); return; }
   var type=document.getElementById('p_type').value; var reqM=(type==='machine'); var estOas=(type==='oas');
   var payload={nom:nom,code:(document.getElementById('p_code').value||'').trim(),activite:document.getElementById('p_activite').value,requiert_machine:reqM,est_oas:estOas,categorie:(document.getElementById('p_categorie').value||'').trim(),ordre:parseInt(document.getElementById('p_ordre').value)||100};
-  if(reqM){ var mid=document.getElementById('p_machine').value; if(mid) payload.machine_id=mid; }
+  if(reqM){
+    var mid=document.getElementById('p_machine').value; if(mid) payload.machine_id=mid;
+    var lt=_lireTaux(document.getElementById('p_taux'));
+    if(!lt.ok){ pushNotif('err','fa-ban',MSG_TAUX_INVALIDE); return; }
+    if(lt.val!=null) payload.taux_horaire_machine=lt.val;   // vide : non envoyé → null en base = « taux à saisir »
+  }
   if(POSTES_JS && POSTES_JS.length){ var _pp=document.getElementById('p_poste'); if(_pp) payload.poste_id=_pp.value||''; }
   fetch('/api/production/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json();}).then(function(j){
-    if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Création échouée.'); return; }
-    pushNotif('ok','fa-plus-circle','Process <strong>'+nom+'</strong> créé.'); setTimeout(function(){ softReload(); },650);
-  }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
-}
-function toggleProcMachine(id, toMachine){
-  fetch('/api/production/process/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({requiert_machine:toMachine})}).then(function(r){return r.json();}).then(function(j){
-    if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Mise à jour échouée.'); return; }
-    pushNotif('ok','fa-exchange-alt','Process basculé en '+(toMachine?'Machine':'Manuel')+'.'); setTimeout(function(){ softReload(); },500);
-  }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
-}
-function editProcMachineLink(id, isMachine){
-  if(!isMachine){ pushNotif('info','fa-info-circle','Process Manuel : basculez-le en Machine avant de rattacher.'); return; }
-  var opts=MACHINES_PROC.map(function(m,i){return (i+1)+') '+m.nom+' ['+m.id+']';}).join('\\n');
-  var pick=prompt('Rattacher une machine — saisir le numéro :\\n'+opts); if(!pick) return; pick=pick.trim();
-  var m=MACHINES_PROC.find(function(x){return x.id===pick;}); if(!m){ var n=parseInt(pick); if(n>=1&&n<=MACHINES_PROC.length) m=MACHINES_PROC[n-1]; }
-  if(!m){ pushNotif('err','fa-ban','Machine introuvable.'); return; }
-  fetch('/api/production/process/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({machine_id:m.id,requiert_machine:true})}).then(function(r){return r.json();}).then(function(j){
-    if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Rattachement échoué.'); return; }
-    pushNotif('ok','fa-link','Machine <strong>'+m.nom+'</strong> rattachée.'); setTimeout(function(){ softReload(); },500);
+    if(!j||!j.ok){ pushNotif('err','fa-ban',_escH((j&&j.error)||'Création échouée.')); return; }
+    var suite=(reqM && payload.taux_horaire_machine==null) ? ' Taux horaire machine <strong>à saisir</strong> (crayon du process).' : '';
+    pushNotif('ok','fa-plus-circle','Process <strong>'+_escH(nom)+'</strong> créé.'+suite,5000);
+    _avertTaux(j);
+    setTimeout(function(){ softReload(); },j.avertissement?2500:650);
   }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
 async function deleteProc(id, nom){
@@ -2680,45 +2736,75 @@ async function deleteProc(id, nom){
     pushNotif('ok','fa-trash','Process supprimé.'); setTimeout(function(){ softReload(); },500);
   }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
-// Édition d'un process : nom + machine rattachée (liste déroulante des machines existantes)
+// Édition d un process : nom, type, machine rattachée, taux horaire machine (process machine seulement), poste.
+var _peProc=null;
 function openProcEdit(id){
   var p=(typeof PROCESS!=='undefined'?PROCESS:[]).find(function(x){return String(x.id)===String(id);}); if(!p){ pushNotif('err','fa-ban','Process introuvable.'); return; }
+  _peProc=p;
   document.getElementById('pe_id').value=id;
   document.getElementById('pe_nom').value=p.nom||'';
+  var ty=document.getElementById('pe_type'); if(ty) ty.value=(p.type==='oas'||p.type==='manuel')?p.type:'machine';
   var sel=document.getElementById('pe_machine');
   var machs=(typeof MACHINES_PROC!=='undefined'?MACHINES_PROC:[]);
-  sel.innerHTML='<option value="">— Aucune (process manuel) —</option>'+machs.map(function(m){return '<option value="'+m.id+'"'+(String(m.id)===String(p.machine_id)?' selected':'')+'>'+m.nom+' ('+m.activite+')</option>';}).join('');
+  sel.innerHTML='<option value="">— Aucune machine rattachée —</option>'+machs.map(function(m){return '<option value="'+_escH(m.id)+'"'+(String(m.id)===String(p.machine_id)?' selected':'')+'>'+_escH(m.nom)+' ('+_escH(m.activite)+')</option>';}).join('');
   var pp=document.getElementById('pe_poste'); if(pp) pp.innerHTML=_posteOptions(p.poste_id||'');
-  peMachineChange();   // charge le taux horaire depuis la machine associée (ou désactive si process manuel)
+  // Taux : valeur SAISIE sur le process. Transition (colonne absente) : le taux en vigueur vient de la machine, pré-rempli
+  // pour information et renvoyé seulement s il est modifié (data-init).
+  var tx=document.getElementById('pe_taux');
+  var init=p.taux_col ? p.taux_horaire_machine : (p.taux_source==='transition_machine' ? p.taux_machine : null);
+  var initS=(init!=null?String(init):'');
+  tx.setAttribute('data-init',initS); tx.setAttribute('data-last',initS); tx.value=''; tx.disabled=true;
+  peTypeChange();
   document.getElementById('procEditModal').style.display='flex';
 }
-// Le « taux horaire » d'un process = le coût horaire de sa machine (il alimente le CRU via le taux du poste).
-function peMachineChange(){
-  var mid=document.getElementById('pe_machine').value;
-  var tx=document.getElementById('pe_taux'); var note=document.getElementById('pe_taux_note');
-  var m=(typeof MACHINES_PROC!=='undefined'?MACHINES_PROC:[]).find(function(x){return String(x.id)===String(mid);});
-  if(m){ tx.value=(m.cout_h!=null?m.cout_h:''); tx.disabled=false; if(note) note.innerHTML='<i class="fas fa-info-circle" style="margin-right:3px;"></i>Coût horaire de <strong>'+String(m.nom).replace(/</g,'&lt;')+'</strong> — modifier ce taux met à jour la machine (impacte le CRU via le taux du poste).'; }
-  else { tx.value=''; tx.disabled=true; if(note) note.innerHTML='<i class="fas fa-info-circle" style="margin-right:3px;"></i>Process manuel (sans machine) : le taux MO est défini dans la nomenclature.'; }
+function peTypeChange(){
+  var t=(document.getElementById('pe_type')||{}).value||'machine';
+  var p=_peProc||{};
+  var mw=document.getElementById('pe_machine_wrap'); if(mw) mw.style.display=(t==='machine')?'':'none';
+  var tx=document.getElementById('pe_taux'), lbl=document.getElementById('pe_taux_lbl'), note=document.getElementById('pe_taux_note');
+  if(!tx) return;
+  if(t==='machine'){
+    if(tx.disabled) tx.value=tx.getAttribute('data-last')||'';   // retour au type machine : restitue la saisie
+    tx.disabled=false; tx.style.display=''; if(lbl) lbl.style.display='';
+    var h='<i class="fas fa-info-circle" style="margin-right:3px;"></i>Porté par le <strong>process</strong>, saisi à la main : il valorise les heures machine (réglage machine + temps machine variable). Le temps homme est valorisé au coût chargé RH. Vide = « taux à saisir » (coût machine à 0).';
+    if(p.taux_col===false) h+='<div style="margin-top:5px;color:#b45309;font-weight:600;"><i class="fas fa-triangle-exclamation" style="margin-right:3px;"></i>Cette base n\\'a pas encore la colonne du taux process : le coût utilise en transition le coût horaire de la machine'+(p.taux_source==='transition_machine'?' ('+_fmtTauxH(p.taux_machine)+' €/h)':' (non renseigné)')+'. Un nouveau taux ne sera enregistré qu\\'après le script docker/db/cloud/cloud-7 (Studio Supabase en ligne).</div>';
+    if(note) note.innerHTML=h;
+  } else {
+    if(!tx.disabled) tx.setAttribute('data-last',tx.value);
+    tx.value=''; tx.disabled=true;
+    tx.style.display=(t==='oas')?'none':''; if(lbl) lbl.style.display=(t==='oas')?'none':'';
+    if(note) note.innerHTML=(t==='oas')?NOTE_PROCESS_OAS:_noteProcessManuel(p.activite);
+  }
 }
-window.peMachineChange=peMachineChange;
+window.peTypeChange=peTypeChange;
 function saveProcEdit(){
   var id=document.getElementById('pe_id').value;
   var nom=(document.getElementById('pe_nom').value||'').trim(); if(!nom){ pushNotif('err','fa-exclamation-circle','Nom requis.'); return; }
-  var mid=document.getElementById('pe_machine').value||null;
-  var _pePatch={nom:nom, machine_id:mid, requiert_machine:!!mid};
+  var t=(document.getElementById('pe_type')||{}).value||'machine';
+  var p=_peProc||{};
+  // Le type est choisi explicitement (plus déduit de la machine) : un process machine sans machine reste « machine ».
+  var mid=(t==='machine')?(document.getElementById('pe_machine').value||null):null;
+  var _pePatch={nom:nom, requiert_machine:(t==='machine'), est_oas:(t==='oas'), machine_id:mid};
   if(POSTES_JS && POSTES_JS.length){ var _pep=document.getElementById('pe_poste'); if(_pep) _pePatch.poste_id=_pep.value||''; }
-  var tauxVal=(document.getElementById('pe_taux')||{}).value;
-  var taux=(tauxVal!=null&&tauxVal!==''&&!isNaN(parseFloat(tauxVal)))?parseFloat(tauxVal):null;
-  function done(msg){ pushNotif('ok','fa-check',msg); setTimeout(function(){ softReload(); },600); }
+  var tauxEnvoye=false;
+  if(t==='machine'){
+    var tx=document.getElementById('pe_taux');
+    var lt=_lireTaux(tx);
+    if(!lt.ok){ pushNotif('err','fa-ban',MSG_TAUX_INVALIDE); return; }
+    var modifie=String(tx.value==null?'':tx.value).trim()!==String(tx.getAttribute('data-init')||'').trim();
+    // Colonne présente : le taux est toujours renvoyé AU PROCESS (vide = à saisir). Transition : seulement s il a été modifié.
+    if(p.taux_col || modifie){ _pePatch.taux_horaire_machine=lt.val; tauxEnvoye=true; }
+  }
   fetch('/api/production/process/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(_pePatch)}).then(function(r){return r.json();}).then(function(j){
-    if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Échec.'); return; }
-    // Taux horaire = coût horaire de la machine associée → met à jour la machine (le CRU suit via le taux du poste).
-    if(mid && taux!=null){
-      fetch('/api/production/machine/'+encodeURIComponent(mid),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({cout_h:taux})}).then(function(r){return r.json();}).then(function(){ done('Process « '+nom+' » + taux machine ('+taux+' €/h) mis à jour.'); }).catch(function(){ done('Process mis à jour (taux machine non enregistré).'); });
-    } else { done('Process « '+nom+' » mis à jour.'); }
+    if(!j||!j.ok){ pushNotif(j&&j.cloud7?'warn':'err',j&&j.cloud7?'fa-triangle-exclamation':'fa-ban',_escH((j&&j.error)||'Échec.'),j&&j.cloud7?12000:5000); return; }
+    var msg='Process « '+_escH(nom)+' » mis à jour';
+    if(tauxEnvoye && !j.avertissement) msg+=(_pePatch.taux_horaire_machine!=null)?(' — taux horaire machine '+_fmtTauxH(_pePatch.taux_horaire_machine)+' €/h'):' — taux horaire machine à saisir';
+    pushNotif('ok','fa-check',msg+'.',5000);
+    _avertTaux(j);
+    setTimeout(function(){ softReload(); },j.avertissement?2500:600);
   }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
-// ─── Réordonnancement par glisser-déposer des lignes (process / machines) → champ ordre ───
+// ─── Réordonnancement par glisser-déposer des lignes (postes / machines) → champ ordre ───
 var _rowDrag=null;
 function rowDragStart(e,id,kind){ _rowDrag={id:id,kind:kind,el:e.currentTarget}; if(e.dataTransfer){ e.dataTransfer.effectAllowed='move'; try{e.dataTransfer.setData('text/plain',id);}catch(_){}} e.currentTarget.style.opacity='.4'; }
 function rowDragOver(e){ if(_rowDrag) e.preventDefault(); }
@@ -2732,11 +2818,11 @@ function rowDrop(e,id,kind){
 }
 function rowDragEnd(){ if(_rowDrag&&_rowDrag.el) _rowDrag.el.style.opacity=''; _rowDrag=null; }
 function persistRowOrder(kind){
-  var tid=kind==='proc'?'proc-tbody':(kind==='poste'?'poste-tbody':'mach-tbody');
-  var attr=kind==='proc'?'data-pid':(kind==='poste'?'data-poid':'data-mid');
+  var tid=kind==='poste'?'poste-tbody':'mach-tbody';
+  var attr=kind==='poste'?'data-poid':'data-mid';
   var tbody=document.getElementById(tid); if(!tbody) return;
   var ids=Array.prototype.slice.call(tbody.children).map(function(r){return r.getAttribute(attr);}).filter(Boolean);
-  var url=kind==='proc'?'/api/production/process/reorder':(kind==='poste'?'/api/production/poste/reorder':'/api/production/machine/reorder');
+  var url=kind==='poste'?'/api/production/poste/reorder':'/api/production/machine/reorder';
   fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:ids})}).then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ pushNotif('ok','fa-sort','Ordre enregistré.'); if(kind==='poste' && typeof softReload==='function') softReload(); } else pushNotif('err','fa-ban',(j&&j.error)||'Réordonnancement échoué.'); }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
 

@@ -78,16 +78,17 @@ Les cases à choisir sont dans l'ordre : **1) Type → 2) Poste → 3) Process**
 |---|---|---|---|---|
 | Type | liste déroulante (Interne, Sous-traité) | Non | **1ʳᵉ case.** Précise si l'étape est faite dans l'atelier (Interne) ou envoyée dehors (Sous-traité). | Interne |
 | Poste | liste déroulante (les postes d'atelier, si interne ; le sous-traitant, si sous-traité) | Non | **2ᵉ case.** Le poste de l'atelier où se fait l'opération (interne), ou le sous-traitant (sous-traité). Choisir le poste **filtre** les process proposés. | Poinçonnage |
-| Process | liste déroulante (**uniquement les process rattachés au poste choisi**, si interne ; les opérations du sous-traitant, si sous-traité) | Non | **3ᵉ case.** Le process interne (avec sa machine liée) parmi ceux du poste, ou l'opération tarifée du sous-traitant. **Choisissez d'abord un poste.** | Cisaillage · Cisailleuse |
+| Process | liste déroulante (**uniquement les process rattachés au poste choisi**, si interne ; les opérations du sous-traitant, si sous-traité) | Non | **3ᵉ case.** Le process interne (avec sa machine liée) parmi ceux du poste, ou l'opération tarifée du sous-traitant. **Choisissez d'abord un poste.** Sous le process, l'origine du coût horaire : « Machine · 48,00 €/h », « Machine · taux à saisir », « Manuel · homme au coût chargé RH ». | Cisaillage · Cisailleuse |
 | N° programme machine | texte | Non | Apparaît pour une étape machine : le numéro du programme, imprimé sur l'OF. | PGM-4521 |
 | Fichier programme (.nc, .mpf...) | texte | Non | Le nom du fichier du programme d'usinage. | dissip_op10.mpf |
-| Régl. ‰h | nombre | Non | Temps de réglage, en millièmes d'heure (1000 = 1 h). Compté une seule fois par lot. | 250 |
-| MO ‰h | nombre | Non | Temps de main d'œuvre (personne) par pièce, en millièmes d'heure (1000 = 1 h). | 120 |
-| Mach ‰h | nombre | Non | Temps machine par pièce, en millièmes d'heure (1000 = 1 h). | 80 |
+| ROP ‰h | nombre | Non | Réglage **homme** (fait par l'opérateur), en millièmes d'heure (1000 = 1 h). Compté une seule fois par lot, au coût chargé RH. | 500 |
+| RGM ‰h | nombre | Non | Réglage **machine**, en millièmes d'heure. Compté une seule fois par lot, **en homme et en machine** (l'opérateur est sur la machine) : coût chargé RH + taux horaire machine du process. Sur un process manuel, il compte en homme seulement. | 1000 |
+| MO ‰h | nombre | Non | Temps **homme** par pièce, en millièmes d'heure (1000 = 1 h), au coût chargé RH moyen du site. | 100 |
+| Mach ‰h | nombre | Non | Temps **machine** par pièce, en millièmes d'heure, au taux horaire machine du process. Grisé pour un process manuel. | 200 |
 | €/pc (prix pièce ST) | nombre | Non | Pour une étape sous-traitée : le prix payé par pièce au sous-traitant. Se remplit depuis le tarif choisi. | 3,20 € |
 
-💡 **Astuce :** Les temps se saisissent en millièmes d'heure : 1000 = 1 heure, 500 = 30 minutes.
-⚠️ **Attention :** En « Sous-traité », les cases de temps (réglage, MO, machine) sont grisées : le coût vient du prix par pièce du sous-traitant. Un process « manuel » (sans machine) grise aussi la case temps machine.
+💡 **Astuce :** Les temps se saisissent en millièmes d'heure : 1000 = 1 heure, 500 = 30 minutes. Exemple (lot de 10, machine à 60 €/h, coût chargé 35 €/h) : ROP 500 + RGM 1000 + MO 100 + Mach 200 → 2,5 h homme (87,50 €) + 3 h machine (180 €) = 267,50 € le lot.
+⚠️ **Attention :** En « Sous-traité », les cases de temps (réglage, MO, machine) sont grisées : le coût vient du prix par pièce du sous-traitant. Un process « manuel » grise la case temps machine ; choisir un process manuel sur une étape qui avait du temps machine le reverse en temps homme. Les taux ne se saisissent pas ici : taux horaire machine sur le process (Production), coût chargé dans la fiche salarié (RH).
 
 ## Éditeur de nomenclature — Documents joints (GED)
 **Quand l'utiliser :** Pour joindre les plans et programmes de la pièce (plan client, plan CAO, programmes machine).

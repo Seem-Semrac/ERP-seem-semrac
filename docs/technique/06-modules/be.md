@@ -32,14 +32,44 @@ Masse en g ; temps en millièmes d'heure ; réglage = coût FIXE/lot ; prix mati
 
 Le formulaire nomenclature est en **deux colonnes** : saisie des champs à gauche (`minmax(340px, 0.78fr)`), déclaration des process et gamme à droite (`minmax(0, 1.22fr)`) — la gamme porte 10 colonnes depuis l'ajout de ROP/RGM et a besoin de la place.
 
-**Deux temps de réglage** depuis le 09/09/2026 — la gamme distingue **ROP** (réglage opérateur, imputé au **taux MO**) et **RGM** (réglage machine, imputé au **taux machine**). Un réglage occupe souvent les deux simultanément, ce que le champ unique ne permettait pas d'exprimer. Les deux restent des **coûts fixes par lot**, jamais multipliés par la quantité.
+**Deux temps de réglage** depuis le 09/09/2026 — la gamme distingue **ROP** (réglage opérateur) et **RGM** (réglage machine). Les deux restent des **coûts fixes par lot**, jamais multipliés par la quantité. ⚠ **Depuis le 14/09/2026**, ROP compte en **homme** et RGM en **homme + machine** (avant : RGM au taux machine seul) — voir la section « Coût d'une étape » ci-dessous.
 
 | Forme d'étape | ROP | RGM |
 |---|---|---|
 | Formulaire BE (minutes) | `temps_reglage_min` | `temps_reglage_machine_min` |
 | Gamme importée (millièmes) | `temps_reglage_op_mille` | `temps_reglage_machine_mille` |
 
-**Compatibilité ascendante** : si aucun des deux champs n'est renseigné, `etapeDecomp()` retombe sur le champ historique `temps_reglage_mille`, imputé à la ressource de l'étape — les nomenclatures déjà chiffrées gardent **exactement** le même coût. Vérifié par 7 cas de non-régression (ancien format machine et homme, nouveau format, ROP seul, RGM seul, forme minutes).
+**Compatibilité ascendante** : si aucun des deux champs n'est renseigné, `etapeDecomp()` retombe sur le champ historique `temps_reglage_mille`, classé **RGM** si le process de l'étape est de type machine, **ROP** sinon (14/09/2026 ; avant : « imputé à la ressource de l'étape »).
+
+## Coût d'une étape : taux porté par le process, homme au coût chargé RH (14/09/2026)
+
+Même règle que le serveur (`etapeDecomp` + `construireTauxAtelier`, `src/shared.ts` — détail et tableau des champs dans [production.md](production.md#coût-horaire-porté-par-le-process-14092026)) :
+
+| Colonne du formulaire | Temps | Homme | Machine |
+|---|---|---|---|
+| ROP ‰h | réglage homme, / lot | ✔ | — |
+| RGM ‰h | réglage machine, / lot | ✔ | ✔ si process machine |
+| MO ‰h | homme variable (THV), / pièce | ✔ | — |
+| Mach ‰h | machine variable (TMV), / pièce | — | ✔ si process machine |
+
+- **Taux machine** = `process_atelier[].taux_machine` résolu par le serveur (`getBeRefs`), lu en direct ; **taux homme** = `taux_homme` (moyennes du coût chargé RH `{moyen, seem, semrac, manquant}`) pour le site de la nomenclature (`nom.entite`). Plus aucun taux inventé (`TAUX_MO_DEFAULT`, `COUT_MACHINE_DEFAULT`, `TAUX_MO_MOYEN`, `COUT_MACHINE_MOY`, `nomMachCoutH` supprimés). `machines[]` n'expose plus `cout_h` ni `taux_horaire`.
+- **Une seule source JS pour le navigateur** : `BE_ETAPE_COUT_JS` (export de `src/be.tsx`, chaîne sans accent grave, sans `${`, sans barre oblique inverse) définit `beTauxAtelierClient(refs)`, `beEtapeDecomp(e, tx, site)` et `beLibelleManquant(code)` ; elle est injectée **telle quelle** dans le formulaire nomenclature **et** dans `/be/analyse`. Parité vérifiée : 11 697 comparaisons navigateur ↔ serveur, écart max 7e-15 €.
+- **Indications sous le process** : « Machine · X €/h », « (provisoire) » en transition (`transition_machine`), « Machine · taux à saisir », « Machine · process à choisir », « Manuel · homme au coût chargé RH (X €/h) », « OAS · aucun temps valorisé ». Encart `#nom-taux-alerte` « Coût de revient incomplet » (codes `taux_homme`, `taux_machine`, `sans_process`) ; bandeau d'en-tête « Coût chargé RH moyen Seem / Semrac » et « Process machine sans taux ».
+- **Taux illisibles** (`BeRefs.taux_erreur`, lecture des process, salariés ou machines en échec) : bandeau rouge `#nom-taux-erreur` et `nomTauxIllisibles()` **bloque** `nomSave` et `nomCreerNouvelIndice` — le coût recalculé serait faux.
+- **Changement de process** (`nomOnEtapeProcessChange`) : ne lit plus `cout_h` ; copies **informatives** `machine_taux_h` (taux du process) et `taux_mo_h` (taux homme du site). Process non machine : RGM reversé dans ROP, TMV dans THV (rien n'est perdu). Une étape importée (millièmes) voit ses minutes **re-déduites avec le nouveau process**. Le changement de **poste** ne convertit plus l'étape et ne remet plus le temps machine à 0.
+- **Étape importée modifiée** : passe au format minutes (`nomEtapeEnMinutes`, clés `*_mille` supprimées) à coût constant — sinon la saisie resterait sans effet. Le journal EN 9100 le trace en modification de gamme.
+- **Enregistrement** (`nomCollectPayload`) : `taux_mo` = coût chargé RH moyen du site (`null` s'il manque), `cout_machine_h = null`, copies d'étapes rafraîchies. Les prix enregistrés (`prix_revient_unitaire`, `prix_mo_unitaire`, `cout_machine_unitaire`) gardent leur sens.
+- **OAS** : en série, max(forfait ; q × prix), comme la sous-traitance (libellé « Sous-traitance · OAS »). ⚠ Défaut connu, non corrigé : le CRU **serveur** (`computeNomCostForQty` → `coutEtapeST`) lit les champs `*_st_*` et compte 0 pour une étape OAS ; et la saisie du prix OAS n'est pas atteignable dans `nomRenderEtapes` (branche « interne » évaluée avant).
+- ⚠ **Effet sur les prix** : la nomenclature cloud 7365635125 (Semrac, validée) passe de 9,85 € à 23,58 €/pièce à q = 1 à la réouverture (coût chargé Semrac 35,70 €/h au lieu de la copie 14,52 ; RGM compté en homme ; poinçonnage au taux de départ 35 €/h). Le prix enregistré ne change qu'au prochain enregistrement, qui ajoute des entrées « recalcul » au journal.
+
+- **Tableau de bord BE** (`/dashboard/be`, `kpi.ts` `be()`) : CRU calculés avec `construireTauxAtelier` sur le socle déjà chargé par `getDashboardData` (process, salariés, machines — aucune requête en plus) ; nouveaux champs `coutsIncomplets`, `hommeManquant`, `lignes[].manquants` → tuile « CRU moyen … dont N au coût incomplet (sous-évalué) » et barres orange ⚠ dans « Pièces les plus coûteuses ».
+
+### Analyse DT (`/be/analyse`, `GET /api/be/analyse-dt/:id`)
+- Serveur : `getTauxAtelier()` ; lecture en échec ⇒ **503** (on refuse de chiffrer à 0). Étapes ajoutées (« libres ») chiffrées par `etapeDecomp(etapeLibreVersEtape(a), tx, site)` : réglage unique = **RGM**, `mo_min` = THV, `machine_min` = TMV, `prix_forfait` + 1 fois / lot ; une étape libre **sous-traitée** ne valorise aucun temps. Réponse : `taux_mo` / `taux_machine` (45 / 50) **supprimés**, remplacés par `site`, `taux_homme`, `homme_manquant`, `manquants` par pièce et, par étape, `type_process`, `taux_homme`, `taux_machine`, `taux_source`, `manquants`, heures homme/machine (contrat dans `07-api-reference.md`).
+- Client : `TX = beTauxAtelierClient(__BE_REFS__)` ; taux homme de la pièce = celui renvoyé par le serveur. `addedCostPc` (variable) / `addedCostFixe` (réglage + forfait). Temps grisés en sous-traitance et sur un process OAS ; temps machine valorisé seulement sur un process machine (un temps déjà saisi reste visible, en orange). Alerte par produit `#gwarn-n`.
+- **Chiffrage indisponible** (`beChiffrageKO`) : réponse en erreur (503…), erreur réseau ou `__BE_REFS__.taux_erreur` ⇒ bandeau rouge permanent, bouton d'enregistrement désactivé, `saveAnalyseBE` n'envoie rien.
+- `POST /api/be/analyse-dt/:id/etapes-libres` : une liste **vide** n'efface des étapes existantes qu'avec `vider: true` (sinon **409**) — l'écran l'envoie quand l'utilisateur a réellement tout supprimé.
+- `pieces_analyse[].cout_mo_ajoute` (part des étapes ajoutées dans `cout_mo`, à sa valeur d'enregistrement) est envoyé et **conservé** par `POST /api/dt/:id/analyse` : à la réouverture, cette part est retirée sans être revalorisée au taux du jour.
 
 **Validation de la préparation technique** : le bouton **« Valider la prépa »** enregistre (plan + codes programme → nomenclature) puis appelle `POST /api/nomenclature/:id/prepa-validee`, qui passe à `faite` toutes les lignes de `preparations_techniques` portant la même référence produit. Le serveur **refuse** la validation si le plan manque ou si une étape CNC n'a pas de code (409) — on n'ouvre pas la porte de production sur une prépa vide.
 

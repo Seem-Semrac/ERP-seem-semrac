@@ -6,7 +6,7 @@
 
 La Production reçoit les **commandes** acceptées côté Commercial. Chaque commande est découpée en **lots**, et chaque lot en **BDT** (bons de travail) : une opération précise (tronçonnage, pliage, usinage…) à faire sur une pièce. Le service **planifie** ces BDT sur le planning Gantt, les **affecte** aux opérateurs ou aux postes atelier, suit leur **démarrage** et leur **clôture**, enregistre la **matière consommée**, et envoie certaines opérations en **sous-traitance** chez un prestataire extérieur.
 
-En sortie, la Production alimente : la **Qualité** (une non-conformité déclarée en fin d'opération crée une fiche NC), le **Stock** (les sorties matière décrémentent le stock), et le **coût de revient** de la commande (temps réel + matière + coût machine). Quand tous les BDT d'une commande sont soldés, l'affaire peut avancer vers l'expédition et la facturation.
+En sortie, la Production alimente : la **Qualité** (une non-conformité déclarée en fin d'opération crée une fiche NC), le **Stock** (les sorties matière décrémentent le stock), et le **coût de revient** de la commande (temps réel × coût chargé de l'opérateur, + taux horaire machine du process pour un BDT machine, + matière). Quand tous les BDT d'une commande sont soldés, l'affaire peut avancer vers l'expédition et la facturation.
 
 ## Étape 1 — Créer et affecter un BDT (bon de travail)
 **⬅️ Avant :** Une commande client a été acceptée (Commercial) et découpée en lots. Il reste à programmer les opérations une par une.

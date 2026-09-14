@@ -63,7 +63,7 @@ const M = [
     notes:'⚠ table `stock` (singulier). Sortie matière consomme le stock et alimente l\'OPEX machine.' },
   { svc:'maintenance', label:'Maintenance', route:'/maintenance/service', file:'src/maintenance_service.tsx', rw:'maintenance', r:'achats, production, oas, sécurité, stock',
     mission:'GMAO : interventions/OM, plan préventif, MTBF, fiche machine 360, pièces détachées.',
-    tabs:[['interventions','Interventions / OM'],['preventif','Plan Préventif'],['mtbf','MTBF & Historique'],['fiche','Fiche 360'],['pieces','Pièces & PDR'],['dashboard','Dashboard']],
+    tabs:[['interventions','Interventions / OM'],['preventif','Plan Préventif'],['mtbf','MTBF & Historique'],['fiche','Fiche 360'],['postes','Coûts postes'],['pieces','Pièces & PDR'],['dashboard','Dashboard']],
     api:['om','maintenance','piece(s)'], tables:['ordres_maintenance','plans_preventif','pieces_detachees','machines'],
     notes:'Fiche Machine 360 (TCO + heures via gamme + Disponibilité/TRS). Préventif → OM. Deep-link depuis le plan bâtiment (#machine=<id>).' },
   { svc:'plans', label:'Plan / Bâtiment', route:'/plans/service', file:'src/plans.tsx', rw:'BE, production, maintenance, qualité, direction', r:'tout connecté',

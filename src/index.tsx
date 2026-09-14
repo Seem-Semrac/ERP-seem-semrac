@@ -23,7 +23,7 @@ import {
   pageFournisseursST,
   pageReferencesPiecesACreer
 } from './listes'
-import { layout, pageHeader, afterBox, SIDEBAR_V2, APP_VERSION, computeNomCostForQty, computePosteRates, etapeDecomp, seemMark, STATUT_ANNULE, estAnnule } from './shared'
+import { layout, pageHeader, afterBox, SIDEBAR_V2, APP_VERSION, computeNomCostForQty, etapeDecomp, etapeLibreVersEtape, construireTauxAtelier, typeProcess, seemMark, STATUT_ANNULE, estAnnule } from './shared'
 import { brandBlockHTML, BRAND, BRAND_PRINT_CSS, SOCIETE } from './brand'
 import { buildXlsx } from './xlsx'
 import { computeRisqueChimique, computeExpositionSante, computeExpositionIncendie, computeExpositionEnv, normQuantiteChimique, SEIRICH_NIVEAUX, EXPO_PROCEDE_LBL, EXPO_FREQ_LBL, EXPO_PROT_LBL, EXPO_VOLAT_LBL, codeDechetDangereux, computeBilanGES, ISO14001_DIAGNOSTIC, ISO26000_QUESTIONS, computeEcmePV, ecmeTypeLabel as _ecmeTypeLabel, ecmeStatutLive as _ecmeStatutLive } from './qref'
@@ -56,7 +56,7 @@ import {
   getEditLock, upsertEditLock, deleteEditLock, getActiveEditLocks,
   createDemandeTravaux, updateDemandeTravaux,
   createOffre, updateOffre, deleteOffre, createCommande, updateCommande, recomputeCmdAvancement, recomputeCmdCout, getCommandeDetail, getLotDetail, getAffaireDetail,
-  getBeRefs, getDashboardData,
+  getBeRefs, getDashboardData, getTauxAtelier,
   getPlanningOperateurs, getPlanningBDTs, getPlanningBDS, getSousTraitants, getShifts, getAbsences, getSalariesActifs,
   updateBDT, createBDTRow, supprimerBDTRow, getBDTStrict, idsMorceauxBDT, retirerBDTRows, updateBDS, createBDSRow,
   createNonConformiteRow, updateNonConformite, ncHasRetourCols, ncEstClose, ncEstBloquante, ncRattacheeAffaire, ncHasExtCols, ncHasResponsable,
@@ -64,7 +64,7 @@ import {
   getDerogations, createDerogation, updateDerogation,
   getPlansControle, createPlanControle, updatePlanControle, deletePlanControle,
   getRapports8D, getRapport8DById, createRapport8D, updateRapport8D,
-  getProcessAtelier, createProcessAtelier, updateProcessAtelier, deleteProcessAtelier,
+  getProcessAtelier, getProcessAtelierDeMachine, createProcessAtelier, updateProcessAtelier, deleteProcessAtelier,
   getPostes, createPoste, updatePoste, deletePoste,
   getAffectationsPoste, upsertAffectationPoste, deleteAffectationPoste,
   getInterlocuteurs, createInterlocuteur, updateInterlocuteur, deleteInterlocuteur, clearInterlocuteurPrincipal,
@@ -120,7 +120,7 @@ import {
 } from './queries'
 import type { Credit } from './types'
 import { pageDTStatuts, pageCommandesValidees as pageCommandesValideesCom, pageOffreCommerciale as pageOffreCom, pageOffreEdit, pageAffaireFiche, pageServiceCommercial, pageClientFiche } from './commercial'
-import { pageServiceBE } from './be'
+import { pageServiceBE, BE_ETAPE_COUT_JS } from './be'
 import { pageServiceAchats } from './achats'
 import { pageFournisseurFiche } from './fournisseur_fiche'
 import { pageGanttBDT, pageGanttBST, pageCommandesProd, pageLotsProd, pageServiceProd, pageCommandeDetail, pageLotDetail } from './prod'
@@ -1439,6 +1439,9 @@ app.post('/api/dt/:id/analyse', async (c) => {
     base.cout_matiere = a.cout_matiere || 0
     base.cout_accessoire = a.cout_accessoire || 0
     base.cout_mo      = a.cout_mo || 0
+    // Part des étapes AJOUTÉES à l'analyse dans cout_mo, à sa valeur d'enregistrement (14/09/2026) : relue par /be/analyse
+    //   pour retirer cette part sans la revaloriser au taux du jour. Absente (ancien client) → null = repli au taux du jour.
+    base.cout_mo_ajoute = (a.cout_mo_ajoute != null && a.cout_mo_ajoute !== '' && Number.isFinite(Number(a.cout_mo_ajoute))) ? Number(a.cout_mo_ajoute) : null
     base.cout_st      = a.cout_st || 0
     base.cout_fg      = a.cout_fg || 0            // frais généraux PAR LOT
     base.marge_pct    = margePct                  // marge conservée (ou 20% par défaut à la 1re analyse)
@@ -3918,32 +3921,50 @@ function reglageMilleTotal(e: any): number {
   return Number(e.temps_reglage_mille) || 0
 }
 
-// Réglage = part fixe (par lot) ; varMin = part variable (par pièce). Une op importée 'est_fixe' bascule en réglage.
+// Réglage = part fixe (par lot) ; varMin = part variable (par pièce). Une op 'est_fixe' bascule en réglage.
+// Format minutes : réglage = ROP (temps_reglage_min) + RGM (temps_reglage_machine_min), comme l'OF et l'analyse DT.
+//   (14/09/2026) Le RGM était oublié ici : depuis que le formulaire BE convertit en minutes une étape importée qu'on
+//   modifie, la durée des BDT générés perdait le réglage machine et multipliait une op fixe par la quantité.
 function etapeTempsMin(e: any): { reglageMin: number; varMin: number } {
   if (e && (e.temps_variable_mille != null || e.temps_reglage_mille != null || e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null)) {
     const vmin = (Number(e.temps_variable_mille) || 0) * 0.06   // millième d'h → minutes (×60/1000)
     const rmin = reglageMilleTotal(e) * 0.06
     return e.est_fixe ? { reglageMin: rmin + vmin, varMin: 0 } : { reglageMin: rmin, varMin: vmin }
   }
-  return { reglageMin: Number(e.temps_reglage_min) || 0, varMin: (Number(e.temps_mo_min) || 0) + (Number(e.temps_machine_min) || 0) }
+  const rmin = (Number(e?.temps_reglage_min) || 0) + (Number(e?.temps_reglage_machine_min) || 0)
+  const vmin = (Number(e?.temps_mo_min) || 0) + (Number(e?.temps_machine_min) || 0)
+  return e?.est_fixe ? { reglageMin: rmin + vmin, varMin: 0 } : { reglageMin: rmin, varMin: vmin }
 }
 app.get('/api/be/analyse-dt/:id', async (c) => {
   const id = c.req.param('id')
-  const [dt, noms, produitsAll, stockAll, machinesAll, machinesOpexAll, postesAll, processAll] = await Promise.all([getDemandeTravaux(id).catch(() => null), getNomenclatures().catch(() => [] as any[]), getProduitsFournisseursAll().catch(() => [] as any[]), getStockReel().catch(() => [] as any[]), getMachines().catch(() => [] as any[]), getMachinesOpex().catch(() => [] as any[]), getPostes().catch(() => [] as any[]), getProcessAtelier().catch(() => [] as any[])])
+  const [dt, noms, produitsAll, stockAll, machinesAll, postesAll, tauxAt] = await Promise.all([getDemandeTravaux(id).catch(() => null), getNomenclatures().catch(() => [] as any[]), getProduitsFournisseursAll().catch(() => [] as any[]), getStockReel().catch(() => [] as any[]), getMachines().catch(() => [] as any[]), getPostes().catch(() => [] as any[]), getTauxAtelier()])
   if (!dt) return c.json({ ok: false, error: 'DT introuvable' }, 404)
-  // Phase E : taux effectif du POSTE de chaque machine (base + incrément OPEX achats reçus / heures budgétées, ou override).
-  //   Passé à computeNomCostForQty → l'achat machine reçu remonte au CRU. Incrément 0 tant qu'aucun achat → CRU inchangé.
-  const posteRates = computePosteRates(machinesAll as any[], machinesOpexAll as any[], postesAll as any[], Number(TODAY_ISO().slice(0, 4)))
-  const costOpts = { machineRate: posteRates.machineRate }
+  // Coût horaire porté par le PROCESS (14/09/2026) : taux machine = process_atelier.taux_horaire_machine (lu en direct),
+  //   taux homme = coût chargé RH MOYEN des opérateurs du site. Lecture en échec → on REFUSE de chiffrer
+  //   (un coût à 0 partirait tel quel dans l'offre) : supabase-js ne lève jamais, l'échec est dans tauxAt.error.
+  if (tauxAt.error) return c.json({ ok: false, error: 'Taux de l\'atelier illisibles, coût non calculé — ' + tauxAt.error }, 503)
+  const tx = tauxAt.tx
+  const siteDt: string | null = (dt as any).activite ? String((dt as any).activite) : null
+  // Étapes AJOUTÉES à l'analyse (« libres ») : même règle que la gamme (etapeDecomp), process choisi, site de la pièce.
+  const libresDe = (etapesLibres: any[], qte: number, site: string | null) => {
+    const manq = new Set<string>()
+    const cout = etapesLibres.reduce((s: number, a: any) => {
+      const d = etapeDecomp(etapeLibreVersEtape(a), tx, site)
+      for (const m of d.manquants) manq.add(m)
+      return s + (Number(a.prix_forfait) || 0)   // forfait éventuel (compté 1× / lot)
+        + (d.moPc + d.machPc) * qte               // homme + machine variables / pièce × qté
+        + d.moFixe + d.machFixe                   // réglage = coût FIXE / lot (jamais × qté)
+    }, 0)
+    return { cout, manquants: Array.from(manq) }
+  }
   // Résolution du POSTE d'une étape : via sa machine (machine_id → machine.poste_id) ou son process (process_id → process.poste_id).
   const _machById: Record<string, any> = {}; (machinesAll as any[]).forEach((m: any) => { _machById[String(m.id)] = m })
-  const _procById: Record<string, any> = {}; (processAll as any[]).forEach((p: any) => { _procById[String(p.id)] = p })
   const _posteNom: Record<string, string> = {}; (postesAll as any[]).forEach((p: any) => { _posteNom[String(p.id)] = p.nom || p.id })
   const _posteOfEtape = (e: any): { id: string | null; nom: string } => {
     const mid = e && e.machine_id ? String(e.machine_id) : ''
     const pid0 = mid && _machById[mid] && _machById[mid].poste_id ? String(_machById[mid].poste_id) : ''
-    const procId = e && e.process_id ? String(e.process_id) : ''
-    const pid = pid0 || (procId && _procById[procId] && _procById[procId].poste_id ? String(_procById[procId].poste_id) : '')
+    const proc = e && e.process_id ? tx.processDe(e.process_id) : null
+    const pid = pid0 || (proc && proc.poste_id ? String(proc.poste_id) : '')
     return pid ? { id: pid, nom: _posteNom[pid] || pid } : { id: null, nom: e && (e.machine_nom || e.fournisseur_st_nom) ? String(e.machine_nom || e.fournisseur_st_nom) : 'Sans poste' }
   }
   // Carte prix par référence (pour repérer matière/accessoires à chiffrer)
@@ -3977,36 +3998,31 @@ app.get('/api/be/analyse-dt/:id', async (c) => {
     const exigences = Array.isArray(p.exigences) ? p.exigences : []
     const nom = ref ? (validByCode[ref] || draftByCode[ref] || null) : null
     const nomStatut = nom ? (validByCode[ref] ? 'valide' : 'brouillon') : null
-    if (!nom) { out.push({ ref_interne: p.ref_interne || null, ref_client: p.ref_client || null, nom_plan: p.nom_plan || null, quantite: qte, quantites: qtes, results: [], exigences, piece_existante_a_jour: !!p.piece_existante_a_jour, nom_statut: null, nomenclature: null, cost: null, etapes: [], fournitures_stock: [], plan_doc_id: null, etapes_libres: Array.isArray(p.etapes_libres) ? p.etapes_libres : [], taux_mo: 45, taux_machine: 50 }); continue }
+    const etapesLibres = Array.isArray(p.etapes_libres) ? p.etapes_libres : []
+    if (!nom) {
+      const lib0 = libresDe(etapesLibres, qte, siteDt)
+      out.push({ ref_interne: p.ref_interne || null, ref_client: p.ref_client || null, nom_plan: p.nom_plan || null, quantite: qte, quantites: qtes, results: [], exigences, piece_existante_a_jour: !!p.piece_existante_a_jour, nom_statut: null, nomenclature: null, cost: null, etapes: [], fournitures_stock: [], plan_doc_id: null, etapes_libres: etapesLibres,
+        site: siteDt, taux_homme: tx.tauxHomme(siteDt), homme_manquant: tx.hommeManquant, manquants: lib0.manquants })
+      continue
+    }
+    // Site du taux homme : celui de la nomenclature, sinon l'activité de la DT.
+    const site: string | null = nom.entite ? String(nom.entite) : siteDt
+    const costOpts = { taux: tx, site: siteDt }   // computeNomCostForQty prend nom.entite en priorité
     const fournitures = await getFournitures(nom.id).catch(() => [] as any[])
     const cost = computeNomCostForQty(nom, fournitures, qte, costOpts)
-    // Process ordonnés → durée = temps fixe (réglage) + temps variable (MO+machine) × quantité client.
-    // On sépare réglage / MO / machine (comme la nomenclature) pour un affichage identique dans l'analyse.
-    const tauxMoDef = Number(nom.taux_mo) || 45
-    const tauxMachDef = Number(nom.cout_machine_h) || 50
+    // Process ordonnés → durée = temps fixe (réglage) + temps variable (homme + machine) × quantité client.
+    // Temps et coûts d'une étape : UNE source (etapeDecomp), STRICTEMENT le même calcul que le CRU (computeNomCostForQty)
+    //   ⇒ le total « par poste » réconcilie exactement moSerie + machineSerie + stOrder. Précision pleine (formatage au rendu).
     const etapes = (Array.isArray(nom.etapes_production) ? nom.etapes_production : []).slice()
       .sort((a: any, b: any) => (Number(a.ordre) || 0) - (Number(b.ordre) || 0))
       .map((e: any, idx: number) => {
-        // TEMPS (min) — pour l'affichage : réglage/lot + variable/pièce (op. fixe importée → part réglage).
-        let reglage = 0, mo = 0, mach = 0
-        if (e && (e.temps_variable_mille != null || e.temps_reglage_mille != null || e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null)) {
-          const varMin = (Number(e.temps_variable_mille) || 0) * 0.06   // millième d'heure → minutes
-          const regMin = reglageMilleTotal(e) * 0.06                    // ROP + RGM
-          reglage = regMin
-          if (e.est_fixe) reglage += varMin                               // opération fixe → part réglage/lot
-          else if (e.ressource === 'machine') mach = varMin
-          else mo = varMin
-        } else if (e) {
-          reglage = Number(e.temps_reglage_min) || 0
-          mo = Number(e.temps_mo_min ?? e.temps_unitaire_min ?? 0) || 0   // format legacy : temps_unitaire_min → MO (cohérent avec computeNomCostForQty)
-          mach = Number(e.temps_machine_min) || 0
-        }
+        const d = etapeDecomp(e, tx, site)
+        const st = !!(e && e.type === 'sous_traite')
+        // TEMPS (min) pour l'affichage : réglage/lot (ROP + RGM) + variable/pièce (THV homme, TMV machine) ;
+        //   une opération fixe (est_fixe) bascule dans la part réglage/lot, comme dans le coût.
+        let reglage = d.reglageMin, mo = d.moMin, mach = d.machineMin
+        if (e && e.est_fixe) { reglage += mo + mach; mo = 0; mach = 0 }
         const varMinPiece = mo + mach
-        const st = e && e.type === 'sous_traite'
-        // COÛT — source UNIQUE (etapeDecomp) : STRICTEMENT le même calcul que le CRU (computeNomCostForQty),
-        //   machine_taux_h=0 → coût machine 0 (+ incrément OPEX poste), pas de repli défaut. ⇒ le total « par
-        //   poste » réconcilie exactement moSerie+machineSerie+stOrder. On garde la précision (formatage au rendu).
-        const d = etapeDecomp(e, tauxMoDef, tauxMachDef, posteRates.machineRate)
         const cout_pc = st ? d.unit : (d.moPc + d.machPc)      // € variable / pièce (× q côté client)
         const cout_reglage = st ? 0 : (d.moFixe + d.machFixe)  // € fixe / lot (réglage + op. fixe)
         const _po = _posteOfEtape(e)
@@ -4016,6 +4032,15 @@ app.get('/api/be/analyse-dt/:id', async (c) => {
           var_min_piece: +varMinPiece.toFixed(3), var_min_total: +(varMinPiece * qte).toFixed(1), duree_h: +(((reglage + varMinPiece * qte)) / 60).toFixed(3),
           cout_pc, cout_reglage,   // précision PLEINE (formatage au rendu) → le total « par poste » = CRU au centime près
           st_forfait: st ? d.forfait : 0, st_unit: st ? d.unit : 0,   // ST : coût = max(forfait ; q×unit)
+          // Taux porté par le process (14/09/2026)
+          process_id: e.process_id ?? null,
+          type_process: d.typeProcess,            // 'machine' | 'manuel' | 'oas' | null (sous-traitance)
+          taux_homme: d.tauxHomme,                // €/h — moyenne du coût chargé RH du site
+          taux_machine: d.tauxMachine,            // €/h — taux du process (0 si non machine / manquant)
+          taux_source: d.sourceTauxMachine,       // 'process' | 'transition_machine' | 'manquant' | 'sans_process' | 'manuel' | 'oas' | null
+          manquants: d.manquants,                 // ['taux_homme' | 'taux_machine' | 'sans_process']
+          homme_h_fixe: +d.hommeH_fixe.toFixed(4), homme_h_pc: +d.hommeH_pc.toFixed(4),
+          machine_h_fixe: +d.machineH_fixe.toFixed(4), machine_h_pc: +d.machineH_pc.toFixed(4),
           source: 'nomenclature', locked: true }
       })
     // Matière + accessoires → besoin (× quantité client) confronté au stock restant et aux seuils
@@ -4059,20 +4084,11 @@ app.get('/api/be/analyse-dt/:id', async (c) => {
     // Plan client ouvrable : dernier document GED « plan_client » rattaché à la nomenclature (si déjà chargé)
     const planDocs = await getDocumentsForNom(nom.id).catch(() => [] as any[])
     const planDoc = (planDocs as any[]).filter((d: any) => d.categorie === 'plan_client' && d.actif !== false).slice(-1)[0] || null
-    // Étapes LIBRES (contrôle dim./qualité ajoutés à l'analyse). MÊME formule que le client (beAddedPerPiece + addedCostPc)
-    //   pour que le total série serveur réconcilie avec le CRU affiché : forfait + MO variable ×qté (tauxMo)
-    //   + machine variable ×qté (tauxMach) + réglage FIXE/lot (tauxMo, jamais ×qté). Repli mo_min/machine_min → temps_min.
-    const tauxMo = tauxMoDef   // même défaut (45) que les étapes verrouillées et computeNomCostForQty
-    const etapesLibres = Array.isArray(p.etapes_libres) ? p.etapes_libres : []
-    const libresCost = etapesLibres.reduce((s: number, e: any) => {
-      const moM = (e.mo_min != null) ? (Number(e.mo_min) || 0) : (Number(e.temps_min) || 0)   // repli ancien format : temps_min → MO
-      const macM = Number(e.machine_min) || 0
-      const regM = Number(e.reglage_min) || 0
-      return s + (Number(e.prix_forfait) || 0)
-        + (moM / 60) * qte * tauxMo          // MO variable / pièce × qté
-        + (macM / 60) * qte * tauxMachDef     // machine variable / pièce × qté (au taux MACHINE)
-        + (regM / 60) * tauxMo                // réglage = coût FIXE / lot (jamais × qté)
-    }, 0)
+    // Étapes LIBRES (contrôle dim./qualité ajoutés à l'analyse) : MÊME règle que la gamme (etapeDecomp via
+    //   etapeLibreVersEtape) — le client (beAddedPerPiece / addedCostPc) doit appliquer la même, avec le taux
+    //   machine du process choisi (__BE_REFS__.process_atelier[].taux_machine) et taux_homme de la pièce.
+    const libres = libresDe(etapesLibres, qte, site)
+    const libresCost = libres.cout
     if (cost && libresCost) cost.totalSerie = Math.round((cost.totalSerie + libresCost) * 100) / 100
     // Chiffrage par quantité : décomposition NOMENCLATURE par pièce. Les étapes AJOUTÉES (libres) sont ajoutées
     // CÔTÉ CLIENT via beAddedPerPiece (source unique) — sinon elles seraient comptées deux fois à la réouverture
@@ -4089,7 +4105,9 @@ app.get('/api/be/analyse-dt/:id', async (c) => {
         cru_base_pc: +cruBasePc.toFixed(4), total_serie: +cq.totalSerie.toFixed(2) }
     })
     out.push({ ref_interne: p.ref_interne || null, ref_client: p.ref_client || null, nom_plan: p.nom_plan || null, quantite: qte, quantites: qtes, results,
-      exigences, piece_existante_a_jour: !!p.piece_existante_a_jour, nom_statut: nomStatut, etapes_libres: etapesLibres, taux_mo: tauxMo, taux_machine: tauxMachDef, libres_cost: Math.round(libresCost * 100) / 100,
+      exigences, piece_existante_a_jour: !!p.piece_existante_a_jour, nom_statut: nomStatut, etapes_libres: etapesLibres, libres_cost: Math.round(libresCost * 100) / 100,
+      site, taux_homme: tx.tauxHomme(site), homme_manquant: tx.hommeManquant,
+      manquants: Array.from(new Set<string>([...(cost.manquants as string[]), ...libres.manquants])),
       plan_doc_id: planDoc ? planDoc.id : null, plan_fichier: planDoc ? (planDoc.fichier_nom || null) : null,
       nomenclature: { id: nom.id, num_nom: nom.num_nom, code: nom.code_ref_produit, indice: nom.indice || 'A', statut: nomStatut }, cost, etapes, fournitures_stock, prix_a_chiffrer })
   }
@@ -4097,7 +4115,9 @@ app.get('/api/be/analyse-dt/:id', async (c) => {
   const missing = out.filter((x: any) => !x.nomenclature && !x.piece_existante_a_jour).length
   const drafts = out.filter((x: any) => x.nom_statut === 'brouillon').length
   const allValidated = missing === 0 && drafts === 0        // analyse validable seulement si tout est validé
-  return c.json({ ok: true, dt: { id: (dt as any).id, num_affaire: (dt as any).num_affaire, client: (dt as any).client_nom }, pieces: out, totalSerie: Math.round(totalSerie * 100) / 100, missing, drafts, allValidated, count: out.length })
+  const hp = tx.hommeParSite
+  return c.json({ ok: true, dt: { id: (dt as any).id, num_affaire: (dt as any).num_affaire, client: (dt as any).client_nom, activite: siteDt }, pieces: out, totalSerie: Math.round(totalSerie * 100) / 100, missing, drafts, allValidated, count: out.length,
+    taux_homme_moyennes: { moyen: hp.moyen, seem: hp.seem, semrac: hp.semrac, manquant: tx.hommeManquant } })
 })
 
 // ─── Étapes LIBRES de l'analyse (contrôle dim./qualité) : persistées sur la pièce de la DT ───
@@ -4126,6 +4146,13 @@ app.post('/api/be/analyse-dt/:id/etapes-libres', async (c) => {
     machine_min: numOrNull(e.machine_min),
   }))
   const pieces = Array.isArray((dt as any).pieces_detail) ? (dt as any).pieces_detail : []
+  // Garde-fou : une liste VIDE n'efface des étapes existantes que sur demande explicite (vider:true). Sans lui, un
+  // écran qui n'a pas pu relire le chiffrage (panne) — ou un vieil onglet — remplacerait les étapes par [] en silence.
+  const cible = pieces.find((p: any) => String(p.ref_interne || '').toLowerCase().trim() === ref.toLowerCase())
+  const existantes = cible && Array.isArray(cible.etapes_libres) ? cible.etapes_libres.length : 0
+  if (!clean.length && existantes > 0 && b.vider !== true) {
+    return c.json({ ok: false, error: `Liste vide refusée : la pièce ${ref} a ${existantes} étape(s) ajoutée(s). Envoyer vider:true pour les supprimer volontairement.` }, 409)
+  }
   let found = false
   const updated = pieces.map((p: any) => (String(p.ref_interne || '').toLowerCase().trim() === ref.toLowerCase() ? (found = true, { ...p, etapes_libres: clean }) : p))
   if (!found) return c.json({ ok: false, error: 'Pièce introuvable dans la DT' }, 404)
@@ -4306,7 +4333,7 @@ app.delete('/api/ged/:id', async (c) => {
 
 // ══ Maquette bâtiment : page + plans + marqueurs ══
 app.get('/plans/service', async (c) => {
-  const [plans, machines, atex, chimie, vgp, perissables, postes, procs, machinesOpex, expositions, ecme, dechets] = await Promise.all([
+  const [plans, machines, atex, chimie, vgp, perissables, postes, procs, expositions, ecme, dechets] = await Promise.all([
     getPlansBatiment().catch(() => [] as any[]),
     getMachines().catch(() => [] as any[]),
     getHseAtexZones().catch(() => [] as any[]),
@@ -4315,24 +4342,20 @@ app.get('/plans/service', async (c) => {
     getProduitsPerissables().catch(() => [] as any[]),
     getPostes().catch(() => [] as any[]),
     getProcessAtelier().catch(() => [] as any[]),
-    getMachinesOpex().catch(() => [] as any[]),
     getHseExpositions().catch(() => [] as any[]),
     getEcme().catch(() => [] as any[]), getHseDechets().catch(() => [] as any[]),
   ])
-  // Stats par POSTE (process contenus + machines + taux effectif + OPEX théorique) → alimentent les repères « poste » du plan (survol).
-  const rates = computePosteRates(machines as any[], machinesOpex as any[], postes as any[], Number(TODAY_ISO().slice(0, 4)))
+  // Stats par POSTE (process contenus + machines) → alimentent les repères « poste » du plan (survol).
+  //   Depuis le 14/09/2026 un poste n'a plus de taux (seul le PROCESS en porte un) ni d'OPEX théorique
+  //   (dérivé de machines.cout_h).
   const postesStats = (postes as any[]).map((p: any) => {
     const pid = String(p.id)
     const pMach = (machines as any[]).filter((m: any) => String(m.poste_id ?? '') === pid)
     const pProc = (procs as any[]).filter((pr: any) => String(pr.poste_id ?? '') === pid)
-    const opexTheo = pMach.reduce((s: number, m: any) => s + (Number(m.cout_h ?? m.taux_horaire) || 0) * (Number(m.capacite_h) || 0) * 220, 0)
-    const r = (rates as any).byPoste[pid]
     return {
       id: p.id, nom: p.nom, couleur: p.couleur || null, activite: p.activite || '',
       nbMachines: pMach.length, machines: pMach.map((m: any) => m.nom).filter(Boolean),
       nbProcess: pProc.length, process: pProc.map((pr: any) => pr.nom).filter(Boolean),
-      taux: r ? Math.round(r.tauxEffectif * 100) / 100 : 0,
-      opexTheo: Math.round(opexTheo),
     }
   })
   return c.html(pageServicePlans({ plans, machines, atex, chimie, vgp, perissables, postes: postesStats, expositions, ecme, dechets }))
@@ -4820,14 +4843,18 @@ app.get('/be/analyse', async (c) => {
   const [dtForAnalysis, salaries, beRefs] = await Promise.all([
     dtId ? getDemandeTravaux(dtId).catch(() => null) : Promise.resolve(null),
     getSalaries().catch(() => [] as any[]),
-    getBeRefs().catch(() => ({ postes: [], process_atelier: [], machines: [] } as any)),
+    getBeRefs().catch((e: any) => ({ postes: [], process_atelier: [], machines: [], taux_erreur: 'référentiels atelier illisibles — ' + String(e?.message || e) } as any)),
   ])
   const dtJson = JSON.stringify(dtForAnalysis ?? null).replace(/</g, '\\u003c')   // anti-breakout </script> + XSS stocké depuis les champs DT
   // Référentiels atelier (postes + process du poste + machines) → alimentent les selects « Poste » / « Process » de la gamme ajoutée
   const beRefsJson = JSON.stringify({
     postes: ((beRefs as any).postes || []).map((p: any) => ({ id: p.id, nom: p.nom, activite: p.activite })),
-    process_atelier: ((beRefs as any).process_atelier || []).map((p: any) => ({ id: p.id, nom: p.nom, poste_id: p.poste_id ?? null, machine_id: p.machine_id ?? null })),
+    // type / taux_machine / taux_source : coût des étapes ajoutées (taux porté par le process, 14/09/2026)
+    process_atelier: ((beRefs as any).process_atelier || []).map((p: any) => ({ id: p.id, nom: p.nom, poste_id: p.poste_id ?? null, machine_id: p.machine_id ?? null, type: p.type ?? null, taux_machine: Number(p.taux_machine) || 0, taux_source: p.taux_source ?? null })),
     machines: ((beRefs as any).machines || []).map((m: any) => ({ id: m.id, nom: m.nom })),
+    taux_homme: (beRefs as any).taux_homme ?? null,   // MOYENNES du coût chargé RH {moyen, seem, semrac, manquant} — jamais un taux individuel
+    // Lecture des taux en ÉCHEC (≠ taux absent) : la page refuse alors d'enregistrer un chiffrage bâti sur des taux vides.
+    taux_erreur: (beRefs as any).taux_erreur ?? null,
   }).replace(/</g, '\\u003c')
   // Analystes BE = salariés dont un rôle donne l'accès BE en écriture (bei) + direction — même règle que /be/service
   const BE_ROLES = new Set(['bei', 'direction'])
@@ -4963,10 +4990,31 @@ app.get('/be/analyse', async (c) => {
   <script>
   (function(){
   var prodCount = 0;
-  var GAM = {};   // n -> { nom:[etapes verrouillées], added:[étapes ajoutées], nextId, qte, tauxMo, tauxMach, baseMo }
+  var GAM = {};   // n -> { nom:[etapes verrouillées], added:[étapes ajoutées], nextId, qte, site, tauxHomme, hommeManquant, baseMo }
   // Grille identique à la gamme de la nomenclature (be.tsx) : N° · Type · Poste · Process · Régl ‰h · MO ‰h · Mach ‰h · Coût/pc · [×]
   var GRID = "34px 84px 1fr 1.2fr 62px 62px 66px 92px 26px";
   var BE_REFS = (window.__BE_REFS__)||{postes:[],process_atelier:[],machines:[]};
+  // ── Coût horaire porté par le PROCESS (14/09/2026) — MÊME moteur que le formulaire nomenclature (be.tsx),
+  //    miroir exact de etapeDecomp serveur : taux machine = process choisi (type + taux_machine résolus serveur),
+  //    taux homme = coût chargé RH moyen du site de la pièce, renvoyé par /api/be/analyse-dt. Plus de 45 / 50.
+${BE_ETAPE_COUT_JS}
+  var TX = beTauxAtelierClient(BE_REFS);
+  function _nbA(v){ var x=Number(v); return isFinite(x)?x:0; }
+  // Taux de la pièce n : taux homme DU SERVEUR pour son site (réponse analyse-dt), sinon moyennes des référentiels
+  function _txDe(n){
+    var g=GAM[n]||{};
+    return { tauxHomme:function(s){ return (g.tauxHomme!=null)?_nbA(g.tauxHomme):TX.tauxHomme(s); },
+      hommeManquant:(g.hommeManquant!=null)?!!g.hommeManquant:TX.hommeManquant, hommeParSite:TX.hommeParSite,
+      processDe:TX.processDe, processMachineDeMachine:TX.processMachineDeMachine, tauxMachine:TX.tauxMachine, typeProcess:TX.typeProcess };
+  }
+  // Étape AJOUTÉE → étape de gamme (miroir de etapeLibreVersEtape serveur) : réglage unique = RGM (homme, + machine
+  // si process machine) ; MO = THV ; Mach = TMV. Sans process = homme seulement. Sous-traitance = aucun temps valorisé.
+  function beLibreEtape(a){
+    if(a&&a.type==='sous_traite') return { type:'sous_traite' };
+    return { process_id:(a&&a.process_id)?a.process_id:null, temps_reglage_machine_min:_nbA(a&&a.reglage_min),
+      temps_mo_min:(a&&a.mo_min!=null)?_nbA(a.mo_min):_nbA(a&&a.temps_min), temps_machine_min:_nbA(a&&a.machine_min) };
+  }
+  function beAddedDecomp(n,a){ return beEtapeDecomp(beLibreEtape(a), _txDe(n), (GAM[n]||{}).site||null); }
   function _gamPostes(){ return BE_REFS.postes||[]; }
   function _gamProcs(pid){ return (BE_REFS.process_atelier||[]).filter(function(p){ return String(p.poste_id||'')===String(pid||''); }); }
   function _gamMachNom(mid){ var m=(BE_REFS.machines||[]).find(function(x){return String(x.id)===String(mid);}); return m?m.nom:''; }
@@ -4986,7 +5034,7 @@ app.get('/be/analyse', async (c) => {
   // ── CHIFFRAGE : coûts AUTO (matière/accessoire/MO+machine/S-trait.), seuls frais généraux + marge saisis, UN prix par quantité ──
   function addedCostOf(n){ return (GAM[n] && GAM[n].addedCost) ? Number(GAM[n].addedCost) || 0 : 0; }
   // Coût/pièce des étapes AJOUTÉES pour une quantité q (variable + réglage amorti sur le lot)
-  function beAddedPerPiece(n,q){ var g=GAM[n]||{}; q=q||1; var add=0; (g.added||[]).forEach(function(a){ add += addedCostPc(n,a) + ((Number(a.reglage_min)||0)/60*(g.tauxMo||45))/q; }); return add; }
+  function beAddedPerPiece(n,q){ var g=GAM[n]||{}; q=q||1; var add=0; (g.added||[]).forEach(function(a){ add += addedCostPc(n,a) + addedCostFixe(n,a)/q; }); return add; }
   // Quantités à chiffrer d'un produit (au moins la principale) + quantité principale (DT)
   function beQtes(n){ var g=GAM[n]||{}; return (g.qtes&&g.qtes.length)?g.qtes:[g.qte||1]; }
   function beMainQte(n){ var g=GAM[n]||{}; var q=g.qte||1; var qs=beQtes(n); return (qs.indexOf(q)>=0)?q:qs[0]; }
@@ -5043,7 +5091,7 @@ app.get('/be/analyse', async (c) => {
     // Coût TOTAL de la DT = somme des coûts SÉRIE (cruS) de chaque produit à sa quantité principale (pas une moyenne /pc).
     var prods=document.querySelectorAll('.produit-block'); var nb=prods.length, totalDT=0, totalTps=0;
     prods.forEach(function(bl){ var n=+bl.id.replace('prod-',''); var d=beRowFor(n, beMainQte(n)); totalDT+=d.cruS;
-      var g=GAM[n]||{nom:[],added:[]}; var tps=0; (g.nom||[]).forEach(function(e){ tps+=Number(e.var_min_piece)||0; }); (g.added||[]).forEach(function(a){ tps+=(Number(a.mo_min)||0)+(Number(a.machine_min)||0); }); totalTps+=tps*beMainQte(n); });
+      var g=GAM[n]||{nom:[],added:[]}; var tps=0; (g.nom||[]).forEach(function(e){ tps+=Number(e.var_min_piece)||0; }); (g.added||[]).forEach(function(a){ var dA=beAddedDecomp(n,a); tps+=dA.moMin+dA.machineMin; }); totalTps+=tps*beMainQte(n); });
     var sn=byId('synth-nb'), sc=byId('synth-cru'), stp=byId('synth-tps');
     if(sn) sn.textContent=nb;
     if(sc) sc.textContent=totalDT.toFixed(2)+' €';
@@ -5096,7 +5144,21 @@ app.get('/be/analyse', async (c) => {
   }
 
   // ── Gamme opératoire (verrouillée = nomenclature ; ajoutée = insérable/glissable) ──
-  function addedCostPc(n,a){ var g=GAM[n]||{}; return (Number(a.mo_min)||0)/60*(g.tauxMo||45) + (Number(a.machine_min)||0)/60*(g.tauxMach||50); }
+  // Étape ajoutée : € VARIABLE / pièce (homme + machine) et € FIXE / lot (réglage + forfait éventuel)
+  function addedCostPc(n,a){ var d=beAddedDecomp(n,a); return d.st?0:(d.moPc+d.machPc); }
+  function addedCostFixe(n,a){ var d=beAddedDecomp(n,a); return (d.st?0:(d.moFixe+d.machFixe))+_nbA(a&&a.prix_forfait); }
+  // Données de coût manquantes de la pièce n : étapes de la nomenclature (serveur) + étapes ajoutées (au fil de la saisie)
+  function beRenderAlerte(n){
+    var g=GAM[n]; var host=byId('gwarn-'+n); if(!g||!host) return;
+    var vus={}, procs=[];
+    (g.nom||[]).forEach(function(e){ (e.manquants||[]).forEach(function(m){ vus[m]=1; }); });
+    (g.added||[]).forEach(function(a){ var d=beAddedDecomp(n,a); (d.manquants||[]).forEach(function(m){ vus[m]=1; }); if(d.manquants.indexOf('taux_machine')>=0&&d.process&&procs.indexOf(d.process.nom)<0) procs.push(d.process.nom); });
+    var codes=Object.keys(vus);
+    if(!codes.length){ host.style.display='none'; host.innerHTML=''; return; }
+    host.innerHTML="<div style='font-weight:800;margin-bottom:2px;'><i class='fas fa-triangle-exclamation' style='margin-right:5px;'></i>Coût de revient incomplet</div>"
+      + codes.map(function(c){ return "<div>• "+esc(beLibelleManquant(c))+((c==='taux_machine'&&procs.length)?(" — "+esc(procs.join(', '))):"")+"</div>"; }).join('');
+    host.style.display='block';
+  }
   function hdr(t,r){ return "<span style='font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:"+(r?'right':'left')+";'>"+t+"</span>"; }
   function dropzone(n,k){ return "<div data-n='"+n+"' data-after='"+k+"' ondragover='beGamOver(event,this)' ondragleave='beGamLeave(event,this)' ondrop='beGamDrop(event,this)' style='height:7px;margin:1px 2px;border-radius:4px;transition:background .1s;'></div>"; }
   function lockedRow(e,seq){
@@ -5113,15 +5175,46 @@ app.get('/be/analyse', async (c) => {
       + "<span></span>"
       + "</div>";
   }
+  // Indication sous le process d'une étape ajoutée : origine du coût horaire
+  function beAddedHint(n,a){
+    if(!a||!a.process_id||a.type==='sous_traite') return '';
+    var d=beAddedDecomp(n,a); var st="font-size:.58rem;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+    var eur=function(v){ return (Number(v)||0).toFixed(2).replace('.',','); };
+    if(d.typeProcess==='machine'){
+      if(d.sourceTauxMachine==='manquant') return "<div style='"+st+"color:#b45309;font-weight:700;' title='Saisir le taux horaire machine du process dans Production › Postes et Process'>Machine · taux à saisir</div>";
+      return "<div style='"+st+"color:#94a3b8;' title='Taux horaire machine du process ; le temps homme est au coût chargé RH'>Machine · "+eur(d.tauxMachine)+" €/h"+(d.sourceTauxMachine==='transition_machine'?' (provisoire)':'')+"</div>";
+    }
+    if(d.typeProcess==='oas') return "<div style='"+st+"color:#4338ca;' title='Process OAS : aucun bon de travail, aucun temps valorisé (seul un forfait éventuel compte)'>OAS · aucun temps valorisé</div>";
+    return "<div style='"+st+"color:#94a3b8;' title='Process manuel : temps homme au coût chargé RH moyen du site'>Manuel · homme au coût chargé RH"+(_txDe(n).hommeManquant?' (à renseigner)':(' ('+eur(d.tauxHomme)+' €/h)'))+"</div>";
+  }
   function addedRow(n,a,seq){
     var t=(a.type==='sous_traite');
+    // Temps : sous-traitance = aucun temps (grisé) ; temps machine seulement pour un process MACHINE (un temps déjà
+    // saisi sur une étape non machine reste visible, signalé non valorisé) ; sans process = homme seulement.
+    var dA=beAddedDecomp(n,a); var nonMach=(dA.typeProcess!=='machine');
+    var GRIS="border:1.5px solid #e2e8f0;border-radius:6px;padding:5px 7px;font-size:.74rem;background:#eef2f7;color:#cbd5e1;outline:none;width:100%;min-width:0;box-sizing:border-box;text-align:right;cursor:not-allowed;";
+    var ALERTE="border-color:#fdba74;background:#fff7ed;";
+    var tIn=function(gf,val,titre,alerte){ return "<input data-gf='"+gf+"' type='number' step='1' min='0' value='"+mille(val)+"' oninput='beGamEdit(this)' title='"+titre+"' style='"+INP+"text-align:right;"+(alerte?ALERTE:"")+"'/>"; };
+    var tGris=function(titre){ return "<input type='number' disabled placeholder='—' title='"+titre+"' style='"+GRIS+"'/>"; };
+    var oasA=(!t&&dA.typeProcess==='oas');   // process OAS : aucun temps valorisé (comme la sous-traitance)
+    var motifA=oasA?'Process OAS : aucun temps valorisé':'Sous-traitance : aucun temps valorisé';
+    var grisA=(t||oasA);
+    var tReg=grisA?tGris(motifA)
+      : tIn('reglage',a.reglage_min,(nonMach?'Réglage (1000 = 1 h) : temps homme, fixe par lot':'Réglage machine (1000 = 1 h) : temps homme + machine, fixe par lot'),false);
+    var tMo=grisA?tGris(motifA) : tIn('mo',a.mo_min,'Temps homme variable par pièce (1000 = 1 h)',false);
+    var tMach=grisA?tGris(motifA)
+      : (!nonMach ? tIn('mach',a.machine_min,'Temps machine variable par pièce (1000 = 1 h) : temps machine seul',false)
+      : ((Number(a.machine_min)||0)>0 ? tIn('mach',a.machine_min,(a.process_id?'Process non machine':'Aucun process machine choisi')+' : ce temps machine n est PAS valorisé',true)
+      : tGris(a.process_id?'Process manuel : pas de temps machine':'Choisir un process machine pour saisir un temps machine')));
     // Poste (2e case) : select des postes ; Process (3e case) : select filtré par le poste, sinon libellé libre de l'étape ajoutée
     var posteOpts=_gamPostes().map(function(p){ return "<option value='"+p.id+"'"+(String(a.poste_id||'')===String(p.id)?' selected':'')+">"+esc(p.nom)+"</option>"; }).join('');
     var posteSel="<select data-gf='poste' onchange='beGamEdit(this)' style='"+INP+"'><option value=''>— Poste —</option>"+posteOpts+"</select>";
     var procCell;
     if(a.poste_id){
-      var procOpts=_gamProcs(a.poste_id).map(function(p){ return "<option value='"+p.id+"'"+(String(a.process_id||'')===String(p.id)?' selected':'')+">"+esc(p.nom)+"</option>"; }).join('');
-      procCell="<select data-gf='process' onchange='beGamEdit(this)' style='"+INP+"'><option value=''>— Process —</option>"+procOpts+"</select>";
+      var procOpts=_gamProcs(a.poste_id).map(function(p){ var tp=TX.typeProcess(p); var sub=(tp==='machine')?(' · machine'+(p.taux_source==='manquant'?' · taux à saisir':'')):(tp==='oas'?' · OAS':' · manuel'); return "<option value='"+esc(p.id)+"'"+(String(a.process_id||'')===String(p.id)?' selected':'')+">"+esc(String(p.nom||'')+sub)+"</option>"; }).join('');
+      // Select + indication dans UN conteneur : la ligne est une grille de 9 colonnes, un 10e enfant décalerait
+      // toutes les cases de temps d une colonne (saisie du temps homme dans la case réglage).
+      procCell="<div style='min-width:0;'><select data-gf='process' onchange='beGamEdit(this)' style='"+INP+"'><option value=''>— Process —</option>"+procOpts+"</select>"+beAddedHint(n,a)+"</div>";
     } else {
       procCell="<input data-gf='nom' value='"+esc(a.nom||'')+"' oninput='beGamEdit(this)' placeholder='Opération ajoutée (ou choisir un poste)' style='"+INP+"'/>";
     }
@@ -5130,10 +5223,8 @@ app.get('/be/analyse', async (c) => {
       + "<select data-gf='type' onchange='beGamEdit(this)' style='"+INP+"'><option value='interne'"+(t?'':' selected')+">Interne</option><option value='sous_traite'"+(t?' selected':'')+">Sous-traité</option></select>"
       + posteSel
       + procCell
-      + "<input data-gf='reglage' type='number' step='1' min='0' value='"+mille(a.reglage_min)+"' oninput='beGamEdit(this)' title='Réglage — millièmes d heure (1000 = 1 h)' style='"+INP+"text-align:right;'/>"
-      + "<input data-gf='mo' type='number' step='1' min='0' value='"+mille(a.mo_min)+"' oninput='beGamEdit(this)' title='MO — millièmes d heure' style='"+INP+"text-align:right;'/>"
-      + "<input data-gf='mach' type='number' step='1' min='0' value='"+mille(a.machine_min)+"' oninput='beGamEdit(this)' title='Machine — millièmes d heure' style='"+INP+"text-align:right;'/>"
-      + "<div id='gcost-"+n+"-"+a.id+"' style='text-align:right;font-size:.72rem;font-weight:700;color:#7c3aed;padding:6px 4px;'>"+addedCostPc(n,a).toFixed(2)+" €</div>"
+      + tReg + tMo + tMach
+      + "<div id='gcost-"+n+"-"+a.id+"' title='Coût variable par pièce (homme + machine) ; le réglage est un coût fixe par lot, amorti sur la quantité' style='text-align:right;font-size:.72rem;font-weight:700;color:#7c3aed;padding:6px 4px;'>"+addedCostPc(n,a).toFixed(2)+" €</div>"
       + "<button type='button' onclick='beGamDel(this)' title='Supprimer l étape ajoutée' style='width:22px;height:22px;border-radius:6px;border:none;background:#fee2e2;color:#dc2626;cursor:pointer;font-size:.78rem;font-weight:700;'>×</button>"
       + "</div>";
   }
@@ -5165,13 +5256,22 @@ app.get('/be/analyse', async (c) => {
       if(!pr){ a.process_id=''; a.process_nom=''; a.machine_nom=''; if(!v) a.nom=a.nom||''; }
       beGamRender(ctx.n); beGamRecalcCRU(ctx.n); return;
     }
-    if(f==='process'){   // choix du process (du poste) → nom + machine dérivés
+    if(f==='process'){   // choix du process (du poste) → nom + machine dérivés ; process non machine → pas de temps machine
       a.process_id=v; var p2=(BE_REFS.process_atelier||[]).find(function(x){return String(x.id)===String(v);});
       a.nom=p2?p2.nom:''; a.process_nom=a.nom; a.machine_nom=(p2&&p2.machine_id)?_gamMachNom(p2.machine_id):'';
+      // Process non machine : le temps machine variable devient du temps homme (même règle que la nomenclature,
+      // rien n est perdu) ; process OAS : aucun temps valorisé (cases grisées, remises à zéro).
+      if(p2&&TX.typeProcess(p2)==='manuel'&&(Number(a.machine_min)||0)>0){ a.mo_min=(Number(a.mo_min)||0)+(Number(a.machine_min)||0); }
+      if(p2&&TX.typeProcess(p2)!=='machine') a.machine_min=0;
+      if(p2&&TX.typeProcess(p2)==='oas'){ a.reglage_min=0; a.mo_min=0; }
       if(p2&&p2.poste_id){ a.poste_id=p2.poste_id; var po2=_gamPostes().find(function(x){return String(x.id)===String(p2.poste_id);}); a.poste_nom=po2?po2.nom:a.poste_nom; }
       beGamRender(ctx.n); beGamRecalcCRU(ctx.n); return;
     }
-    if(f==='nom') a.nom=v; else if(f==='type') a.type=v; else if(f==='machine_nom') a.machine_nom=v;
+    if(f==='type'){   // sous-traitance : aucun temps valorisé → temps remis à zéro (et grisés)
+      a.type=v; if(v==='sous_traite'){ a.reglage_min=0; a.mo_min=0; a.machine_min=0; }
+      beGamRender(ctx.n); beGamRecalcCRU(ctx.n); return;
+    }
+    if(f==='nom') a.nom=v; else if(f==='machine_nom') a.machine_nom=v;
     else if(f==='reglage') a.reglage_min=fromMille(v); else if(f==='mo') a.mo_min=fromMille(v); else if(f==='mach') a.machine_min=fromMille(v);
     var cell=byId('gcost-'+ctx.n+'-'+aid); if(cell) cell.textContent=addedCostPc(ctx.n,a).toFixed(2)+' €';
     beGamRecalcCRU(ctx.n);
@@ -5206,6 +5306,7 @@ app.get('/be/analyse', async (c) => {
     var disp=byId('gadd-'+n); if(disp) disp.textContent=addMain.toFixed(2)+' €';
     beRenderResults(n);
     beRenderPostes(n);
+    beRenderAlerte(n);
   }
 
   // ── Temps & coûts PAR POSTE (vrais temps = réglage/lot + variable × quantité ; défilable par quantité) ──
@@ -5230,9 +5331,9 @@ app.get('/be/analyse', async (c) => {
       push(key,tmin,cout);
     });
     (g.added||[]).forEach(function(a){
-      var reglc=(Number(a.reglage_min)||0)/60*(g.tauxMo||45);
+      var dA=beAddedDecomp(n,a);   // même règle que la gamme : réglage/lot + variable × q (temps machine valorisé si process machine)
       var key=a.poste_nom||'Étapes ajoutées';   // rattache l'étape ajoutée à son poste si renseigné
-      push(key,(Number(a.reglage_min)||0)+((Number(a.mo_min)||0)+(Number(a.machine_min)||0))*q,reglc+addedCostPc(n,a)*q);
+      push(key,dA.reglageMin+(dA.moMin+dA.machineMin)*q,addedCostFixe(n,a)+addedCostPc(n,a)*q);
     });
     if(!order.length){ host.innerHTML="<div style='font-size:.72rem;color:#9ca3af;padding:6px 2px;'>Aucune étape dans la gamme.</div>"; return; }
     var fmtT=function(m){ return m>=60?((m/60).toFixed(2)+' h'):(Math.round(m)+' min'); };
@@ -5299,6 +5400,7 @@ app.get('/be/analyse', async (c) => {
       +   "<div id='gamme-"+n+"'></div>"
       +   "<button type='button' onclick='beGamAdd("+n+")' style='margin-top:8px;display:flex;align-items:center;gap:5px;color:#6366f1;background:#ede9fe;border:1px dashed #c4b5fd;border-radius:6px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;width:100%;justify-content:center;'><i class='fas fa-plus'></i> Ajouter une étape (insérable dans la gamme)</button>"
       +   "<div style='margin-top:6px;text-align:right;font-size:.68rem;color:#7c3aed;font-weight:700;'>Coût étapes ajoutées : <span id='gadd-"+n+"'>0.00 €</span> / pièce <span style='color:#94a3b8;font-weight:600;'>(inclus dans le CRU)</span></div>"
+      +   "<div id='gwarn-"+n+"' style='display:none;margin-top:8px;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:8px;padding:7px 10px;font-size:.68rem;color:#9a3412;line-height:1.5;'></div>"
       + "</div>"
       // Temps & coûts PAR POSTE — vrais temps calculés (réglage/lot + variable × quantité), défilables par quantité
       + "<div style='background:#eff6ff;border-radius:10px;padding:14px;margin-bottom:14px;border:1px solid #bfdbfe;'>"
@@ -5328,7 +5430,7 @@ app.get('/be/analyse', async (c) => {
 
   function addProduit(){
     prodCount++; var n=prodCount;
-    GAM[n]={ nom:[], added:[], nextId:1, qte:1, tauxMo:45, tauxMach:50, baseMo:0 };
+    GAM[n]={ nom:[], added:[], nextId:1, qte:1, site:null, tauxHomme:null, hommeManquant:null, baseMo:0 };
     document.getElementById('produitsList').insertAdjacentHTML('beforeend', beBlock(n));
     beGamRender(n); beRenderCoverage(n, []); updateSynthese();
     return n;
@@ -5443,6 +5545,27 @@ app.get('/be/analyse', async (c) => {
   }
   window.beSetVolet=beSetVolet;
 
+  // ── CHIFFRAGE INDISPONIBLE (lecture des taux ou de l analyse en échec) ──────
+  // Une panne n est pas une absence : sans la réponse du serveur, les étapes ajoutées de la DT ne sont pas relues et
+  // les coûts retombent à 0. Enregistrer écraserait alors les étapes ajoutées (liste vide) et enverrait un CRU faux
+  // dans l offre. On le dit en permanence et on BLOQUE l enregistrement jusqu au rechargement de la page.
+  function beChiffrageKO(raison){
+    if(window.__beChiffrageKO) return;
+    window.__beChiffrageKO=String(raison||'inconnue');
+    var list=byId('produitsList');
+    if(list&&list.parentNode&&!byId('be-chiffrage-ko')){
+      var bx=document.createElement('div'); bx.id='be-chiffrage-ko';
+      bx.style.cssText='margin:0 0 14px;padding:10px 14px;background:#fef2f2;border:1.5px solid #fecaca;border-radius:10px;color:#991b1b;font-size:.76rem;line-height:1.5;';
+      var t1=document.createElement('div'); t1.style.fontWeight='800'; t1.textContent='Chiffrage indisponible : les coûts affichés ne sont PAS fiables, enregistrement bloqué.';
+      var t2=document.createElement('div'); t2.textContent='Cause : '+window.__beChiffrageKO+'. Rechargez la page quand la base répond (rien n a été modifié).';
+      bx.appendChild(t1); bx.appendChild(t2); list.parentNode.insertBefore(bx,list);
+    }
+    var btn=byId('be-save-analyse-btn');
+    if(btn){ btn.disabled=true; btn.style.opacity='.5'; btn.style.cursor='not-allowed'; btn.title='Chiffrage indisponible : rechargez la page'; }
+    if(window.pushNotif) pushNotif('err','fa-triangle-exclamation','Chiffrage indisponible : '+window.__beChiffrageKO.replace(/</g,'&lt;')+' — enregistrement bloqué.',9000);
+  }
+  if(BE_REFS.taux_erreur) beChiffrageKO('taux de l atelier illisibles ('+String(BE_REFS.taux_erreur)+')');
+
   // ── PRÉ-REMPLISSAGE depuis la DT ───────────────────────────────
   async function prefillFromDT(){
     if(window.__bePrefilled) return;
@@ -5477,7 +5600,10 @@ app.get('/be/analyse', async (c) => {
     setDl('dt-client-dl',pieces.map(function(p){return p.ref_client;}));
     if(!pieces.length){ addProduit(); if(window.pushNotif) pushNotif('warn','fa-exclamation-triangle','Aucune pièce dans cette DT. Demandez au commercial de compléter.',5000); return; }
     var byRef={};
-    try{ var r=await fetch('/api/be/analyse-dt/'+encodeURIComponent(dt.id)); var j=await r.json(); if(j&&j.ok)(j.pieces||[]).forEach(function(ap){ byRef[String(ap.ref_interne||'').toLowerCase().trim()]=ap; }); }catch(e){}
+    try{ var r=await fetch('/api/be/analyse-dt/'+encodeURIComponent(dt.id)); var j=await r.json();
+      if(j&&j.ok)(j.pieces||[]).forEach(function(ap){ byRef[String(ap.ref_interne||'').toLowerCase().trim()]=ap; });
+      else beChiffrageKO(String((j&&j.error)||('HTTP '+r.status)));   // ex. 503 : taux de l atelier illisibles → aucun coût à 0 présenté comme réel
+    }catch(e){ beChiffrageKO('erreur réseau ou réponse illisible'); }
     pieces.forEach(function(p){
       var n=addProduit(); var block=byId('prod-'+n);
       var rm=block.querySelector('[data-remove]'); if(rm) rm.style.display='none';
@@ -5490,7 +5616,9 @@ app.get('/be/analyse', async (c) => {
       renderSurface(block,p);
       if(ap&&ap.plan_doc_id){ var a=byId('planopen-'+n); if(a){ a.href='/api/ged/file/'+encodeURIComponent(ap.plan_doc_id); a.style.display='inline-flex'; if(ap.plan_fichier) a.title=ap.plan_fichier; } }
       beRenderCoverage(n,(ap&&ap.fournitures_stock)?ap.fournitures_stock:[]);
-      var g=GAM[n]; g.qte=Number(p.quantite)||1; g.tauxMo=(ap&&ap.taux_mo)?ap.taux_mo:45; g.tauxMach=(ap&&ap.taux_machine)?ap.taux_machine:50;
+      // Taux homme = coût chargé RH moyen du SITE de la pièce, tel que le serveur l'a résolu (même valeur que ses coûts)
+      var g=GAM[n]; g.qte=Number(p.quantite)||1; g.site=(ap&&ap.site)?ap.site:beSiteOf(p);
+      g.tauxHomme=(ap&&ap.taux_homme!=null)?Number(ap.taux_homme):null; g.hommeManquant=(ap&&ap.homme_manquant!=null)?!!ap.homme_manquant:null;
       // Quantités à chiffrer (plusieurs estimatifs par pièce) + décomposition de prix AUTO par quantité (NOMENCLATURE seule ;
       // les étapes ajoutées sont ré-ajoutées par beAddedPerPiece → on les reconstruit d'abord dans g.added)
       g.qtes=(ap&&ap.quantites&&ap.quantites.length)?ap.quantites.slice():((Array.isArray(p.quantites)&&p.quantites.length)?p.quantites.slice():[g.qte]);
@@ -5502,11 +5630,14 @@ app.get('/be/analyse', async (c) => {
         var macM=(e.machine_min!=null)?Number(e.machine_min):0;
         var ap0=(e.apres!=null?Number(e.apres):g.nom.length);
         if(ap0<0) ap0=0; if(ap0>g.nom.length) ap0=g.nom.length;   // clamp : évite qu'une étape disparaisse si la gamme a raccourci
-        g.added.push({ id:g.nextId++, nom:e.nom||'', type:(e.type==='sous_traite'?'sous_traite':'interne'), poste_id:e.poste_id||'', poste_nom:e.poste_nom||'', process_id:e.process_id||'', process_nom:e.process_nom||'', machine_nom:e.machine_nom||'', reglage_min:Number(e.reglage_min)||0, mo_min:moM, machine_min:macM, apres:ap0 });
+        g.added.push({ id:g.nextId++, nom:e.nom||'', type:(e.type==='sous_traite'?'sous_traite':'interne'), poste_id:e.poste_id||'', poste_nom:e.poste_nom||'', process_id:e.process_id||'', process_nom:e.process_nom||'', machine_nom:e.machine_nom||'', reglage_min:Number(e.reglage_min)||0, mo_min:moM, machine_min:macM, prix_forfait:(e.prix_forfait!=null&&e.prix_forfait!==''?Number(e.prix_forfait):null), apres:ap0 });
       }); }
       // Repli : pièce sans nomenclature live mais coûts enregistrés → une ligne à la quantité principale.
       // On RETIRE la part des étapes ajoutées de cout_mo (elle sera ré-ajoutée par beAddedPerPiece → pas de double compte).
-      if(!g.results.length){ var addBase=beAddedPerPiece(n, g.qte); var moBase=(Number(p.cout_mo)||0)-addBase; if(moBase<0) moBase=0;
+      // Cette part est retirée À SA VALEUR D ENREGISTREMENT (cout_mo_ajoute) quand elle est connue : la retirer au taux
+      // du jour laisserait un résidu fantôme dès qu un taux a changé. À défaut (analyse antérieure), taux du jour :
+      // l ouverture restitue alors exactement le cout_mo enregistré.
+      if(!g.results.length){ var addBase=(p.cout_mo_ajoute!=null&&p.cout_mo_ajoute!=='')?(Number(p.cout_mo_ajoute)||0):beAddedPerPiece(n, beMainQte(n)); var moBase=(Number(p.cout_mo)||0)-addBase; if(moBase<0) moBase=0;
         g.results=[{ quantite:g.qte, matiere_pc:Number(p.cout_matiere)||0, accessoire_pc:Number(p.cout_accessoire)||0, mo_pc:moBase, st_pc:Number(p.cout_st)||0 }]; }
       beGamRender(n);
       if(p.cout_fg!=null&&p.cout_fg!=='') setVal('cru-fg-'+n,p.cout_fg);
@@ -5514,13 +5645,16 @@ app.get('/be/analyse', async (c) => {
     });
     // DT mixte Seem/Semrac → bascule en 2 volets (sinon : rien, comportement mono-site inchangé)
     try{ beSetupVolets(ab, pieces); }catch(e){ console.error(e); }
-    if(window.pushNotif) pushNotif('info','fa-link','Analyse pré-remplie depuis '+dt.id+' ('+pieces.length+' pièce(s)) — gamme, matière/stock, exigences et plan déversés.',5000);
+    if(window.pushNotif && !window.__beChiffrageKO) pushNotif('info','fa-link','Analyse pré-remplie depuis '+dt.id+' ('+pieces.length+' pièce(s)) — gamme, matière/stock, exigences et plan déversés.',5000);
   }
 
   // ── SAUVEGARDE ─────────────────────────────────────────────────
   async function saveAnalyseBE(){
     var dt=window.__DT_FOR_ANALYSIS__;
     if(!dt){ if(window.confirmSend) confirmSend('Analyse BE validée – CRU calculé pour tous les produits.'); return; }
+    // Chiffrage non relu (panne) : RIEN n est envoyé — ni les étapes ajoutées (elles seraient remplacées par une liste vide),
+    // ni l analyse (CRU faux transmis à l offre).
+    if(window.__beChiffrageKO){ pushNotif('err','fa-ban','Enregistrement bloqué : chiffrage indisponible ('+String(window.__beChiffrageKO).replace(/</g,'&lt;')+'). Rechargez la page quand la base répond.',9000); return; }
     // Mode 2 volets : on ne soumet QUE les pièces du volet actif (l'autre volet garde sa progression déjà enregistrée).
     var beMulti=!!(window.__beSites&&window.__beSites.length>=2); var beActive=window.__beActiveSite||null;
     var blocks=document.querySelectorAll('.produit-block'); var pieces_analyse=[]; var libresByRef=[];
@@ -5531,13 +5665,15 @@ app.get('/be/analyse', async (c) => {
       var qte=parseFloat(getAf(bl,'quantite')||'1')||1;
       var fg=parseFloat(getVal('cru-fg-'+n))||0;   // frais généraux = coût PAR LOT
       var mainRow=beRowFor(n, beMainQte(n));   // coûts AUTO à la quantité principale (matière/accessoire/MO+machine/S-trait.)
-      var tps=0; (g.nom||[]).forEach(function(e){ tps+=Number(e.var_min_piece)||0; }); (g.added||[]).forEach(function(a){ tps+=(Number(a.mo_min)||0)+(Number(a.machine_min)||0); });
+      var tps=0; (g.nom||[]).forEach(function(e){ tps+=Number(e.var_min_piece)||0; }); (g.added||[]).forEach(function(a){ var dA=beAddedDecomp(n,a); tps+=dA.moMin+dA.machineMin; });
       // Chiffrage multi-quantités : un COÛT DE REVIENT par quantité (cru = /pc, cru_serie = total lot). La marge/PV se fixent dans l'offre.
       var chiffrage=beQtes(n).map(function(q){ var d=beRowFor(n,q); return { quantite:q, cru:+d.cru.toFixed(2), cru_serie:+d.cruS.toFixed(2) }; });
       pieces_analyse.push({ ref_interne:refInterne, quantite:qte, quantites:beQtes(n).slice(),
         cout_matiere:+mainRow.mat.toFixed(4), cout_accessoire:+mainRow.acc.toFixed(4), cout_mo:+mainRow.mo.toFixed(4), cout_st:+mainRow.st.toFixed(4),
+        cout_mo_ajoute:+beAddedPerPiece(n, beMainQte(n)).toFixed(4),   // part des étapes ajoutées dans cout_mo (voir le repli moBase)
         cout_fg:fg, cru:+mainRow.cru.toFixed(4), temps_unitaire_min:+tps.toFixed(2), quantites_chiffrage:chiffrage });
-      var libres=(g.added||[]).map(function(a){ return { nom:a.nom||'Étape ajoutée', type:(a.type==='sous_traite'?'sous_traite':'libre'), temps_min:(Number(a.mo_min)||0)+(Number(a.machine_min)||0), prix_forfait:null, apres:Number(a.apres)||0, machine_nom:a.machine_nom||null, poste_id:a.poste_id||null, poste_nom:a.poste_nom||null, process_id:a.process_id||null, process_nom:a.process_nom||null, reglage_min:Number(a.reglage_min)||0, mo_min:Number(a.mo_min)||0, machine_min:Number(a.machine_min)||0 }; });
+      var libres=(g.added||[]).map(function(a){ var st=(a.type==='sous_traite');   // sous-traitance : aucun temps valorisé → temps à 0 (le serveur chiffre ainsi pareil)
+        return { nom:a.nom||'Étape ajoutée', type:(st?'sous_traite':'libre'), temps_min:st?0:((Number(a.mo_min)||0)+(Number(a.machine_min)||0)), prix_forfait:(a.prix_forfait!=null?a.prix_forfait:null), apres:Number(a.apres)||0, machine_nom:a.machine_nom||null, poste_id:a.poste_id||null, poste_nom:a.poste_nom||null, process_id:a.process_id||null, process_nom:a.process_nom||null, reglage_min:st?0:(Number(a.reglage_min)||0), mo_min:st?0:(Number(a.mo_min)||0), machine_min:st?0:(Number(a.machine_min)||0) }; });
       libresByRef.push({ ref:refInterne, libres:libres });
     });
     if(!pieces_analyse.length){ if(window.pushNotif) pushNotif('err','fa-exclamation-triangle','Aucune pièce à enregistrer.',4000); return; }
@@ -5554,7 +5690,11 @@ app.get('/be/analyse', async (c) => {
     };
     try{
       for(var i=0;i<libresByRef.length;i++){ var lb=libresByRef[i]; if(!lb.ref) continue;
-        try{ await fetch('/api/be/analyse-dt/'+encodeURIComponent(dt.id)+'/etapes-libres',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ ref_interne:lb.ref, etapes_libres:lb.libres }) }); }catch(e){}
+        // vider:true = liste vide VOULUE (étapes supprimées à l écran) ; sans lui le serveur refuse d effacer une liste existante.
+        try{ var rl=await fetch('/api/be/analyse-dt/'+encodeURIComponent(dt.id)+'/etapes-libres',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ ref_interne:lb.ref, etapes_libres:lb.libres, vider:(lb.libres.length===0) }) });
+          var jl=await rl.json().catch(function(){ return null; });
+          if(!jl||!jl.ok) pushNotif('warn','fa-triangle-exclamation','Étapes ajoutées de '+String(lb.ref).replace(/</g,'&lt;')+' non enregistrées : '+String((jl&&jl.error)||('HTTP '+rl.status)).replace(/</g,'&lt;'),8000);
+        }catch(e){ pushNotif('warn','fa-triangle-exclamation','Étapes ajoutées de '+String(lb.ref).replace(/</g,'&lt;')+' non enregistrées (erreur réseau).',8000); }
       }
       var res=await fetch('/api/dt/'+encodeURIComponent(dt.id)+'/analyse',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ pieces_analyse:pieces_analyse, analyste:analyste, meta:meta, site:(beMulti?beActive:null) }) });
       var data=await res.json();
@@ -6032,7 +6172,7 @@ app.get('/production/service', async (c) => {
       lot_ref: String(x.bdt.lot_ref ?? x.bdt.lot_id ?? ''), num_affaire: String(x.bdt.num_affaire ?? ''),
       cmd_ref: String(x.bdt.cmd_ref ?? ''), raison: x.raison as string,
     }))
-  return c.html(pageServiceProd(bdts as any[], machines, ops, lots, cmds, sousTraitants, processes, bds, bcStById, stock, presences, absences, mouvements, affByDate, congesOperateursPend, postes, machinesOpex, bdtsVigilance))
+  return c.html(pageServiceProd(bdts as any[], machines, ops, lots, cmds, sousTraitants, processes, bds, bcStById, stock, presences, absences, mouvements, affByDate, congesOperateursPend, postes, machinesOpex, bdtsVigilance, salaries as any[]))
 })
 
 // ─── PLANNING UNIFIÉ (Gantt Usine BDT + Gantt Sous-Traitance BDS) ───
@@ -6356,12 +6496,30 @@ app.get('/api/export/seirich.xlsx', async (c) => {
 })
 
 // ─── API PROCESS ATELIER (référentiel machine / manuel) ───
-const PROC_COLS = ['nom', 'code', 'activite', 'categorie', 'requiert_machine', 'est_oas', 'machine_id', 'operations', 'couleur', 'statut', 'ordre', 'poste_id']
+const PROC_COLS = ['nom', 'code', 'activite', 'categorie', 'requiert_machine', 'est_oas', 'machine_id', 'operations', 'couleur', 'statut', 'ordre', 'poste_id', 'taux_horaire_machine']
+// Taux horaire MACHINE du process (€/h HT, saisi à la main — 14/09/2026) : '' / null → null (« à saisir ») ;
+// sinon un nombre ≥ 0 (virgule décimale acceptée). Renvoie un message d'erreur si la valeur est invalide.
+function normTauxHoraireMachine(payload: Record<string, any>): string | null {
+  if (!payload || !('taux_horaire_machine' in payload)) return null
+  const v = payload.taux_horaire_machine
+  if (v == null || (typeof v === 'string' && v.trim() === '')) { payload.taux_horaire_machine = null; return null }
+  const n = Number(typeof v === 'string' ? v.trim().replace(',', '.') : v)
+  if (typeof v === 'boolean' || !Number.isFinite(n) || n < 0) return 'Taux horaire machine invalide : un nombre positif ou nul (€/h) est attendu, ou vide pour « à saisir ».'
+  payload.taux_horaire_machine = n
+  return null
+}
+// Colonne process_atelier.taux_horaire_machine absente (base cloud avant cloud-7) ? PGRST204 = colonne inconnue du
+// cache PostgREST ; 42703 = colonne inexistante. ⚠ Ne PAS se fier au seul nom de colonne : la violation de la
+// contrainte CHECK (valeur négative) le cite aussi, et ne doit surtout pas déclencher un réessai sans le taux.
+const colTauxProcessAbsente = (err: any): boolean => !!err && (String(err.code) === 'PGRST204' || String(err.code) === '42703') && /taux_horaire_machine/i.test(String(err.message || ''))
+const AVERT_CLOUD7 = 'Taux horaire machine NON enregistré : la colonne process_atelier.taux_horaire_machine n\'existe pas encore sur cette base. Jouez docker/db/cloud/cloud-7-process-taux-horaire-machine.sql dans le Studio Supabase en ligne (SQL Editor), puis ressaisissez le taux.'
 
 app.post('/api/production/process', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const payload = pick(body, PROC_COLS)
   if (!payload.nom) return c.json({ ok: false, error: 'nom requis' })
+  const errTaux = normTauxHoraireMachine(payload)
+  if (errTaux) return c.json({ ok: false, error: errTaux }, 400)
   payload.id = 'proc-' + Date.now().toString(36)
   if ('poste_id' in payload) payload.poste_id = payload.poste_id ? String(payload.poste_id) : null   // '' → null (FK)
   if (payload.activite == null) payload.activite = 'Seem'
@@ -6369,21 +6527,36 @@ app.post('/api/production/process', async (c) => {
   if (payload.statut == null) payload.statut = 'actif'
   if (payload.ordre == null) payload.ordre = 100
   if (payload.requiert_machine === false) payload.machine_id = null
-  const { data, error } = await createProcessAtelier(payload)
+  let { data, error } = await createProcessAtelier(payload)
+  let avertissement: string | null = null
+  if (error && 'taux_horaire_machine' in payload && colTauxProcessAbsente(error)) {   // base cloud avant cloud-7 : on crée le process sans le taux
+    delete payload.taux_horaire_machine
+    ;({ data, error } = await createProcessAtelier(payload))
+    if (!error) avertissement = AVERT_CLOUD7
+  }
   if (error) return c.json({ ok: false, error: error.message })
-  return c.json({ ok: true, data })
+  return c.json({ ok: true, data, ...(avertissement ? { avertissement } : {}) })
 })
 
 app.patch('/api/production/process/:id', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json().catch(() => ({}))
   const patch = pick(body, PROC_COLS)
+  const errTaux = normTauxHoraireMachine(patch)
+  if (errTaux) return c.json({ ok: false, error: errTaux }, 400)
   if (patch.requiert_machine === false) patch.machine_id = null
   if ('poste_id' in patch) patch.poste_id = patch.poste_id ? String(patch.poste_id) : null   // '' → null (détacher du poste)
   if (!Object.keys(patch).length) return c.json({ ok: false, error: 'no valid fields' })
-  const { data, error } = await updateProcessAtelier(id, patch)
+  let { data, error } = await updateProcessAtelier(id, patch)
+  let avertissement: string | null = null
+  if (error && 'taux_horaire_machine' in patch && colTauxProcessAbsente(error)) {   // base cloud avant cloud-7
+    delete patch.taux_horaire_machine
+    if (!Object.keys(patch).length) return c.json({ ok: false, error: AVERT_CLOUD7, cloud7: true })
+    ;({ data, error } = await updateProcessAtelier(id, patch))
+    if (!error) avertissement = AVERT_CLOUD7
+  }
   if (error) return c.json({ ok: false, error: error.message })
-  return c.json({ ok: true, data })
+  return c.json({ ok: true, data, ...(avertissement ? { avertissement } : {}) })
 })
 
 app.delete('/api/production/process/:id', async (c) => {
@@ -6410,7 +6583,8 @@ app.post('/api/production/machine/reorder', async (c) => {
 })
 
 // ─── API POSTES D'ATELIER (conteneurs machines + process ; planning & OPEX par poste) ───
-const POSTE_COLS = ['nom', 'code', 'activite', 'couleur', 'ordre', 'statut', 'notes', 'taux_horaire_manuel']
+// `taux_horaire_manuel` retiré le 14/09/2026 : un poste ne porte plus de taux (seul le process en porte un).
+const POSTE_COLS = ['nom', 'code', 'activite', 'couleur', 'ordre', 'statut', 'notes']
 app.post('/api/production/poste', async (c) => {
   const b = await c.req.json().catch(() => ({} as any))
   const payload: any = pick(b, POSTE_COLS)
@@ -6929,6 +7103,10 @@ app.post('/api/production/bst/:id/affecter-st', async (c) => {
 app.post('/api/production/machine', async (c) => {
   const b = await c.req.json().catch(() => ({} as any))
   if (!b.nom || !String(b.nom).trim()) return c.json({ ok: false, error: 'Nom requis' }, 400)
+  // Taux horaire machine du process créé avec la machine (optionnel) : validé AVANT de créer quoi que ce soit.
+  const tauxProc: Record<string, any> = ('taux_horaire_machine' in b) ? { taux_horaire_machine: b.taux_horaire_machine } : {}
+  const errTaux = normTauxHoraireMachine(tauxProc)
+  if (errTaux) return c.json({ ok: false, error: errTaux }, 400)
   const machines = await getMachines().catch(() => [] as any[])
   const year = new Date().getFullYear()
   const existingIds = new Set((machines as any[]).map((m: any) => String(m.id)))
@@ -6957,7 +7135,7 @@ app.post('/api/production/machine', async (c) => {
     categorie: b.categorie || null,
     operations: ops,
     capacite_h: b.capacite_h != null ? Number(b.capacite_h) : 8,
-    cout_h: b.cout_h != null ? Number(b.cout_h) : 35,
+    // cout_h n'est plus écrit (14/09/2026) : le coût horaire machine est porté par le PROCESS (taux_horaire_machine).
     tolerance_defaut: (b.tolerance_defaut != null && b.tolerance_defaut !== '') ? Number(b.tolerance_defaut) : null,
     statut: b.statut || 'operationnel',
     couleur: b.couleur || '#6366f1',
@@ -6973,19 +7151,27 @@ app.post('/api/production/machine', async (c) => {
 
   // Intégration automatique au planning BDT : un process atelier "machine" rattaché (hérite du poste de la machine).
   let procId: string | null = null
+  let avertissement: string | null = null
   if (b.create_process !== false) {
     procId = 'proc-' + Date.now().toString(36)   // id robuste (jamais de collision), comme la création manuelle de process
-    const { error: pErr } = await createProcessAtelier({
+    const procPayload: Record<string, any> = {
       id: procId, nom: b.nom_process || String(b.nom).trim(), code,
       activite, categorie: b.categorie || 'Machine',
       requiert_machine: true, machine_id: mId,
       operations: ops, couleur: machinePayload.couleur, statut: 'actif',
       ordre: 100,
       ...(machinePayload.poste_id ? { poste_id: machinePayload.poste_id } : {}),
-    })
+      ...tauxProc,   // taux horaire machine saisi (normalisé) — sinon null à la base = « à saisir »
+    }
+    let { error: pErr } = await createProcessAtelier(procPayload)
+    if (pErr && 'taux_horaire_machine' in procPayload && colTauxProcessAbsente(pErr)) {   // base cloud avant cloud-7
+      delete procPayload.taux_horaire_machine
+      ;({ error: pErr } = await createProcessAtelier(procPayload))
+      if (!pErr) avertissement = AVERT_CLOUD7
+    }
     if (pErr) procId = null
   }
-  return c.json({ ok: true, machine, process_id: procId })
+  return c.json({ ok: true, machine, process_id: procId, ...(avertissement ? { avertissement } : {}) })
 })
 
 // ─── API : modifier une machine ───
@@ -7006,7 +7192,7 @@ app.patch('/api/production/machine/:id', async (c) => {
   if ('activite' in b) patch.activite = ['Seem', 'Semrac', 'both', 'OAS'].includes(b.activite) ? b.activite : 'Seem'   // OAS = traitement de surface
   if ('categorie' in b) patch.categorie = b.categorie || null
   if ('capacite_h' in b) patch.capacite_h = Number(b.capacite_h) || 8
-  if ('cout_h' in b) patch.cout_h = Number(b.cout_h) || 35
+  // cout_h ignoré (14/09/2026) : le coût horaire machine se saisit sur le PROCESS (PATCH /api/production/process/:id).
   if ('tolerance_defaut' in b) patch.tolerance_defaut = (b.tolerance_defaut != null && b.tolerance_defaut !== '') ? Number(b.tolerance_defaut) : null
   if ('statut' in b) patch.statut = b.statut
   if ('couleur' in b) patch.couleur = b.couleur
@@ -7023,18 +7209,24 @@ app.patch('/api/production/machine/:id', async (c) => {
 // ─── API : supprimer une machine (et détacher les process liés) ───
 app.delete('/api/production/machine/:id', async (c) => {
   const id = c.req.param('id')
-  // Détacher les process ateliers rattachés à cette machine pour éviter les liens morts
-  try {
-    const procs = await getProcessAtelier().catch(() => [] as any[])
-    for (const p of (procs as any[])) {
-      if (String(p.machine_id) === String(id)) {
-        await updateProcessAtelier(p.id, { machine_id: null, requiert_machine: false }).catch(() => {})
-      }
-    }
-  } catch { /* non bloquant */ }
+  // Détacher les process rattachés à cette machine (pas de lien mort). Coût horaire porté par le PROCESS (14/09/2026) :
+  // on retire UNIQUEMENT la machine. Un process machine RESTE machine, avec son taux — requiert_machine est posé à true
+  // quand son type ne venait que de machine_id (sinon il deviendrait « manuel » et son taux cesserait de s'appliquer
+  // en silence dans les nomenclatures, l'analyse DT et le coût réel des BDT).
+  // supabase-js ne lève jamais : lecture et détachements sont vérifiés ; au moindre échec la machine N'EST PAS supprimée.
+  const { data: procs, error: lectErr } = await getProcessAtelierDeMachine(id)
+  if (lectErr) return c.json({ ok: false, error: 'Process rattachés illisibles, machine non supprimée — ' + lectErr }, 503)
+  const echecs: string[] = []
+  for (const p of procs) {
+    const patch: Record<string, any> = { machine_id: null }
+    if (typeProcess(p) === 'machine') patch.requiert_machine = true
+    const { error: e1 } = await updateProcessAtelier(p.id, patch)
+    if (e1) echecs.push(`${p.nom || p.id} : ${e1.message}`)
+  }
+  if (echecs.length) return c.json({ ok: false, error: 'Détachement des process impossible, machine non supprimée — ' + echecs.join(' · ') }, 400)
   const { error } = await deleteMachine(id)
   if (error) return c.json({ ok: false, error: error.message }, 400)
-  return c.json({ ok: true })
+  return c.json({ ok: true, process_detaches: procs.length })
 })
 
 // ─── API : présence opérateur (upsert d'une case jour×opérateur) ───
@@ -8601,13 +8793,16 @@ app.get('/api/commande/:id/detail', async (c) => {
 
 app.get('/maintenance/service', async (c) => {
   await scanPreventifOM().catch(() => {}) // best-effort : matérialise les OM préventifs dus (calendaire + usure) à l'ouverture du service
-  const [oms, pps, mtbf, machines, pieces, sals, bdts, opex, controles, hist, noms, lots, postesM] = await Promise.all([
+  const [oms, pps, mtbf, machines, pieces, sals, bdts, opex, controles, hist, noms, lots, postesM, procsM] = await Promise.all([
     getOrdresMaintenance(), getPlansPreventif(), getMtbfMachines(),
     getMachines().catch(() => []), getPiecesRechange().catch(() => []), getSalariesActifs().catch(() => []),
     getBonsDeTravail().catch(() => []),
     getMachinesOpex().catch(() => []), getControlesCotes().catch(() => []), getMachineHistorique().catch(() => []),
     getNomenclatures().catch(() => []), getLots().catch(() => []), getPostes().catch(() => []),
+    getProcessAtelier().catch(() => []),
   ])
+  // Types des process (heures machine) : seule la règle typeProcess compte ici, aucun taux n'est lu.
+  const txTypes = construireTauxAtelier(procsM as any[])
   // ─── Heures de fonctionnement MACHINE par machine → { machine_id: [{d, h}] } ───
   // h = TEMPS MACHINE uniquement (pas le temps opérateur). Source : champ stocké
   // temps_machine_reel/alloue si présent, sinon dérivé de l'analyse DT (gamme :
@@ -8628,21 +8823,14 @@ app.get('/maintenance/service', async (c) => {
     let e = etapes.find((x: any) => _lcN(x.nom) === _lcN(bdt.operation) || _lcN(x.process_nom) === _lcN(bdt.operation))
     if (!e && bdt.machine_id) e = etapes.find((x: any) => String(x.machine_id) === String(bdt.machine_id))
     if (!e) return null
-    let mMinUnit = 0, mReg = 0
-    if (e.ressource === 'machine') {
-      mMinUnit = (Number(e.temps_variable_mille) || 0) / 1000 * 60
-      // Temps MACHINE : seul le reglage machine (RGM) immobilise la machine ; a defaut,
-      // le champ historique, qui etait deja impute a la machine pour une etape 'machine'.
-      mReg = (e.temps_reglage_machine_mille != null || e.temps_reglage_op_mille != null)
-        ? (Number(e.temps_reglage_machine_mille) || 0) / 1000 * 60
-        : (Number(e.temps_reglage_mille) || 0) / 1000 * 60
-    } else {
-      mMinUnit = Number(e.temps_machine_min ?? ((e.machine_id || e.machine_taux_h) ? (e.temps_unitaire_min ?? 0) : 0)) || 0
-      mReg = (e.machine_id || e.machine_taux_h) ? (Number(e.temps_reglage_machine_min ?? e.temps_reglage_min) || 0) : 0
-    }
-    if (mMinUnit <= 0 && mReg <= 0) return null
+    // Heures MACHINE = même classement que le coût (shared.ts etapeDecomp) : RGM (réglage machine, /lot)
+    //   + TMV (temps machine variable, /pièce), et seulement si le process de l'étape est de type machine
+    //   (typeProcess ; process inconnu → ressource / machine_id). Le ROP et le THV n'immobilisent pas la machine.
+    const d = etapeDecomp(e, txTypes, null)
+    if (d.st) return null
     const qte = Math.max(1, Number(lotById[String(bdt.lot_id)]?.qte) || 1)
-    return (mMinUnit * qte + mReg) / 60
+    const h = d.machineH_pc * qte + d.machineH_fixe
+    return h > 0 ? h : null
   }
   const machineHours: Record<string, { d: string; h: number }[]> = {}
   ;(bdts as any[]).forEach((b: any) => {
@@ -10990,10 +11178,12 @@ app.get('/stock/alertes',  (c) => c.redirect('/stock/service'))
 // MODULE FINANCES – COÛTS, TAUX, MACHINES, IMPUTATIONS
 // §4.2 (coût de revient), §4.18 (temps réels), §5 (Power BI)
 // ══════════════════════════════════════════════════════════════
-app.get('/finances/couts',        async (c) => { const [sal,mac,opx,cmd,pst] = await Promise.all([getSalaries().catch(()=>[]), getMachines().catch(()=>[]), getMachinesOpex().catch(()=>[]), getCommandes().catch(()=>[]), getPostes().catch(()=>[])]); return c.html(pageFinancesCouts(cmd as any, sal as any, mac as any, opx as any, pst as any)) })
+// Coût horaire porté par le PROCESS (14/09/2026) : les pages Finances reçoivent les process bruts (select *) et l'erreur
+//   de lecture des taux (getTauxAtelier relit process_atelier / salaries / machines et REMONTE l'échec : jamais un 0 muet).
+app.get('/finances/couts',        async (c) => { const [sal,mac,prc,ta] = await Promise.all([getSalaries().catch(()=>[]), getMachines().catch(()=>[]), getProcessAtelier().catch(()=>[]), getTauxAtelier()]); return c.html(pageFinancesCouts([], sal as any, mac as any, [], [], { process: prc as any, erreur: ta.error })) })
 app.get('/finances/taux',         async (c) => { const sal = await getSalaries().catch(()=>[]); return c.html(pageFinancesTaux(sal as any)) })
-app.get('/finances/machines',     async (c) => { const [mac,opx,pst] = await Promise.all([getMachines().catch(()=>[]), getMachinesOpex().catch(()=>[]), getPostes().catch(()=>[])]); return c.html(pageFinancesMachines(mac as any, opx as any, pst as any)) })
-app.get('/finances/imputations',  async (c) => { const [bdt,sal,mac,opx,pst] = await Promise.all([getBonsDeTravail().catch(()=>[]), getSalaries().catch(()=>[]), getMachines().catch(()=>[]), getMachinesOpex().catch(()=>[]), getPostes().catch(()=>[])]); return c.html(pageFinancesImputations(bdt as any, sal as any, mac as any, opx as any, pst as any)) })
+app.get('/finances/machines',     async (c) => { const [mac,opx,prc,ta] = await Promise.all([getMachines().catch(()=>[]), getMachinesOpex().catch(()=>[]), getProcessAtelier().catch(()=>[]), getTauxAtelier()]); return c.html(pageFinancesMachines(mac as any, opx as any, [], { process: prc as any, erreur: ta.error })) })
+app.get('/finances/imputations',  async (c) => { const [bdt,sal,mac,prc,ta] = await Promise.all([getBonsDeTravail().catch(()=>[]), getSalaries().catch(()=>[]), getMachines().catch(()=>[]), getProcessAtelier().catch(()=>[]), getTauxAtelier()]); return c.html(pageFinancesImputations(bdt as any, sal as any, mac as any, [], [], { process: prc as any, erreur: ta.error })) })
 
 // ══════════════════════════════════════════════════════════════
 // PAGE LISTE AVOIRS PAR COMMERCIAL

@@ -256,10 +256,10 @@
 
     <h3>Ce que vous voyez</h3>
     <ul class="points">
-      <li><b>DT à analyser</b> (avec le nombre total de DT ouvertes) — la tuile ouvre la liste des DT ; <b>DT analysées</b> en pourcentage ; <b>CRU moyen</b> en euros par pièce avec le nombre de nomenclatures chiffrées ; <b>Marge brute moyenne</b> avec le détail Seem / Semrac (objectif 25 %).</li>
+      <li><b>DT à analyser</b> (avec le nombre total de DT ouvertes) — la tuile ouvre la liste des DT ; <b>DT analysées</b> en pourcentage ; <b>CRU moyen</b> en euros par pièce avec le nombre de nomenclatures chiffrées, « dont N au coût incomplet (sous-évalué) » quand des taux manquent, et « coût chargé RH à renseigner » si aucun opérateur n'a de coût chargé ; <b>Marge brute moyenne</b> avec le détail Seem / Semrac (objectif 25 %).</li>
       <li><b>Structure de coût moyenne du CRU</b> — une barre empilée horizontale décomposant matière, main d'œuvre, machine et sous-traitance, avec les montants rappelés en dessous.</li>
       <li><b>Corrélation CRU ↔ marge</b> — un nuage de points (axe X : coût de revient par pièce, axe Y : marge en %) : il montre si l'on marge moins sur les pièces chères.</li>
-      <li><b>Pièces les plus coûteuses</b> — classement des CRU par pièce.</li>
+      <li><b>Pièces les plus coûteuses</b> — classement des CRU par pièce ; une barre orange marquée <b>⚠</b> signale un coût incomplet (taux horaire machine à saisir sur un process, coût chargé RH absent ou étape sans process) : son CRU est sous-évalué.</li>
       <li><b>Complétude des nomenclatures</b> — un pourcentage et une barre : une nomenclature est dite complète quand elle a une <b>gamme</b>, une <b>matière</b> et le statut <b>validée</b>.</li>
       <li><b>DT entrantes par mois</b> (+ N-1 en pointillé) et la <b>file d'attente des DT à traiter</b>, avec la priorité en liseré, le site et le délai.</li>
     </ul>
@@ -511,11 +511,11 @@
 
     <h3>Ce que vous voyez</h3>
     <ul class="points">
-      <li><b>Machines en panne</b> avec le nombre d'OM ouverts ; <b>Disponibilité parc</b> avec l'OEE et le nombre de machines (objectif 90 %) ; <b>MTTR moyen</b> en heures avec le MTBF ; <b>Ratio préventif</b> avec le décompte préventif / correctif et, si l'OPEX est renseigné, le coût horaire réel.</li>
+      <li><b>Machines en panne</b> avec le nombre d'OM ouverts ; <b>Disponibilité parc</b> avec l'OEE et le nombre de machines (objectif 90 %) ; <b>MTTR moyen</b> en heures avec le MTBF ; <b>Ratio préventif</b> avec le décompte préventif / correctif.</li>
       <li>Une <b>jauge de disponibilité</b>, un anneau <b>Préventif vs Correctif</b>, et la liste <b>Statut machines</b> (<span class="b b-ok">opérationnel</span>, <span class="b b-info">maintenance</span>, <span class="b b-crit">autre état</span>).</li>
       <li><b>Prochaines maintenances</b> — les échéances préventives et les OM datés, triés par date, précédés du bouton <b>« Générer les OM préventifs dus »</b>.</li>
       <li><b>Backlog OM par âge</b> — 0–7 j, 8–30 j, 31–90 j, plus de 90 j, suivi des OM ouverts les plus anciens.</li>
-      <li><b>Coût de maintenance mensuel</b> (+ N-1 en pointillé), <b>OPEX par machine</b> avec le total, les heures productives et le coût horaire réel, et le tableau <b>MTBF / MTTR par machine</b> (Machine, MTBF, MTTR, Dispo, Pannes) classé du plus long temps de réparation au plus court.</li>
+      <li><b>Coût de maintenance mensuel</b> (+ N-1 en pointillé), <b>OPEX par machine</b> (en euros) avec le total et les heures productives, et le tableau <b>MTBF / MTTR par machine</b> (Machine, MTBF, MTTR, Dispo, Pannes) classé du plus long temps de réparation au plus court.</li>
     </ul>
     <figure class="shot">
       <img src="../../assets/dash-maintenance.png" alt="Capture du Dashboard Maintenance" loading="lazy">
@@ -535,7 +535,7 @@
     <ul class="points">
       <li>Le filtre <b>Machine</b> restreint tout l'écran (disponibilité, OM, MTBF/MTTR, OPEX) à un seul équipement : idéal pour instruire une machine à problèmes.</li>
       <li>La disponibilité provient des relevés MTBF quand ils existent ; à défaut, elle est estimée par la part de machines à l'état « opérationnel ».</li>
-      <li>L'<b>OPEX par machine</b> reste vide tant que les consommations et achats rattachés aux machines ne sont pas saisis — le coût horaire réel n'apparaît alors pas non plus.</li>
+      <li>L'<b>OPEX par machine</b> reste vide tant que les consommations et achats rattachés aux machines ne sont pas saisis. Il n'est plus converti en « coût horaire réel » : depuis le 14/09/2026, le coût horaire se saisit sur les process machine (Production › Process Ateliers).</li>
       <li>Le <b>backlog</b> se calcule depuis la date de signalement : un OM ouvert sans date de signalement n'y figure pas.</li>
     </ul>
     <div class="warn"><b>Attention :</b> « Générer les OM préventifs dus » <b>crée réellement</b> des ordres de maintenance dans l'ERP. Ne cliquez pas « pour voir » : lancez-le quand vous êtes prêt à les traiter.</div>

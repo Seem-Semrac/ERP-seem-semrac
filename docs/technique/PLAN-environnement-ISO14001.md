@@ -110,7 +110,7 @@ Légende état : 🟢 câblé · 🟡 partiel/données prêtes · 🔴 absent
 ### 3.3 → Bilan énergétique / GES (nouveau, `hse_bilan_energie`)
 | Source ERP | État | Câblage |
 |---|---|---|
-| **Machines** (`machines` : `cnc`, `cout_h`, `capacite_h`) | 🔴 **bloquant** | Ajouter en DDL `type_energie` (électrique/GPL/fioul), `puissance_kw`, `conso_horaire`. Puis heures machine × puissance → kWh → mesure `energie` ; GPL/fioul → facteur GES → `emission_air` (scope 1). Sans ces colonnes, aucun bilan machine calculable. |
+| **Machines** (`machines` : `cnc`, `capacite_h` ; `cout_h` obsolète depuis le 14/09/2026, le taux horaire est porté par `process_atelier.taux_horaire_machine`) | 🔴 **bloquant** | Ajouter en DDL `type_energie` (électrique/GPL/fioul), `puissance_kw`, `conso_horaire`. Puis heures machine × puissance → kWh → mesure `energie` ; GPL/fioul → facteur GES → `emission_air` (scope 1). Sans ces colonnes, aucun bilan machine calculable. |
 | **Factures EDF** (`factures_fournisseur` compte 606300) | 🔴 | Miroir €→(kWh si dispo)→GES scope 2. Idéalement ajouter un champ `kwh` sur la facture. |
 | **Achats par compte PCG** (606 énergie, 624 transport…) | 🔴 | `compte_charge` = point d'accroche naturel du **Scope 3** (chaque compte = poste d'émission × facteur monétaire). |
 | **Catégorie achat « Transport » + montants** | 🔴 | Assiette Scope 3 transport présente, aucun facteur t.km/CO₂. |

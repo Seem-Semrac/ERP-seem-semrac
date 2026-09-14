@@ -19,7 +19,8 @@
 //   Une étape de fabrication ENTAMÉE est due EN ENTIER (pas de prorata).
 //   La préparation technique À FAIRE disparaît ; celle DÉJÀ FAITE est conservée.
 
-import { estAnnule } from './shared'
+import { estAnnule, coutReelBdt } from './shared'
+import type { TauxAtelier, ManquantCout } from './shared'
 
 // ─── Vocabulaire des états ────────────────────────────────────
 /** Un BC dont la marchandise est arrivée : la matière est là, elle se facture. */
@@ -56,9 +57,15 @@ export interface ContexteAnnulation {
   das: any[]
   bcs: any[]
   prepas: any[]
-  /** (machineId, operateurId, activite) → € par heure. Fournis par computeAtelierRates. */
-  tauxMachine?: (machineId: any) => number
-  tauxMo?: (operateurId: any, activite: any) => number
+  /**
+   * Taux de l'atelier (queries.ts getTauxAtelier().tx) — 14/09/2026 : le taux MACHINE est porté par le
+   * PROCESS de l'étape (process machine seulement), le taux HOMME est le coût chargé RH de l'opérateur
+   * (repli : moyenne du site). Absent → le travail n'est pas chiffré (signalé dans `incertitudes`).
+   * ⚠ Ne passer `taux` que si getTauxAtelier().error est null : une lecture en échec ne vaut pas « 0 € ».
+   */
+  taux?: TauxAtelier | null
+  /** Salariés par id (getTauxAtelier().salById) : taux chargé de l'opérateur de chaque étape. */
+  salById?: Record<string, any> | null
 }
 
 const nb = (v: any) => { const n = Number(v); return isFinite(n) ? n : 0 }
@@ -91,14 +98,18 @@ export function etapeEnCours(ops: any[]): any | null {
   return derniere
 }
 
-/** Coût d'une étape, temps ALLOUÉ × taux (machine + main-d'œuvre). */
-function coutOp(op: any, ctx: ContexteAnnulation): number {
+/**
+ * Coût d'une étape : temps ALLOUÉ valorisé par la règle unique du coût d'un BDT (shared.ts coutReelBdt) —
+ * homme = heures × taux chargé de l'opérateur (repli moyenne du site) ; machine = heures × taux du process
+ * de l'étape si ce process est de type machine. `manquants` : taux absents, comptés 0 €.
+ */
+function coutOpDetail(op: any, ctx: ContexteAnnulation): { cout: number; manquants: ManquantCout[] } {
   const heures = nb(op.temps_alloue) || nb(op.duree) || 0
-  if (heures <= 0) return 0
-  const tm = op.machine_id && ctx.tauxMachine ? nb(ctx.tauxMachine(op.machine_id)) : 0
-  const to = ctx.tauxMo ? nb(ctx.tauxMo(op.operateur_id, op.activite)) : 0
-  return +(heures * (tm + to)).toFixed(2)
+  if (heures <= 0 || !ctx.taux) return { cout: 0, manquants: [] }
+  const c = coutReelBdt({ ...op, temps_reel: heures }, ctx.taux, ctx.salById ?? null)
+  return { cout: +(c.coutHomme + c.coutMachine).toFixed(2), manquants: c.manquants }
 }
+const coutOp = (op: any, ctx: ContexteAnnulation): number => coutOpDetail(op, ctx).cout
 
 /**
  * Simule une annulation. NE MODIFIE RIEN.
@@ -206,6 +217,14 @@ export function simulerAnnulation(ctx: ContexteAnnulation, opts: OptionsAnnulati
       + ' ligne(s) de matiere s\'ajouteront.')
   }
   if (!lotsCmd.length) incertitudes.push('Aucun lot ouvert sur cette commande.')
+  // Travail chiffré sans taux (taux de l'atelier absents, ou taux manquants) : montant sous-évalué, à dire.
+  if (entamees.length && !ctx.taux) {
+    incertitudes.push("Taux de l'atelier non fournis : les " + entamees.length + ' etape(s) entamee(s) ne sont pas chiffrees.')
+  } else if (entamees.length) {
+    const incompletes = entamees.filter((op) => coutOpDetail(op, ctx).manquants.length > 0).length
+    if (incompletes) incertitudes.push(incompletes + ' etape(s) entamee(s) chiffree(s) sans taux complet '
+      + '(taux machine du process a saisir, cout charge RH manquant ou etape machine sans process) : le travail est sous-evalue.')
+  }
   // ⚠ LIMITE STRUCTURELLE, a dire plutot qu'a masquer : un bon de commande est rattache
   //   a l'AFFAIRE, jamais a un lot. Sur une annulation PARTIELLE, on ne sait donc pas
   //   quelle part de la matiere revient au lot annule — la totalite est comptee.

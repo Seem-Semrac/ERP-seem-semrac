@@ -31,7 +31,15 @@ const M = [
   { file: 'form-commercial-dt',        path: '/commercial/service', tabClick: '#svc-tab-dt',     click: 'Créer la DT',    inline: true, wait: 900 },
   { file: 'form-commercial-avoir',     path: '/commercial/service', tabClick: '#svc-tab-avoirs', click: "Émettre l'avoir", inline: true, wait: 900 },
   // Bureau d'études
-  { file: 'form-be-nomenclature',      path: '/be/service', fn: "nomNewStandard()", inline: true, wait: 900 },
+  //   Nouvelle nomenclature + 2 étapes D'EXEMPLE posées dans le navigateur seulement (rien n'est enregistré) :
+  //   un process MACHINE avec taux (0,5 h ROP · 1 h RGM · 0,1 h MO/pc · 0,2 h machine/pc — l'exemple du manuel)
+  //   et un process MANUEL, pour montrer les indications « Machine · X €/h » / « Manuel · coût chargé RH » (14/09/2026).
+  { file: 'form-be-nomenclature',      path: '/be/service', inline: true, wait: 1100,
+    fn: "(function(){nomNewStandard();var L=(BE_REFS_JS.process_atelier||[]).filter(function(p){return p.activite==='Seem'||p.activite==='both';});"
+      + "var pm=L.filter(function(p){return p.type==='machine'&&p.taux_source==='process'&&!/oxyd|surtec|sox|lavage|anodis/i.test(String(p.nom||''));})[0];var ph=L.filter(function(p){return p.type==='manuel';})[0];"
+      + "if(pm){nomAddEtape();var i=nomEtapes.length-1;nomOnEtapeProcessChange(i,pm.id);var e=nomEtapes[i];e.temps_reglage_min=30;e.temps_reglage_machine_min=60;e.temps_mo_min=6;e.temps_machine_min=12;}"
+      + "if(ph){nomAddEtape();var j=nomEtapes.length-1;nomOnEtapeProcessChange(j,ph.id);nomEtapes[j].temps_mo_min=3;}"
+      + "nomRenderEtapes();if(typeof nomCalcTotaux==='function') nomCalcTotaux();})()" },
   // Achats
   { file: 'form-achats-bc',            path: '/achats/service', fn: "achNewBC()" },
   // Fenetre « Traiter la DA -> BC » : celle qui porte la reference du materiel. Necessite une DA a traiter.
@@ -100,6 +108,16 @@ const M = [
       + "if(!c){BDTS.push({id:'BDT-2026-0001-01-01',client:'Client exemple',piece:'Bride alu 7075',operation:'Usinage CN',duree:12,tempsAlloue:12,statut:'a_programmer',process:'pending',datePrevue:null,activite:'Seem',lotId:'LOT-2026-0001-01',numAffaire:'2026-0001',seq:1});buildPending();c=carte();}"
       + "var btn=c&&c.querySelector('button[onclick*=\"splitBdt(\"]');if(!btn) throw new Error('ciseaux introuvables');"
       + "btn.click();splitAdd();_splitBdt.vals[_splitBdt.vals.length-1]='1.5';splitRender();})()" },
+  // Production — coût horaire porté par le PROCESS (14/09/2026). Les trois modales vivent dans le panneau
+  //   « Process Ateliers » (#ppanel-machines) : tabClick OBLIGATOIRE. Aucune écriture : on ouvre, on capture.
+  { file: 'form-production-process',  path: '/production/service', tabClick: '#ptab-machines', fn: "openProcModal()", wait: 700 },
+  //   Modifier le process : de préférence un process MACHINE qui porte un taux et n'est pas un traitement de surface (5 process
+  //   OAS de la base ont est_oas=false : on les écarte par leur nom), sinon le premier process machine, sinon le premier.
+  { file: 'form-production-process-edit', path: '/production/service', tabClick: '#ptab-machines', wait: 800,
+    fn: "(function(){var L=(typeof PROCESS!=='undefined'?PROCESS:[]);var nonOas=function(x){return !/oxyd|surtec|sox|lavage|anodis/i.test(String(x.nom||''));};var p=L.filter(function(x){return x.type==='machine'&&x.taux_source==='process'&&nonOas(x);})[0]||L.filter(function(x){return x.type==='machine';})[0]||L[0];if(!p) throw new Error('aucun process');openProcEdit(p.id);})()" },
+  //   Nouvelle machine, case « Créer aussi un nouveau process » cochée : champ « Taux horaire machine du nouveau process ».
+  { file: 'form-production-machine',  path: '/production/service', tabClick: '#ptab-machines', wait: 700,
+    fn: "(function(){openMachineModal();var c=document.getElementById('mc_proc_new');if(c&&!c.checked){c.checked=true;}if(typeof mcProcNewChange==='function') mcProcNewChange();})()" },
   // OAS — clôture avec autocontrôle (≠ création de balancelle)
   { file: 'form-oas-cloture-balancelle', path: '/oas/service', fn: "openCloreBalModal('BAL-DEMO','OAS-2026-1042','LOT-2026-014','Bride alu 7075')", wait: 800 },
   // Expéditions (dépendent des tableaux globaux EXP_PLAN / EXP_BC)

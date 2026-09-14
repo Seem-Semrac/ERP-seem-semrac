@@ -44,7 +44,8 @@ const MANIFEST = [
   { file: 'achats-fournisseurs',   path: '/achats/service', clicks: ['#ach-tab-fourn'] },
   // Production + planning
   { file: 'production-service',    path: '/production/service' },
-  { file: 'production-postes',     path: '/production/service', eval: "var g=document.getElementById('ppanel-gantt-bdt'); if(g) g.style.display='none'; var mp=document.getElementById('ppanel-machines'); if(mp) mp.style.display=''; var vm=document.getElementById('vol-mach'); if(vm) vm.style.display='none'; var vp=document.getElementById('vol-pp'); if(vp) vp.style.display='';", wait: 700, fullPage: true },   // onglet Process Ateliers → volet Postes & Process (colonne Taux/h effectif)
+  { file: 'production-postes',     path: '/production/service', eval: "var g=document.getElementById('ppanel-gantt-bdt'); if(g) g.style.display='none'; var mp=document.getElementById('ppanel-machines'); if(mp) mp.style.display=''; var vm=document.getElementById('vol-mach'); if(vm) vm.style.display='none'; var vp=document.getElementById('vol-pp'); if(vp) vp.style.display=''; [].slice.call(document.querySelectorAll('#vol-pp button[id^=postexp-]')).slice(0,3).forEach(function(b){ b.click(); });", wait: 700, fullPage: true },   // onglet Process Ateliers → volet Postes & Process, 3 postes dépliés : taux horaire machine de chaque process (« X €/h », « taux à saisir », « coût RH ») — 14/09/2026
+  { file: 'production-machines',   path: '/production/service', clicks: ['#ptab-machines'], eval: "if(typeof volShow==='function') volShow('mach');", wait: 800, fullPage: true },   // volet Machines : plus de colonne Taux/h ni d'OPEX théorique (14/09/2026)
   // OAS
   { file: 'oas',                   path: '/oas/service' },
   // Qualité

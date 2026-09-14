@@ -24,7 +24,7 @@ const R = [
   { role: 'bei', label: 'Bureau d\'Études (BE)', rw: ['be', 'achats'], r: ['commercial', 'production', 'oas', 'qualité', 'sécurité', 'stock', 'maintenance'],
     mission: 'Définir techniquement les pièces (nomenclatures, gammes) et préparer la fabrication.',
     taches: [
-      ['Créer une nomenclature', 'be-noms', ['BE › **Nomenclatures**, « Nouvelle ».', 'Matière (réf → prix auto <3 mois) + masse (g).', 'Étapes (glisser-déposer) : opération, machine, temps, réglage.', 'Prix de revient calculé → Enregistrer (indice A/B/C).']],
+      ['Créer une nomenclature', 'be-noms', ['BE › **Nomenclatures**, « Nouvelle ».', 'Matière (réf → prix auto <3 mois) + masse (g).', 'Étapes (glisser-déposer) : type, poste, process, puis les temps en ‰h — ROP (réglage homme), RGM (réglage machine : homme + machine), MO (homme / pièce), Mach (machine / pièce). Heure homme = coût chargé RH moyen du site ; heure machine = taux du process (saisi en Production).', 'Prix de revient calculé → Enregistrer (indice A/B/C).']],
       ['Analyser une DT', 'be-analyse', ['Onglet **Analyse DT**, sélectionner la DT.', 'Générer le dossier technique → BDT.']],
     ] },
   { role: 'achats', label: 'Acheteur(se)', rw: ['achats', 'stock'], r: ['commercial', 'be', 'production', 'expéditions', 'maintenance'],
@@ -39,6 +39,7 @@ const R = [
     taches: [
       ['Affecter un BDT à un opérateur', 'production-service', ['**/production/service** → onglet **Planning Gantt BDT** (planning unique).', 'Glisser une carte de « **BDT à classer** » (au-dessus du planning) sur le poste, ou sur la sous-case **Matin / Ap-m / Soir** de l\'opérateur.', 'Un clic sur un BDT n\'affiche que **son poste + l\'étape d\'avant et d\'après** ; « Tout afficher » lève le focus.', 'Les BDT prioritaires (BDTP) sont encadrés en rouge.']],
       ['Suivre les commandes à faire', 'production-service', ['Onglet **Commandes & Lots** : commandes → lots → BDT.']],
+      ['Saisir le taux horaire machine d\'un process', 'form-production-process-edit', ['Onglet **Process Ateliers** → volet **Postes & Process** → déplier le poste : chaque process affiche « X €/h », « taux à saisir » ou « coût RH ».', 'Crayon du process → **Type** (Machine / Manuel / OAS) → **Taux horaire machine (€/h HT)** → Enregistrer. Vide = « taux à saisir » (temps machine compté 0 €).', 'Seul le process machine porte un taux : ni la machine ni le poste. Le temps homme est valorisé au coût chargé RH (fiche salarié). Taux de départ = ancien coût de la machine, souvent 35 €/h : à vérifier.']],
     ] },
   { role: 'operateur', label: 'Opérateur atelier', rw: [], r: ['production', 'oas', 'qualité', 'expéditions'],
     mission: 'Réaliser les opérations de fabrication et tracer son travail (pointage + soldage BDT au PIN).',

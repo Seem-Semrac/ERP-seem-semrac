@@ -7,9 +7,149 @@ import type { DemandeTravaux, Commande, Nomenclature, Offre } from './types'
 
 const sjX = (v: any) => JSON.stringify(v).replace(/</g, '\\u003c')
 
-// ─── CONSTANTES CALCUL (fallback si pas de données DB) ─────────
-const TAUX_MO_DEFAULT   = 30   // €/h — moyenne MO de secours
-const COUT_MACHINE_DEFAULT = 35 // €/h — coût horaire machine moyen de secours
+// ─── COÛT D'UNE ÉTAPE CÔTÉ NAVIGATEUR — MIROIR EXACT de etapeDecomp (src/shared.ts) ─────────────
+// Coût horaire porté par le PROCESS (14/09/2026). Source JS UNIQUE, injectée telle quelle dans la page
+// BE (formulaire nomenclature) ET dans la page /be/analyse (étapes ajoutées) : aucune troisième copie.
+// Parité vérifiée par un test qui confronte beEtapeDecomp à etapeDecomp serveur (écart < 0,01 €).
+//   beTauxAtelierClient(refs) : équivalent navigateur de construireTauxAtelier, bâti sur les référentiels
+//     déjà résolus par le serveur (getBeRefs) — process_atelier[] { id, type, taux_machine, taux_source,
+//     machine_id, statut } et taux_homme { moyen, seem, semrac, manquant } (MOYENNES seulement).
+//   beEtapeDecomp(e, tx, site) : classement ROP / RGM / THV / TMV, formats minutes ET millièmes, OAS / ST.
+// ⚠ Chaîne JS brute : ni accent grave, ni dollar-accolade, ni barre oblique inverse, ni apostrophe
+//   dans les chaînes (elle est injectée dans deux gabarits TSX).
+export const BE_ETAPE_COUT_JS = `
+function beTauxAtelierClient(refs){
+  var procs = (refs && Array.isArray(refs.process_atelier)) ? refs.process_atelier : [];
+  var th = (refs && refs.taux_homme && typeof refs.taux_homme === "object") ? refs.taux_homme : null;
+  var vide = function(v){ return v == null || v === ""; };
+  var cle = function(s){ return String(s == null ? "" : s).trim().toLowerCase(); };
+  var nbOuNull = function(v){ if (vide(v)) return null; var n = Number(v); return isFinite(n) ? n : null; };
+  var typeDe = function(p){
+    if (!p) return "manuel";
+    if (p.type === "machine" || p.type === "manuel" || p.type === "oas") return p.type;
+    if (p.est_oas === true) return "oas";
+    return vide(p.machine_id) ? "manuel" : "machine";
+  };
+  var parId = Object.create(null);
+  procs.forEach(function(p){ if (p && !vide(p.id)) parId[String(p.id)] = p; });
+  var hp = { moyen: th ? nbOuNull(th.moyen) : null, seem: th ? nbOuNull(th.seem) : null, semrac: th ? nbOuNull(th.semrac) : null };
+  var processDe = function(pid){ return vide(pid) ? null : (parId[String(pid)] || null); };
+  var processMachineDeMachine = function(mid){
+    if (vide(mid)) return null;
+    var l = procs.filter(function(p){ return p && !vide(p.id) && typeDe(p) === "machine" && !vide(p.machine_id) && String(p.machine_id) === String(mid); });
+    if (l.length === 1) return l[0];
+    if (l.length > 1) { var actifs = l.filter(function(p){ return cle(p.statut) !== "inactif"; }); if (actifs.length === 1) return actifs[0]; }
+    return null;
+  };
+  var tauxMachine = function(pid, mid){
+    var p = processDe(pid);
+    if (!p && !vide(mid)) p = processMachineDeMachine(mid);
+    if (!p) return { taux: 0, source: "sans_process", pid: null };
+    var id = String(p.id), t = typeDe(p);
+    if (t === "oas") return { taux: 0, source: "oas", pid: id };
+    if (t === "manuel") return { taux: 0, source: "manuel", pid: id };
+    var v = nbOuNull(p.taux_machine), s = p.taux_source;
+    if (s === "process" || s === "transition_machine") return { taux: (v != null && v >= 0) ? v : 0, source: s, pid: id };
+    if (s == null && v != null && v > 0) return { taux: v, source: "process", pid: id };
+    return { taux: 0, source: "manquant", pid: id };
+  };
+  return {
+    tauxHomme: function(site){ var k = cle(site); if ((k === "seem" || k === "semrac") && hp[k] != null) return hp[k]; return hp.moyen != null ? hp.moyen : 0; },
+    hommeManquant: hp.moyen == null,
+    hommeParSite: hp,
+    processDe: processDe,
+    processMachineDeMachine: processMachineDeMachine,
+    tauxMachine: tauxMachine,
+    typeProcess: typeDe
+  };
+}
+function beEtapeDecomp(e, tx, site){
+  var nb = function(v){ var n = Number(v); return isFinite(n) ? n : 0; };
+  var vide = function(v){ return v == null || v === ""; };
+  var r = { st: false, oas: false, forfait: 0, unit: 0, moPc: 0, machPc: 0, moFixe: 0, machFixe: 0, reglageMin: 0, moMin: 0, machineMin: 0,
+    hommeH_fixe: 0, hommeH_pc: 0, machineH_fixe: 0, machineH_pc: 0, tauxHomme: 0, tauxMachine: 0,
+    typeProcess: null, sourceTauxMachine: null, manquants: [], process: null };
+  if (!e) return r;
+  if (e.type === "sous_traite") {
+    r.st = true;
+    r.forfait = Math.max(0, Number(e.forfait_st_ht != null ? e.forfait_st_ht : 0) || 0);
+    r.unit = Number(e.prix_unitaire_st_ht != null ? e.prix_unitaire_st_ht : (e.cout_st_unitaire != null ? e.cout_st_unitaire : 0)) || 0;
+    return r;
+  }
+  if (e.est_oas === true || e.type === "oas") {
+    r.st = true; r.oas = true; r.typeProcess = "oas"; r.sourceTauxMachine = "oas";
+    r.forfait = Math.max(0, Number(e.forfait_oas_ht != null ? e.forfait_oas_ht : 0) || 0);
+    r.unit = Number(e.prix_oas_unitaire != null ? e.prix_oas_unitaire : (e.prix_unitaire_oas_ht != null ? e.prix_unitaire_oas_ht : 0)) || 0;
+    return r;
+  }
+  var pid = vide(e.process_id) ? null : e.process_id;
+  var mid = vide(e.machine_id) ? null : e.machine_id;
+  var millieme = e.temps_variable_mille != null || e.temps_reglage_mille != null || e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null;
+  var proc = null;
+  if (tx) { proc = tx.processDe(pid); if (!proc && mid) proc = tx.processMachineDeMachine(mid); }
+  if (proc && tx.typeProcess(proc) === "oas") {
+    r.st = true; r.oas = true; r.typeProcess = "oas"; r.sourceTauxMachine = "oas"; r.process = proc;
+    r.forfait = Math.max(0, Number(e.forfait_oas_ht != null ? e.forfait_oas_ht : 0) || 0);
+    r.unit = Number(e.prix_oas_unitaire != null ? e.prix_oas_unitaire : (e.prix_unitaire_oas_ht != null ? e.prix_unitaire_oas_ht : 0)) || 0;
+    return r;
+  }
+  var tp = proc ? tx.typeProcess(proc)
+    : millieme ? (e.ressource === "machine" ? "machine" : "manuel")
+    : ((mid || (!tx && nb(e.machine_taux_h) > 0)) ? "machine" : "manuel");
+  var estMach = tp === "machine";
+  var ropH = 0, rgmH = 0, thvH = 0, tmvH = 0;
+  if (millieme) {
+    var varH = nb(e.temps_variable_mille) / 1000;
+    if (e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null) {
+      ropH = nb(e.temps_reglage_op_mille) / 1000;
+      rgmH = nb(e.temps_reglage_machine_mille) / 1000;
+    } else if (estMach) rgmH = nb(e.temps_reglage_mille) / 1000;
+    else ropH = nb(e.temps_reglage_mille) / 1000;
+    if (estMach) tmvH = varH; else thvH = varH;
+  } else {
+    ropH = nb(e.temps_reglage_min) / 60;
+    rgmH = nb(e.temps_reglage_machine_min) / 60;
+    thvH = (e.temps_mo_min != null ? nb(e.temps_mo_min) : (estMach ? 0 : nb(e.temps_unitaire_min))) / 60;
+    tmvH = (e.temps_machine_min != null ? nb(e.temps_machine_min) : (estMach ? nb(e.temps_unitaire_min) : 0)) / 60;
+  }
+  var tmvValorise = estMach ? tmvH : 0;
+  r.hommeH_fixe = ropH + rgmH;
+  r.machineH_fixe = estMach ? rgmH : 0;
+  if (e.est_fixe) { r.hommeH_fixe += thvH; r.machineH_fixe += tmvValorise; }
+  else { r.hommeH_pc = thvH; r.machineH_pc = tmvValorise; }
+  r.reglageMin = (ropH + rgmH) * 60;
+  r.moMin = thvH * 60;
+  r.machineMin = tmvValorise * 60;
+  r.typeProcess = tp;
+  r.process = proc;
+  if (tx) {
+    r.tauxHomme = tx.tauxHomme(site);
+    var tm = tx.tauxMachine(pid, mid);
+    r.sourceTauxMachine = (estMach && !proc) ? "sans_process" : tm.source;
+    r.tauxMachine = estMach ? tm.taux : 0;
+  } else {
+    r.tauxHomme = nb(e.taux_mo_h);
+    r.tauxMachine = estMach ? nb(e.machine_taux_h) : 0;
+  }
+  r.moPc = r.hommeH_pc * r.tauxHomme;
+  r.moFixe = r.hommeH_fixe * r.tauxHomme;
+  r.machPc = r.machineH_pc * r.tauxMachine;
+  r.machFixe = r.machineH_fixe * r.tauxMachine;
+  if (tx) {
+    var hH = r.hommeH_fixe + r.hommeH_pc, mH = r.machineH_fixe + r.machineH_pc;
+    if (hH > 0 && tx.hommeManquant) r.manquants.push("taux_homme");
+    if (mH > 0 && r.sourceTauxMachine === "manquant") r.manquants.push("taux_machine");
+    if ((mH > 0 && r.sourceTauxMachine === "sans_process") || (!proc && !estMach && tmvH > 0)) r.manquants.push("sans_process");
+  }
+  return r;
+}
+function beLibelleManquant(code){
+  if (code === "taux_homme") return "Coût chargé RH à renseigner (fiche salarié, service RH) : le temps homme est compté 0 €";
+  if (code === "taux_machine") return "Taux horaire machine à saisir sur le process (Production › Postes & Process) : le temps machine est compté 0 €";
+  if (code === "sans_process") return "Étape sans process machine : son temps machine n’est pas valorisé (choisir le process)";
+  return String(code);
+}
+`
 
 // ─── MAPPERS ──────────────────────────────────────────────────
 function mapDT(d: DemandeTravaux) {
@@ -86,10 +226,14 @@ const TD = 'padding:10px 14px;'
 
 // ══════════════════════════════════════════════════════════════
 type BeRefs = {
-  machines: Array<{ id: string; nom: string; code?: string; activite?: string; categorie?: string; statut?: string; taux_horaire: number | null }>
-  taux_operateur: { moyen: number; seem: number; semrac: number }
+  machines: Array<{ id: string; nom: string; code?: string; activite?: string; categorie?: string; statut?: string; cnc?: boolean; poste_id?: string | null }>
+  // Coût chargé RH MOYEN des opérateurs actifs (null = aucun) — jamais un taux individuel
+  taux_homme?: { moyen: number | null; seem: number | null; semrac: number | null; manquant: boolean }
+  taux_operateur?: { moyen: number; seem: number; semrac: number }   // alias transitoire (plus lu ici)
+  taux_erreur?: string | null
   fournisseurs_st: Array<{ id: string; nom: string; operation?: string; qualification?: string; statut?: string }>
-  process_atelier?: Array<{ id: string; nom: string; code?: string; activite?: string; categorie?: string; requiert_machine?: boolean; machine_id?: string | null; poste_id?: string | null; statut?: string }>
+  process_atelier?: Array<{ id: string; nom: string; code?: string; activite?: string; categorie?: string; requiert_machine?: boolean; machine_id?: string | null; poste_id?: string | null; statut?: string; est_oas?: boolean
+    type?: 'machine' | 'manuel' | 'oas'; taux_horaire_machine?: number | null; taux_machine?: number; taux_source?: string }>
   postes?: Array<{ id: string; nom: string; code?: string | null; activite?: string | null; couleur?: string | null }>
   sous_traitants?: Array<{ id: string; nom: string; tarifs?: Array<{ operation: string; forfait_ht?: number; prix_unitaire_piece_ht?: number }>; prestations?: string[] }>
   fournisseurs?: Array<{ id: string; nom: string; categorie?: string | null; activite?: string; familles_fourniture?: string[]; catalogue?: any[] }>
@@ -206,12 +350,13 @@ export const pageServiceBE = (
   const DT_TYPES = ['Nouveau produit', 'Maj produit', 'Maj prix']
 
   // ── RÉFÉRENTIELS BE (machines, taux MO, fournisseurs ST) ─────
-  const BE_REFS = dbRefs ?? { machines: [], taux_operateur: { moyen: TAUX_MO_DEFAULT, seem: TAUX_MO_DEFAULT, semrac: TAUX_MO_DEFAULT }, fournisseurs_st: [], process_atelier: [], sous_traitants: [], fournisseurs: [] }
-  const TAUX_MO_RESOLVED = BE_REFS.taux_operateur.moyen || TAUX_MO_DEFAULT
-  const MACHINES_AVG = BE_REFS.machines.filter(m => m.taux_horaire != null).map(m => m.taux_horaire as number)
-  const COUT_MACHINE_AVG = MACHINES_AVG.length
-    ? +(MACHINES_AVG.reduce((s,n)=>s+n,0)/MACHINES_AVG.length).toFixed(2)
-    : COUT_MACHINE_DEFAULT
+  // Coût horaire porté par le PROCESS (14/09/2026) : plus aucun taux inventé (fini 30/35/45/50).
+  //   taux machine = process_atelier[].taux_machine (résolu serveur) ; taux homme = taux_homme (moyennes RH).
+  const BE_REFS: BeRefs = dbRefs ?? { machines: [], taux_homme: { moyen: null, seem: null, semrac: null, manquant: true }, fournisseurs_st: [], process_atelier: [], sous_traitants: [], fournisseurs: [] }
+  const TH_RH: any = (BE_REFS && (BE_REFS as any).taux_homme && typeof (BE_REFS as any).taux_homme === 'object') ? (BE_REFS as any).taux_homme : {}
+  const fmtTauxRH = (v: any) => (typeof v === 'number' && Number.isFinite(v)) ? `${v.toFixed(2).replace('.', ',')} €/h` : 'à renseigner dans RH'
+  const PROCS_SANS_TAUX = (Array.isArray(BE_REFS?.process_atelier) ? BE_REFS.process_atelier : [])
+    .filter((p: any) => p && p.type === 'machine' && p.taux_source === 'manquant' && String(p.statut || '').toLowerCase() !== 'inactif')
 
   // ── ONGLET NOMENCLATURES ──────────────────────────────────────
   const piecesToFaireTotal = DTS_NOM_AVEC_PIECES.reduce((s, d) => s + d.piecesAFaire.length, 0)
@@ -700,10 +845,13 @@ export const pageServiceBE = (
               </button>
             </div>
             <div style="background:#f8fafc;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:.7rem;color:#6b7280;">
-              <div>Taux MO moyen DB <span style="font-weight:800;color:#374151;">${TAUX_MO_RESOLVED.toFixed(2)} €/h</span></div>
-              <div>Machines référencées <span style="font-weight:800;color:#374151;">${BE_REFS.machines.length}</span></div>
-              <div>Sous-traitants actifs <span style="font-weight:800;color:#374151;">${(BE_REFS.sous_traitants?.length ?? BE_REFS.fournisseurs_st.length)}</span></div>
+              <div title="Taux horaire HOMME = coût chargé RH moyen des opérateurs actifs du site (fiche salarié). Le taux MACHINE est porté par chaque process machine (Production › Postes &amp; Process).">Coût chargé RH moyen <span style="font-weight:800;color:#374151;">Seem ${escX(fmtTauxRH(TH_RH.seem ?? TH_RH.moyen))} · Semrac ${escX(fmtTauxRH(TH_RH.semrac ?? TH_RH.moyen))}</span></div>
+              <div title="Process machine dont le taux horaire machine n'est pas encore saisi">Process machine sans taux <span style="font-weight:800;color:${PROCS_SANS_TAUX.length ? '#b45309' : '#374151'};">${PROCS_SANS_TAUX.length}</span></div>
+              <div>Sous-traitants actifs <span style="font-weight:800;color:#374151;">${(BE_REFS.sous_traitants?.length ?? BE_REFS.fournisseurs_st?.length ?? 0)}</span></div>
             </div>
+            <!-- Données de coût manquantes (taux machine à saisir, coût chargé RH absent, étape sans process) -->
+            ${(BE_REFS as any)?.taux_erreur ? `<div id="nom-taux-erreur" style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:.7rem;color:#991b1b;line-height:1.5;"><div style="font-weight:800;"><i class="fas fa-circle-exclamation" style="margin-right:5px;"></i>Taux de l'atelier illisibles : les coûts affichés ne sont PAS fiables</div><div>La lecture a échoué (${escX(String((BE_REFS as any).taux_erreur))}) — ce n'est pas une donnée absente. Enregistrement des nomenclatures bloqué : rechargez la page quand la base répond.</div></div>` : ''}
+            <div id="nom-taux-alerte" style="display:none;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:.7rem;color:#9a3412;line-height:1.5;"></div>
             <!-- Header colonnes -->
             <div style="font-size:.62rem;color:#7c3aed;font-weight:700;margin:0 2px 5px;"><i class="fas fa-clock" style="margin-right:4px;"></i>Temps en <strong>millièmes d'heure</strong> (1000&nbsp;‰&nbsp;=&nbsp;1&nbsp;h) — totaux affichés en heures/minutes</div>
             <div style="display:grid;grid-template-columns:34px 84px 1fr 1.2fr 58px 58px 58px 62px 88px 26px;gap:4px;margin-bottom:4px;padding:0 2px;">
@@ -711,10 +859,10 @@ export const pageServiceBE = (
               <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Type</span>
               <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;" title="Poste d'atelier (interne) / sous-traitant">Poste</span>
               <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;" title="Process du poste choisi (interne) / opération (sous-traité)">Process</span>
-              <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;" title="ROP — réglage OPÉRATEUR, en millièmes d'heure (1000 = 1 h). Coût fixe par lot, au taux main d'œuvre.">ROP ‰h</span>
-              <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;" title="RGM — réglage MACHINE, en millièmes d'heure (1000 = 1 h). Coût fixe par lot, au taux machine.">RGM ‰h</span>
-              <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;" title="Temps main d'œuvre / homme — millièmes d'heure (1000 = 1 h)">MO ‰h</span>
-              <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;" title="Temps machine — millièmes d'heure (1000 = 1 h)">Mach ‰h</span>
+              <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;" title="ROP — réglage homme, en millièmes d'heure (1000 = 1 h). Temps HOMME, fixe par lot, au coût chargé RH moyen du site.">ROP ‰h</span>
+              <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;" title="RGM — réglage machine, en millièmes d'heure (1000 = 1 h). Temps HOMME + MACHINE, fixe par lot : coût chargé RH + taux horaire machine du process (process machine seulement).">RGM ‰h</span>
+              <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;" title="THV — temps homme variable, par pièce, en millièmes d'heure (1000 = 1 h). Temps HOMME, au coût chargé RH moyen du site.">MO ‰h</span>
+              <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;" title="TMV — temps machine variable, par pièce, en millièmes d'heure (1000 = 1 h). Temps MACHINE seul, au taux horaire machine du process (process machine seulement).">Mach ‰h</span>
               <span style="font-size:.58rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Coût/pc</span>
               <span></span>
             </div>
@@ -753,11 +901,11 @@ export const pageServiceBE = (
                 <span id="nom-calc-mofixe" style="font-size:1rem;font-weight:800;color:#f59e0b;">0,00 €</span>
               </div>
               <div style="display:flex;justify-content:space-between;align-items:center;background:white;border-radius:8px;padding:9px 14px;">
-                <div><div style="font-size:.78rem;font-weight:700;color:#374151;"><i class="fas fa-gears" style="color:#10b981;margin-right:7px;"></i>Main d'œuvre variable</div><div style="font-size:.62rem;color:#9ca3af;margin-left:22px;">MO + machine / pièce</div></div>
+                <div><div style="font-size:.78rem;font-weight:700;color:#374151;"><i class="fas fa-gears" style="color:#10b981;margin-right:7px;"></i>Main d'œuvre variable</div><div style="font-size:.62rem;color:#9ca3af;margin-left:22px;">homme + machine / pièce</div></div>
                 <span id="nom-calc-movar" style="font-size:1rem;font-weight:800;color:#10b981;">0,00 €</span>
               </div>
               <div style="display:flex;justify-content:space-between;align-items:center;background:white;border-radius:8px;padding:9px 14px;">
-                <div style="font-size:.78rem;font-weight:700;color:#374151;"><i class="fas fa-industry" style="color:#b45309;margin-right:7px;"></i>Sous-traitance</div>
+                <div style="font-size:.78rem;font-weight:700;color:#374151;"><i class="fas fa-industry" style="color:#b45309;margin-right:7px;"></i>Sous-traitance · OAS</div>
                 <span id="nom-calc-st-d" style="font-size:1rem;font-weight:800;color:#b45309;">0,00 €</span>
               </div>
               <div style="display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#8b5cf6,#6d28d9);border-radius:10px;padding:14px 16px;margin-top:4px;">
@@ -792,11 +940,11 @@ export const pageServiceBE = (
                     <span id="nom-calc-s-mofixe" style="font-size:.95rem;font-weight:800;color:#f59e0b;">0,00 €</span>
                   </div>
                   <div style="display:flex;justify-content:space-between;align-items:center;background:white;border-radius:8px;padding:8px 12px;">
-                    <div><div style="font-size:.76rem;font-weight:700;color:#374151;"><i class="fas fa-gears" style="color:#10b981;margin-right:7px;"></i>Main d'œuvre variable</div><div style="font-size:.6rem;color:#9ca3af;margin-left:22px;">MO + machine × quantité</div></div>
+                    <div><div style="font-size:.76rem;font-weight:700;color:#374151;"><i class="fas fa-gears" style="color:#10b981;margin-right:7px;"></i>Main d'œuvre variable</div><div style="font-size:.6rem;color:#9ca3af;margin-left:22px;">homme + machine × quantité</div></div>
                     <span id="nom-calc-s-movar" style="font-size:.95rem;font-weight:800;color:#10b981;">0,00 €</span>
                   </div>
                   <div style="display:flex;justify-content:space-between;align-items:center;background:white;border-radius:8px;padding:8px 12px;">
-                    <div style="font-size:.76rem;font-weight:700;color:#374151;"><i class="fas fa-industry" style="color:#b45309;margin-right:7px;"></i>Sous-traitance</div>
+                    <div style="font-size:.76rem;font-weight:700;color:#374151;"><i class="fas fa-industry" style="color:#b45309;margin-right:7px;"></i>Sous-traitance · OAS</div>
                     <span id="nom-calc-s-st" style="font-size:.95rem;font-weight:800;color:#b45309;">0,00 €</span>
                   </div>
                 </div>
@@ -1347,7 +1495,7 @@ export const pageServiceBE = (
   function gedRenderZone(cat){ var el=document.getElementById('ged-list-'+cat); if(!el)return; var it=GED_DOCS.filter(function(d){return d.categorie===cat;}); el.innerHTML=it.length?it.map(gedItemHtml).join(''):'<div style="font-size:.64rem;color:#cbd5e1;">Aucun fichier</div>'; }
   function nomRenderFaoList(){
     var el=document.getElementById('ged-fao-list'); if(!el)return;
-    var steps=[]; nomEtapes.forEach(function(e,i){ var isMach=(e.type==='interne')&&(e.machine_id||String(e.ressource||'').toLowerCase()==='machine'); if(isMach)steps.push({e:e,ord:e.ordre||(i+1)}); });
+    var steps=[]; nomEtapes.forEach(function(e,i){ var isMach=(e.type==='interne')&&(nomEtapeDecomp(e).typeProcess==='machine'); if(isMach)steps.push({e:e,ord:e.ordre||(i+1)}); });   // étape machine = type du process (règle unique), même sans machine rattachée
     if(!steps.length){ el.innerHTML='<div style="font-size:.64rem;color:#cbd5e1;">Aucune étape machine dans la gamme.</div>'; return; }
     el.innerHTML=steps.map(function(s){
       var docs=GED_DOCS.filter(function(d){return d.categorie==='programme_fao'&&String(d.etape_ordre)===String(s.ord);});
@@ -1604,6 +1752,7 @@ export const pageServiceBE = (
   // Bouton « Incrémenter l'indice » : crée une nouvelle révision sans effacer l'ancienne
   async function nomCreerNouvelIndice(){
     if(!nomCurrentId){ pushNotif('err','fa-exclamation-triangle','Enregistrez d\\'abord la nomenclature avant d\\'incrémenter l\\'indice.'); return; }
+    if (nomTauxIllisibles()) return;
     var payload = nomCollectPayload(nomCurrentStatut || 'en_cours');
     if(!payload.num_nom){ pushNotif('err','fa-exclamation-triangle','Le N° de nomenclature (réf. pièce) est obligatoire.'); return; }
     if(!await appConfirm('Créer la révision '+nomNextIndice(nomCurrentIndice)+' ? L\\'indice '+nomCurrentIndice+' actuel sera conservé.')) return;
@@ -1619,10 +1768,23 @@ export const pageServiceBE = (
     }catch(e){ pushNotif('err','fa-exclamation-circle','Erreur réseau : '+e.message); }
   }
 
-  // Référentiels chargés côté serveur (machines avec taux horaire, fournisseurs ST, taux MO moyens)
+  // Référentiels chargés côté serveur (process avec type + taux machine résolu, coût chargé RH moyen, fournisseurs ST)
   var BE_REFS_JS = ${sjX(BE_REFS)};
-  var TAUX_MO_MOYEN     = BE_REFS_JS.taux_operateur.moyen || ${TAUX_MO_RESOLVED};
-  var COUT_MACHINE_MOY  = ${COUT_MACHINE_AVG};
+  // ── Coût horaire porté par le PROCESS (14/09/2026) — moteur partagé avec /be/analyse (miroir de etapeDecomp) ──
+${BE_ETAPE_COUT_JS}
+  var NOM_TX = beTauxAtelierClient(BE_REFS_JS);
+  // Site de la nomenclature (taux homme = coût chargé RH moyen de CE site)
+  function nomSite(){ var s=document.getElementById('nom-f-entite'); return (s && s.value === 'Semrac') ? 'Semrac' : 'Seem'; }
+  // Décomposition d'une étape au prix du jour : taux machine du process EN DIRECT, taux homme du site
+  function nomEtapeDecomp(e){ if (!NOM_TX) NOM_TX = beTauxAtelierClient(BE_REFS_JS); return beEtapeDecomp(e, NOM_TX, nomSite()); }
+  // Lecture des taux en ÉCHEC côté serveur (≠ taux absent) : le coût recalculé à l'enregistrement serait faux
+  // (prix de revient sans temps homme ou machine, taux_mo vide) et tracé « recalcul » au journal EN 9100, qui ne
+  // s'efface pas. On bloque donc tout enregistrement de nomenclature jusqu'au rechargement de la page.
+  function nomTauxIllisibles(){
+    if (!BE_REFS_JS || !BE_REFS_JS.taux_erreur) return false;
+    pushNotif('err','fa-ban','Enregistrement bloqué : taux de l\\'atelier illisibles ('+String(BE_REFS_JS.taux_erreur).replace(/</g,'&lt;')+'). Rechargez la page quand la base répond.', 9000);
+    return true;
+  }
 
   var TYPES_FOURN = ['Matière première','Visserie / Boulonnerie','Composant acheté','Emballage','Consommable','Sous-traitance','Outillage','Autre'];
 
@@ -1827,35 +1989,11 @@ export const pageServiceBE = (
     nomMatieres    = [];
     nomAccessoires = [];
     nomEtapes      = Array.isArray(nom.etapes_production) ? nom.etapes_production.slice() : [];
-    // Compat anciennes étapes (temps_unitaire_min unique) → temps MO (+ machine si une machine était liée)
-    nomEtapes.forEach(function(e){
-      if (e.temps_mo_min == null && e.temps_machine_min == null && e.temps_unitaire_min != null) {
-        e.temps_mo_min = e.temps_unitaire_min;
-        e.temps_machine_min = (e.machine_id || e.machine_taux_h) ? e.temps_unitaire_min : 0;
-      }
-      // Gammes importées (temps en MILLIÈMES d'heure) → rendre réglage/MO/machine VISIBLES en minutes.
-      //   millième → minutes = ×0.06 (×60/1000). Réglage = part fixe/lot ; MO ou machine selon la ressource du process.
-      //   Le calcul de coût serveur reste basé sur les millièmes (source de vérité) ; ici on dérive l'affichage.
-      var hasMille = (e.temps_variable_mille != null || e.temps_reglage_mille != null || e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null);
-      if (hasMille && e.type == null) e.type = 'interne';   // gammes importées = procédés internes (ni ST)
-      if (hasMille && e.temps_reglage_min == null && e.temps_mo_min == null && e.temps_machine_min == null) {
-        var isMach = (e.ressource === 'machine');
-        var varMin = (Number(e.temps_variable_mille) || 0) * 0.06;
-        // ROP et RGM s'ils existent, sinon le champ historique impute a la ressource de l'etape.
-        var aSplit = (e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null);
-        var ropMin = aSplit ? (Number(e.temps_reglage_op_mille) || 0) * 0.06 : (isMach ? 0 : (Number(e.temps_reglage_mille) || 0) * 0.06);
-        var rgmMin = aSplit ? (Number(e.temps_reglage_machine_mille) || 0) * 0.06 : (isMach ? (Number(e.temps_reglage_mille) || 0) * 0.06 : 0);
-        if (e.est_fixe) { if (isMach) { rgmMin += varMin; } else { ropMin += varMin; } varMin = 0; }   // operation fixe = comptee par lot
-        var r2 = function(x){ return Math.round(x * 100) / 100; };
-        e.temps_reglage_min = r2(ropMin);
-        e.temps_reglage_machine_min = r2(rgmMin);
-        e.temps_mo_min      = r2(isMach ? 0 : varMin);
-        e.temps_machine_min = r2(isMach ? varMin : 0);
-        if (e.taux_mo_h == null) e.taux_mo_h = Number(nom.taux_mo) || TAUX_MO_MOYEN;
-        if (isMach && e.machine_taux_h == null) e.machine_taux_h = Number(nom.cout_machine_h) || 50;
-        if (isMach && !e.machine_nom) e.machine_nom = e.process_nom || '';
-      }
-    });
+    // Le site pilote le taux homme des étapes : il est posé AVANT la mise en forme des anciennes étapes.
+    var _entOpen = document.getElementById('nom-f-entite'); if (_entOpen) _entOpen.value = (nom.entite === 'Semrac') ? 'Semrac' : 'Seem';
+    // Compat anciennes étapes et gammes importées → temps VISIBLES en minutes, SANS changer leur coût :
+    // chaque conversion donne, au format minutes, exactement la décomposition du moteur (nomEtapeDecomp).
+    nomEtapes.forEach(function(e){ nomEtapeCompleterMinutes(e); });
     // Bandeau de révision : indice actuel + bouton d'incrément
     var rb=document.getElementById('nom-revision-banner'); if(rb) rb.style.display='flex';
     var ia=document.getElementById('nom-indice-actuel'); if(ia) ia.textContent = nomCurrentIndice;
@@ -2213,11 +2351,55 @@ export const pageServiceBE = (
 
   // ── ÉTAPES DE PRODUCTION ─────────────────────────────────────
   // Une étape = { ordre, nom, type ('interne'|'sous_traite'),
-  //               process_id, process_nom, machine_id, machine_nom, machine_taux_h,
-  //               temps_reglage_min, temps_mo_min, temps_machine_min, taux_mo_h,
-  //               operation_st, fournisseur_st_id, fournisseur_st_nom,
+  //               process_id, process_nom, machine_id, machine_nom, machine_taux_h (copie informative),
+  //               temps_reglage_min (ROP), temps_reglage_machine_min (RGM), temps_mo_min (THV), temps_machine_min (TMV),
+  //               taux_mo_h (copie informative), operation_st, fournisseur_st_id, fournisseur_st_nom,
   //               forfait_st_ht, prix_unitaire_st_ht, cout_st_unitaire }
-  // Coût interne/pièce = taux_mo × (temps_mo + réglage)/60 + taux_machine × temps_machine/60
+  // Coût interne = (ROP + RGM + THV) × coût chargé RH du site + (RGM + TMV) × taux machine du process (nomEtapeDecomp)
+  // ── Formats de temps d'une étape ──
+  // Gamme importée : temps en MILLIÈMES d'heure (lus EN PRIORITÉ par le moteur, serveur comme navigateur).
+  // Ancien format : temps_unitaire_min unique. Le formulaire, lui, saisit des MINUTES (affichées en ‰h).
+  function nomEtapeAMilliemes(e){ return !!e && (e.temps_variable_mille != null || e.temps_reglage_mille != null || e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null); }
+  // À l'ouverture : complète les minutes d'une étape qui n'en a pas, en conservant son coût.
+  //   Millièmes : ROP / RGM (ou réglage historique = RGM si process machine, ROP sinon) ; variable = TMV si
+  //   machine, THV sinon. Opération fixe (est_fixe) : sur un process manuel elle rejoint le ROP (homme, par
+  //   lot) ; sur un process machine elle reste en TMV, compté par lot grâce au drapeau est_fixe.
+  //   Ancien format : temps_unitaire_min = TMV sur une étape machine, THV sinon (règle du moteur).
+  function nomEtapeCompleterMinutes(e){
+    if (!e) return;
+    var r4 = function(x){ return Math.round(x * 10000) / 10000; };
+    var d = nomEtapeDecomp(e);
+    var mach = (d.typeProcess === 'machine');
+    if (nomEtapeAMilliemes(e)) {
+      if (e.type == null) e.type = 'interne';   // gammes importées = procédés internes (ni ST)
+      if (e.temps_reglage_min == null && e.temps_mo_min == null && e.temps_machine_min == null && e.type === 'interne' && e.est_oas !== true) {
+        var varMin = (Number(e.temps_variable_mille) || 0) * 0.06;
+        var aSplit = (e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null);
+        var ropMin = aSplit ? (Number(e.temps_reglage_op_mille) || 0) * 0.06 : (mach ? 0 : (Number(e.temps_reglage_mille) || 0) * 0.06);
+        var rgmMin = aSplit ? (Number(e.temps_reglage_machine_mille) || 0) * 0.06 : (mach ? (Number(e.temps_reglage_mille) || 0) * 0.06 : 0);
+        var thvMin = mach ? 0 : varMin, tmvMin = mach ? varMin : 0;
+        if (e.est_fixe && !mach) { ropMin += thvMin; thvMin = 0; }
+        e.temps_reglage_min = r4(ropMin);
+        e.temps_reglage_machine_min = r4(rgmMin);
+        e.temps_mo_min      = r4(thvMin);
+        e.temps_machine_min = r4(tmvMin);
+        if (mach && !e.machine_nom) e.machine_nom = e.process_nom || '';
+      }
+      return;
+    }
+    if (e.temps_mo_min == null && e.temps_machine_min == null && e.temps_unitaire_min != null) {
+      e.temps_mo_min = mach ? 0 : (Number(e.temps_unitaire_min) || 0);
+      e.temps_machine_min = mach ? (Number(e.temps_unitaire_min) || 0) : 0;
+    }
+  }
+  // Toute saisie sur une étape importée la fait passer au format minutes : sans cela le moteur continuerait
+  // de lire ses millièmes et la saisie resterait sans effet sur le coût (et l'OF imprime déjà les minutes).
+  function nomEtapeEnMinutes(e){
+    if (!nomEtapeAMilliemes(e)) return;
+    nomEtapeCompleterMinutes(e);
+    if (e.temps_reglage_min == null && e.temps_mo_min == null && e.temps_machine_min == null) return;   // rien d'équivalent en minutes (ST / OAS)
+    delete e.temps_variable_mille; delete e.temps_reglage_mille; delete e.temps_reglage_op_mille; delete e.temps_reglage_machine_mille;
+  }
   function nomAddEtape() {
     nomEtapes.push({
       ordre: nomEtapes.length + 1,
@@ -2233,7 +2415,7 @@ export const pageServiceBE = (
       temps_reglage_min: 0,
       temps_mo_min: 0,
       temps_machine_min: 0,
-      taux_mo_h: TAUX_MO_MOYEN,
+      taux_mo_h: nomEtapeTauxHomme(),   // copie INFORMATIVE (le moteur lit le taux en direct)
       operation_st: '',
       fournisseur_st_id: '',
       fournisseur_st_nom: '',
@@ -2272,6 +2454,7 @@ export const pageServiceBE = (
   }
 
   function nomOnEtapeTypeChange(idx, value) {
+    nomEtapeEnMinutes(nomEtapes[idx]);
     nomEtapes[idx].type = value;
     if (value === 'sous_traite') {
       nomEtapes[idx].process_id = '';
@@ -2295,6 +2478,10 @@ export const pageServiceBE = (
   }
 
   // Interne : choix du POSTE → les process choisissables = ceux du poste. Efface le process s'il n'appartient plus au poste.
+  // Le poste n'entre pas dans le coût : une étape importée (millièmes) N'EST PAS convertie ici. Sa conversion
+  // attend le choix du process, qui seul fixe le classement de ses temps (voir nomOnEtapeProcessChange).
+  // Process retiré : les temps sont CONSERVÉS (un temps machine resté sans process est signalé « sans process »
+  // par le moteur et affiché en orange) — les effacer ferait disparaître le temps variable du coût et de l'OF.
   function nomOnEtapePosteChange(idx, posteId) {
     nomEtapes[idx].poste_id = posteId;
     var cur = nomEtapes[idx].process_id;
@@ -2305,30 +2492,51 @@ export const pageServiceBE = (
       nomEtapes[idx].machine_id = '';
       nomEtapes[idx].machine_nom = '';
       nomEtapes[idx].machine_taux_h = 0;
-      nomEtapes[idx].temps_machine_min = 0;
     }
     nomRenderEtapes();
   }
 
-  // Interne : choix d'un process → machine liée auto-renseignée (ou MO seule si manuel) ; le poste suit le process
+  // Taux homme du site (copie INFORMATIVE posée sur l'étape ; le moteur relit toujours le taux en direct)
+  function nomEtapeTauxHomme(){ if (!NOM_TX) NOM_TX = beTauxAtelierClient(BE_REFS_JS); return Math.round((NOM_TX.tauxHomme(nomSite()) || 0) * 100) / 100; }
+  // Interne : choix d'un process → machine liée auto-renseignée (ou homme seul si manuel) ; le poste suit le process
   function nomOnEtapeProcessChange(idx, processId) {
-    var p = (BE_REFS_JS.process_atelier || []).find(function(x){ return x.id === processId; });
-    nomEtapes[idx].process_id = processId;
-    nomEtapes[idx].process_nom = p ? p.nom : '';
-    if (p && p.poste_id) nomEtapes[idx].poste_id = p.poste_id;   // le process fixe le poste (cohérence)
-    if (p && !nomEtapes[idx].nom) nomEtapes[idx].nom = p.nom;
-    var m = (p && p.requiert_machine && p.machine_id)
-      ? BE_REFS_JS.machines.find(function(x){ return x.id === p.machine_id; })
+    var et = nomEtapes[idx];
+    var p = (BE_REFS_JS.process_atelier || []).find(function(x){ return String(x.id) === String(processId); });
+    var oas = nomEstProcessOAS(p);
+    et.process_id = processId;
+    et.process_nom = p ? p.nom : '';
+    if (p && p.poste_id) et.poste_id = p.poste_id;   // le process fixe le poste (cohérence)
+    if (p && !et.nom) et.nom = p.nom;
+    // Process MACHINE (type résolu serveur) : il reste machine même sans machine rattachée.
+    var estMach = !!p && NOM_TX.typeProcess(p) === 'machine';
+    var m = (estMach && p.machine_id)
+      ? (BE_REFS_JS.machines || []).find(function(x){ return String(x.id) === String(p.machine_id); })
       : null;
-    nomEtapes[idx].machine_id = m ? m.id : '';
-    nomEtapes[idx].machine_nom = m ? m.nom : '';
-    nomEtapes[idx].machine_taux_h = m ? (Number(m.cout_h != null ? m.cout_h : m.taux_horaire) || 0) : 0;   // taux horaire machine du process = coût machine du CRU
-    // Process manuel (sans machine) → pas de temps machine
-    if (!m) nomEtapes[idx].temps_machine_min = 0;
+    et.machine_id = (estMach && p.machine_id) ? p.machine_id : '';
+    et.machine_nom = m ? m.nom : '';
+    et.est_oas = oas;
+    // Étape importée (millièmes) : ses minutes affichées ont été déduites à l'ouverture avec l'ANCIEN process.
+    // On les re-déduit APRÈS avoir posé le nouveau process : le temps variable devient TMV sur un process
+    // machine, THV sinon (règle du moteur), au lieu d'être classé machine puis effacé.
+    if (p && nomEtapeAMilliemes(et)) {
+      delete et.temps_reglage_min; delete et.temps_reglage_machine_min; delete et.temps_mo_min; delete et.temps_machine_min;
+      nomEtapeEnMinutes(et);
+    }
+    // Copies INFORMATIVES : taux horaire machine DU PROCESS et coût chargé RH moyen du site
+    et.machine_taux_h = estMach ? (Number(p.taux_machine) || 0) : 0;
+    et.taux_mo_h = nomEtapeTauxHomme();
+    // Process non machine choisi : aucun temps machine. Ses temps restent du temps HOMME, visibles et valorisés :
+    // le RGM rejoint le ROP, le TMV rejoint le THV (l'opération est désormais faite à la main). Aucun process
+    // choisi (« — Process — ») : les temps restent tels quels, le moteur signale l'étape « sans process ».
+    if (p && !estMach) {
+      var _rgm = Number(et.temps_reglage_machine_min) || 0;
+      if (_rgm > 0) { et.temps_reglage_min = (Number(et.temps_reglage_min) || 0) + _rgm; et.temps_reglage_machine_min = 0; }
+      var _tmv = Number(et.temps_machine_min) || 0;
+      if (_tmv > 0) { et.temps_mo_min = (Number(et.temps_mo_min) || 0) + _tmv; }
+      et.temps_machine_min = 0;
+    }
     // OAS : le traitement de surface se chiffre au PRIX, pas au temps. On bascule l'étape et on
     // remet les temps à zéro pour qu'aucun coût horaire résiduel ne vienne s'ajouter au prix.
-    var oas = nomEstProcessOAS(p);
-    nomEtapes[idx].est_oas = oas;
     if (oas) {
       nomEtapes[idx].temps_reglage_min = 0;
       nomEtapes[idx].temps_reglage_machine_min = 0;
@@ -2384,22 +2592,19 @@ export const pageServiceBE = (
     return Object.keys(set).sort();
   }
 
-  // Coût unitaire d'une étape :
-  //   - Interne : taux_mo × (temps_mo + réglage)/60 + taux_machine × temps_machine/60
-  //   - Sous-traitée : prix unitaire pièce du ST (le forfait est appliqué comme plancher à la commande)
-  function nomEtapeCoutMO(e) { return ((e.temps_mo_min||0) + (e.temps_reglage_min||0))/60 * (e.taux_mo_h || TAUX_MO_MOYEN); }
-  // Part RÉGLAGE du coût MO d'une étape (fixe / lot — ne se multiplie pas avec la quantité produite).
-  // ROP au taux MO + RGM au taux machine — les deux sont fixes par lot.
-  function nomEtapeCoutReglage(e) { return (e.temps_reglage_min||0)/60 * (e.taux_mo_h || TAUX_MO_MOYEN) + (e.temps_reglage_machine_min||0)/60 * (e.machine_taux_h || nomMachCoutH(e.machine_id) || 0); }
-  function nomMachCoutH(mid){ if(!mid) return 0; var m=(BE_REFS_JS.machines||[]).find(function(x){return String(x.id)===String(mid);}); return m?(Number(m.cout_h!=null?m.cout_h:m.taux_horaire)||0):0; }
-  function nomEtapeCoutMachine(e) { return ((e.temps_machine_min||0) + (e.temps_reglage_machine_min||0))/60 * (e.machine_taux_h || nomMachCoutH(e.machine_id) || 0); }   // operation + reglage machine, au taux horaire de la machine
+  // Coût d'une étape — TOUT passe par nomEtapeDecomp (miroir exact de etapeDecomp serveur) :
+  //   homme   = (ROP + RGM + THV) × coût chargé RH moyen du site
+  //   machine = (RGM + TMV) × taux horaire machine DU PROCESS (process machine seulement)
+  //   ST / OAS = un prix (le forfait est un plancher appliqué à la commande), jamais un temps.
+  // Valeurs « pour 1 pièce » : le réglage (fixe / lot) y est inclus, comme le prix de revient unitaire.
+  function nomEtapeCoutMO(e) { var d = nomEtapeDecomp(e); return d.st ? 0 : (d.moPc + d.moFixe); }
+  // Part FIXE / lot d'une étape (réglages ROP + RGM et opérations fixes) — ne se multiplie pas avec la quantité.
+  function nomEtapeCoutReglage(e) { var d = nomEtapeDecomp(e); return d.st ? 0 : (d.moFixe + d.machFixe); }
+  function nomEtapeCoutMachine(e) { var d = nomEtapeDecomp(e); return d.st ? 0 : (d.machPc + d.machFixe); }
   function nomEtapeCoutUnitaire(e) {
-    if (e.type === 'sous_traite') {
-      return (e.prix_unitaire_st_ht != null ? e.prix_unitaire_st_ht : (e.cout_st_unitaire || 0)) || 0;
-    }
-    // OAS : prix direct, aucun temps ne doit être valorisé (cf. etapeDecomp dans shared.ts).
-    if (e.est_oas === true) return Number(e.prix_oas_unitaire) || 0;
-    return nomEtapeCoutMO(e) + nomEtapeCoutMachine(e);
+    var d = nomEtapeDecomp(e);
+    if (d.st) return d.unit;   // sous-traitance : prix pièce du ST ; OAS : prix pièce du traitement
+    return d.moPc + d.machPc + d.moFixe + d.machFixe;
   }
 
   // ── Glisser-déposer pour réordonner les procédés (l'ordre = séquence de fabrication → BDT) ──
@@ -2433,7 +2638,10 @@ export const pageServiceBE = (
     var POSTES = (BE_REFS_JS.postes || []).filter(function(p){ var a=String(p.activite||'').toLowerCase(); return !a || a==='both' || a==='tout' || a==='seem & semrac' || a===_entPl; });
     var _procById = {}; (BE_REFS_JS.process_atelier || []).forEach(function(p){ _procById[String(p.id)]=p; });
     var ST_OPS = nomStOperations();
+    var _escH = function(v){ return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); };
+    var _eur = function(v){ return (Number(v)||0).toFixed(2).replace('.', ','); };
     c.innerHTML = nomEtapes.map(function(e, i){
+      var d = nomEtapeDecomp(e);   // décomposition au prix du jour (taux du process en direct, coût RH du site)
       var cout = nomEtapeCoutUnitaire(e).toFixed(2);
       // ── Colonne « Type » (1re case à choisir) : interne / sous-traité ──
       var typeCol = '<select class="nom-f-inp" onchange="nomOnEtapeTypeChange('+i+', this.value)">'
@@ -2457,12 +2665,28 @@ export const pageServiceBE = (
         // Process choisissables = UNIQUEMENT ceux rattachés au poste courant
         var procsForPoste = PROCS.filter(function(p){ return String(p.poste_id||'')===String(curPoste||''); });
         var procOpts = procsForPoste.map(function(p){
-          var mm = (p.requiert_machine && p.machine_id) ? BE_REFS_JS.machines.find(function(x){return x.id===p.machine_id;}) : null;
-          var sub = mm ? (' · '+mm.nom) : (p.requiert_machine ? '' : ' · manuel');
-          return '<option value="'+p.id+'"'+(e.process_id===p.id?' selected':'')+'>'+String(p.nom||'').replace(/</g,'&lt;')+sub+'</option>';
+          // Libellé : type du process (règle serveur typeProcess) + machine + alerte si le taux machine manque
+          var tpP = NOM_TX.typeProcess(p);
+          var mm = (tpP === 'machine' && p.machine_id) ? (BE_REFS_JS.machines||[]).find(function(x){return String(x.id)===String(p.machine_id);}) : null;
+          var sub = (tpP === 'machine') ? (' · '+(mm ? mm.nom : 'machine')+(p.taux_source === 'manquant' ? ' · taux à saisir' : ''))
+            : (tpP === 'oas' ? ' · OAS' : ' · manuel');
+          return '<option value="'+_escH(p.id)+'"'+(String(e.process_id||'')===String(p.id)?' selected':'')+'>'+_escH(String(p.nom||'')+sub)+'</option>';
         }).join('');
-        var hint = e.machine_nom ? ('<div style="font-size:.58rem;color:#94a3b8;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+e.machine_nom+(e.machine_taux_h?(' · '+e.machine_taux_h.toFixed(2)+' €/h'):'')+'</div>') : (e.process_id?'<div style="font-size:.58rem;color:#94a3b8;margin-top:1px;">manuel (MO)</div>':'');
-        var _isMachStep = !!(e.machine_id || String(e.ressource||'').toLowerCase()==='machine');
+        // Indication sous le process : d'où vient le coût horaire de l'étape
+        var _hs = 'font-size:.58rem;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+        var _mn = e.machine_nom ? (_escH(e.machine_nom)+' · ') : '';
+        var hint = '';
+        if (d.typeProcess === 'machine' && (e.process_id || e.machine_id)) {
+          if (d.sourceTauxMachine === 'process') hint = '<div style="'+_hs+'color:#94a3b8;" title="Taux horaire machine saisi sur le process (réglage machine et temps machine). Le temps homme est au coût chargé RH.">'+_mn+'Machine · '+_eur(d.tauxMachine)+' €/h</div>';
+          else if (d.sourceTauxMachine === 'transition_machine') hint = '<div style="'+_hs+'color:#94a3b8;" title="Taux provisoire repris du coût horaire de la machine, en attendant la saisie du taux sur le process (script cloud-7).">'+_mn+'Machine · '+_eur(d.tauxMachine)+' €/h (provisoire)</div>';
+          else if (d.sourceTauxMachine === 'manquant') hint = '<div style="'+_hs+'color:#b45309;font-weight:700;" title="Saisir le taux horaire machine de ce process dans Production › Postes &amp; Process : en attendant, le temps machine vaut 0 €.">'+_mn+'Machine · taux à saisir</div>';
+          else hint = '<div style="'+_hs+'color:#b45309;font-weight:700;" title="Aucun process machine unique ne porte cette machine : choisir le process pour valoriser le temps machine.">'+_mn+'Machine · process à choisir</div>';
+        } else if (d.typeProcess === 'manuel' && e.process_id) {
+          hint = '<div style="'+_hs+'color:#94a3b8;" title="Process manuel : tout le temps est du temps homme, valorisé au coût chargé RH moyen du site (fiche salarié).">Manuel · homme au coût chargé RH'+(NOM_TX.hommeManquant ? ' (à renseigner)' : (' ('+_eur(d.tauxHomme)+' €/h)'))+'</div>';
+        } else if (d.typeProcess === 'oas' && e.process_id) {
+          hint = '<div style="'+_hs+'color:#4338ca;" title="Process OAS : aucun bon de travail n est généré, aucun temps n est valorisé.">OAS · aucun temps valorisé</div>';
+        }
+        var _isMachStep = (d.typeProcess === 'machine');
         // Code programme = UNIQUEMENT pour les machines CNC. Machine identifiée non-CNC → pas de champ ;
         // MAIS on garde toujours le champ si un code existe déjà (aucune perte de donnée) ou si la machine
         // n'est pas résolue (gamme importée sans machine_id) → pas de régression.
@@ -2486,14 +2710,15 @@ export const pageServiceBE = (
         var dis = e.fournisseur_st_id ? '' : ' disabled';
         midCol = '<select class="nom-f-inp" onchange="nomOnEtapeOperationChange('+i+', this.value)"'+dis+'><option value="">'+(e.fournisseur_st_id?'— Opération —':'(choisir sous-traitant)')+'</option>'+opOpts2+'</select>';
       }
-      // ── Colonne coût ── (décomposition selon la formule : MO = taux_mo×(temps_mo+réglage)/60 ; Mach = taux_machine×temps_machine/60)
+      // ── Colonne coût ── homme = (ROP + RGM + THV) × coût chargé RH ; machine = (RGM + TMV) × taux machine du process
       var coutCol;
       if (e.type === 'interne') {
         var moE  = nomEtapeCoutMO(e);
         var macE = nomEtapeCoutMachine(e);
-        coutCol = '<div style="text-align:right;padding:3px 6px;line-height:1.2;">'
-          + '<div style="font-size:.6rem;color:#0ea5e9;font-weight:700;" title="MO = taux MO moyen x (temps MO + reglage) / 60">MO '+moE.toFixed(2)+' €</div>'
-          + '<div style="font-size:.6rem;color:#9333ea;font-weight:700;" title="Machine = taux machine x temps machine / 60">Mach '+macE.toFixed(2)+' €</div>'
+        var _txtTM = (d.typeProcess === 'machine') ? ((d.sourceTauxMachine === 'manquant' || d.sourceTauxMachine === 'sans_process') ? 'à saisir' : (_eur(d.tauxMachine)+' €/h')) : 'process non machine : 0';
+        coutCol = '<div style="text-align:right;padding:3px 6px;line-height:1.2;"'+(d.manquants.length ? (' title="'+_escH(d.manquants.map(beLibelleManquant).join(' · '))+'"') : '')+'>'
+          + '<div style="font-size:.6rem;color:#0ea5e9;font-weight:700;" title="Homme = (ROP + RGM + THV) × coût chargé RH moyen du site ('+(NOM_TX.hommeManquant ? 'à renseigner dans RH' : (_eur(d.tauxHomme)+' €/h'))+'), réglage compris pour 1 pièce">Homme '+moE.toFixed(2)+' €</div>'
+          + '<div style="font-size:.6rem;color:#9333ea;font-weight:700;" title="Machine = (RGM + TMV) × taux horaire machine du process ('+_txtTM+')">Mach '+macE.toFixed(2)+' €'+(d.manquants.length ? ' <i class="fas fa-triangle-exclamation" style="color:#b45309;"></i>' : '')+'</div>'
           + '<div style="font-size:.74rem;color:#374151;font-weight:800;border-top:1px solid #eef2f7;margin-top:1px;padding-top:1px;">'+cout+' €</div>'
           + '</div>';
       } else if (e.est_oas === true) {
@@ -2507,24 +2732,32 @@ export const pageServiceBE = (
         coutCol = '<div><input class="nom-f-inp" type="number" step="0.01" placeholder="€/pc" value="'+(e.prix_unitaire_st_ht||0)+'" oninput="nomEtapes['+i+'].prix_unitaire_st_ht=parseFloat(this.value)||0;nomEtapes['+i+'].cout_st_unitaire=nomEtapes['+i+'].prix_unitaire_st_ht;nomCalcTotaux()" style="text-align:right;"/>'+forfaitHint+'</div>';
       }
       // Champs temps : réglage + MO + machine. Grisés en sous-traitance ; le temps machine est aussi grisé pour un process manuel (sans machine).
-      var estOas = (e.est_oas === true);
+      var estOas = (e.est_oas === true) || d.oas === true;   // drapeau de l'étape OU process de type OAS
       // OAS : tous les temps sont grisés — le traitement se chiffre au prix du bain, pas à l'heure.
       var greyTime = (e.type === 'sous_traite') || estOas;
-      var noMachine = (e.type === 'interne' && !e.machine_id && e.ressource !== 'machine');
+      // Temps machine (RGM, TMV) : seulement pour un process MACHINE — un process machine sans machine rattachée
+      // reste machine. Sur une étape non machine, une valeur déjà saisie reste visible (et modifiable) avec son effet.
+      var noMachine = (e.type === 'interne' && d.typeProcess !== 'machine');
       var greyStyle = 'text-align:right;background:#eef2f7;color:#cbd5e1;cursor:not-allowed;';
       // oninput : met à jour le modèle + les totaux SANS re-render (sinon la saisie multi-chiffres bug — ex. « 10 »).
       // onchange (sortie de champ) : rafraîchit la colonne coût de l'étape.
       // Saisie en MILLIÈMES d'heure (1000 = 1 h). Stockage interne conservé en minutes (min = ‰ × 0.06)
       // → aucun impact sur le moteur de coût / l'OF / les dashboards. Affichage input = min × 1000/60.
-      var mkTime = function(field, val){ var mil = val ? +((Number(val)*1000/60).toFixed(1)) : 0; return '<input class="nom-f-inp" type="number" step="1" min="0" inputmode="decimal" placeholder="0" title="1000 millièmes = 1 heure" value="'+mil+'" oninput="nomEtapes['+i+'].'+field+'=(parseFloat(this.value)||0)*60/1000;nomCalcTotaux()" onchange="nomRenderEtapes()" style="text-align:right;"/>'; };
+      var mkTime = function(field, val, titre, alerte){ var mil = val ? +((Number(val)*1000/60).toFixed(1)) : 0; return '<input class="nom-f-inp" type="number" step="1" min="0" inputmode="decimal" placeholder="0" title="'+(titre || '1000 millièmes = 1 heure')+'" value="'+mil+'" oninput="nomEtapeEnMinutes(nomEtapes['+i+']);nomEtapes['+i+'].'+field+'=(parseFloat(this.value)||0)*60/1000;nomCalcTotaux()" onchange="nomRenderEtapes()" style="text-align:right;'+(alerte ? 'border-color:#fdba74;background:#fff7ed;' : '')+'"/>'; };
       var greyInput = function(titleTxt){ return '<input class="nom-f-inp" type="number" placeholder="—" disabled title="'+titleTxt+'" style="'+greyStyle+'"/>'; };
       // ROP = reglage operateur (au taux MO) · RGM = reglage machine (au taux machine).
       // Les deux sont des couts FIXES par lot, jamais multiplies par la quantite.
       var motifGris = estOas ? 'Traitement OAS : on saisit un prix, pas un temps' : 'Non applicable en sous-traitance';
-      var regInput = greyTime ? greyInput(motifGris) : mkTime('temps_reglage_min', e.temps_reglage_min);
-      var regMacInput = (greyTime || noMachine) ? greyInput(greyTime ? motifGris : 'Process manuel — pas de machine a regler') : mkTime('temps_reglage_machine_min', e.temps_reglage_machine_min);
-      var moInput  = greyTime ? greyInput(motifGris) : mkTime('temps_mo_min', e.temps_mo_min);
-      var macInput = (greyTime || noMachine) ? greyInput(greyTime ? motifGris : 'Process manuel — pas de machine') : mkTime('temps_machine_min', e.temps_machine_min);
+      var regInput = greyTime ? greyInput(motifGris) : mkTime('temps_reglage_min', e.temps_reglage_min, 'ROP — réglage homme (1000 = 1 h) : temps homme, fixe par lot');
+      var regMacInput = greyTime ? greyInput(motifGris)
+        : (!noMachine ? mkTime('temps_reglage_machine_min', e.temps_reglage_machine_min, 'RGM — réglage machine (1000 = 1 h) : temps homme + machine, fixe par lot')
+        : ((Number(e.temps_reglage_machine_min) || 0) > 0 ? mkTime('temps_reglage_machine_min', e.temps_reglage_machine_min, 'Process non machine : ce réglage compte en temps homme seulement (aucun taux machine)', true)
+        : greyInput('Process manuel — pas de machine à régler (choisir un process machine)')));
+      var moInput  = greyTime ? greyInput(motifGris) : mkTime('temps_mo_min', e.temps_mo_min, 'THV — temps homme variable par pièce (1000 = 1 h)');
+      var macInput = greyTime ? greyInput(motifGris)
+        : (!noMachine ? mkTime('temps_machine_min', e.temps_machine_min, 'TMV — temps machine variable par pièce (1000 = 1 h) : temps machine seul')
+        : ((Number(e.temps_machine_min) || 0) > 0 ? mkTime('temps_machine_min', e.temps_machine_min, 'Process non machine : ce temps machine n est PAS valorisé — le passer en temps homme ou choisir un process machine', true)
+        : greyInput('Process manuel — pas de machine (choisir un process machine)')));
       return '<div ondragover="nomEtapeDragOver(event)" ondrop="nomEtapeDrop(event,'+i+')" style="display:grid;grid-template-columns:34px 84px 1fr 1.2fr 58px 58px 58px 62px 88px 26px;gap:4px;margin-bottom:4px;align-items:start;">'
         + '<div draggable="true" ondragstart="nomEtapeDragStart(event,'+i+')" ondragend="nomEtapeDragEnd(event)" title="Glisser pour réordonner les procédés" style="text-align:center;cursor:grab;font-size:.74rem;font-weight:800;color:#94a3b8;font-family:monospace;padding-top:6px;user-select:none;"><i class="fas fa-grip-vertical" style="color:#cbd5e1;font-size:.66rem;"></i> '+(e.ordre || (i+1))+'</div>'
         + typeCol
@@ -2551,14 +2784,19 @@ export const pageServiceBE = (
   function nomCalcTotaux() {
     var totalMatiere = nomTotalMatiere(), totalAccessoire = nomTotalAccessoire();
     var totalFourn = totalMatiere + totalAccessoire;
-    // Totaux étapes
+    // Totaux étapes — UNE décomposition par étape (nomEtapeDecomp = miroir de etapeDecomp serveur)
     var reglageTotal  = 0, unitaireTotal = 0, etapesTotal = 0, machineTotal = 0;
+    var stUnitTotal = 0, reglageFixe = 0, _decomps = [];
     nomEtapes.forEach(function(e){
-      reglageTotal  += (e.temps_reglage_min || 0) + (e.temps_reglage_machine_min || 0);   // ROP + RGM
-      unitaireTotal += (e.temps_mo_min || 0) + (e.temps_machine_min || 0);
-      etapesTotal  += nomEtapeCoutUnitaire(e);
-      if (e.type === 'interne') machineTotal += nomEtapeCoutMachine(e);
+      var d = nomEtapeDecomp(e); _decomps.push(d);
+      reglageTotal  += d.reglageMin;                  // ROP + RGM (minutes)
+      unitaireTotal += d.moMin + d.machineMin;        // THV + TMV valorisé (minutes / pièce)
+      if (d.st) { etapesTotal += d.unit; stUnitTotal += d.unit; return; }   // ST / OAS : prix pièce
+      etapesTotal  += d.moPc + d.machPc + d.moFixe + d.machFixe;
+      machineTotal += d.machPc + d.machFixe;
+      reglageFixe  += d.moFixe + d.machFixe;           // fixe / lot (réglages + opérations fixes)
     });
+    nomRenderAlerteTaux(_decomps);
     // Pour une mère : le prix de revient = somme des standards composants.
     var isMere = (document.getElementById('nom-f-type') && document.getElementById('nom-f-type').value === 'mere');
     var prixRevient = isMere ? nomComposantTotal() : (totalFourn + etapesTotal);
@@ -2582,17 +2820,9 @@ export const pageServiceBE = (
     // il est compté UNE seule fois, jamais multiplié par Q. Seuls MO/machine variables + fournitures × Q.
     var qSerie = parseInt((document.getElementById('nom-qte-serie')||{}).value, 10);
     if (!qSerie || qSerie < 1) qSerie = 1;
-    var stUnitTotal = 0, stSerie = 0, reglageFixe = 0;
-    nomEtapes.forEach(function(e){
-      if (e.type === 'sous_traite') {
-        var unit = (e.prix_unitaire_st_ht != null ? e.prix_unitaire_st_ht : (e.cout_st_unitaire||0)) || 0;
-        var forfait = e.forfait_st_ht || 0;
-        stUnitTotal += unit;
-        stSerie += Math.max(forfait, qSerie * unit);
-      } else {
-        reglageFixe += nomEtapeCoutReglage(e);   // coût réglage = fixe / lot (inclus dans prixRevient unitaire)
-      }
-    });
+    var stSerie = 0;
+    // Sous-traitance ET OAS : max(forfait ; Q × prix pièce) — même chemin que le moteur (etapeDecomp)
+    _decomps.forEach(function(d){ if (d.st) stSerie += Math.max(d.forfait, qSerie * d.unit); });
     // varPerPiece = part réellement variable : fournitures + MO/machine (hors réglage) + (étapes internes hors ST)
     var varPerPiece = prixRevient - stUnitTotal - reglageFixe;
     var totalSerie = reglageFixe + varPerPiece * qSerie + stSerie;
@@ -2617,6 +2847,22 @@ export const pageServiceBE = (
     el('nom-calc-s-movar',      fmt(dMoVar * qSerie) + ' €');
     el('nom-calc-s-st',         fmt(stSerie) + ' €');            // sous-traitance : max(forfait ; qté × unitaire)
     el('nom-calc-s-qte',        String(qSerie));
+  }
+
+  // Alerte « coût incomplet » : ce qui manque pour chiffrer (taux machine à saisir, coût chargé RH, process).
+  function nomRenderAlerteTaux(decomps){
+    var box = document.getElementById('nom-taux-alerte'); if (!box) return;
+    var vus = {}, procsSansTaux = [];
+    (decomps || []).forEach(function(d){
+      (d.manquants || []).forEach(function(m){ vus[m] = true; });
+      if ((d.manquants || []).indexOf('taux_machine') >= 0 && d.process && procsSansTaux.indexOf(d.process.nom) < 0) procsSansTaux.push(d.process.nom);
+    });
+    var codes = Object.keys(vus);
+    if (!codes.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    var esc0 = function(v){ return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
+    box.innerHTML = '<div style="font-weight:800;margin-bottom:2px;"><i class="fas fa-triangle-exclamation" style="margin-right:5px;"></i>Coût de revient incomplet</div>'
+      + codes.map(function(c){ return '<div>• ' + esc0(beLibelleManquant(c)) + (c === 'taux_machine' && procsSansTaux.length ? (' — ' + esc0(procsSansTaux.join(', '))) : '') + '</div>'; }).join('');
+    box.style.display = 'block';
   }
 
   function nomCollectPayload(statut) {
@@ -2653,14 +2899,16 @@ export const pageServiceBE = (
       surface_totale_dm2: (function(){ var v=parseFloat(document.getElementById('nom-f-surface')?.value); return (!isNaN(v) && v>0) ? +(v/10000).toFixed(6) : null; })(),
       temps_matiere_h:  unitaireTotal ? +(unitaireTotal/60).toFixed(3) : null,
       temps_machine_h:  null,
-      taux_mo:          TAUX_MO_MOYEN,
-      cout_machine_h:   COUT_MACHINE_MOY,
+      // Copies INFORMATIVES (plus lues par aucun calcul) : coût chargé RH moyen du site ; plus de taux machine
+      // « moyen » (le taux machine est porté par chaque process).
+      taux_mo:          NOM_TX.hommeManquant ? null : nomEtapeTauxHomme(),
+      cout_machine_h:   null,
       prix_mo_unitaire:       isMere ? 0 : parseFloat(moTotal.toFixed(2)),
       cout_machine_unitaire:  isMere ? 0 : parseFloat(machineTotal.toFixed(2)),
       prix_revient_unitaire:  parseFloat(prixRevientUnit.toFixed(2)),
       temps_reglage_total_min:  reglageTotal,
       temps_unitaire_total_min: unitaireTotal,
-      etapes_production: nomEtapes,
+      etapes_production: nomEtapesPourEnregistrement(),
       notes:            document.getElementById('nom-f-notes')?.value || null,
       cree_par:         document.getElementById('nom-f-createur')?.value || null,
       statut:           statut,
@@ -2680,10 +2928,23 @@ export const pageServiceBE = (
     };
   }
 
+  // Étapes enregistrées : copies INFORMATIVES des taux du jour (taux_mo_h = coût chargé RH du site,
+  // machine_taux_h = taux du process machine), tracées « recalcul » au journal EN 9100. Le moteur ne les lit pas.
+  function nomEtapesPourEnregistrement(){
+    return nomEtapes.map(function(e){
+      if (!e || e.type !== 'interne' || e.est_oas === true) return e;
+      var d = nomEtapeDecomp(e), c = Object.assign({}, e);
+      c.taux_mo_h = NOM_TX.hommeManquant ? null : Math.round(d.tauxHomme * 100) / 100;
+      c.machine_taux_h = (d.typeProcess === 'machine') ? Math.round(d.tauxMachine * 100) / 100 : 0;
+      return c;
+    });
+  }
+
   async function nomSave(statut) {
     // Une nomenclature DEJA validee reste validee quand on l'enregistre. Le bouton
     // Enregistrer envoyait en_cours et la devalidait en silence : elle quittait la liste
     // des faites et la cascade de production. Le serveur applique la meme regle.
+    if (nomTauxIllisibles()) return;
     var dejaValidee = (nomCurrentStatut === 'valide');
     var statutEffectif = (statut !== 'valide' && dejaValidee) ? 'valide' : statut;
     var payload = nomCollectPayload(statutEffectif);
@@ -2878,8 +3139,8 @@ export const pageServiceBE = (
             + '<td style="${TD}font-size:.74rem;color:#6366f1;font-weight:700;">'+(p.nomenclature.num_nom||'—')+' <span style="background:#eef2ff;border-radius:5px;padding:0 5px;font-size:.62rem;">'+(p.nomenclature.indice||'A')+'</span>'+(draft?' <span style="background:#fef3c7;color:#b45309;border-radius:5px;padding:0 5px;font-size:.6rem;font-weight:800;">brouillon</span>':'')+'</td>'
             + '<td style="${TD}text-align:right;font-weight:800;color:#15803d;">×'+c.qte+'</td>'
             + '<td style="${TD}text-align:right;color:#0ea5e9;font-weight:700;" title="dont accessoires '+fe(c.accessoire)+'">'+fe(c.matiereSerie)+'</td>'
-            + '<td style="${TD}text-align:right;color:#0284c7;" title="MO réglage inclus · '+c.moMinTotal+'+'+c.reglageMinTotal+' min/pc">'+fe(c.moSerie)+'</td>'
-            + '<td style="${TD}text-align:right;color:#9333ea;" title="'+c.machineMinTotal+' min machine/pc">'+fe(c.machineSerie)+'</td>'
+            + '<td style="${TD}text-align:right;color:#0284c7;" title="Temps HOMME (ROP + RGM + THV) au coût chargé RH moyen du site'+(p.taux_homme!=null&&!p.homme_manquant?(' · '+(Number(p.taux_homme)||0).toFixed(2)+' €/h'):' · coût RH à renseigner')+' — réglage/lot inclus · '+(Number(c.moMinTotal)||0).toFixed(1)+' min/pc + '+(Number(c.reglageMinTotal)||0).toFixed(1)+' min/lot">'+fe(c.moSerie)+'</td>'
+            + '<td style="${TD}text-align:right;color:#9333ea;" title="Temps MACHINE (RGM + TMV) au taux horaire machine de chaque process · '+(Number(c.machineMinTotal)||0).toFixed(1)+' min machine/pc">'+fe(c.machineSerie)+((p.manquants&&p.manquants.length)?' <i class="fas fa-triangle-exclamation" style="color:#b45309;" title="'+String(p.manquants.map(beLibelleManquant).join(' · ')).replace(/"/g,'&quot;')+'"></i>':'')+'</td>'
             + '<td style="${TD}text-align:right;color:#b45309;">'+fe(c.stOrder)+'</td>'
             + '<td style="${TD}text-align:right;font-weight:800;color:#111827;">'+fe(c.totalSerie)+'</td>'
             + '<td style="${TD}text-align:right;font-weight:700;color:#374151;">'+(Number(c.perPiece)||0).toFixed(3)+' €</td>'
@@ -2896,6 +3157,10 @@ export const pageServiceBE = (
           if(j.missing>0){ banner.style.background='#fff7ed'; banner.style.borderColor='#fed7aa'; banner.style.color='#b45309'; banner.innerHTML='<i class="fas fa-exclamation-triangle" style="margin-right:6px;"></i><strong>'+j.missing+' pièce(s)</strong> sans nomenclature : créez-les pour compléter l\\'analyse.'; }
           else if(j.drafts>0){ banner.style.background='#fffbeb'; banner.style.borderColor='#fde68a'; banner.style.color='#92400e'; banner.innerHTML='<i class="fas fa-pen-ruler" style="margin-right:6px;"></i><strong>'+j.drafts+' nomenclature(s) en brouillon</strong> — analyse <strong>visible</strong> mais <strong>non validable</strong> tant qu\\'elles ne sont pas validées.'; }
           else { banner.style.background='#f0fdf4'; banner.style.borderColor='#86efac'; banner.style.color='#166534'; banner.innerHTML='<i class="fas fa-check-circle" style="margin-right:6px;"></i>Toutes les nomenclatures sont validées — analyse complète.'; }
+          // Coût incomplet (taux machine à saisir, coût chargé RH absent, étape sans process) : signalé, jamais masqué
+          var _manq = {}; pieces.forEach(function(p){ (p.manquants||[]).forEach(function(m){ _manq[m] = true; }); });
+          var _codes = Object.keys(_manq);
+          if(_codes.length){ banner.innerHTML += '<div style="margin-top:6px;padding-top:6px;border-top:1px dashed currentColor;color:#9a3412;font-size:.74rem;"><i class="fas fa-triangle-exclamation" style="margin-right:6px;"></i><strong>Coût incomplet :</strong> '+_codes.map(beLibelleManquant).join(' · ').replace(/</g,'&lt;')+'</div>'; }
         }
       })
       .catch(function(){ tb.innerHTML = '<tr><td colspan="9" style="padding:24px;text-align:center;color:#ef4444;font-size:.78rem;">Erreur réseau lors du calcul.</td></tr>'; });

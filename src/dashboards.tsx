@@ -115,11 +115,14 @@ export const dashBE = (d: DashboardData, f?: DashFilter) => {
   const oMarge = objectif(d, 'marge_pct')
   const clients = Array.from(new Set(((d.dts || []) as any[]).map(x => x.client_nom).filter(Boolean))).sort() as string[]
   const sc = k.structureCout; const scTot = sc.matiere + sc.mo + sc.machine + sc.st
+  // Coût horaire porté par le process (14/09/2026) : un taux absent vaut 0 → CRU sous-évalué. On le DIT (tuile + top).
+  const nbCruIncomplets = (k.lignes || []).filter((l: any) => (l.manquants || []).length).length
+  const topIncomplets = (k.topCher || []).filter((l: any) => (l.manquants || []).length)
   const content = wrap(`
   ${g4(`
     ${U.kpiCard('fa-inbox', k.dtAAnalyser.length, 'DT à analyser', `${k.dtOpen.length} DT ouvertes`, '#6366f1', '#f5f3ff', { href: '/commercial/dt-liste' + filterQS(f) })}
     ${U.kpiCard('fa-check-circle', k.tauxAnalyse + '%', 'DT analysées', `${k.dtAnalysees}/${k.dtTotal}`, '#22c55e', '#f0fdf4')}
-    ${U.kpiCard('fa-euro-sign', k.cruMoyen ? k.cruMoyen + '€' : '—', 'CRU moyen', `${k.nbChiffrees} nomenclature(s)`, '#3b82f6', '#eff6ff')}
+    ${U.kpiCard('fa-euro-sign', k.cruMoyen ? k.cruMoyen + '€' : '—', 'CRU moyen', `${k.nbChiffrees} nomenclature(s)` + (nbCruIncomplets ? ` · dont ${nbCruIncomplets} au coût incomplet (sous-évalué)` : '') + (k.hommeManquant ? ' · coût chargé RH à renseigner' : ''), nbCruIncomplets || k.hommeManquant ? '#b45309' : '#3b82f6', nbCruIncomplets || k.hommeManquant ? '#fffbeb' : '#eff6ff')}
     ${U.kpiCard('fa-percent', k.margeMoy ? k.margeMoy + '%' : '—', 'Marge brute moyenne', `Seem ${k.margeSeem}% · Semrac ${k.margeSemrac}%`, '#f59e0b', '#fffbeb', { obj: k.margeMoy ? U.kpiObj(k.margeMoy, oMarge) : undefined })}
   `)}
   ${grid('1fr 1fr')(`
@@ -133,7 +136,9 @@ export const dashBE = (d: DashboardData, f?: DashFilter) => {
   `)}
   ${grid('1fr 1fr')(`
     ${U.card(U.cardTitle('Pièces les plus coûteuses (CRU €/pièce)', 'fa-coins', '#3b82f6') + (
-      k.topCher.length ? barChart('beCru', k.topCher.map(p => String(p.ref).slice(0, 14)), [{ label: 'CRU', data: k.topCher.map(p => p.perPiece), backgroundColor: '#3b82f6', borderRadius: 4 }], { indexAxis: 'y' }) : U.emptyState('Aucune nomenclature chiffrée')))}
+      k.topCher.length ? barChart('beCru', k.topCher.map(p => String(p.ref).slice(0, 14) + ((p.manquants || []).length ? ' ⚠' : '')), [{ label: 'CRU', data: k.topCher.map(p => p.perPiece), backgroundColor: k.topCher.map(p => (p.manquants || []).length ? '#f59e0b' : '#3b82f6'), borderRadius: 4 }], { indexAxis: 'y' })
+        + (topIncomplets.length ? `<div style="font-size:.66rem;color:#b45309;margin-top:6px;"><i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>⚠ = coût incomplet (taux machine à saisir sur le process, coût chargé RH absent ou étape sans process) : CRU sous-évalué.</div>` : '')
+        : U.emptyState('Aucune nomenclature chiffrée')))}
     ${U.card(U.cardTitle('Complétude des nomenclatures', 'fa-clipboard-check', '#22c55e') + (k.nbNoms ? `<div style="text-align:center;padding:12px 0;"><div style="font-size:2.6rem;font-weight:900;color:#22c55e;line-height:1;">${k.tauxCompletude}%</div><div style="font-size:.72rem;color:#6b7280;margin-top:4px;">${k.complet}/${k.nbNoms} nomenclatures complètes<br>(gamme + matière + validée)</div></div><div style="height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden;margin-top:6px;"><div style="width:${k.tauxCompletude}%;height:100%;background:#22c55e;border-radius:4px;"></div></div>` : U.emptyState('Aucune nomenclature')))}
   `)}
   ${grid('2fr 1fr')(`
@@ -442,7 +447,7 @@ export const dashMaintenance = (d: DashboardData, f?: DashFilter) => {
     ${U.kpiCard('fa-exclamation-circle', m.pannes, 'Machines en panne', `${m.omOpen} OM ouvert(s)`, m.pannes ? '#ef4444' : '#22c55e', m.pannes ? '#fef2f2' : '#f0fdf4')}
     ${U.kpiCard('fa-tachometer-alt', m.machinesTotal ? m.disponibilite + '%' : '—', 'Disponibilité parc', `OEE ${m.oee != null ? m.oee + '%' : '—'} · ${m.machinesTotal} machine(s)`, m.machinesTotal ? K.statutObjectif(m.disponibilite, oDispo).color : '#94a3b8', '#f0fdf4', { obj: m.machinesTotal ? U.kpiObj(m.disponibilite, oDispo) : undefined })}
     ${U.kpiCard('fa-tools', m.mttrMoyen != null ? m.mttrMoyen + 'h' : '—', 'MTTR moyen', m.mtbfMoyen != null ? `MTBF ${m.mtbfMoyen}h` : 'temps de réparation', '#3b82f6', '#eff6ff')}
-    ${U.kpiCard('fa-shield-alt', m.ratioPreventif + '%', 'Ratio préventif', `${m.prev} prév. · ${m.corr} corr.${m.coutHoraireReel != null ? ' · ' + m.coutHoraireReel + '€/h réel' : ''}`, '#f59e0b', '#fffbeb')}
+    ${U.kpiCard('fa-shield-alt', m.ratioPreventif + '%', 'Ratio préventif', `${m.prev} prév. · ${m.corr} corr.`, '#f59e0b', '#fffbeb')}
   `)}
   ${grid('1fr 1fr 1fr')(`
     ${U.card(U.gauge(m.disponibilite, oDispo, 'Disponibilité parc'))}
@@ -463,7 +468,7 @@ export const dashMaintenance = (d: DashboardData, f?: DashFilter) => {
     ]) : U.emptyState('Aucun coût OM sur la période')))}
   `)}
   ${grid('1fr 1fr')(`
-    ${U.card(U.cardTitle('OPEX par machine (€)', 'fa-coins', '#eab308') + (m.opexParMachine.length ? m.opexParMachine.map(([n, v], i) => U.miniBar(esc(n), Math.round(v), Math.round(m.opexParMachine[0][1]), U.PALETTE[i % U.PALETTE.length], '€')).join('') + `<div style="font-size:.66rem;color:#94a3b8;margin-top:8px;">Total OPEX ${fmtEur(m.coutOpexTotal)} · ${m.heuresProd} h productives${m.coutHoraireReel != null ? ' · ' + m.coutHoraireReel + ' €/h réel' : ''}</div>` : U.emptyState('OPEX machine non renseigné (machines_opex)')))}
+    ${U.card(U.cardTitle('OPEX par machine (€)', 'fa-coins', '#eab308') + (m.opexParMachine.length ? m.opexParMachine.map(([n, v], i) => U.miniBar(esc(n), Math.round(v), Math.round(m.opexParMachine[0][1]), U.PALETTE[i % U.PALETTE.length], '€')).join('') + `<div style="font-size:.66rem;color:#94a3b8;margin-top:8px;">Total OPEX ${fmtEur(m.coutOpexTotal)} · ${m.heuresProd} h productives</div>` : U.emptyState('OPEX machine non renseigné (machines_opex)')))}
     ${U.card(U.cardTitle('MTBF / MTTR par machine', 'fa-gauge', '#3b82f6') + (m.mtbfParMachine.length ? `<table style="width:100%;border-collapse:collapse;"><thead><tr style="border-bottom:2px solid #f1f5f9;">${['Machine', 'MTBF', 'MTTR', 'Dispo', 'Pannes'].map(h => `<th style="padding:5px 7px;font-size:.62rem;color:#6b7280;font-weight:700;text-align:left;">${h}</th>`).join('')}</tr></thead><tbody>${m.mtbfParMachine.map((x: any) => `<tr style="border-bottom:1px solid #f8fafc;"><td style="padding:6px 7px;font-size:.7rem;font-weight:700;color:#374151;">${esc(x.nom)}</td><td style="padding:6px 7px;font-size:.7rem;">${x.mtbf || '—'}h</td><td style="padding:6px 7px;font-size:.7rem;color:${x.mttr > 24 ? '#b91c1c' : '#374151'};">${x.mttr || '—'}h</td><td style="padding:6px 7px;font-size:.7rem;">${x.dispo ? x.dispo + '%' : '—'}</td><td style="padding:6px 7px;font-size:.7rem;">${x.pannes || 0}</td></tr>`).join('')}</tbody></table>` : U.emptyState('Aucune donnée MTBF/MTTR par machine')))}
   `)}
   ${U.chartScript()}`)

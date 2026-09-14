@@ -64,46 +64,46 @@ Sur cet écran, vous utilisez :
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/compta.md).
 
-## Étape 4 — Régler et affiner les taux horaires opérateurs
+## Étape 4 — Vérifier les taux horaires (homme et machine)
 
-**⬅️ Avant :** Les salaires ou les charges sociales ont évolué, ou vous préparez un chiffrage fiable. Ces taux servent de socle à tous les calculs de coûts.
-**📝 Ici, vous :** ajustez le taux brut et les charges de chaque opérateur, sur la page « Taux horaires opérateurs » (menu Finances & Coûts), directement dans le tableau, puis « Enregistrer ».
+**⬅️ Avant :** Les salaires ou les charges sociales ont évolué, ou vous préparez un chiffrage fiable. Depuis le 14/09/2026, le coût de revient n'utilise que **deux taux** :
+- le **taux homme** = le **taux horaire chargé** de chaque salarié, saisi dans sa **fiche salarié (service RH)** ;
+- le **taux horaire machine** de chaque **process machine**, saisi en **Production › Process Ateliers**. Les machines et les postes n'ont plus de taux.
 
-Sur cet écran, vous renseignez :
-- **Taux brut (€/h)** — le salaire horaire de l'opérateur avant charges.
-- **Charges (%)** — le pourcentage de charges sociales (généralement 45 %).
+**📝 Ici, vous :** contrôlez ces taux depuis le menu Finances & Coûts :
+- page **« Taux horaires opérateurs »** — le taux chargé de chaque opérateur et la ligne **« Taux homme du coût de revient estimé »** (moyennes Seem, Semrac, atelier). Les cases *Taux brut* et *Charges (%)* permettent de simuler un autre taux, mais **le bouton « Enregistrer » de cette page n'écrit rien** : un taux se corrige dans la fiche salarié (RH) ;
+- page **« Taux machine des process »** — pour chaque machine, ses process machine et leur taux, avec les badges **« taux à saisir »** ; bouton « Saisir les taux (Production) ».
 
-Le **Taux chargé**, le **Coût journée** et le **Coût annuel** se recalculent tout seuls.
-
-**➡️ Ensuite :** ces taux alimentent directement le calcul du **coût de revient** (étape 5) et les marges vues par la Direction. Une erreur ici fausse tous les chiffrages : pensez à « Enregistrer ».
+**➡️ Ensuite :** ces taux alimentent le **coût de revient** estimé (nomenclatures, analyse DT, étape 5) et le **coût réel** des commandes (étape 6). Un taux manquant compte 0 € et le coût est signalé « incomplet » partout.
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/compta.md).
 
 ## Étape 5 — Simuler un coût de revient (aide au chiffrage)
 
 **⬅️ Avant :** Le Bureau d'Études ou le Commercial doit chiffrer une pièce avant de faire une offre de prix. Les taux horaires (étape 4) sont à jour.
-**📝 Ici, vous :** estimez le coût de revient et le prix de vente suggéré, depuis la page « Coûts de revient » (menu Finances & Coûts) › bouton « Simuler CR ».
+**📝 Ici, vous :** estimez un coût de revient et un prix de vente, depuis la page « Coûts de revient » (menu Finances & Coûts) › bouton « Simuler CR ». La page rappelle la méthode (ROP → homme, RGM → homme + machine, THV → homme, TMV → machine) et les taux en vigueur.
 
 Sur cet écran, vous renseignez :
-- **Activité** (Seem / Semrac) et **Référence pièce** — le contexte de la pièce simulée.
-- **Quantité** — le nombre de pièces de la commande (100 par défaut).
-- **Opération / Temps (min) / Taux MO / Coût machine / Matière** — une ligne de gamme par étape de fabrication ; cliquez « Ajouter une opération » pour en ajouter.
-- **Frais généraux (%)** et **Coefficient de vente** — les frais ajoutés et le multiplicateur qui transforme le coût en prix de vente.
+- **Activité** (Seem / Semrac) et **Référence pièce** — l'activité propose le **taux homme** (moyenne du coût chargé RH du site).
+- **Quantité du lot** — les réglages sont comptés une fois puis répartis sur les pièces.
+- Une ligne par opération : **Process** (pré-remplit le type et le taux machine), **Type**, **ROP** et **RGM** (minutes par lot), **THV** et **TMV** (minutes par pièce), **Taux machine** ; « Ajouter une opération » pour en ajouter.
+- **Matière (€/pièce)**, **Frais généraux (%) – hypothèse** et **Coefficient de vente** — rien n'est pré-rempli.
 
-**➡️ Ensuite :** « Calculer CR » affiche le coût de revient et le prix de vente suggéré, qui servent à préparer l'**offre de prix** côté Commercial. C'est une simulation : **rien n'est enregistré** en base.
+**➡️ Ensuite :** « Calculer CR » détaille homme, machine, matière, frais et le CR unitaire, puis le prix simulé avec son taux de marque. C'est une simulation : **rien n'est enregistré** en base ; le coût de revient qui part dans l'offre est celui de l'analyse DT du Bureau d'Études.
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/compta.md).
 
 ## Étape 6 — Consulter les imputations des temps
 
 **⬅️ Avant :** Les opérateurs ont soldé leurs bons de travail (BDT) en Production. Les temps pointés remontent **automatiquement** ici.
-**📝 Ici, vous :** consultez les temps imputés d'une journée, sur la page « Imputations des temps » (menu Finances & Coûts).
+**📝 Ici, vous :** consultez le coût réel de chaque bon de travail, sur la page « Imputations des temps » (menu Finances & Coûts).
 
-Sur cet écran, vous utilisez :
-- **Date** — la journée à afficher (aujourd'hui par défaut).
-- **Valider tout** — valide les pointages de la journée affichée.
-- **Exporter** — génère un fichier des imputations (base de la paie et des coûts réels).
+Sur cet écran, vous lisez pour chaque BDT :
+- **Opérateur, Process, Machine, Opération, Commande** et les temps **alloué / réel** ;
+- **Coût homme** — temps réel × taux chargé de l'opérateur (à défaut, moyenne du site) ;
+- **Coût machine** — temps réel × taux horaire machine du process, si le process est de type machine ;
+- **Total** ; un bandeau orange compte les BDT **au coût incomplet** (un taux manque).
 
-**➡️ Ensuite :** les temps validés alimentent les **coûts réels** par affaire et l'export vers la paie (Silae). Cette page ne saisit rien : elle ne fait que consulter, valider et exporter ce que la Production a pointé.
+**➡️ Ensuite :** ces coûts alimentent les **coûts réels** par commande et par affaire (fiches Commande, Lot et Affaire 360, qui affichent « — » et un bandeau si le coût n'est pas calculable). Cette page ne saisit rien ; les anciens boutons « Valider tout », « Exporter » et le sélecteur de date, qui ne faisaient rien, ont été retirés. L'export vers la paie se fait depuis RH (export Silae).
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/compta.md).

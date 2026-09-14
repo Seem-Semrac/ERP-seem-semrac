@@ -62,7 +62,51 @@ export interface Machine {
   capacite_h: number
   statut: 'operationnel' | 'maintenance' | 'arret'
   couleur?: string
+  poste_id?: string | null
+  cnc?: boolean
+  /**
+   * @deprecated 14/09/2026 : la machine ne porte plus de taux horaire (seul le PROCESS machine en porte un :
+   * ProcessAtelier.taux_horaire_machine). Colonne laissée en base, plus écrite ; lue UNIQUEMENT pour la
+   * transition (base sans cloud-7 : taux du process = cout_h de sa machine) et pour la recopie de départ.
+   */
+  cout_h?: number | null
   created_at?: string
+}
+
+/** Type d'un process — règle unique : shared.ts typeProcess (est_oas → oas ; requiert_machine ; sinon machine_id). */
+export type TypeProcessAtelier = 'machine' | 'manuel' | 'oas'
+
+/** Process d'atelier (table process_atelier) — SEUL porteur d'un coût horaire depuis le 14/09/2026. */
+export interface ProcessAtelier {
+  id: string
+  nom: string
+  code?: string | null
+  activite?: string | null          // 'Seem' | 'Semrac' | 'both'
+  categorie?: string | null
+  requiert_machine?: boolean | null  // null → machine si machine_id renseigné
+  est_oas?: boolean | null
+  machine_id?: string | null
+  poste_id?: string | null
+  statut?: string | null
+  ordre?: number | null
+  /**
+   * Taux horaire MACHINE (€/h HT), saisi à la main, pour un process de type machine uniquement.
+   * null = « taux à saisir ». Absent de la ligne (colonne pas encore créée, cloud avant cloud-7) = transition.
+   */
+  taux_horaire_machine?: number | null
+}
+
+/** Poste d'atelier (table postes) : conteneur de machines et de process, sans coût horaire propre. */
+export interface Poste {
+  id: string
+  nom: string
+  code?: string | null
+  activite?: string | null
+  couleur?: string | null
+  ordre?: number | null
+  statut?: string | null
+  /** @deprecated 14/09/2026 : plus lu ni écrit (le coût horaire est porté par le process). Colonne laissée en base. */
+  taux_horaire_manuel?: number | null
 }
 
 export interface Absence {
@@ -196,8 +240,9 @@ export interface BonDeTravail {
   matiere_ok: boolean
   pv_requis: boolean
   temps_alloue?: number
-  temps_reel?: number
+  temps_reel?: number                   // coût réel : t = temps_reel ?? duree (shared.ts coutReelBdt)
   temps_machine_alloue?: number
+  process_id?: string | null            // process du BDT → taux machine s'il est de type machine
   created_at?: string
   updated_at?: string
 }
@@ -657,18 +702,23 @@ export interface MtbfMachine {
 
 // ─── NOMENCLATURE ────────────────────────────────────────────
 
+// Classement des temps (14/09/2026, shared.ts etapeDecomp) — coût = heures homme × taux homme (coût chargé RH)
+// + heures machine × taux machine du PROCESS de l'étape (process de type machine seulement) :
+//   ROP → homme (fixe/lot) · RGM → homme + machine (fixe/lot) · THV → homme (par pièce) · TMV → machine (par pièce)
 export interface EtapeProduction {
   ordre: number
   nom: string
   type: 'interne' | 'sous_traite'
   machine_id?: string
   machine_nom?: string
+  /** @deprecated copie figée du taux machine : plus lue par le calcul (taux lu en direct sur le process). Écriture informative tolérée. */
   machine_taux_h?: number
-  temps_reglage_min: number             // ROP — réglage opérateur (minutes)
-  temps_reglage_machine_min?: number    // RGM — réglage machine (minutes)
-  temps_unitaire_min: number
-  temps_mo_min?: number
-  temps_machine_min?: number
+  temps_reglage_min: number             // ROP — réglage homme (minutes, fixe / lot) → homme
+  temps_reglage_machine_min?: number    // RGM — réglage machine (minutes, fixe / lot) → homme + machine
+  temps_unitaire_min: number            // historique : repli TMV sur une étape machine, THV sinon
+  temps_mo_min?: number                 // THV — temps homme variable (minutes / pièce) → homme
+  temps_machine_min?: number            // TMV — temps machine variable (minutes / pièce) → machine
+  /** @deprecated copie figée du taux homme : plus lue par le calcul (moyenne du coût chargé RH du site). Écriture informative tolérée. */
   taux_mo_h?: number
   fournisseur_st_id?: string
   fournisseur_st_nom?: string
@@ -676,18 +726,18 @@ export interface EtapeProduction {
   // Prépa technique : n° + fichier programme CN (FAO) rattaché à l'étape machine
   programme?: string
   programme_fichier?: string
-  process_id?: string
+  process_id?: string                   // clé du taux machine (process_atelier) ; absent → process machine unique de machine_id
   process_nom?: string
-  ressource?: string
+  ressource?: string                    // format importé : 'machine' | 'homme' (utilisé si le process est inconnu)
   est_oas?: boolean
   oas_avant?: boolean
   oas_apres?: boolean
   // Étapes importées (temps en millièmes d'heure)
-  temps_variable_mille?: number
-  temps_reglage_mille?: number          // historique : réglage unique, imputé à la ressource de l'étape
-  temps_reglage_op_mille?: number       // ROP — réglage opérateur, imputé au taux MO
-  temps_reglage_machine_mille?: number  // RGM — réglage machine, imputé au taux machine
-  est_fixe?: boolean
+  temps_variable_mille?: number         // TMV si ressource machine, THV sinon
+  temps_reglage_mille?: number          // historique (sans split) : RGM si ressource machine, ROP sinon
+  temps_reglage_op_mille?: number       // ROP — réglage homme → homme
+  temps_reglage_machine_mille?: number  // RGM — réglage machine → homme + machine
+  est_fixe?: boolean                    // THV / TMV comptés une fois par lot au lieu de par pièce
 }
 
 export interface Nomenclature {
@@ -715,7 +765,9 @@ export interface Nomenclature {
   temps_machine_h?: number
   temps_reglage_total_min?: number
   temps_unitaire_total_min?: number
+  /** @deprecated copie figée : plus lue par le calcul (taux homme = moyenne du coût chargé RH du site `entite`). */
   taux_mo?: number
+  /** @deprecated copie figée : plus lue par le calcul (taux machine lu en direct sur le process de chaque étape). */
   cout_machine_h?: number
   prix_mo_unitaire?: number
   cout_machine_unitaire?: number

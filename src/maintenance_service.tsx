@@ -3,7 +3,7 @@
 // Interventions · Plan préventif · MTBF · Pièces · Dashboard
 // SPEC-ERP-GPAO-V1.8 / EN 9100:2018 / ISO 14001
 // ══════════════════════════════════════════════════════════════
-import { escX, layout, serviceHeader, demandeAchatModal, computePosteRates } from './shared'
+import { escX, layout, serviceHeader, demandeAchatModal } from './shared'
 import type { OrdreMaintenance, PlanPreventif, MtbfMachine } from './types'
 
 const sjX = (v: any) => JSON.stringify(v).replace(/</g, '\\u003c')
@@ -470,25 +470,22 @@ function panelPieces(machines: any[] = [], pieces: any[] = []) {
   </div>`
 }
 
-function panelPosteCosts(postes: any[] = [], cost: Record<string, any> = {}, rates: Record<string, any> = {}) {
+// Coûts par poste : OPEX saisi (machines_opex) + maintenance (OM) = TCO, en EUROS.
+// 14/09/2026 : plus de colonne « Taux/h effectif » — seul le PROCESS porte un taux horaire (Production).
+function panelPosteCosts(postes: any[] = [], cost: Record<string, any> = {}) {
   const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const fmt = (v: number) => Math.round(Number(v) || 0).toLocaleString('fr-FR') + ' €'
   const list = (postes || []).filter((p: any) => p.statut !== 'inactif')
   let tOpex = 0, tMaint = 0
   const rows = list.map((p: any) => {
-    const c = cost[String(p.id)] || { opexAn: 0, maintAn: 0, machines: [] }
+    const c = cost[String(p.id)] || { opexAn: 0, maintAn: 0, machines: [], opexNR: 0 }
     const tco = (c.opexAn || 0) + (c.maintAn || 0); tOpex += c.opexAn || 0; tMaint += c.maintAn || 0
-    const pr = rates[String(p.id)] || null
-    const tauxEff = pr ? Number(pr.tauxEffectif) || 0 : 0
-    const tauxManuel = pr && pr.manuel != null
-    const tauxIncr = pr ? Number(pr.increment) || 0 : 0
     return `<tr style="border-bottom:1px solid #f9fafb;">
       <td style="padding:10px 14px;font-weight:700;color:#1e293b;"><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${p.couleur || '#8b5cf6'};margin-right:7px;"></span>${esc(p.nom)}</td>
       <td style="padding:10px 14px;text-align:center;font-weight:700;color:${c.machines.length ? '#0ea5e9' : '#cbd5e1'};">${c.machines.length || '—'}</td>
-      <td style="padding:10px 14px;text-align:right;color:#6b7280;">${fmt(c.opexAn)}</td>
+      <td style="padding:10px 14px;text-align:right;color:#6b7280;">${fmt(c.opexAn)}${c.opexNR ? '<div style="font-size:.58rem;color:#b45309;font-weight:700;">' + c.opexNR + ' machine(s) sans OPEX saisi</div>' : ''}</td>
       <td style="padding:10px 14px;text-align:right;color:#c2410c;font-weight:700;">${fmt(c.maintAn)}</td>
       <td style="padding:10px 14px;text-align:right;font-weight:800;color:#7c3aed;">${fmt(tco)}</td>
-      <td style="padding:10px 14px;text-align:right;font-weight:800;color:${tauxManuel ? '#b45309' : (tauxIncr > 0 ? '#0d9488' : '#475569')};">${c.machines.length ? tauxEff.toFixed(2) + ' €/h' + (tauxManuel ? '<div style="font-size:.58rem;color:#b45309;font-weight:700;">manuel</div>' : (tauxIncr > 0 ? '<div style="font-size:.58rem;color:#0d9488;font-weight:700;">dont +' + tauxIncr.toFixed(2) + ' achats</div>' : '')) : '—'}</td>
     </tr>`
   }).join('')
   return `<div id="mnt-panel-postes" style="display:none;">
@@ -502,7 +499,6 @@ function panelPosteCosts(postes: any[] = [], cost: Record<string, any> = {}, rat
           <th style="text-align:right;padding:10px 14px;font-size:.66rem;text-transform:uppercase;color:#6b7280;font-weight:800;">OPEX annuel</th>
           <th style="text-align:right;padding:10px 14px;font-size:.66rem;text-transform:uppercase;color:#6b7280;font-weight:800;">Maintenance ${new Date().getFullYear()}</th>
           <th style="text-align:right;padding:10px 14px;font-size:.66rem;text-transform:uppercase;color:#6b7280;font-weight:800;">TCO annuel</th>
-          <th style="text-align:right;padding:10px 14px;font-size:.66rem;text-transform:uppercase;color:#0d9488;font-weight:800;" title="Taux qui alimente le CRU : base + achats machine reçus / heures budgétées (ou override manuel). Réglé en Production.">Taux/h effectif</th>
         </tr></thead>
         <tbody>${rows}</tbody>
         <tfoot><tr style="background:#faf5ff;border-top:2px solid #ede9fe;">
@@ -510,10 +506,9 @@ function panelPosteCosts(postes: any[] = [], cost: Record<string, any> = {}, rat
           <td style="padding:10px 14px;text-align:right;font-weight:800;color:#6b7280;">${fmt(tOpex)}</td>
           <td style="padding:10px 14px;text-align:right;font-weight:800;color:#c2410c;">${fmt(tMaint)}</td>
           <td style="padding:10px 14px;text-align:right;font-weight:900;color:#7c3aed;">${fmt(tOpex + tMaint)}</td>
-          <td></td>
         </tr></tfoot>
       </table></div>`}
-      <div style="padding:10px 18px;border-top:1px solid #f1f5f9;font-size:.72rem;color:#64748b;"><i class="fas fa-link" style="color:#8b5cf6;margin-right:5px;"></i>Même agrégation qu'en Production : OPEX annuel (réel/théorique) des machines du poste + coût des OM de leurs machines. TCO = OPEX + maintenance.</div>
+      <div style="padding:10px 18px;border-top:1px solid #f1f5f9;font-size:.72rem;color:#64748b;"><i class="fas fa-link" style="color:#8b5cf6;margin-right:5px;"></i>OPEX annuel saisi (machines_opex, dernière année renseignée) des machines du poste + coût des OM de l’année sur ces machines. TCO = OPEX + maintenance, en euros. Aucun taux horaire n’est tiré de ces montants : le coût horaire est porté par les process (Production › Process Ateliers).</div>
     </div>
   </div>`
 }
@@ -521,7 +516,7 @@ function panelFiche(machines: any[] = []) {
   const opts = (machines || []).map((m: any) => `<option value="${escX(m.id)}">${escX(m.nom)}${m.code ? ` (${escX(m.code)})` : ''}</option>`).join('')
   return `<div id="mnt-panel-fiche" style="display:none;">
     <div style="font-weight:800;color:#111827;font-size:1rem;margin-bottom:6px;"><i class="fas fa-id-card" style="color:#eab308;margin-right:7px;"></i>Fiche machine 360</div>
-    <div style="font-size:.76rem;color:#64748b;margin-bottom:16px;">Coût total de possession (OPEX + usage production + maintenance + pièces), fiabilité et historique complet de tout ce qui est passé sur la machine.</div>
+    <div style="font-size:.76rem;color:#64748b;margin-bottom:16px;">Coût total de possession en euros (OPEX + maintenance), pièces de rechange, heures machine, fiabilité et historique complet de tout ce qui est passé sur la machine.</div>
     <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
       <label style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;">Machine :</label>
       <select id="fiche_machine" onchange="mntFicheRender(this.value)" style="border:1.5px solid #e2e8f0;border-radius:9px;padding:8px 12px;font-size:.84rem;background:#f8fafc;min-width:300px;"><option value="">— Choisir une machine —</option>${opts}</select>
@@ -552,7 +547,7 @@ export const pageServiceMaintenance = (
   const SALS: any[]     = dbSals ?? []
   const MACHINE_HOURS: Record<string, { d: string; h: number }[]> = dbMachineHours ?? {}
 
-  // ─── FICHE MACHINE 360 : agrégation coûts (OPEX + usage prod + maintenance + PDR),
+  // ─── FICHE MACHINE 360 : agrégation coûts en euros (OPEX + maintenance + PDR), heures machine,
   //     fiabilité et traçabilité de tout ce qui est passé sur la machine. ──────────
   const OPEX: any[]      = dbOpex ?? []
   const CONTROLES: any[] = dbControles ?? []
@@ -564,16 +559,18 @@ export const pageServiceMaintenance = (
   for (const o of OPEX) { const k = String(o.machine_id); if (!(k in opexByMachine)) opexByMachine[k] = o }
   // ─── Coût PAR POSTE (régularisé avec la Production) : par poste, OPEX annuel + maintenance de ses machines ───
   const POSTES: any[] = dbPostes ?? []
-  // Phase E : taux horaire effectif par poste (même moteur que le CRU) — affiché en « Coûts postes » pour réconcilier.
-  const POSTE_RATES = computePosteRates(MACHINES, OPEX, POSTES, FYEAR)
-  const posteCost: Record<string, { opexAn: number; maintAn: number; maintTot: number; machines: string[] }> = {}
+  // 14/09/2026 : plus de taux horaire par poste (computePosteRates retiré) ni d'OPEX « théorique »
+  // cout_h × capacité × 220 : seul l'OPEX SAISI (machines_opex.cout_total_ht) est additionné, et les
+  // machines sans OPEX saisi sont comptées à part (opexNR) plutôt que remplacées par une valeur inventée.
+  const posteCost: Record<string, { opexAn: number; maintAn: number; maintTot: number; machines: string[]; opexNR: number }> = {}
   for (const m of MACHINES) {
     const pid = (m as any).poste_id ? String((m as any).poste_id) : ''
     if (!pid) continue
-    const e = (posteCost[pid] = posteCost[pid] || { opexAn: 0, maintAn: 0, maintTot: 0, machines: [] })
+    const e = (posteCost[pid] = posteCost[pid] || { opexAn: 0, maintAn: 0, maintTot: 0, machines: [], opexNR: 0 })
     e.machines.push(String(m.id))
     const ox = opexByMachine[String(m.id)]
-    e.opexAn += (ox && ox.cout_total_ht != null) ? Number(ox.cout_total_ht) : (Number((m as any).cout_h) || 0) * (Number((m as any).capacite_h) || 0) * 220
+    if (ox && ox.cout_total_ht != null) e.opexAn += Number(ox.cout_total_ht) || 0
+    else e.opexNR++
   }
   for (const o of OMS) {
     const m = MACHINES.find((x: any) => String(x.id) === String((o as any).machine_id || ''))
@@ -590,10 +587,11 @@ export const pageServiceMaintenance = (
     const heuresTot = hrs.reduce((s, x) => s + (Number(x.h) || 0), 0)
     const heuresAn  = hrs.reduce((s, x) => s + ((x.d && String(x.d).slice(0, 4) === FYEAR_S) ? (Number(x.h) || 0) : 0), 0)
     const opex = opexByMachine[id] || null
-    const taux = opex && opex.taux_horaire != null ? Number(opex.taux_horaire) : 0
-    const opexAnnuel = opex && opex.cout_total_ht != null ? Number(opex.cout_total_ht) : 0
-    const coutAbsorbeTot = +(heuresTot * taux).toFixed(2)
-    const coutAbsorbeAn  = +(heuresAn * taux).toFixed(2)
+    // OPEX saisi (euros), null si non renseigné. Plus de taux machines_opex.taux_horaire ni de « coût absorbé »
+    // (heures × taux) : le taux horaire est porté par les PROCESS, et les heures machine reçues de la route
+    // ({d, h} par machine) ne disent pas de quel process elles viennent.
+    const opexAnnuel: number | null = opex && opex.cout_total_ht != null ? Number(opex.cout_total_ht) : null
+    const opexAnnee: number | null = opex && opex.annee != null ? Number(opex.annee) : null
 
     const omsM = OMS.filter((o: any) => String(o.machine_id) === id)
     const maintTot = omsM.reduce((s: number, o: any) => s + (Number(o.cout_reel) || 0), 0)
@@ -640,12 +638,11 @@ export const pageServiceMaintenance = (
 
     FICHE[id] = {
       id, nom: m.nom, code: m.code || '', activite: m.activite || '', statut: m.statut || 'operationnel', annee: FYEAR,
-      taux, opexAnnuel, heuresTot: Math.round(heuresTot), heuresAn: Math.round(heuresAn),
-      coutAbsorbeTot, coutAbsorbeAn,
+      opexAnnuel, opexAnnee, heuresTot: Math.round(heuresTot), heuresAn: Math.round(heuresAn),
       maintTot: +maintTot.toFixed(2), maintAn: +maintAn.toFixed(2), nbOM: omsM.length, omOuverts,
       pdrCount: pcs.length, pdrValeur: +pdrValeur.toFixed(2), pdrSousMini,
       ctrlN: ctrl.length, ctrlPct,
-      tcoAn: +(opexAnnuel + maintAn).toFixed(2),
+      tcoAn: +((opexAnnuel || 0) + maintAn).toFixed(2),
       mttr: mttr != null ? +mttr.toFixed(1) : null, mtbf: mtbf != null ? +mtbf.toFixed(1) : null,
       nbPannes: omsM.length, dispo, qualPct, trs,
       hist, omsList,
@@ -698,7 +695,7 @@ export const pageServiceMaintenance = (
       ${panelPreventif(MACHINES)}
       ${panelMTBF(OMS, MACHINES)}
       ${panelFiche(MACHINES)}
-      ${panelPosteCosts(POSTES, posteCost, POSTE_RATES.byPoste)}
+      ${panelPosteCosts(POSTES, posteCost)}
       ${panelPieces(MACHINES, PIECES)}
     </div>
   </div>
@@ -930,9 +927,8 @@ export const pageServiceMaintenance = (
       +'<div style="background:rgba(255,255,255,.18);border-radius:999px;padding:6px 14px;font-weight:700;font-size:.8rem;"><span style="display:inline-block;width:8px;height:8px;border-radius:999px;background:'+(f.statut==='operationnel'?'#86efac':'#fecaca')+';margin-right:6px;"></span>'+stLbl+'</div></div>';
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">'
       +kpi('TCO '+f.annee, mntEur(f.tcoAn), '#7c3aed', 'OPEX + maintenance')
-      +kpi('OPEX annuel', mntEur(f.opexAnnuel), '#0d9488', f.taux?(f.taux.toFixed(1)+' €/h'):'taux n/a')
+      +kpi('OPEX annuel', f.opexAnnuel!=null?mntEur(f.opexAnnuel):'—', '#0d9488', f.opexAnnuel!=null?('saisi'+(f.opexAnnee?(' · '+f.opexAnnee):'')):'non renseigné')
       +kpi('Maintenance '+f.annee, mntEur(f.maintAn), '#ef4444', f.nbOM+' OM ('+f.omOuverts+' ouverts)')
-      +kpi('Coût absorbé prod.', mntEur(f.coutAbsorbeAn), '#2563eb', f.heuresAn+' h BDT × taux')
       +kpi('Valeur PDR stock', mntEur(f.pdrValeur), '#d97706', f.pdrCount+' pièces'+(f.pdrSousMini?(' · '+f.pdrSousMini+' sous mini'):''))
       +'</div>';
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin:14px 0;">'
@@ -941,7 +937,7 @@ export const pageServiceMaintenance = (
       +kpi('MTTR', f.mttr!=null?f.mttr.toFixed(1)+' h':'—', '#0d9488', 'réparation moy.')
       +kpi('MTBF', f.mtbf!=null?(f.mtbf>=48?(f.mtbf/24).toFixed(1)+' j':f.mtbf.toFixed(1)+' h'):'—', '#6366f1', 'entre pannes')
       +kpi('Pannes', String(f.nbPannes), '#ef4444', 'total OM')
-      +kpi('Heures machine', f.heuresTot+' h', '#0ea5e9', 'temps machine (analyse DT)')
+      +kpi('Heures machine', f.heuresTot+' h', '#0ea5e9', f.heuresAn+' h en '+f.annee+' (temps machine)')
       +kpi('SPC cotes', f.ctrlN?(f.ctrlPct+'%'):'—', f.ctrlPct==null?'#94a3b8':(f.ctrlPct>=99?'#16a34a':'#d97706'), f.ctrlN+' relevés conf.')
       +'</div>';
     var hr=(f.hist||[]).map(function(x){
@@ -969,7 +965,7 @@ export const pageServiceMaintenance = (
       +'<div style="padding:11px 16px;font-weight:800;color:#111827;font-size:.84rem;border-bottom:1px solid #f1f5f9;"><i class="fas fa-screwdriver-wrench" style="color:#ef4444;margin-right:6px;"></i>Maintenance <span style="color:#9ca3af;font-weight:600;font-size:.72rem;">('+mntEur(f.maintTot)+' cumul)</span></div>'
       +'<div style="overflow-x:auto;max-height:360px;overflow-y:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f8fafc;position:sticky;top:0;"><th style="text-align:left;padding:7px 10px;font-size:.6rem;text-transform:uppercase;color:#6b7280;">OM</th><th style="text-align:left;padding:7px 10px;font-size:.6rem;text-transform:uppercase;color:#6b7280;">Intervention</th><th style="text-align:left;padding:7px 10px;font-size:.6rem;text-transform:uppercase;color:#6b7280;">Date</th><th style="text-align:right;padding:7px 10px;font-size:.6rem;text-transform:uppercase;color:#6b7280;">Coût</th></tr></thead><tbody>'+(maintR||'<tr><td colspan="4" style="text-align:center;padding:20px;color:#cbd5e1;font-size:.78rem;">Aucune intervention.</td></tr>')+'</tbody></table></div></div>';
     h+='</div>';
-    h+='<div style="font-size:.66rem;color:#9ca3af;margin-top:12px;line-height:1.5;"><i class="fas fa-circle-info" style="margin-right:4px;"></i>Heures machine = temps machine uniquement, dérivé de la gamme (analyse DT). TCO = OPEX annuel (machines_opex) + maintenance annuelle (ordres_maintenance) ; coût absorbé = heures machine × taux horaire (indicateur de charge, hors TCO). * TRS partiel = Disponibilité × Qualité ; Performance (cadence théorique) non encore mesurée.</div>';
+    h+='<div style="font-size:.66rem;color:#9ca3af;margin-top:12px;line-height:1.5;"><i class="fas fa-circle-info" style="margin-right:4px;"></i>Heures machine = temps machine uniquement : temps machine alloué du BDT, sinon dérivé de la gamme (réglage machine RGM + temps machine variable TMV des étapes de process machine). TCO = OPEX annuel saisi (machines_opex) + maintenance annuelle (ordres_maintenance), en euros ; aucun taux horaire n’en est tiré (le coût horaire est porté par les process). * TRS partiel = Disponibilité × Qualité ; Performance (cadence théorique) non encore mesurée.</div>';
     z.innerHTML=h;
   }
   (function(){ var fs={}; MNT_PIECES.forEach(function(p){ if(p.fournisseur) fs[p.fournisseur]=1; }); var dl=document.createElement('datalist'); dl.id='pdr-fourn-list'; Object.keys(fs).forEach(function(f){ var o=document.createElement('option'); o.value=f; dl.appendChild(o); }); document.body.appendChild(dl); try{ mntRenderMTBF(); }catch(e){} })();

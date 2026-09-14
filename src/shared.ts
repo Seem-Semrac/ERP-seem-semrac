@@ -96,89 +96,366 @@ export function coutEtapeST(etape: { forfait_st_ht?: number; prix_unitaire_st_ht
   return Math.max(forfait, q * unit)
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// COÛT HORAIRE PORTÉ PAR LE PROCESS (14/09/2026) — source UNIQUE de vérité des taux de l'atelier
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// Demande : « seuls les process ont un coût horaire […] le process machine porte le taux horaire
+// machine uniquement, et le taux horaire homme c'est son coût chargé dans RH ».
+//   · Taux MACHINE  = process_atelier.taux_horaire_machine, saisi À LA MAIN, lu EN DIRECT (null = à saisir).
+//                     Plus aucun taux sur la machine (cout_h), le poste (taux_horaire_manuel) ni l'OPEX.
+//   · Taux HOMME    = salaries.taux_horaire_charge. Coût ESTIMÉ : MOYENNE des opérateurs actifs du
+//                     site (repli : tous les opérateurs ; aucun → 0 + drapeau hommeManquant). Coût
+//                     RÉEL d'un BDT : le taux de l'opérateur pointé (voir coutReelBdt).
+//   · Classement des temps d'une étape :
+//       ROP (réglage homme)          → homme            · fixe / lot
+//       RGM (réglage machine)        → homme + machine  · fixe / lot
+//       THV (temps homme variable)   → homme            · par pièce (fixe / lot si est_fixe)
+//       TMV (temps machine variable) → machine          · par pièce (fixe / lot si est_fixe)
+//     Le taux machine ne s'applique que si le process est de type « machine » : sur un process
+//     manuel, RGM compte en homme seulement et TMV ne compte pas.
+//   · OAS et sous-traitance : inchangés (un prix, jamais un temps).
+// Aucun taux inventé (fini 30/35/45/50) : ce qui manque vaut 0 ET est signalé (`manquants`).
+
+export type TypeProcess = 'machine' | 'manuel' | 'oas'
+export type SourceTauxMachine = 'process' | 'transition_machine' | 'manquant' | 'sans_process' | 'manuel' | 'oas'
+/** Codes des données manquantes signalées par le moteur de coût. */
+export type ManquantCout = 'taux_homme' | 'taux_machine' | 'sans_process'
+
+/** Type d'un process — la SEULE règle du dépôt (serveur ; le client reçoit `type` tout calculé). */
+export function typeProcess(p: any): TypeProcess {
+  if (!p) return 'manuel'
+  if (p.est_oas === true) return 'oas'
+  if (p.requiert_machine === true) return 'machine'
+  if (p.requiert_machine === false) return 'manuel'
+  return (p.machine_id != null && p.machine_id !== '') ? 'machine' : 'manuel'
+}
+
+export interface TauxAtelier {
+  /** Moyenne du coût chargé RH des opérateurs actifs : site → tous → 0. */
+  tauxHomme(site?: string | null): number
+  /** Aucun coût chargé RH exploitable (aucun opérateur actif avec taux_horaire_charge > 0). */
+  hommeManquant: boolean
+  /** Moyennes arrondies au centime, null si aucune (jamais de repli inventé). */
+  hommeParSite: { moyen: number | null; seem: number | null; semrac: number | null }
+  processDe(pid: any): any | null
+  /** Process machine UNIQUE rattaché à cette machine, sinon null. */
+  processMachineDeMachine(machineId: any): any | null
+  tauxMachine(pid: any, machineIdRepli?: any): { taux: number; source: SourceTauxMachine; pid: string | null }
+}
+
+const _vide = (v: any) => v == null || v === ''
+const _vrai = (v: any) => v === true || v === 'true' || v === 't'
+const _cleSite = (s: any) => String(s ?? '').trim().toLowerCase()
+const _r2 = (n: number) => Math.round(n * 100) / 100
+const _nb = (v: any) => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
+/** Taux saisi : '' / null / invalide / négatif → null (à saisir). */
+const _tauxSaisi = (v: any): number | null => {
+  if (_vide(v)) return null
+  const n = Number(v)
+  return Number.isFinite(n) && n >= 0 ? n : null
+}
+
+/**
+ * Construit le résolveur des taux de l'atelier.
+ * @param process  lignes BRUTES de process_atelier (select '*') — ne pas projeter : l'ABSENCE de la
+ *                 propriété `taux_horaire_machine` est le signal de transition (cloud avant cloud-7).
+ * @param salaries lignes avec taux_horaire_charge, entite, actif, est_operateur (le filtre
+ *                 « actif ET opérateur » est fait ICI).
+ * @param machines lignes avec id, cout_h — lues UNIQUEMENT pour la transition.
+ */
+export function construireTauxAtelier(process: any[] = [], salaries: any[] = [], machines: any[] = []): TauxAtelier {
+  const procById = new Map<string, any>()
+  const procMachParMachine = new Map<string, any[]>()
+  for (const p of (process || [])) {
+    if (!p || _vide(p.id)) continue
+    procById.set(String(p.id), p)
+    if (typeProcess(p) === 'machine' && !_vide(p.machine_id)) {
+      const k = String(p.machine_id)
+      const l = procMachParMachine.get(k) || []
+      l.push(p); procMachParMachine.set(k, l)
+    }
+  }
+  const coutHMachine = new Map<string, number | null>()
+  for (const m of (machines || [])) if (m && !_vide(m.id)) coutHMachine.set(String(m.id), _tauxSaisi(m.cout_h))
+
+  const tous: number[] = []
+  const parSite: Record<string, number[]> = {}
+  for (const s of (salaries || [])) {
+    if (!s || !_vrai(s.actif) || !_vrai(s.est_operateur)) continue
+    const t = Number(s.taux_horaire_charge)
+    if (!(Number.isFinite(t) && t > 0)) continue
+    tous.push(t)
+    const k = _cleSite(s.entite)
+    if (k) (parSite[k] = parSite[k] || []).push(t)
+  }
+  const moy = (a?: number[]): number | null => (a && a.length) ? _r2(a.reduce((x, y) => x + y, 0) / a.length) : null
+  const moyen = moy(tous)
+  const moyParSite: Record<string, number | null> = {}
+  for (const k of Object.keys(parSite)) moyParSite[k] = moy(parSite[k])
+
+  const processDe = (pid: any): any | null => _vide(pid) ? null : (procById.get(String(pid)) ?? null)
+  const processMachineDeMachine = (machineId: any): any | null => {
+    if (_vide(machineId)) return null
+    const l = procMachParMachine.get(String(machineId)) || []
+    if (l.length === 1) return l[0]
+    if (l.length > 1) {   // plusieurs process machine : un seul ACTIF lève l'ambiguïté, sinon aucun
+      const actifs = l.filter((p: any) => _cleSite(p.statut) !== 'inactif')
+      if (actifs.length === 1) return actifs[0]
+    }
+    return null
+  }
+  const tauxMachine = (pid: any, machineIdRepli?: any): { taux: number; source: SourceTauxMachine; pid: string | null } => {
+    let p = processDe(pid)
+    if (!p && !_vide(machineIdRepli)) p = processMachineDeMachine(machineIdRepli)
+    if (!p) return { taux: 0, source: 'sans_process', pid: null }
+    const id = String(p.id)
+    const t = typeProcess(p)
+    if (t === 'oas') return { taux: 0, source: 'oas', pid: id }
+    if (t === 'manuel') return { taux: 0, source: 'manuel', pid: id }
+    // Transition : colonne pas encore créée (cloud avant cloud-7) → coût horaire de SA machine.
+    if (!Object.prototype.hasOwnProperty.call(p, 'taux_horaire_machine')) {
+      const ch = _vide(p.machine_id) ? null : (coutHMachine.get(String(p.machine_id)) ?? null)
+      return ch != null ? { taux: ch, source: 'transition_machine', pid: id } : { taux: 0, source: 'manquant', pid: id }
+    }
+    const v = _tauxSaisi(p.taux_horaire_machine)
+    return v != null ? { taux: v, source: 'process', pid: id } : { taux: 0, source: 'manquant', pid: id }
+  }
+  return {
+    tauxHomme: (site?: string | null): number => {
+      const k = _cleSite(site)
+      if (k && moyParSite[k] != null) return moyParSite[k] as number
+      return moyen ?? 0
+    },
+    hommeManquant: moyen == null,
+    hommeParSite: { moyen, seem: moyParSite['seem'] ?? null, semrac: moyParSite['semrac'] ?? null },
+    processDe,
+    processMachineDeMachine,
+    tauxMachine,
+  }
+}
+
+/** Décomposition d'une étape (voir etapeDecomp). */
+export interface EtapeDecomp {
+  st: boolean
+  oas?: boolean
+  forfait: number
+  unit: number
+  /** € variable / pièce (homme, machine) */
+  moPc: number
+  machPc: number
+  /** € fixe / lot (homme, machine) */
+  moFixe: number
+  machFixe: number
+  /** minutes : réglage (ROP + RGM), homme variable (THV), machine variable (TMV, 0 si process non machine) */
+  reglageMin: number
+  moMin: number
+  machineMin: number
+  hommeH_fixe: number
+  hommeH_pc: number
+  machineH_fixe: number
+  machineH_pc: number
+  tauxHomme: number
+  tauxMachine: number
+  /** null pour une sous-traitance */
+  typeProcess: TypeProcess | null
+  /** null pour une sous-traitance, ou sans résolveur `tx` */
+  sourceTauxMachine: SourceTauxMachine | null
+  manquants: ManquantCout[]
+}
+
 // ─── Décomposition d'UNE étape de gamme (SOURCE UNIQUE de vérité) ───────────────────────────────
-// Renvoie, pour une étape, ses coûts (€) et temps (min) ventilés — utilisé À LA FOIS par
-// `computeNomCostForQty` (agrégat CRU) ET par l'analyse DT (affichage « coût/pièce » + panneau
-// « temps & coûts par poste »). Un seul point de calcul ⇒ le total par poste RÉCONCILIE toujours
-// avec le CRU (moSerie+machineSerie+stOrder), sans dérive possible entre les deux chemins.
-//   coûts : moPc/machPc = € variable/pièce (× q) ; moFixe/machFixe = € fixe/lot (réglage + op. fixe, compté 1×)
-//   ST    : forfait/unit → coût = max(forfait ; q×unit) (JAMAIS moPc/machPc)
-//   temps : reglageMin/moMin/machineMin (convention de computeNomCostForQty, pour reglageMinTotal…)
-// ⚠ machine_taux_h = 0 signifie « pas de taux machine sur l'étape » ⇒ coût machine 0 (+ incrément OPEX
-//   du poste via machineRate), et NON un repli sur le défaut nomenclature (piège de l'ancien `|| défaut`).
-export function etapeDecomp(
-  e: any,
-  tauxMoDef: number,
-  tauxMachDef: number,
-  machineRate?: (machineId: string, baseRate: number) => number,
-) {
-  const mr = (mid: any, base: number): number => (machineRate && mid != null && mid !== '') ? machineRate(String(mid), base) : base
-  const z = { st: false, forfait: 0, unit: 0, moPc: 0, machPc: 0, moFixe: 0, machFixe: 0, reglageMin: 0, moMin: 0, machineMin: 0 }
+// Utilisée À LA FOIS par `computeNomCostForQty` (agrégat CRU), par l'analyse DT (coût/pièce, temps &
+// coûts par poste) et par les heures machine de la Maintenance. Un seul point de calcul ⇒ le total
+// par poste réconcilie toujours avec le CRU (moSerie + machineSerie + stOrder).
+//   coûts : moPc/machPc = € variable/pièce (× q) ; moFixe/machFixe = € fixe/lot (compté 1×)
+//   ST/OAS: forfait/unit → coût = max(forfait ; q×unit) (JAMAIS moPc/machPc)
+//   heures: hommeH_* / machineH_* (fixe = par lot, pc = par pièce)
+// Process de l'étape : `process_id`, sinon (anciennes données) le process machine UNIQUE de `machine_id`.
+// Type de l'étape : type du process ; process inconnu → format millièmes : `ressource === 'machine'`,
+// format minutes : présence de `machine_id`.
+// Les copies figées (`machine_taux_h`, `taux_mo_h`, `nom.taux_mo`, `nom.cout_machine_h`) ne sont plus
+// lues — SAUF sans résolveur `tx` (ne devrait plus arriver), pour ne rien casser.
+export function etapeDecomp(e: any, tx?: TauxAtelier | null, site?: string | null): EtapeDecomp {
+  const z: EtapeDecomp = {
+    st: false, forfait: 0, unit: 0, moPc: 0, machPc: 0, moFixe: 0, machFixe: 0, reglageMin: 0, moMin: 0, machineMin: 0,
+    hommeH_fixe: 0, hommeH_pc: 0, machineH_fixe: 0, machineH_pc: 0, tauxHomme: 0, tauxMachine: 0,
+    typeProcess: null, sourceTauxMachine: null, manquants: [],
+  }
   if (!e) return z
   if (e.type === 'sous_traite') {
     return { ...z, st: true, forfait: Math.max(0, Number(e.forfait_st_ht ?? 0) || 0), unit: Number(e.prix_unitaire_st_ht ?? e.cout_st_unitaire ?? 0) || 0 }
   }
   // OAS (traitement de surface) — CAS PARTICULIER ASSUMÉ : on saisit un PRIX, jamais un temps.
-  // C'est cohérent avec le reste de la chaîne : une étape OAS ne produit AUCUN bon de travail
-  // (la cascade d'acceptation la saute), elle est facturée au bain et non à l'heure. Le coût
-  // emprunte le même chemin que la sous-traitance — max(forfait ; qté × prix unitaire) — donc
-  // il entre dans le CRU sans qu'aucun consommateur ait à être modifié. Le drapeau `oas` permet
-  // aux affichages de la nommer correctement : chez Seem le traitement est fait EN INTERNE.
+  // Une étape OAS ne produit AUCUN bon de travail (la cascade d'acceptation la saute), elle est
+  // facturée au bain et non à l'heure. Le coût emprunte le chemin de la sous-traitance —
+  // max(forfait ; qté × prix unitaire). Le drapeau `oas` permet aux affichages de la nommer
+  // correctement : chez Seem le traitement est fait EN INTERNE.
   if (e.est_oas === true || e.type === 'oas') {
-    return { ...z, st: true, oas: true,
+    return { ...z, st: true, oas: true, typeProcess: 'oas', sourceTauxMachine: 'oas',
       forfait: Math.max(0, Number(e.forfait_oas_ht ?? 0) || 0),
       unit: Number(e.prix_oas_unitaire ?? e.prix_unitaire_oas_ht ?? 0) || 0 }
   }
-  if (e.temps_variable_mille != null || e.temps_reglage_mille != null || e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null) {
-    // Étape importée : temps en MILLIÈMES d'heure → heures = millième / 1000
-    const isMach = e.ressource === 'machine'
-    const taux = isMach ? mr(e.machine_id, tauxMachDef) : tauxMoDef
-    const varH = (Number(e.temps_variable_mille) || 0) / 1000
-    const r = { ...z }
-    // Réglage : deux temps distincts quand ils sont renseignés — ROP occupe l'opérateur,
-    // RGM immobilise la machine, et un réglage occupe souvent LES DEUX simultanément.
-    // Sans eux, on retombe sur le champ historique, imputé à la ressource de l'étape :
-    // les nomenclatures déjà chiffrées gardent donc exactement le même coût.
-    const aSplit = e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null
-    let regH = 0
-    if (aSplit) {
-      const ropH = (Number(e.temps_reglage_op_mille) || 0) / 1000
-      const rgmH = (Number(e.temps_reglage_machine_mille) || 0) / 1000
-      r.moFixe += ropH * tauxMoDef
-      r.machFixe += rgmH * mr(e.machine_id, tauxMachDef)
-      regH = ropH + rgmH
-    } else {
-      regH = (Number(e.temps_reglage_mille) || 0) / 1000
-      if (isMach) r.machFixe += regH * taux; else r.moFixe += regH * taux           // réglage = fixe / lot
-    }
-    if (e.est_fixe) { if (isMach) r.machFixe += varH * taux; else r.moFixe += varH * taux }  // opération fixe / lot
-    else { if (isMach) r.machPc += varH * taux; else r.moPc += varH * taux }                 // opération variable / pièce
-    r.reglageMin = regH * 60
-    if (isMach) r.machineMin = varH * 60; else r.moMin = varH * 60
-    return r
+  const pid = _vide(e.process_id) ? null : e.process_id
+  const mid = _vide(e.machine_id) ? null : e.machine_id
+  const millieme = e.temps_variable_mille != null || e.temps_reglage_mille != null || e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null
+  let proc: any = null
+  if (tx) { proc = tx.processDe(pid); if (!proc && mid) proc = tx.processMachineDeMachine(mid) }
+  // Process OAS (drapeau porté par le PROCESS, pas par l'étape — cas des gammes importées, qui ne posent jamais
+  // est_oas) : même chemin que ci-dessus. La production ne génère aucun BDT pour lui (generer-bdt, cascade) :
+  // valoriser ses temps au coût chargé RH compterait des heures qui n'existeront jamais.
+  if (proc && typeProcess(proc) === 'oas') {
+    return { ...z, st: true, oas: true, typeProcess: 'oas', sourceTauxMachine: 'oas',
+      forfait: Math.max(0, Number(e.forfait_oas_ht ?? 0) || 0),
+      unit: Number(e.prix_oas_unitaire ?? e.prix_unitaire_oas_ht ?? 0) || 0 }
   }
-  // Étape manuelle (minutes) — logique historique
-  const tMo = Number(e.temps_mo_min ?? e.temps_unitaire_min ?? 0) || 0
-  const tReg = Number(e.temps_reglage_min ?? 0) || 0            // ROP — réglage opérateur
-  const tRegMach = Number(e.temps_reglage_machine_min ?? 0) || 0 // RGM — réglage machine
-  const tMach = Number(e.temps_machine_min ?? ((e.machine_id || e.machine_taux_h) ? (e.temps_unitaire_min ?? 0) : 0)) || 0
-  const tauxMo = Number(e.taux_mo_h ?? 0) || 0
-  const tauxMach = mr(e.machine_id, Number(e.machine_taux_h ?? 0) || 0)   // machine : base étape + incrément OPEX poste (0 si non renseigné)
-  return { ...z, moPc: tMo / 60 * tauxMo, machPc: tMach / 60 * tauxMach, moFixe: tReg / 60 * tauxMo, machFixe: tRegMach / 60 * tauxMach, reglageMin: tReg + tRegMach, moMin: tMo, machineMin: tMach }
+  const tp: TypeProcess = proc ? typeProcess(proc)
+    : millieme ? (e.ressource === 'machine' ? 'machine' : 'manuel')
+    : (mid || (!tx && _nb(e.machine_taux_h) > 0)) ? 'machine' : 'manuel'
+  const estMach = tp === 'machine'
+
+  // ── Temps en HEURES, classés ROP / RGM / THV / TMV ──
+  let ropH = 0, rgmH = 0, thvH = 0, tmvH = 0
+  if (millieme) {
+    // Format importé : millièmes d'heure (÷ 1000). Réglage séparé quand il est renseigné, sinon le
+    // champ historique = RGM sur une ressource machine, ROP sinon. Variable = TMV (machine) / THV (homme).
+    const varH = _nb(e.temps_variable_mille) / 1000
+    if (e.temps_reglage_op_mille != null || e.temps_reglage_machine_mille != null) {
+      ropH = _nb(e.temps_reglage_op_mille) / 1000
+      rgmH = _nb(e.temps_reglage_machine_mille) / 1000
+    } else if (estMach) rgmH = _nb(e.temps_reglage_mille) / 1000
+    else ropH = _nb(e.temps_reglage_mille) / 1000
+    if (estMach) tmvH = varH; else thvH = varH
+  } else {
+    // Format du formulaire BE : minutes. Repli historique `temps_unitaire_min` = TMV sur une étape
+    // machine, THV sinon.
+    ropH = _nb(e.temps_reglage_min) / 60
+    rgmH = _nb(e.temps_reglage_machine_min) / 60
+    thvH = (e.temps_mo_min != null ? _nb(e.temps_mo_min) : (estMach ? 0 : _nb(e.temps_unitaire_min))) / 60
+    tmvH = (e.temps_machine_min != null ? _nb(e.temps_machine_min) : (estMach ? _nb(e.temps_unitaire_min) : 0)) / 60
+  }
+  const tmvValorise = estMach ? tmvH : 0          // TMV sur un process manuel : ne compte pas
+  const r = { ...z, manquants: [] as ManquantCout[] }
+  r.hommeH_fixe = ropH + rgmH                     // ROP + RGM → homme
+  r.machineH_fixe = estMach ? rgmH : 0            // RGM → machine (process machine seulement)
+  if (e.est_fixe) {                               // opération fixe / lot
+    r.hommeH_fixe += thvH
+    r.machineH_fixe += tmvValorise
+  } else {
+    r.hommeH_pc = thvH
+    r.machineH_pc = tmvValorise
+  }
+  r.reglageMin = (ropH + rgmH) * 60
+  r.moMin = thvH * 60
+  r.machineMin = tmvValorise * 60
+  r.typeProcess = tp
+
+  // ── Taux ──
+  if (tx) {
+    r.tauxHomme = tx.tauxHomme(site)
+    const tm = tx.tauxMachine(pid, mid)
+    r.sourceTauxMachine = (estMach && !proc) ? 'sans_process' : tm.source
+    r.tauxMachine = estMach ? tm.taux : 0
+  } else {
+    r.tauxHomme = _nb(e.taux_mo_h)
+    r.tauxMachine = estMach ? _nb(e.machine_taux_h) : 0
+  }
+  r.moPc = r.hommeH_pc * r.tauxHomme
+  r.moFixe = r.hommeH_fixe * r.tauxHomme
+  r.machPc = r.machineH_pc * r.tauxMachine
+  r.machFixe = r.machineH_fixe * r.tauxMachine
+
+  // ── Ce qui manque (le coût est incomplet) ──
+  if (tx) {
+    const hH = r.hommeH_fixe + r.hommeH_pc, mH = r.machineH_fixe + r.machineH_pc
+    if (hH > 0 && tx.hommeManquant) r.manquants.push('taux_homme')
+    if (mH > 0 && r.sourceTauxMachine === 'manquant') r.manquants.push('taux_machine')
+    if ((mH > 0 && r.sourceTauxMachine === 'sans_process') || (!proc && !estMach && tmvH > 0)) r.manquants.push('sans_process')
+  }
+  return r
 }
 
-// ─── Calcul complet du coût d'une nomenclature pour une quantité (pour l'analyse DT) ──────────
-// Reprend la même logique que le formulaire BE : matière + accessoires + MO/(réglage)/machine internes
-// + sous-traitance au forfait (max(forfait ; qté×unitaire)). Tout est calculé pour `qte` pièces.
+// ─── Étape AJOUTÉE à l'analyse DT (« étape libre ») → étape de gamme au format minutes ──────────
+// Mêmes règles que les étapes de la nomenclature (etapeDecomp), avec le process choisi :
+//   réglage unique (`reglage_min`) = RGM (homme, + machine si le process est de type machine) ;
+//   `mo_min` = THV (repli ancien format `temps_min`) ; `machine_min` = TMV.
+// Étape libre SOUS-TRAITÉE : aucun temps valorisé (règle « sous-traitance = prix, jamais de temps », miroir exact
+// de beLibreEtape côté /be/analyse) — seul `prix_forfait` compte. `prix_forfait` s'ajoute tel quel, une fois par lot.
+export function etapeLibreVersEtape(a: any): any {
+  if (a && a.type === 'sous_traite') return { type: 'sous_traite' }
+  return {
+    process_id: a && !_vide(a.process_id) ? a.process_id : null,
+    temps_reglage_machine_min: _nb(a?.reglage_min),
+    temps_mo_min: a?.mo_min != null ? _nb(a.mo_min) : _nb(a?.temps_min),
+    temps_machine_min: _nb(a?.machine_min),
+  }
+}
+
+// ─── Coût RÉEL d'un bon de travail (commande, lot, affaire, imputations) ─────────────────────────
+// t = temps_reel ?? duree (h). Homme = t × taux chargé de l'OPÉRATEUR pointé — TOUJOURS (repli : moyenne
+// du site = activite du BDT, puis moyenne de tous les opérateurs, sinon 0 + drapeau). Machine = t × taux
+// machine du process du BDT si ce process est de type machine (le temps pointé d'un BDT machine vaut homme
+// ET machine, comme un réglage machine). Process du BDT : process_id, sinon process machine unique de machine_id.
+export function tauxHommeReel(tx: TauxAtelier, sal: any, site?: string | null): { taux: number; source: 'operateur' | 'moyenne' | 'manquant' } {
+  const t = Number(sal?.taux_horaire_charge)
+  if (Number.isFinite(t) && t > 0) return { taux: t, source: 'operateur' }
+  if (!tx.hommeManquant) return { taux: tx.tauxHomme(site), source: 'moyenne' }
+  return { taux: 0, source: 'manquant' }
+}
+export function coutReelBdt(b: any, tx: TauxAtelier, salById?: Record<string, any> | null) {
+  const t = Number(b?.temps_reel ?? b?.duree ?? 0) || 0
+  const h = tauxHommeReel(tx, salById ? salById[String(b?.operateur_id ?? '')] : null, b?.activite)
+  const pid = _vide(b?.process_id) ? null : b.process_id
+  const mid = _vide(b?.machine_id) ? null : b.machine_id
+  const proc = tx.processDe(pid) || (mid ? tx.processMachineDeMachine(mid) : null)
+  const tp: TypeProcess = proc ? typeProcess(proc) : (mid ? 'machine' : 'manuel')
+  const tm = tx.tauxMachine(pid, mid)
+  const estMach = tp === 'machine'
+  const source: SourceTauxMachine = (estMach && !proc) ? 'sans_process' : tm.source
+  const tauxMachine = estMach ? tm.taux : 0
+  const manquants: ManquantCout[] = []
+  if (t > 0 && h.source === 'manquant') manquants.push('taux_homme')
+  if (t > 0 && estMach && source === 'manquant') manquants.push('taux_machine')
+  if (t > 0 && estMach && source === 'sans_process') manquants.push('sans_process')
+  return {
+    heures: t, hommeH: t, machineH: estMach ? t : 0,
+    tauxHomme: h.taux, sourceTauxHomme: h.source,
+    tauxMachine, sourceTauxMachine: source, typeProcess: tp,
+    coutHomme: t * h.taux, coutMachine: estMach ? t * tauxMachine : 0,
+    manquants,
+  }
+}
+
+// ─── Signal « coût réel non fiable » des fiches 360 (commande, affaire, lot) — rendu SERVEUR ────
+// kpi.tauxErreur : lecture des taux en ÉCHEC → homme / machine / coût réel / marge non calculés (null, affichés « — »).
+// kpi.manquants  : données de coût absentes → la part correspondante vaut 0 : coût sous-évalué, marge surévaluée.
+export const LIBELLES_MANQUANTS_COUT: Record<string, string> = {
+  taux_homme: 'coût chargé RH à renseigner (fiche salarié, service RH) : temps homme compté 0 €',
+  taux_machine: 'taux horaire machine à saisir sur le process (Production › Postes & Process) : temps machine compté 0 €',
+  sans_process: 'BDT machine sans process identifiable : temps machine non valorisé',
+}
+export function alerteCoutReel(kpi: any): string {
+  if (!kpi) return ''
+  if (kpi.tauxErreur) {
+    return `<div style="margin-top:12px;background:#fef2f2;border:1.5px solid #fecaca;border-radius:10px;padding:9px 12px;font-size:.74rem;color:#991b1b;line-height:1.5;"><div style="font-weight:800;"><i class="fas fa-circle-exclamation" style="margin-right:5px;"></i>Taux de l’atelier illisibles : main d’oeuvre, machine, coût réel et marge non calculés</div><div>${escX(String(kpi.tauxErreur))}</div></div>`
+  }
+  const m: string[] = Array.isArray(kpi.manquants) ? kpi.manquants : []
+  if (!m.length) return ''
+  return `<div style="margin-top:12px;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:9px 12px;font-size:.74rem;color:#9a3412;line-height:1.5;"><div style="font-weight:800;"><i class="fas fa-triangle-exclamation" style="margin-right:5px;"></i>Coût réel incomplet : coût sous-évalué, marge surévaluée</div>${m.map((c) => `<div>• ${escX(LIBELLES_MANQUANTS_COUT[c] || c)}</div>`).join('')}</div>`
+}
+
+// ─── Calcul complet du coût d'une nomenclature pour une quantité (analyse DT, KPI BE) ──────────
+// Matière + accessoires + temps internes (etapeDecomp) + sous-traitance/OAS au forfait
+// (max(forfait ; qté×unitaire)). Tout est calculé pour `qte` pièces.
+// Site du taux homme : nom.entite, sinon opts.site (ex. activité de la DT).
 export function computeNomCostForQty(
   nom: any,
   fournitures: any[],
   qte: number,
-  opts?: { machineRate?: (machineId: string, baseRate: number) => number },
+  opts?: { taux?: TauxAtelier | null; site?: string | null },
 ) {
   const q = Math.max(1, Number(qte) || 1)
-  // Phase E : taux machine d'une étape = taux de base + incrément OPEX du POSTE de la machine (ou override),
-  // appliqué par etapeDecomp via opts.machineRate. Sans machineRate (ou incrément 0) → CRU inchangé (non-régression).
+  const tx = opts?.taux ?? null
+  const site = (nom?.entite != null && nom.entite !== '') ? String(nom.entite) : (opts?.site ?? null)
   // Coût des fournitures en UNITÉS D'ACHAT ENTIÈRES, arrondi SUPÉRIEUR (on n'achète ni une demi-tôle ni un demi-paquet).
   //   Matière     : nb de TÔLES   = ceil(qté / nb_par_tole)            ; coût = nb de tôles   × prix de la tôle.
   //   Accessoires : nb de PAQUETS = ceil(nb par pièce × qté / qte_paquet) ; coût = nb de paquets × prix du paquet.
@@ -201,15 +478,17 @@ export function computeNomCostForQty(
   const matiere = matiereSerieOnly / q               // ramené à la pièce (baisse par paliers quand la qté monte)
   const accessoire = accessoireSerie / q             // idem (amorti du paquet)
   const etapes = Array.isArray(nom?.etapes_production) ? nom.etapes_production : []
-  const tauxMoDef = Number(nom?.taux_mo) || 45
-  const tauxMachDef = Number(nom?.cout_machine_h) || 50
   let moPiece = 0, machinePiece = 0, reglageMin = 0, moMin = 0, machineMin = 0, stOrder = 0
   let moFixeSerie = 0, machFixeSerie = 0   // temps fixes par lot (réglage + opérations fixes), en €
+  let hommeHSerie = 0, machineHSerie = 0
+  const manquants = new Set<ManquantCout>()
   for (const e of etapes) {
-    const d = etapeDecomp(e, tauxMoDef, tauxMachDef, opts?.machineRate)   // décomposition par étape (source UNIQUE partagée avec l'analyse DT)
-    if (d.st) { stOrder += coutEtapeST(e, q); continue }
+    const d = etapeDecomp(e, tx, site)   // décomposition par étape (source UNIQUE partagée avec l'analyse DT)
+    if (d.st) { stOrder += coutEtapeST(e, q); continue }   // ST (et OAS : inchangé, lit les champs *_st_* de l'étape)
     moPiece += d.moPc; machinePiece += d.machPc; moFixeSerie += d.moFixe; machFixeSerie += d.machFixe
     reglageMin += d.reglageMin; moMin += d.moMin; machineMin += d.machineMin
+    hommeHSerie += d.hommeH_pc * q + d.hommeH_fixe; machineHSerie += d.machineH_pc * q + d.machineH_fixe
+    for (const m of d.manquants) manquants.add(m)
   }
   const matierePiece = matiere + accessoire
   const matiereSerie = matiereSerieOnly + accessoireSerie   // matière (tôles entières) + accessoires (paquets entiers)
@@ -228,69 +507,10 @@ export function computeNomCostForQty(
     stOrder: r2(stOrder),
     totalSerie: r2(totalSerie), perPiece: r4(q > 0 ? totalSerie / q : totalSerie),
     prixRevientUnitaireNom: nom?.prix_revient_unitaire != null ? Number(nom.prix_revient_unitaire) : null,
+    hommeHSerie: r4(hommeHSerie), machineHSerie: r4(machineHSerie),
+    tauxHomme: tx ? tx.tauxHomme(site) : null as number | null,
+    manquants: Array.from(manquants),
   }
-}
-
-// ─── Taux horaire effectif d'un POSTE (Phase E : OPEX poste → taux → CRU) ──────────────────────
-// Le POSTE est l'unité de coût : l'OPEX (achats machine reçus, année civile) de ses machines est amorti
-// sur ses heures productives BUDGÉTÉES (Σ capacité × 220 jours ouvrés) → un INCRÉMENT €/h commun à toutes
-// ses machines, AJOUTÉ au taux de base de chaque étape machine. Garantit la non-régression : l'incrément
-// vaut 0 tant qu'aucun achat machine n'est reçu, donc le CRU d'une pièce sans achat machine est inchangé.
-// Un taux manuel (postes.taux_horaire_manuel) prime en ABSOLU s'il est posé (override + confirmation côté UI),
-// et se réinitialise au nouvel exercice (colonne remise à null).
-export const HEURES_JOURS_OUVRES = 220
-export function computePosteRates(machines: any[] = [], machinesOpex: any[] = [], postes: any[] = [], annee?: number) {
-  const an = Number(annee) || new Date().getFullYear()
-  // Achats machine reçus (colonne DÉDIÉE `achats_ht`, JAMAIS `cout_total_ht`), cumulés par machine, POUR
-  // L'EXERCICE (année civile). `cout_total_ht` = OPEX annuel complet (Maintenance/Finances) ⇒ ne PAS le mélanger ici,
-  // sinon une ligne d'OPEX pré-existante gonflerait le taux sans aucun achat (violation de la non-régression).
-  const achatByMachine: Record<string, number> = {}
-  for (const o of (machinesOpex || [])) {
-    if (Number(o?.annee) !== an) continue
-    const k = String(o.machine_id)
-    achatByMachine[k] = (achatByMachine[k] || 0) + (Number(o.achats_ht) || 0)
-  }
-  const posteById: Record<string, any> = {}
-  for (const p of (postes || [])) posteById[String(p.id)] = p
-  // Taux horaire (cout_h) de CHAQUE machine (avec ou sans poste) → base du coût machine du CRU.
-  const coutHByMachine: Record<string, number> = {}
-  for (const m of (machines || [])) coutHByMachine[String((m as any).id)] = Number((m as any).cout_h ?? (m as any).taux_horaire) || 0
-  const agg: Record<string, { heures: number; achat: number; baseAnnual: number; machines: string[] }> = {}
-  for (const m of (machines || [])) {
-    const pid = (m as any).poste_id ? String((m as any).poste_id) : ''
-    if (!pid) continue
-    const e = agg[pid] = agg[pid] || { heures: 0, achat: 0, baseAnnual: 0, machines: [] }
-    const capa = Number((m as any).capacite_h) || 0
-    const coutH = Number((m as any).cout_h ?? (m as any).taux_horaire) || 0
-    e.heures += capa * HEURES_JOURS_OUVRES
-    e.baseAnnual += coutH * capa * HEURES_JOURS_OUVRES
-    e.achat += achatByMachine[String((m as any).id)] || 0
-    e.machines.push(String((m as any).id))
-  }
-  const byPoste: Record<string, { heures: number; achat: number; baseWeighted: number; increment: number; manuel: number | null; tauxEffectif: number; machines: string[] }> = {}
-  const byMachine: Record<string, { pid: string; increment: number; manuel: number | null; coutH: number }> = {}
-  for (const pid of Object.keys(agg)) {
-    const e = agg[pid]
-    const p = posteById[pid] || {}
-    const increment = e.heures > 0 ? e.achat / e.heures : 0        // €/h supplémentaire dû aux achats machine reçus
-    const baseWeighted = e.heures > 0 ? e.baseAnnual / e.heures : 0 // taux de base indicatif (moyenne pondérée cout_h)
-    const rawManuel = (p as any).taux_horaire_manuel
-    const manuel = (rawManuel != null && rawManuel !== '' && !isNaN(Number(rawManuel))) ? Number(rawManuel) : null
-    const tauxEffectif = manuel != null ? manuel : baseWeighted + increment
-    byPoste[pid] = { heures: e.heures, achat: e.achat, baseWeighted, increment, manuel, tauxEffectif, machines: e.machines }
-    for (const mid of e.machines) byMachine[mid] = { pid, increment, manuel, coutH: coutHByMachine[mid] ?? 0 }
-  }
-  // Closure passée à computeNomCostForQty : taux horaire de LA MACHINE (cout_h) + incrément OPEX du poste (ou override absolu).
-  // Le coût machine du CRU suit le taux de la machine du process choisi ; `baseRate` (taux stocké sur l'étape) ne sert
-  // plus que de repli si la machine n'est pas rattachée à un poste (donc absente de byMachine).
-  const machineRate = (machineId: string, baseRate: number): number => {
-    const r = byMachine[String(machineId)]
-    const coutH = coutHByMachine[String(machineId)] || 0
-    if (!r) return coutH > 0 ? coutH : baseRate       // machine sans poste : son cout_h seul (aucun incrément OPEX)
-    if (r.manuel != null) return r.manuel             // override manuel du poste : prime en absolu
-    return (r.coutH || coutH || baseRate) + r.increment   // cout_h de la machine + incrément OPEX du poste
-  }
-  return { byPoste, byMachine, machineRate, annee: an }
 }
 
 // ─── OPÉRATIONS PAR ACTIVITÉ ──────────────────────────────────

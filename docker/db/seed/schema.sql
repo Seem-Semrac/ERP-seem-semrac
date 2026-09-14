@@ -4746,3 +4746,51 @@ revoke all on table public.avoirs_fournisseurs from anon, authenticated;
 grant select, insert, update on table public.avoirs_fournisseurs to anon, authenticated;
 
 notify pgrst, 'reload schema';
+
+--
+-- 009 · Taux horaire MACHINE saisi sur le PROCESS (process_atelier.taux_horaire_machine)
+-- (report de docker/db/migrations/009-process-taux-horaire-machine.sql — une base neuve
+--  naît déjà à jour, le lanceur de migrations rejouera le fichier sans effet)
+--
+
+-- La recopie de départ n'est jouée QUE si la colonne vient d'être créée par ce script : une fois la colonne en
+-- place, NULL signifie « taux à saisir » (éventuellement vidé volontairement) et ne doit plus être ré-alimenté par
+-- machines.cout_h. Le script peut donc être rejoué sans réintroduire un ancien taux.
+do $$
+declare
+  colonne_neuve boolean;
+  nb integer := 0;
+begin
+  colonne_neuve := not exists (select 1 from information_schema.columns
+                                where table_schema = 'public' and table_name = 'process_atelier'
+                                  and column_name = 'taux_horaire_machine');
+  if colonne_neuve then
+    alter table public.process_atelier add column taux_horaire_machine numeric;   -- €/h HT ; null = à saisir
+  end if;
+
+  if not exists (select 1 from pg_constraint
+                  where conrelid = 'public.process_atelier'::regclass
+                    and conname = 'process_atelier_taux_horaire_machine_positif') then
+    alter table public.process_atelier add constraint process_atelier_taux_horaire_machine_positif
+      check (taux_horaire_machine is null or taux_horaire_machine >= 0);
+  end if;
+
+  if colonne_neuve then
+    update public.process_atelier p
+       set taux_horaire_machine = m.cout_h::text::numeric
+      from public.machines m
+     where m.id = p.machine_id
+       and p.taux_horaire_machine is null
+       and coalesce(p.est_oas, false) = false
+       and coalesce(p.requiert_machine, nullif(p.machine_id, '') is not null) = true
+       and m.cout_h is not null
+       and m.cout_h::text ~ '^[0-9]+(\.[0-9]+)?$';
+    get diagnostics nb = row_count;
+    raise notice 'taux_horaire_machine cree : % process machine ont recu le cout horaire de leur machine', nb;
+  else
+    raise notice 'taux_horaire_machine deja present : recopie de depart NON rejouee (un taux vide reste a saisir)';
+  end if;
+end
+$$;
+
+notify pgrst, 'reload schema';

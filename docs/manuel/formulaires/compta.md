@@ -61,39 +61,46 @@
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
-| Activité | liste déroulante (Seem, Semrac) | Oui | La société / activité concernée par la pièce. | Seem |
+| Activité | liste déroulante (Seem, Semrac) | Oui | Le site de la pièce : il propose le taux homme (moyenne du coût chargé RH des opérateurs du site). | Seem |
 | Référence pièce | texte | Non | Le repère ou la référence de la pièce simulée. | DISSIP-42 |
-| Quantité | nombre | Non | Le nombre de pièces de la commande (par défaut 100). | 100 |
-| Opération | texte | Non | Le nom de l'étape de fabrication (une ligne par opération de la gamme). | Usinage |
-| Temps (min) | nombre | Non | La durée de l'opération, en minutes. | 15 |
-| Taux MO (€/h) | nombre | Non | Le coût horaire chargé de l'opérateur (par défaut 26,83). | 26.83 |
-| Coût machine (€/h) | nombre | Non | Le coût horaire de la machine utilisée (0 si opération manuelle). | 18.50 |
+| Quantité du lot | nombre | Non | Le nombre de pièces du lot : les réglages (ROP, RGM) sont comptés une fois puis répartis sur les pièces. Par défaut 1. | 10 |
+| Taux homme (€/h) | nombre | Non | Pré-rempli avec la moyenne du coût chargé RH du site (ou de l'atelier). Modifiable pour une hypothèse. | 35.25 |
+| Opération | texte | Non | Le nom de l'étape (une ligne par opération de la gamme). | Usinage |
+| Process | liste déroulante (process de l'atelier, ou « Saisie libre ») | Non | Choisir un process remplit son type et son taux horaire machine. | Tronçonneuse · machine · 48,00 €/h |
+| Type | liste déroulante (Manuel, Machine) | Non | Verrouillé si un process est choisi. « Manuel » grise le temps machine et le taux machine. | Machine |
+| ROP min/lot | nombre | Non | Réglage homme, en minutes, une fois par lot (homme). | 30 |
+| RGM min/lot | nombre | Non | Réglage machine, en minutes, une fois par lot (homme **et** machine). | 60 |
+| THV min/pce | nombre | Non | Temps homme par pièce, en minutes. | 6 |
+| TMV min/pce | nombre | Non | Temps machine par pièce, en minutes (type Machine seulement). | 12 |
+| Taux machine €/h | nombre | Non | Taux horaire machine du process (pré-rempli si un process est choisi). Vide = temps machine compté 0 € et signalé. | 48 |
 | Matière (€/pièce) | nombre | Non | Le coût de la matière pour une pièce. | 5.50 |
-| Frais généraux (%) | nombre | Non | Le pourcentage de frais généraux ajouté (par défaut 12). | 12 |
-| Coefficient de vente | nombre | Non | Le multiplicateur appliqué au coût pour obtenir le prix de vente (par défaut 1,35). | 1.35 |
+| Frais généraux (%) – hypothèse | nombre | Non | Un pourcentage ajouté pour la simulation seulement : l'ERP n'en compte pas dans le coût de revient. Vide = 0. | 0 |
+| Coefficient de vente (×) | nombre | Non | Multiplicateur coût → prix de vente simulé ; le taux de marque correspondant est affiché (×2 = 50 %). Vide = pas de prix. | 1.35 |
 
-💡 **Astuce :** Cliquez sur « Ajouter une opération » pour ajouter autant de lignes de gamme que nécessaire, puis « Calculer CR » pour voir le coût de revient et le prix de vente suggéré.
-⚠️ **Attention :** C'est un outil de simulation : rien n'est enregistré en base, il sert uniquement à chiffrer une offre.
+💡 **Astuce :** « Calculer CR » détaille homme (minutes/pièce, €), machine (minutes/pièce, €), matière, frais généraux et le CR unitaire, puis le prix simulé. Même règle que les nomenclatures : ROP → homme, RGM → homme + machine, THV → homme, TMV → machine.
+⚠️ **Attention :** C'est un outil de simulation : rien n'est enregistré en base. Plus aucune valeur n'est pré-remplie par défaut (fini 26,83 / 18,50 €/h, 12 %, ×1,35) : un taux vide est signalé sous le résultat.
 
-## Taux horaires opérateurs (tableau modifiable)
-**Quand l'utiliser :** Pour ajuster le taux brut et le taux de charges sociales de chaque opérateur, qui servent au calcul des coûts.
-**Où le trouver :** Page « Taux horaires opérateurs » (menu Finances & Coûts) — les cases se modifient directement dans le tableau, puis bouton « Enregistrer ».
+## Taux horaires opérateurs (tableau de simulation)
+**Quand l'utiliser :** Pour consulter le taux chargé de chaque opérateur et les **moyennes par site** utilisées par le coût de revient estimé (ligne « Taux homme du coût de revient estimé » : Seem, Semrac, atelier), et simuler l'effet d'un taux brut ou de charges différents.
+**Où le trouver :** Page « Taux horaires opérateurs » (menu Finances & Coûts).
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
 | Taux brut (€/h) | nombre | Non | Le salaire horaire brut de l'opérateur, avant charges. | 17.50 |
 | Charges (%) | nombre | Non | Le pourcentage de charges sociales (généralement 45 %). | 45 |
 
-💡 **Astuce :** Le « Taux chargé », le « Coût journée » et le « Coût annuel » se recalculent tout seuls dès que vous changez le taux brut ou les charges. Pensez à cliquer « Enregistrer » pour sauver vos modifications.
-⚠️ **Attention :** Ces taux alimentent directement le calcul du coût de revient : une erreur ici fausse tous les chiffrages.
+💡 **Astuce :** Le « Taux chargé », le « Coût journée » et le « Coût annuel » se recalculent tout seuls dès que vous changez le taux brut ou les charges.
+⚠️ **Attention :** Le bouton « Enregistrer » de cette page **n'écrit rien en base** (il affiche seulement un message). Le taux qui compte dans le coût de revient est le **taux horaire chargé de la fiche salarié** (service RH) : c'est là qu'il se corrige. Le taux brut affiché ici est déduit du taux chargé avec 45 % de charges.
 
-## Imputations des temps — filtre du jour
-**Quand l'utiliser :** Pour consulter les temps pointés (imputations) d'une journée donnée.
-**Où le trouver :** Page « Imputations des temps » (menu Finances & Coûts), à côté du titre « Imputations du jour ».
+## Imputations des temps — journal BDT (consultation)
+**Quand l'utiliser :** Pour voir le coût réel de chaque bon de travail : temps alloué et réel, coût homme, coût machine.
+**Où le trouver :** Page « Imputations des temps » (menu Finances & Coûts). Page de consultation : aucun champ à saisir.
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
-| Date | date | Non | La journée dont vous voulez voir les imputations (par défaut, aujourd'hui). | 04/07/2026 |
+| Coût homme (€) | lecture | — | Temps réel (sinon durée) × taux chargé de l'opérateur du BDT ; à défaut, moyenne du site (l'origine est indiquée). | 42,30 € |
+| Coût machine (€) | lecture | — | Temps réel × taux horaire machine du process du BDT, si ce process est de type machine ; « — » sinon. | 57,60 € |
+| Total (€) | lecture | — | Coût homme + coût machine. | 99,90 € |
 
-💡 **Astuce :** Le bouton « Valider tout » valide les pointages de la journée affichée ; « Exporter » génère un fichier des imputations.
-⚠️ **Attention :** Cette page ne saisit pas de temps : les imputations remontent automatiquement quand les opérateurs soldent leurs bons de travail (BDT).
+💡 **Astuce :** Un bandeau orange « N BDT au coût incomplet » compte les BDT dont un taux manque (coût chargé RH, taux horaire machine du process, ou BDT machine sans process).
+⚠️ **Attention :** Cette page ne saisit pas de temps : les imputations remontent automatiquement quand les opérateurs soldent leurs BDT. Les anciens boutons « Valider tout », « Exporter », « Sync Power BI » et le sélecteur de date, qui ne faisaient rien, ont été retirés.

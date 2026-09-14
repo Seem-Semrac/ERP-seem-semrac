@@ -17,7 +17,9 @@ Définition technique des pièces : nomenclatures (matières + gamme d'opératio
 ### Créer une nomenclature
 1. Onglet **Nomenclatures**, « Nouvelle nomenclature ».
 2. Renseigner la **matière** (référence → prix auto si < 3 mois, sinon RFQ) et la **masse** (g).
-3. Ajouter les **étapes** (glisser-déposer) : opération, machine, temps MO/machine, réglage (coût fixe/lot).
+3. Ajouter les **étapes** (glisser-déposer) : type, poste, process, puis les temps en millièmes d'heure — **ROP** (réglage homme), **RGM** (réglage machine), **MO** (homme par pièce), **Mach** (machine par pièce). Les réglages sont des coûts fixes par lot.
+   - Coût d'une étape = heures homme (ROP + RGM + MO) × **coût chargé RH moyen du site** + heures machine (RGM + Mach) × **taux horaire machine du process** (process machine seulement). Sous le process, l'indication dit d'où vient le taux (« Machine · 48,00 €/h », « Machine · taux à saisir », « Manuel · homme au coût chargé RH »).
+   - Un encart orange **« Coût de revient incomplet »** signale un taux machine à saisir (Production › Process Ateliers) ou un coût chargé RH absent (RH) : la part concernée compte 0 €.
 4. Le **prix de revient unitaire** se calcule automatiquement. Enregistrer (indice A/B/C).
 
 ### Supprimer une nomenclature validée

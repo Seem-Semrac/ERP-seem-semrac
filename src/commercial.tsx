@@ -3,7 +3,7 @@
 // Rentrée commerciale, DT statuts, fiches client, offre, avoirs, crédits
 // SPEC-ERP-GPAO-V1.8 / EN9100:2018
 // ══════════════════════════════════════════════════════════════
-import { escX, layout, pageHeader, afterBox, serviceHeader, SIDEBAR_V2, APP_VERSION, interlocuteursPanel, validationCheckbox, bulkToolbar, bulkSelectAssets, buildValDirMap, valDirBadge } from './shared'
+import { escX, layout, pageHeader, afterBox, serviceHeader, SIDEBAR_V2, APP_VERSION, interlocuteursPanel, validationCheckbox, bulkToolbar, bulkSelectAssets, buildValDirMap, valDirBadge, alerteCoutReel } from './shared'
 import { normeReferentiel } from './qref'
 import { SOCIETE, LOGO_SVG, societeLignes, BRAND } from './brand'
 import type { Client, DemandeTravaux, Offre, Commande, Credit, BonDeTravail, DemandeSite } from './types'
@@ -3312,6 +3312,15 @@ export const pageServiceCommercial = (
     var c=j.cmd||{}, k=j.kpi||{};
     var margeCol=(k.marge==null)?'#64748b':(k.marge>=0?'#16a34a':'#dc2626');
     var pct=k.avancement||0;
+    // Coût réel : null = NON calculable (taux illisibles) → « — », jamais « 0 € » ; manquants = coût incomplet (part à 0).
+    var euroOuTiret=function(v){ return (v==null)?'—':euro(v); };
+    var escF=function(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
+    var LIB_MANQ={ taux_homme:'coût chargé RH à renseigner (fiche salarié) : temps homme compté 0 €', taux_machine:'taux horaire machine à saisir sur le process (Production › Postes & Process) : temps machine compté 0 €', sans_process:'BDT machine sans process : temps machine non valorisé' };
+    var manq=(k.manquants||[]);
+    var alerteCout=k.tauxErreur
+      ? '<div style="margin-top:10px;background:#fef2f2;border:1.5px solid #fecaca;border-radius:10px;padding:9px 12px;font-size:.72rem;color:#991b1b;line-height:1.5;"><div style="font-weight:800;"><i class="fas fa-circle-exclamation" style="margin-right:5px;"></i>Taux de l atelier illisibles : main d oeuvre, machine, coût réel et marge non calculés</div><div>'+escF(k.tauxErreur)+'</div></div>'
+      : (manq.length ? '<div style="margin-top:10px;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:9px 12px;font-size:.72rem;color:#9a3412;line-height:1.5;"><div style="font-weight:800;"><i class="fas fa-triangle-exclamation" style="margin-right:5px;"></i>Coût réel incomplet : coût sous-évalué, marge surévaluée</div>'+manq.map(function(m){ return '<div>• '+escF(LIB_MANQ[m]||m)+'</div>'; }).join('')+'</div>' : '');
+    var incompl=manq.length?' · incomplet':'';
     function kp(lbl,val,col,sub){ return '<div style="background:#f8fafc;border-radius:10px;padding:11px 13px;border-top:3px solid '+col+';"><div style="font-size:1.1rem;font-weight:800;color:'+col+';line-height:1.15;">'+val+'</div><div style="font-size:.63rem;color:#6b7280;font-weight:700;margin-top:2px;">'+lbl+'</div>'+(sub?'<div style="font-size:.59rem;color:#9ca3af;">'+sub+'</div>':'')+'</div>'; }
     function tbl(title,icon,headers,rows){ var th=headers.map(function(h){return '<th style="text-align:'+(h.a||'left')+';padding:6px 9px;font-size:.59rem;text-transform:uppercase;color:#6b7280;">'+h.t+'</th>';}).join(''); return '<div style="margin-top:14px;"><div style="font-weight:800;color:#111827;font-size:.8rem;margin-bottom:6px;"><i class="fas '+icon+'" style="margin-right:6px;color:#8b5cf6;"></i>'+title+'</div><div style="border:1px solid #f1f5f9;border-radius:10px;overflow:hidden;max-height:200px;overflow-y:auto;"><table style="width:100%;border-collapse:collapse;font-size:.73rem;"><thead><tr style="background:#faf5ff;position:sticky;top:0;">'+th+'</tr></thead><tbody>'+(rows||'<tr><td colspan="'+headers.length+'" style="text-align:center;padding:14px;color:#cbd5e1;">Aucun</td></tr>')+'</tbody></table></div></div>'; }
     var bdtRows=(j.bdts||[]).map(function(b){ return '<tr style="border-bottom:1px solid #f9fafb;"><td style="padding:6px 9px;font-weight:600;">'+(b.piece||'—')+'</td><td style="padding:6px 9px;">'+(b.operation||'—')+'</td><td style="padding:6px 9px;text-align:center;">'+(b.machine==='machine'?'<i class="fas fa-cog" style="color:#6366f1;" title="machine"></i>':'<i class="fas fa-user" style="color:#94a3b8;" title="main d oeuvre"></i>')+'</td><td style="padding:6px 9px;text-align:right;">'+(b.temps_reel!=null?b.temps_reel:b.duree)+' h</td><td style="padding:6px 9px;text-align:center;font-size:.65rem;">'+(b.statut||'')+'</td></tr>'; }).join('');
@@ -3327,14 +3336,15 @@ export const pageServiceCommercial = (
       +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:10px;">'
       +kp('Budget (devis)', euro(k.budget), '#0ea5e9', '')
       +kp('CA facturé', euro(k.caFacture), '#22c55e', (j.factures||[]).length+' facture(s)')
-      +kp('Coût réel', euro(k.coutReel), '#f59e0b', 'MO+machine+matière')
-      +kp('Marge', (k.marge!=null?euro(k.marge):'—')+(k.margePct!=null?' ('+k.margePct+'%)':''), margeCol, k.caFacture>0?'sur CA facturé':'sur budget')
+      +kp('Coût réel', euroOuTiret(k.coutReel), '#f59e0b', 'MO+machine+matière'+incompl)
+      +kp('Marge', (k.marge!=null?euro(k.marge):'—')+(k.margePct!=null?' ('+k.margePct+'%)':''), margeCol, (k.caFacture>0?'sur CA facturé':'sur budget')+incompl)
       +'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px;">'
-      +kp('Main d\\'oeuvre', euro(k.coutMo), '#6366f1', (k.moH||0)+' h')
-      +kp('Machine', euro(k.coutMach), '#0d9488', (k.machH||0)+' h')
+      +kp('Main d\\'oeuvre', euroOuTiret(k.coutMo), '#6366f1', (k.moH||0)+' h'+((manq.indexOf('taux_homme')>=0)?' · incomplet':''))
+      +kp('Machine', euroOuTiret(k.coutMach), '#0d9488', (k.machH||0)+' h'+((manq.indexOf('taux_machine')>=0||manq.indexOf('sans_process')>=0)?' · incomplet':''))
       +kp('Matière', euro(k.coutMat), '#d97706', (j.matieres||[]).length+' sortie(s)')
       +'</div>'
+      +alerteCout
       +'<div style="margin-top:14px;background:#f8fafc;border-radius:10px;padding:12px;"><div style="display:flex;justify-content:space-between;font-size:.74rem;font-weight:700;color:#374151;margin-bottom:5px;"><span>Avancement production</span><span>'+(k.bdtSoldes||0)+'/'+(k.bdtTotal||0)+' BDT · '+pct+'%</span></div><div style="background:#e2e8f0;border-radius:999px;height:8px;overflow:hidden;"><div style="height:100%;background:'+(pct===100?'#22c55e':(pct>0?'#f59e0b':'#cbd5e1'))+';width:'+pct+'%;"></div></div></div>'
       +tbl('Bons de travail','fa-list-check',[{t:'Pièce'},{t:'Opération'},{t:'Type',a:'center'},{t:'Temps',a:'right'},{t:'Statut',a:'center'}],bdtRows)
       +tbl('Lots','fa-layer-group',[{t:'Lot'},{t:'Pièce'},{t:'Qté',a:'center'},{t:'Statut',a:'center'},{t:'NC',a:'center'}],lotRows)
@@ -4225,10 +4235,11 @@ export function pageAffaireFiche(num: string, detail?: any): string {
           ${kpiCard('Montant offre', eur0(kpi.montantOffre), '#6366f1', offres.length + ' offre(s)')}
           ${kpiCard('Montant commande', eur0(kpi.montantCmd), '#0ea5e9', cmds.length + ' commande(s)')}
           ${kpiCard('CA facturé', eur0(kpi.caFacture), '#22c55e', (kpi.nbFactures || 0) + ' facture(s)')}
-          ${kpiCard('Coût de revient', eur0(kpi.coutReel), '#d97706')}
-          ${kpiCard('Marge', kpi.marge != null ? eur0(kpi.marge) : '—', (kpi.marge != null && kpi.marge >= 0) ? '#16a34a' : '#dc2626', kpi.margePct != null ? kpi.margePct + ' %' : 'à facturer')}
+          ${kpiCard('Coût de revient', kpi.coutReel != null ? eur0(kpi.coutReel) : '—', '#d97706', kpi.tauxErreur ? 'non calculé' : ((kpi.manquants || []).length ? 'incomplet' : ''))}
+          ${kpiCard('Marge', kpi.marge != null ? eur0(kpi.marge) : '—', (kpi.marge != null && kpi.marge >= 0) ? '#16a34a' : '#dc2626', (kpi.margePct != null ? kpi.margePct + ' %' : (kpi.coutReel == null && cmds.length ? 'non calculée' : 'à facturer')) + ((kpi.manquants || []).length && !kpi.tauxErreur ? ' · surévaluée' : ''))}
           ${kpiCard('Avancement', (kpi.avancement || 0) + ' %', '#0891b2', (kpi.bdtSoldes || 0) + '/' + (kpi.bdtTotal || 0) + ' BDT')}
         </div>
+        ${alerteCoutReel(kpi)}
         ${stepper}
       </div>
 

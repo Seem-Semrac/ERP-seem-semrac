@@ -48,6 +48,8 @@ Le JS client est écrit dans des chaînes TSX. Deux passes d'échappement se sup
 | **Confirmation** (« êtes-vous sûr ? ») | **`await appConfirm(message)`** (shared.ts) → `Promise<boolean>`, modale au design de l'app. **Ne PAS utiliser `confirm()` natif.** La fonction appelante doit être `async`. Danger (rouge) auto si le message évoque une suppression. |
 | Grosse liste déroulante | `<input list="…">` + `<datalist>` (typeahead) plutôt qu'un `<select>` lourd → **auto-remplacé** par un combobox stylé recherchable (enhancer global du `layout`, `shared.ts`) qui préserve l'`onchange` (re-déclenche `change` à la sélection). Rien à câbler. |
 | Modale | div `position:fixed;display:none` → `style.display='flex'` |
+| **Coût d'une étape / taux de l'atelier** | Serveur : `construireTauxAtelier(process, salaries, machines)`, `etapeDecomp(e, tx, site)`, `computeNomCostForQty(nom, fournitures, q, { taux, site })`, `coutReelBdt(b, tx, salById)`, `typeProcess(p)` (shared.ts) ; lecture : `getTauxAtelier()` (queries.ts, erreur remontée). Navigateur : `BE_ETAPE_COUT_JS` (be.tsx, miroir exact injecté par `${BE_ETAPE_COUT_JS}`). **Ne jamais recoder un taux ni un classement ROP/RGM/THV/TMV à la main** : toute évolution se fait dans shared.ts **et** dans la chaîne miroir. Donner à `construireTauxAtelier` les lignes `process_atelier` **brutes** (`select *`). |
+| Bandeau « coût réel non calculable / incomplet » (fiches 360) | `alerteCoutReel(kpi)` + `LIBELLES_MANQUANTS_COUT` (shared.ts) |
 
 ## Accès données (`queries.ts`)
 - Une fonction par opération : `getX()` (lecture, retourne `[]` en fallback), `createX/updateX/deleteX` (retournent `{data, error}` supabase-js).

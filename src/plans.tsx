@@ -14,7 +14,8 @@ export const pageServicePlans = (data: any) => {
   const D = data || {}
   const arr = (k: string) => (Array.isArray(D[k]) ? D[k] : [])
   const PLANS = arr('plans').map((p: any) => ({ id: p.id, nom: p.nom, entite: p.entite, image_doc_id: p.image_doc_id }))
-  const POSTES = arr('postes').map((p: any) => ({ id: p.id, nom: p.nom, couleur: p.couleur || '', act: p.activite || '', nbMachines: p.nbMachines || 0, machines: Array.isArray(p.machines) ? p.machines : [], nbProcess: p.nbProcess || 0, process: Array.isArray(p.process) ? p.process : [], taux: p.taux || 0, opexTheo: p.opexTheo || 0 }))
+  const POSTES = arr('postes').map((p: any) => ({ id: p.id, nom: p.nom, couleur: p.couleur || '', act: p.activite || '', nbMachines: p.nbMachines || 0, machines: Array.isArray(p.machines) ? p.machines : [], nbProcess: p.nbProcess || 0, process: Array.isArray(p.process) ? p.process : [] }))
+  // 14/09/2026 : plus de taux effectif ni d'OPEX théorique par poste — seul le PROCESS porte un taux horaire.
   // SEIRICH : niveau de risque précalculé serveur (le pire des 3 axes du produit, rehaussé par ses situations d'exposition Santé).
   const _expoMaxSante: Record<string, number> = {}
   arr('expositions').forEach((e: any) => { const k = String(e.produit_id || ''); const n = Number(e.niveau_sante) || 0; if (n > (_expoMaxSante[k] || 0)) _expoMaxSante[k] = n })
@@ -213,7 +214,7 @@ export const pageServicePlans = (data: any) => {
 
     // ── Catalogues liés ──
     function entitiesFor(k){ var link=(CATS[k]||{}).link;
-      if(link==="poste") return POSTES.map(function(p){return {id:p.id,raw:p.nom,nom:p.nom,sub:p.nbProcess+" process · "+p.nbMachines+" machine(s)"+(p.taux?(" · "+p.taux+" €/h"):""),table:"postes"};});
+      if(link==="poste") return POSTES.map(function(p){return {id:p.id,raw:p.nom,nom:p.nom,sub:p.nbProcess+" process · "+p.nbMachines+" machine(s)",table:"postes"};});
       if(link==="zone") return ZONES.map(function(z){return {id:z[0],raw:z[1]||z[0],nom:z[0]+" — "+z[1],sub:"matrice EPI de la zone",table:"zone_atelier"};});
       if(link==="chimie") return CHIMIE.map(function(x){return {id:x.id,raw:x.nom,nom:x.nom,sub:(x.zone?("stock : "+x.zone):"sans zone de stockage"),table:"hse_produits_chimiques"};});
       if(link==="perissable") return PERISSABLES.map(function(p){return {id:p.id,raw:p.nom,nom:p.nom+(p.ref?(" ["+p.ref+"]"):""),sub:(p.empl?p.empl+" · ":"")+(p.exp?("exp. "+p.exp):"sans date"),table:"produits_perissables"};});
@@ -471,15 +472,13 @@ export const pageServicePlans = (data: any) => {
         if(j&&j.ok){ SUPPRIMES=[]; EDIT=false; syncEditUI(); noti("ok","fa-save","Maquette enregistrée ("+j.saved+" éléments)."); planSelect(CURRENT); } else noti("err","fa-times",(j&&j.error)||"Échec.");
       }).catch(function(){ noti("err","fa-times","Erreur réseau."); }); }
 
-    // ── Survol d'un repère POSTE : bulle avec process contenus, coûts (taux €/h, OPEX) et stats ──
+    // ── Survol d'un repère POSTE : bulle avec les process et machines contenus ──
     function posteTipHtml(po){
       var procTxt=(po.process&&po.process.length)?po.process.map(esc).join(", "):"aucun";
       var machTxt=(po.machines&&po.machines.length)?po.machines.map(esc).join(", "):"aucune";
       return "<div style='font-weight:800;font-size:.8rem;margin-bottom:5px;color:white;'>"+esc(po.nom)+(po.act?(" <span style='font-weight:600;color:#94a3b8;'>\\u00b7 "+esc(po.act)+"</span>"):"")+"</div>"
         +"<div style='margin-bottom:2px;'><span style='color:#94a3b8;'>Process ("+po.nbProcess+")</span> : "+procTxt+"</div>"
-        +"<div style='margin-bottom:2px;'><span style='color:#94a3b8;'>Machines ("+po.nbMachines+")</span> : "+machTxt+"</div>"
-        +"<div style='margin-top:5px;padding-top:5px;border-top:1px solid #334155;'><span style='color:#94a3b8;'>Taux effectif</span> : <b style='color:#5eead4;'>"+po.taux+" \\u20ac/h</b></div>"
-        +"<div><span style='color:#94a3b8;'>OPEX th\\u00e9orique</span> : <b style='color:#fcd34d;'>"+(po.opexTheo||0).toLocaleString('fr-FR')+" \\u20ac/an</b></div>";
+        +"<div><span style='color:#94a3b8;'>Machines ("+po.nbMachines+")</span> : "+machTxt+"</div>";
     }
     function posTip(e){ var t=document.getElementById("plan-tip"); if(!t||t.style.display==="none") return; var x=e.clientX+14,y=e.clientY+16,w=t.offsetWidth||260,h=t.offsetHeight||110; if(x+w>window.innerWidth-8) x=e.clientX-w-14; if(y+h>window.innerHeight-8) y=e.clientY-h-16; if(x<4)x=4; if(y<4)y=4; t.style.left=x+"px"; t.style.top=y+"px"; }
     function showPosteTip(po,e){ var t=document.getElementById("plan-tip"); if(!t) return; t.innerHTML=posteTipHtml(po); t.style.display="block"; posTip(e); }

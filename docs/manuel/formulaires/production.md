@@ -113,24 +113,32 @@
 | Nom du process | texte | Oui | Le nom du poste ou de l'étape de fabrication. | Tournage CNC |
 | Code | texte | Non | Un code court pour repérer le process. | PROC-05 |
 | Activité | liste déroulante (Seem, Semrac, Seem & Semrac) | Oui | Le ou les sites concernés par ce process. | Seem |
-| Type | liste déroulante (Machine, Manuel, OAS (traitement de surface)) | Oui | La nature du poste. « Machine » fait apparaître le choix de la machine rattachée. | Machine |
+| Type | liste déroulante (Machine, Manuel, OAS (traitement de surface)) | Oui | La nature du process. « Machine » fait apparaître la machine rattachée **et le taux horaire machine** ; « Manuel » affiche la note « coût chargé RH » ; « OAS » n'a pas de taux (chiffré au prix). | Machine |
 | Machine rattachée | liste déroulante (liste des machines) | Non | La machine associée au process (visible pour le type Machine). | Tour CNC Mazak QT-200 |
+| Taux horaire machine (€/h HT) | nombre ≥ 0 | Non | **Visible pour le type Machine seulement.** Le coût d'une heure machine de ce process : il valorise le réglage machine et le temps machine des étapes. Saisi à la main. Vide = « taux à saisir » (le temps machine compte 0 € et le coût est signalé incomplet). | 55 |
 | Catégorie | texte | Non | Un regroupement libre pour classer le process. | Usinage |
+| Poste de travail | liste déroulante (postes) | Non | Le poste où le process est planifié. | Tournage |
 | Ordre d'affichage | nombre | Non | La position du process dans les listes (plus petit = affiché en premier). Par défaut 100. | 100 |
 
-💡 **Astuce :** Le type « OAS » sert aux traitements de surface (bains) ; il gère un enchaînement particulier des bons de travail.
+💡 **Astuce :** Pour un process « Manuel », une note affiche la moyenne du coût chargé RH du site (ex. « moyenne atelier Seem 35,25 €/h ») : c'est elle qui valorise le temps homme. Le type « OAS » sert aux traitements de surface (bains) ; il gère un enchaînement particulier des bons de travail.
 
 ## Modifier le process
-**Quand l'utiliser :** Pour corriger le nom d'un poste existant ou changer la machine qui lui est rattachée.
-**Où le trouver :** Depuis la liste des process, action « Modifier ».
+**Quand l'utiliser :** Pour corriger le nom, le type, la machine, le **taux horaire machine** ou le poste d'un process.
+**Où le trouver :** Onglet Process Ateliers → volet « Postes & Process » → déplier le poste → crayon du process.
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
-| Nom du process | texte | Oui | Le nouveau nom du poste. | Tournage CNC 2 |
-| Machine rattachée | liste déroulante (liste des machines) | Non | La machine à associer au poste. | Tour CNC Mazak QT-250 |
+| Nom du process | texte | Oui | Le nouveau nom du process. | Tournage CNC 2 |
+| Type | liste déroulante (Machine, Manuel, OAS) | Oui | Le type ne se déduit plus de la machine : un process machine sans machine reste « Machine ». Passer en « Manuel » grise le taux (sa saisie est restituée si l'on revient en « Machine ») ; « OAS » le masque. | Machine |
+| Machine rattachée | liste déroulante (liste des machines) | Non | La machine du process (visible pour le type Machine). | Tour CNC Mazak QT-250 |
+| Taux horaire machine (€/h HT) | nombre ≥ 0 | Non | Actif pour un process Machine. Le coût d'une heure machine de ce process. Vide = « taux à saisir ». | 48 |
+| Poste de travail | liste déroulante (postes) | Non | Le poste où ce process est planifié (ses BDT s'y placent). | Tronçonnage |
+
+💡 **Astuce :** Le nouveau taux s'applique aux chiffrages (nomenclatures, analyse DT) dès leur prochain affichage, et aux coûts réels calculés ensuite.
+⚠️ **Attention :** Un taux négatif ou non numérique est refusé. Sur la base en ligne pas encore mise à jour, le message « Taux horaire machine NON enregistré… cloud-7 » signale que l'administrateur doit d'abord jouer le script de mise à jour ; le reste de la fiche est enregistré.
 
 ## Nouvelle machine / Modifier la machine
-**Quand l'utiliser :** Pour ajouter une machine de l'atelier au référentiel (ou modifier ses caractéristiques). Sert au planning, aux coûts et à la capabilité qualité.
+**Quand l'utiliser :** Pour ajouter une machine de l'atelier au référentiel (ou modifier ses caractéristiques). Sert au planning, à l'OPEX réel et à la capabilité qualité. **Une machine ne porte plus de coût horaire** : il se saisit sur ses process.
 **Où le trouver :** Onglet des machines → bouton « Nouvelle machine » (ou action « Modifier » sur une machine).
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
@@ -139,14 +147,15 @@
 | Code | texte | Non | Un code court pour repérer la machine. | CNC-03 |
 | Activité | liste déroulante (Seem, Semrac, Seem & Semrac) | Oui | Le ou les sites où se trouve la machine. | Seem |
 | Catégorie | texte | Non | Un regroupement libre (type de machine). | Usinage |
-| Capacité (h/jour) | nombre | Non | Le nombre d'heures que la machine peut travailler par jour. Par défaut 8. | 8 |
-| Coût machine (€/h) | nombre | Non | Le coût horaire de la machine, utilisé pour calculer le coût de revient. Par défaut 35. | 35 |
+| Capacité (h/jour) | nombre | Non | Le nombre d'heures que la machine peut travailler par jour (calcul d'utilisation). Par défaut 8. | 8 |
 | Tolérance ± (mm) | nombre | Non | La tolérance dimensionnelle de la machine (précision), utilisée pour la capabilité qualité. | 0.05 |
 | Statut | liste déroulante (Opérationnel, Maintenance, Arrêt) | Non | L'état actuel de la machine. | Opérationnel |
 | Opérations possibles (séparées par virgule) | texte | Non | La liste des opérations que la machine sait faire, séparées par des virgules. | Usinage CN, Tronçonnage |
-| Créer aussi le process atelier | case à cocher | Non | Si coché, crée automatiquement un poste atelier lié à cette machine pour le planning. Coché par défaut. | (coché) |
+| Créer aussi un nouveau process (au nom de la machine) | case à cocher | Non | Si coché, crée un process machine lié à cette machine pour le planning. | (coché) |
+| Taux horaire machine du nouveau process (€/h HT) | nombre ≥ 0 | Non | Apparaît quand la case précédente est cochée, à la création seulement. Vide = « taux à saisir » (un message le rappelle). | 55 |
 
-💡 **Astuce :** Laissez « Créer aussi le process atelier » coché si vous voulez pouvoir affecter directement des BDT à cette machine dans le planning.
+💡 **Astuce :** Cochez « Créer aussi un nouveau process » si vous voulez pouvoir affecter directement des BDT à cette machine dans le planning, et saisissez tout de suite son taux horaire machine.
+⚠️ **Attention :** Le champ « Coût machine (€/h) » a été supprimé le 14/09/2026. Supprimer une machine détache ses process : ils restent des process machine, avec leur taux.
 
 ## Programmer la semaine entière (présence opérateurs)
 **Quand l'utiliser :** Pour définir d'un coup les plages horaires (shifts) de plusieurs opérateurs sur toute une semaine.

@@ -5,6 +5,8 @@
 import { supabase } from './db'
 import { verifyPin, hashPin, isHashedPin } from './auth'
 import { computeExpositionSante, normQuantiteChimique } from './qref'
+import { construireTauxAtelier, coutReelBdt, typeProcess } from './shared'
+import type { TauxAtelier } from './shared'
 
 // Migration paresseuse : si le PIN stocké est en clair (legacy), le remplacer
 // par son empreinte hachée après une vérification réussie (best-effort).
@@ -335,34 +337,28 @@ export async function upsertPresence(payload: Record<string, any>) {
 }
 
 // Référentiels nécessaires aux étapes de production d'une nomenclature :
-//   - liste des machines opérationnelles avec leur taux horaire le plus récent (machines_opex)
-//   - taux horaire moyen des opérateurs (salaries actifs + est_operateur)
-//   - liste des fournisseurs de sous-traitance actifs
+//   - machines opérationnelles (SANS aucun taux : depuis le 14/09/2026 seul le PROCESS porte un taux)
+//   - process atelier + leur type (machine / manuel / oas) et leur taux machine RÉSOLU (transition comprise)
+//   - coût chargé RH MOYEN des opérateurs actifs (global + par site) — jamais un taux individuel
+//   - fournisseurs de sous-traitance actifs, sous-traitants, fournisseurs, postes
 export async function getBeRefs() {
-  const [{ data: machines }, { data: opex }, { data: ops }, { data: st }, { data: procs }, { data: stReal }, { data: fournReal }, { data: postesRaw }] = await Promise.all([
-    supabase.from('machines').select('*').neq('statut', 'arret').order('nom'),
-    supabase.from('machines_opex').select('machine_id, annee, taux_horaire').order('annee', { ascending: false }),
-    supabase.from('salaries').select('taux_horaire_charge, entite').eq('actif', true).eq('est_operateur', true),
+  const [{ data: machinesAll, error: machErr }, { data: ops, error: opsErr }, { data: st }, { data: procs, error: procErr }, { data: stReal }, { data: fournReal }, { data: postesRaw }] = await Promise.all([
+    supabase.from('machines').select('*').order('nom'),   // TOUTES (arrêt compris) : la transition lit cout_h de la machine d'un process ; filtrage « arret » ci-dessous
+    supabase.from('salaries').select('taux_horaire_charge, entite, actif, est_operateur').eq('actif', true).eq('est_operateur', true),
     supabase.from('fournisseurs_st').select('id, nom, operation, qualification, statut').eq('statut', 'actif').order('nom'),
-    supabase.from('process_atelier').select('*').order('ordre', { ascending: true }),   // select('*') → immunisé si poste_id absent (migration postes non passée) ; le .map lit poste_id ?? null
+    supabase.from('process_atelier').select('*').order('ordre', { ascending: true }),   // select('*') : l'absence de taux_horaire_machine = transition (cloud avant cloud-7)
     supabase.from('sous_traitants').select('id, nom, tarifs, prestations').eq('actif', true).order('nom'),
     supabase.from('fournisseurs').select('id, nom, categorie, activite, catalogue, familles_fourniture').eq('actif', true).order('nom'),
     supabase.from('postes').select('*').order('ordre', { ascending: true, nullsFirst: false }).order('nom').then((r: any) => r, () => ({ data: [] }))   // select('*') immunise si colonnes absentes ; ordre pour le glisser-déposer. fail-soft (migration postes peut ne pas être passée)
   ])
-  // Taux horaire le plus récent par machine
-  const opexByMachine: Record<string, number> = {}
-  ;(opex ?? []).forEach((o: any) => {
-    if (!(o.machine_id in opexByMachine)) opexByMachine[o.machine_id] = Number(o.taux_horaire)
-  })
-  // Taux horaire moyen opérateurs (global + par entité)
-  const rates = (ops ?? []).map((o: any) => Number(o.taux_horaire_charge)).filter(n => !isNaN(n))
-  const tauxMoMoyen = rates.length ? +(rates.reduce((s, n) => s + n, 0) / rates.length).toFixed(2) : 30
-  const ratesSeem   = (ops ?? []).filter((o: any) => o.entite === 'Seem').map((o: any) => Number(o.taux_horaire_charge))
-  const ratesSemrac = (ops ?? []).filter((o: any) => o.entite === 'Semrac').map((o: any) => Number(o.taux_horaire_charge))
-  const tauxMoSeem   = ratesSeem.length   ? +(ratesSeem.reduce((s, n) => s + n, 0) / ratesSeem.length).toFixed(2)     : tauxMoMoyen
-  const tauxMoSemrac = ratesSemrac.length ? +(ratesSemrac.reduce((s, n) => s + n, 0) / ratesSemrac.length).toFixed(2) : tauxMoMoyen
+  const tx = construireTauxAtelier((procs ?? []) as any[], (ops ?? []) as any[], (machinesAll ?? []) as any[])
+  const hp = tx.hommeParSite
+  const tauxErreurs: string[] = []
+  if (opsErr) tauxErreurs.push('salariés : ' + opsErr.message)
+  if (procErr) tauxErreurs.push('process : ' + procErr.message)
+  if (machErr) tauxErreurs.push('machines : ' + machErr.message)   // la transition (cloud avant cloud-7) lit cout_h de la machine
   return {
-    machines: (machines ?? []).map((m: any) => ({
+    machines: ((machinesAll ?? []) as any[]).filter((m: any) => m.statut != null && m.statut !== 'arret').map((m: any) => ({   // = l'ancien .neq('statut','arret') (qui écarte aussi les statuts NULL)
       id:         m.id,
       nom:        m.nom,
       code:       m.code,
@@ -371,21 +367,30 @@ export async function getBeRefs() {
       statut:     m.statut,
       cnc:        !!m.cnc,
       poste_id:   m.poste_id ?? null,
-      cout_h:     m.cout_h ?? null,                 // taux horaire machine → alimente le coût machine du CRU
-      taux_horaire: opexByMachine[m.id] ?? null
     })),
+    // Coût chargé RH moyen des opérateurs actifs (null = aucun ; AUCUN repli inventé). manquant = aucun du tout.
+    taux_homme: { moyen: hp.moyen, seem: hp.seem, semrac: hp.semrac, manquant: tx.hommeManquant },
+    // ⚠ ALIAS TRANSITOIRE (lu par be.tsx) — à retirer quand plus aucun écran ne le lit. Mêmes moyennes, 0 si aucune.
     taux_operateur: {
-      moyen:  tauxMoMoyen,
-      seem:   tauxMoSeem,
-      semrac: tauxMoSemrac
+      moyen:  hp.moyen ?? 0,
+      seem:   hp.seem ?? hp.moyen ?? 0,
+      semrac: hp.semrac ?? hp.moyen ?? 0,
     },
+    taux_erreur: tauxErreurs.length ? tauxErreurs.join(' · ') : null,
     fournisseurs_st: st ?? [],
     // Process internes (lien machine direct ou manuel) — poste_id = poste de rattachement (filtre du choix de process)
-    process_atelier: (procs ?? []).map((p: any) => ({
-      id: p.id, nom: p.nom, code: p.code, activite: p.activite, categorie: p.categorie,
-      requiert_machine: p.requiert_machine !== false, machine_id: p.machine_id ?? null, poste_id: p.poste_id ?? null, statut: p.statut,
-      est_oas: p.est_oas === true,   // traitement de surface : facturé au prix, jamais au temps
-    })),
+    process_atelier: ((procs ?? []) as any[]).map((p: any) => {
+      const tm = tx.tauxMachine(p.id)
+      return {
+        id: p.id, nom: p.nom, code: p.code, activite: p.activite, categorie: p.categorie,
+        requiert_machine: p.requiert_machine !== false, machine_id: p.machine_id ?? null, poste_id: p.poste_id ?? null, statut: p.statut,
+        est_oas: p.est_oas === true,   // traitement de surface : facturé au prix, jamais au temps
+        type: typeProcess(p),                                   // 'machine' | 'manuel' | 'oas' (règle unique shared.ts)
+        taux_horaire_machine: p.taux_horaire_machine ?? null,   // valeur BRUTE saisie (null = à saisir, ou colonne absente)
+        taux_machine: tm.taux,                                  // taux RÉSOLU utilisé par le calcul (0 si manuel/oas/manquant)
+        taux_source: tm.source,                                 // 'process' | 'transition_machine' | 'manquant' | 'manuel' | 'oas'
+      }
+    }),
     // Postes d'atelier (conteneurs de machines/process) → alimentent le select « Poste » de la gamme
     postes: (postesRaw ?? []).filter((p: any) => p.statut !== 'inactif').map((p: any) => ({
       id: p.id, nom: p.nom, code: p.code ?? null, activite: p.activite ?? null, couleur: p.couleur ?? null
@@ -685,46 +690,37 @@ export async function recomputeCmdAvancement(ref: string | null | undefined): Pr
   } catch { /* non bloquant */ }
 }
 
-// Coût de revient RÉEL d'une commande : MO (temps_reel × taux) + machine + matière sortie ; + marge réelle (CA facturé − coût).
+// Coût de revient RÉEL d'une commande : homme + machine (BDT) + matière sortie + sous-traitance ; + marge réelle (CA facturé − coût).
 // Isolé de recomputeCmdAvancement : si les colonnes cout_reel/marge_reelle n'existent pas encore (interop_schema.sql),
 // l'update échoue silencieusement sans casser l'avancement.
-const TAUX_MO_DEF = 45, TAUX_MACH_DEF = 50
-// Taux atelier RÉELS (jamais 45/50 en dur, sauf repli ultime) — cohérents avec l'estimé.
-//  Machine : taux horaire = (OPEX annuel + achats greffés + AMORTISSEMENT annuel) / heures productives,
-//            amortissement = valeur_achat / duree_amortissement_ans ; repli machines_opex.taux_horaire, puis machines.cout_h, puis 50.
-//  MO      : salaries.taux_horaire_charge de l'opérateur ; repli moyenne par entité (Seem/Semrac) ; repli 45.
-export async function computeAtelierRates() {
-  const [{ data: machines }, { data: opex }, { data: sals }] = await Promise.all([
-    supabase.from('machines').select('id, cout_h, valeur_achat, duree_amortissement_ans'),
-    supabase.from('machines_opex').select('machine_id, annee, cout_total_ht, heures_productives, taux_horaire, achats_ht'),
-    supabase.from('salaries').select('id, taux_horaire_charge, entite'),
+
+// Taux de l'atelier (14/09/2026) — coût horaire porté par le PROCESS (shared.ts : construireTauxAtelier).
+//   process   : select('*') — l'absence de la colonne taux_horaire_machine déclenche la transition (machines.cout_h)
+//   salariés  : TOUS (le taux individuel de l'opérateur d'un BDT sert au coût réel, même s'il a quitté l'atelier) ;
+//               les MOYENNES (coût estimé) ne retiennent que les opérateurs actifs (filtre dans construireTauxAtelier)
+//   machines  : id, cout_h — transition uniquement
+// ⚠ supabase-js ne lève jamais : une lecture en échec est REMONTÉE dans `error`, jamais confondue avec « aucun taux ».
+export async function getTauxAtelier(): Promise<{ tx: TauxAtelier; salById: Record<string, any>; error: string | null }> {
+  const [pr, sa, ma] = await Promise.all([
+    supabase.from('process_atelier').select('*'),
+    supabase.from('salaries').select('id, taux_horaire_charge, entite, actif, est_operateur'),
+    supabase.from('machines').select('id, cout_h'),
   ])
-  const machById: Record<string, any> = {}; for (const m of (machines ?? [])) machById[String((m as any).id)] = m
-  const opexByMachine: Record<string, any> = {}
-  for (const o of (opex ?? [])) { const m = String((o as any).machine_id); if (!opexByMachine[m] || Number((o as any).annee) > Number(opexByMachine[m].annee)) opexByMachine[m] = o }
-  const tauxMachineFor = (machineId: any): number => {
-    const m = machById[String(machineId)]; const o = opexByMachine[String(machineId)]
-    let taux = 0
-    if (o && Number((o as any).heures_productives) > 0) {
-      const amort = (m && Number(m.valeur_achat) > 0 && Number(m.duree_amortissement_ans) > 0) ? (Number(m.valeur_achat) / Number(m.duree_amortissement_ans)) : 0
-      taux = (Number((o as any).cout_total_ht || 0) + Number((o as any).achats_ht || 0) + amort) / Number((o as any).heures_productives)
-    } else if (o && Number((o as any).taux_horaire) > 0) taux = Number((o as any).taux_horaire)
-    if (!(taux > 0) && m && Number(m.cout_h) > 0) taux = Number(m.cout_h)
-    return taux > 0 ? taux : TAUX_MACH_DEF
-  }
-  const salById: Record<string, any> = {}; for (const s of (sals ?? [])) salById[String((s as any).id)] = s
-  const grp: Record<string, number[]> = {}
-  for (const s of (sals ?? [])) { const t = Number((s as any).taux_horaire_charge); if (t > 0) { const e = String((s as any).entite || ''); (grp[e] = grp[e] || []).push(t) } }
-  const avgByEntite: Record<string, number> = {}
-  for (const [e, arr] of Object.entries(grp)) avgByEntite[e] = arr.reduce((a, b) => a + b, 0) / arr.length
-  const tauxMoFor = (operateurId: any, activite?: any): number => {
-    const s = salById[String(operateurId)]
-    if (s && Number(s.taux_horaire_charge) > 0) return Number(s.taux_horaire_charge)
-    const e = String(activite || '')
-    if (avgByEntite[e] > 0) return avgByEntite[e]
-    return TAUX_MO_DEF
-  }
-  return { tauxMachineFor, tauxMoFor }
+  const erreurs: string[] = []
+  if (pr.error) erreurs.push('process_atelier : ' + pr.error.message)
+  if (sa.error) erreurs.push('salaries : ' + sa.error.message)
+  if (ma.error) erreurs.push('machines : ' + ma.error.message)
+  const salById: Record<string, any> = {}
+  for (const s of ((sa.data ?? []) as any[])) salById[String(s.id)] = s
+  const tx = construireTauxAtelier((pr.data ?? []) as any[], (sa.data ?? []) as any[], (ma.data ?? []) as any[])
+  return { tx, salById, error: erreurs.length ? erreurs.join(' · ') : null }
+}
+
+// Coût RÉEL des BDT (règle unique : shared.ts coutReelBdt) — homme au taux chargé de l'opérateur, TOUJOURS ;
+// machine au taux du process du BDT si ce process est de type machine. Plus aucun 45/50 ni taux issu de l'OPEX.
+export async function computeAtelierRates() {
+  const { tx, salById, error } = await getTauxAtelier()
+  return { tx, salById, error, coutBdt: (b: any) => coutReelBdt(b, tx, salById) }
 }
 export async function recomputeCmdCout(ref: string | null | undefined): Promise<void> {
   if (!ref) return
@@ -734,16 +730,21 @@ export async function recomputeCmdCout(ref: string | null | undefined): Promise<
     const cmd = (cmds ?? []).find((x: any) => String(x.id) === String(ref) || String(x.num_affaire) === String(ref))
     if (!cmd) return
     const aff = String((cmd as any).num_affaire ?? (cmd as any).id)
-    const { data: bdts } = await supabase.from('bons_de_travail').select('temps_reel, duree, machine_id, operateur_id, activite, lot_id, lot_ref, cmd_id, cmd_ref, num_affaire')
+    const { data: bdts, error: bdtErr } = await supabase.from('bons_de_travail').select('temps_reel, duree, machine_id, process_id, operateur_id, activite, lot_id, lot_ref, cmd_id, cmd_ref, num_affaire')
+    // Lecture en échec (BDT ou taux) : on n'écrit PAS un coût faux (supabase-js ne lève jamais).
+    if (bdtErr) { console.warn('recomputeCmdCout : lecture des BDT impossible — ' + bdtErr.message); return }
     const mine = (bdts ?? []).filter((b: any) => String(b.cmd_id ?? '') === String((cmd as any).id) || String(b.cmd_ref ?? '') === aff || String(b.num_affaire ?? '') === aff)
     const rates = await computeAtelierRates()
+    if (rates.error) { console.warn('recomputeCmdCout : taux atelier illisibles — ' + rates.error); return }
     let mo = 0, mach = 0
     const lotIds = new Set<string>()
+    const manquants = new Set<string>()
     for (const b of mine) {
-      const t = Number((b as any).temps_reel ?? (b as any).duree ?? 0) || 0
-      // Taux RÉELS : machine (OPEX+amortissement/heures) ou MO (taux chargé opérateur), jamais 45/50 forfaitaire.
-      if ((b as any).machine_id) mach += t * rates.tauxMachineFor((b as any).machine_id)
-      else mo += t * rates.tauxMoFor((b as any).operateur_id, (b as any).activite)
+      // Coût RÉEL (shared.ts coutReelBdt) : homme (opérateur) toujours + machine si process machine.
+      const cb = rates.coutBdt(b)
+      mo += cb.coutHomme
+      mach += cb.coutMachine
+      for (const m of cb.manquants) manquants.add(m)
       // Réconciliation clé-lot : lot_id ?? lot_ref (= lots.id = mouvements_stock.lot_id) → la matière est enfin comptée.
       const k = String(((b as any).lot_id ?? (b as any).lot_ref ?? '') || ''); if (k) lotIds.add(k)
     }
@@ -771,6 +772,15 @@ export async function recomputeCmdCout(ref: string | null | undefined): Promise<
     const caFac = (facs ?? []).filter((f: any) => String(f.cmd_id ?? '') === String((cmd as any).id)).reduce((s: number, f: any) => s + (Number(f.montant_ht) || 0), 0)
     const patch: any = { cout_reel: coutReel }
     if (caFac > 0) patch.marge_reelle = Math.round((caFac - coutReel) * 100) / 100
+    // Coût INCOMPLET (taux machine à saisir, coût chargé RH absent, BDT machine sans process) : la part manquante vaut 0,
+    // le coût serait sous-évalué et la marge surévaluée — et marge_reelle nourrit l'alerte Direction « Marge faible ».
+    // Aucune colonne ne porte le drapeau : on écrit « non calculable » (null) plutôt qu'une valeur fausse. La raison
+    // reste visible en direct sur la fiche Commande 360 (kpi.manquants).
+    if (manquants.size) {
+      patch.cout_reel = null
+      patch.marge_reelle = null
+      console.warn(`recomputeCmdCout ${aff} : coût réel incomplet (${Array.from(manquants).join(', ')}) — cout_reel et marge_reelle laissés vides`)
+    }
     await supabase.from('commandes').update(patch).eq('id', (cmd as any).id)
   } catch { /* non bloquant : colonnes peut-être absentes */ }
 }
@@ -802,13 +812,18 @@ export async function getCommandeDetail(cmdId: string) {
   const factures = (facsAll ?? []).filter((f: any) => String(f.cmd_id ?? '') === String((cmd as any).id))
   const ncs = (ncsAll ?? []).filter((n: any) => lotIds.has(String(n.lot_ref)))
   const pvs = (pvsAll ?? []).filter((p: any) => lotIds.has(String((p as any).lot_id)))
-  // Taux RÉELS (mêmes que recomputeCmdCout → fiche 360 = cockpit, aucune divergence).
+  // Coût RÉEL (même règle que recomputeCmdCout → fiche 360 = cockpit, aucune divergence) :
+  //   heures homme = Σ t (toujours) ; heures machine = Σ t des BDT dont le process est de type machine.
   const rates = await computeAtelierRates()
   let moH = 0, machH = 0, coutMoAcc = 0, coutMachAcc = 0
+  const manquantsCout = new Set<string>()
+  const typeBdt: Record<string, string> = {}
   for (const b of bdts) {
-    const t = Number((b as any).temps_reel ?? (b as any).duree ?? 0) || 0
-    if ((b as any).machine_id) { machH += t; coutMachAcc += t * rates.tauxMachineFor((b as any).machine_id) }
-    else { moH += t; coutMoAcc += t * rates.tauxMoFor((b as any).operateur_id, (b as any).activite) }
+    const cb = rates.coutBdt(b)
+    moH += cb.hommeH; machH += cb.machineH
+    coutMoAcc += cb.coutHomme; coutMachAcc += cb.coutMachine
+    for (const m of cb.manquants) manquantsCout.add(m)
+    typeBdt[String((b as any).id)] = cb.typeProcess
   }
   const priceOf = (id: any) => { const s = (stock ?? []).find((x: any) => String(x.id) === String(id) || String(x.reference) === String(id)); return s ? Number((s as any).prix_achat_ht) || 0 : 0 }
   const mvts = (mvtsAll ?? []).filter((m: any) => lc((m as any).type) === 'sortie' && lotIds.has(String((m as any).lot_id)))
@@ -816,18 +831,22 @@ export async function getCommandeDetail(cmdId: string) {
   const matieres = mvts.map((m: any) => { const pu = priceOf((m as any).article_id); const total = (Number((m as any).quantite) || 0) * pu; matiere += total; return { article: (m as any).article_nom || (m as any).article_id, quantite: Number((m as any).quantite) || 0, pu: +pu.toFixed(2), total: +total.toFixed(2), date: String((m as any).date_mvt || (m as any).created_at || '').slice(0, 10), bdt_id: (m as any).bdt_id || null } })
   // Coût sous-traitance réel = Σ BC sous-traitant de l'affaire.
   const coutSt = +(((bcAll ?? []) as any[]).filter((x: any) => /sous|st/i.test(String(x.type_bc || '')) && (String(x.num_affaire ?? '') === aff || String(x.cmd_ref ?? '') === aff || String(x.cmd_ref ?? '') === String((cmd as any).id))).reduce((s: number, x: any) => s + (Number(x.montant_ht) || 0), 0)).toFixed(2)
-  const coutMo = +coutMoAcc.toFixed(2), coutMach = +coutMachAcc.toFixed(2), coutMat = +matiere.toFixed(2)
-  const coutReel = +(coutMo + coutMach + coutMat + coutSt).toFixed(2)
+  // Taux illisibles (panne ≠ absence, supabase-js ne lève jamais) : homme, machine, coût réel et marge NON calculés
+  // (null) — même règle que recomputeCmdCout, qui n'écrit rien dans ce cas. Jamais un 0 présenté comme réel.
+  const coutMat = +matiere.toFixed(2)
+  const coutMo: number | null = rates.error ? null : +coutMoAcc.toFixed(2)
+  const coutMach: number | null = rates.error ? null : +coutMachAcc.toFixed(2)
+  const coutReel: number | null = (coutMo == null || coutMach == null) ? null : +(coutMo + coutMach + coutMat + coutSt).toFixed(2)
   const caFacture = factures.reduce((s: number, f: any) => s + (Number(f.montant_ht) || 0), 0)
   const budget = Number((cmd as any).montant) || 0
   const base = caFacture > 0 ? caFacture : budget
-  const marge = base > 0 ? +(base - coutReel).toFixed(2) : null
-  const margePct = base > 0 ? +((marge as number) / base * 100).toFixed(1) : null
+  const marge = (base > 0 && coutReel != null) ? +(base - coutReel).toFixed(2) : null
+  const margePct = (base > 0 && marge != null) ? +(marge / base * 100).toFixed(1) : null
   const bdtTotal = bdts.length, bdtSoldes = bdts.filter((b: any) => /sold/.test(lc(b.statut))).length
   return {
     cmd: { id: (cmd as any).id, num_affaire: (cmd as any).num_affaire, client_nom: (cmd as any).client_nom, montant: budget, statut: (cmd as any).statut, date_cmd: (cmd as any).date_cmd, date_liv: (cmd as any).date_liv },
-    kpi: { budget, caFacture: +caFacture.toFixed(2), coutReel, coutMo, coutMach, coutMat, marge, margePct, avancement: bdtTotal > 0 ? Math.round(bdtSoldes / bdtTotal * 100) : 0, bdtTotal, bdtSoldes, moH: +moH.toFixed(1), machH: +machH.toFixed(1) },
-    bdts: bdts.slice(0, 200).map((b: any) => ({ id: b.id, piece: b.piece, operation: b.operation, machine: b.machine_id ? 'machine' : 'mo', statut: b.statut, duree: Number(b.duree) || 0, temps_reel: b.temps_reel != null ? Number(b.temps_reel) : null, operateur_id: b.operateur_id ?? null, operateur_nom: b.operateur_nom ?? null, lot_id: b.lot_id ?? null })),
+    kpi: { budget, caFacture: +caFacture.toFixed(2), coutReel, coutMo, coutMach, coutMat, marge, margePct, avancement: bdtTotal > 0 ? Math.round(bdtSoldes / bdtTotal * 100) : 0, bdtTotal, bdtSoldes, moH: +moH.toFixed(1), machH: +machH.toFixed(1), manquants: Array.from(manquantsCout), tauxErreur: rates.error },
+    bdts: bdts.slice(0, 200).map((b: any) => ({ id: b.id, piece: b.piece, operation: b.operation, machine: typeBdt[String(b.id)] === 'machine' ? 'machine' : 'mo', statut: b.statut, duree: Number(b.duree) || 0, temps_reel: b.temps_reel != null ? Number(b.temps_reel) : null, operateur_id: b.operateur_id ?? null, operateur_nom: b.operateur_nom ?? null, lot_id: b.lot_id ?? null })),
     lots: lots.slice(0, 100).map((l: any) => ({ id: l.id, piece: l.piece, qte: Number(l.qte) || 0, statut: l.statut, nc: (ncsAll ?? []).filter((n: any) => String(n.lot_ref) === String(l.id)).length })),
     factures: factures.map((f: any) => ({ num: f.num_facture || f.id, montant_ht: Number(f.montant_ht) || 0, statut: f.statut, date: String(f.date_facture || f.created_at || '').slice(0, 10) })),
     matieres: matieres.slice(0, 100),
@@ -943,20 +962,25 @@ export async function getAffaireDetail(numAffaire: string) {
   const montantOffre = offres.reduce((s: number, o: any) => s + (Number(o.montant) || 0), 0)
   const montantCmd = cmds.reduce((s: number, c: any) => s + (Number(c.montant) || 0), 0)
   const caFacture = cmdDetails.reduce((s: number, d: any) => s + (Number(d.kpi?.caFacture) || 0), 0)
-  const coutReel = cmdDetails.reduce((s: number, d: any) => s + (Number(d.kpi?.coutReel) || 0), 0)
+  // Coût réel de l'affaire : non calculable (null) si les taux d'UNE commande sont illisibles ; données de coût
+  // manquantes (taux à saisir, coût chargé RH absent…) remontées pour être affichées.
+  const tauxErreur: string | null = (cmdDetails.find((d: any) => d.kpi?.tauxErreur) as any)?.kpi?.tauxErreur ?? null
+  const manquantsAff = Array.from(new Set<string>(cmdDetails.flatMap((d: any) => (d.kpi?.manquants ?? []) as string[])))
+  const coutReel: number | null = tauxErreur ? null : cmdDetails.reduce((s: number, d: any) => s + (Number(d.kpi?.coutReel) || 0), 0)
   const bdtTotal = cmdDetails.reduce((s: number, d: any) => s + (Number(d.kpi?.bdtTotal) || 0), 0)
   const bdtSoldes = cmdDetails.reduce((s: number, d: any) => s + (Number(d.kpi?.bdtSoldes) || 0), 0)
   const nbNc = cmdDetails.reduce((s: number, d: any) => s + ((d.ncs || []).length), 0)
   const nbFactures = cmdDetails.reduce((s: number, d: any) => s + ((d.factures || []).length), 0)
   const nbLots = cmdDetails.reduce((s: number, d: any) => s + ((d.lots || []).length), 0)
   const base = caFacture > 0 ? caFacture : (montantCmd > 0 ? montantCmd : montantOffre)
-  const marge = base > 0 ? +(base - coutReel).toFixed(2) : null
+  const marge = (base > 0 && coutReel != null) ? +(base - coutReel).toFixed(2) : null
   const margePct = (base > 0 && marge != null) ? +((marge as number) / base * 100).toFixed(1) : null
   const avancement = bdtTotal > 0 ? Math.round(bdtSoldes / bdtTotal * 100) : 0
   return {
     num, found: (dts.length + offres.length + cmds.length) > 0, client,
     dts, offres, cmds, cmdDetails, credits, bls,
-    kpi: { montantOffre: +montantOffre.toFixed(2), montantCmd: +montantCmd.toFixed(2), caFacture: +caFacture.toFixed(2), coutReel: +coutReel.toFixed(2), marge, margePct, avancement, bdtTotal, bdtSoldes, nbNc, nbFactures, nbLots, soldeAvoirs: credits.reduce((s: number, c: any) => s + (Number(c.solde) || 0), 0) },
+    kpi: { montantOffre: +montantOffre.toFixed(2), montantCmd: +montantCmd.toFixed(2), caFacture: +caFacture.toFixed(2), coutReel: coutReel == null ? null : +coutReel.toFixed(2), marge, margePct,
+      manquants: manquantsAff, tauxErreur, avancement, bdtTotal, bdtSoldes, nbNc, nbFactures, nbLots, soldeAvoirs: credits.reduce((s: number, c: any) => s + (Number(c.solde) || 0), 0) },
   }
 }
 
@@ -978,23 +1002,31 @@ export async function getLotDetail(lotId: string) {
   const myQuar = (quar ?? []).filter((q: any) => String(q.lot_id ?? '') === String(lotId))
   const ncIds = new Set(myNc.map((n: any) => String(n.id)))
   const my8d = (r8d ?? []).filter((r: any) => ncIds.has(String(r.nc_id ?? '')) || String(r.lot_ref ?? '') === String(lotId))
-  // Taux RÉELS (cohérents avec recomputeCmdCout / getCommandeDetail).
+  // Coût RÉEL (même règle que recomputeCmdCout / getCommandeDetail : shared.ts coutReelBdt).
   const rates = await computeAtelierRates()
   let moH = 0, machH = 0, coutMoAcc = 0, coutMachAcc = 0
-  for (const b of myBdt) { const t = Number((b as any).temps_reel ?? (b as any).duree ?? 0) || 0; if ((b as any).machine_id) { machH += t; coutMachAcc += t * rates.tauxMachineFor((b as any).machine_id) } else { moH += t; coutMoAcc += t * rates.tauxMoFor((b as any).operateur_id, (b as any).activite) } }
+  const manquantsCout = new Set<string>()
+  for (const b of myBdt) {
+    const cb = rates.coutBdt(b)
+    moH += cb.hommeH; machH += cb.machineH
+    coutMoAcc += cb.coutHomme; coutMachAcc += cb.coutMachine
+    for (const m of cb.manquants) manquantsCout.add(m)
+  }
   const priceOf = (id: any) => { const s = (stock ?? []).find((x: any) => String(x.id) === String(id) || String(x.reference) === String(id)); return s ? Number((s as any).prix_achat_ht) || 0 : 0 }
   const myMvt = (mvts ?? []).filter((m: any) => lc((m as any).type) === 'sortie' && String((m as any).lot_id ?? '') === String(lotId))
   let matiere = 0
   const matieres = myMvt.map((m: any) => { const pu = priceOf(m.article_id); const total = (Number(m.quantite) || 0) * pu; matiere += total; return { article: m.article_nom || m.article_id, quantite: Number(m.quantite) || 0, total: +total.toFixed(2), date: String(m.date_mvt || m.created_at || '').slice(0, 10) } })
-  const coutMO = Math.round(coutMoAcc), coutMach = Math.round(coutMachAcc), coutMat = Math.round(matiere)
+  // Taux illisibles (panne ≠ absence) : homme et machine NON calculés (null) plutôt qu'un 0 présenté comme réel.
+  const coutMO = rates.error ? null : Math.round(coutMoAcc), coutMach = rates.error ? null : Math.round(coutMachAcc), coutMat = Math.round(matiere)
   const ncBloq = myNc.filter((n: any) => ['Critique', 'Bloquante'].includes(n.gravite)).length
   const enQuar = myQuar.filter((q: any) => !/lib|sort|clos|leve/i.test(lc(q.statut))).length
   return {
     kpi: {
-      coutMO, coutMach, coutMat, coutEngage: coutMO + coutMach + coutMat,
+      coutMO, coutMach, coutMat, coutEngage: (coutMO == null || coutMach == null) ? null : coutMO + coutMach + coutMat,
       nbBDT: myBdt.length, nbBDTSoldes: myBdt.filter((b: any) => /sold/.test(lc(b.statut))).length,
       nbPV: myPv.length, nbNC: myNc.length, ncBloq, enQuar, nb8d: my8d.length,
       moH: +moH.toFixed(1), machH: +machH.toFixed(1),
+      manquants: Array.from(manquantsCout), tauxErreur: rates.error,
     },
     pvs: myPv.slice(0, 20).map((p: any) => ({ num: p.num_pv || p.id, type: p.type_controle, statut: p.statut, decision: p.decision, date: p.date_pv, cpk: p.cpk })),
     ncs: myNc.slice(0, 20).map((n: any) => ({ id: n.id, gravite: n.gravite, statut: n.statut, type: n.type_nc, date: n.date_nc })),
@@ -2723,6 +2755,13 @@ export async function getProcessAtelier(): Promise<any[]> {
     .select('*')
     .order('ordre', { ascending: true })
   return data ?? []
+}
+
+// Process rattachés à UNE machine — l'échec de lecture est REMONTÉ (supabase-js ne lève jamais) : la suppression d'une
+// machine ne doit pas se faire sur une liste vide qui ne serait qu'une panne.
+export async function getProcessAtelierDeMachine(machineId: string): Promise<{ data: any[]; error: string | null }> {
+  const { data, error } = await supabase.from('process_atelier').select('*').eq('machine_id', machineId)
+  return { data: (data ?? []) as any[], error: error ? error.message : null }
 }
 
 export async function createProcessAtelier(payload: Record<string, any>) {

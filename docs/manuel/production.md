@@ -11,7 +11,7 @@ Planification et suivi de la fabrication : planning Gantt des BDT (bons de trava
 - **Planning Gantt BST** — Planning de la sous-traitance (14 jours).
 - **Présence opérateurs** — Programmation des horaires (matin / journée / soir / absent) et congés. Pilote qui est affectable dans le planning.
 - **Commandes & Lots** — Vue des commandes à faire, découpées en lots et BDT.
-- **Process Ateliers** — Référentiel des postes, machines et process (taux horaire, capacité).
+- **Process Ateliers** — Référentiel des postes, machines et process. **Seul le process machine porte un coût horaire** (« Taux horaire machine »), saisi à la main ; machines et postes n'en ont plus.
 - **Dashboards** — Programmation et production.
 
 > Il n'y a **plus de page « Affectation » séparée** ni de sous-navigation « Programmation | Affectation » : tout se fait sur le planning unique.
@@ -34,6 +34,28 @@ Utile pour réaliser une opération en plusieurs fois (plusieurs créneaux, post
 4. **« Découper »** (grisé tant qu'un morceau est vide ou à 0) : le BDT d'origine devient le premier morceau et garde son numéro, les suivants sont créés avec les suffixes **-M2**, **-M3**… Chaque morceau reçoit **exactement** le temps saisi et reste dans la goulotte, à programmer séparément.
 
 > Un BDT **posé sur le planning** ne se découpe pas : le déprogrammer d'abord (clic droit → « Déprogrammer », ou glisser la barre dans la goulotte). Un BDT reçu, soldé, annulé ou sous-traité ne se découpe pas non plus.
+
+### Saisir le taux horaire machine d'un process
+Depuis le 14/09/2026, le coût horaire se saisit **sur le process**, et seulement sur un process **machine**. Une machine ou un poste n'ont plus de taux (le champ « Coût machine (€/h) » a disparu).
+1. Onglet **Process Ateliers** → volet **Postes & Process** → déplier le poste (flèche).
+2. Chaque process affiche une pastille : **« X €/h »** (taux saisi), **« taux à saisir »** (process machine sans taux : son temps machine compte 0 €), **« coût RH »** (process manuel).
+3. **Crayon** du process → **Type** (Machine / Manuel / OAS) → **Taux horaire machine (€/h HT)** → **Enregistrer**. Vide = « taux à saisir ».
+4. Pour un process **manuel**, pas de taux : une note rappelle que le temps homme est valorisé au **coût chargé RH** des opérateurs (fiche salarié, service RH), avec la moyenne du site.
+
+![Modifier le process](../assets/form-production-process-edit.png)
+
+> **Taux de départ** : chaque process machine a reçu l'ancien coût horaire de sa machine — souvent **35 €/h**, l'ancienne valeur par défaut. À vérifier un par un.
+
+### Comment se calcule le coût d'une étape
+| Temps de la gamme | Homme | Machine | Compté |
+|---|---|---|---|
+| Réglage homme (ROP) | ✔ | — | une fois par lot |
+| Réglage machine (RGM) | ✔ | ✔ | une fois par lot |
+| Temps homme variable (MO) | ✔ | — | par pièce |
+| Temps machine variable (Mach) | — | ✔ | par pièce |
+
+Heures homme × coût chargé RH + heures machine × taux horaire machine du process (process machine seulement).
+**Exemple** (lot de 10 pièces, machine à 60 €/h, coût chargé 35 €/h) : réglage homme 0,5 h + réglage machine 1 h + 0,1 h × 10 en homme + 0,2 h × 10 en machine → **2,5 h homme** (87,50 €) et **3 h machine** (180 €) = **267,50 €** le lot, 26,75 € la pièce.
 
 ---
 > Détails techniques : `docs/technique/06-modules/production.md`. Droits d'accès : `docs/fiches-poste/`.

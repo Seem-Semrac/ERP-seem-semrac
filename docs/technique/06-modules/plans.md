@@ -25,6 +25,9 @@ Maquette « BIM » : zones (rectangles) + objets (machines, périssables, chimie
 Zones = rectangles dessinables, objets = pins rangés dedans (classement par zone). Couleurs d'état live. Deep-links vers fiches. Auto-placement. **Vue « Risque chimique » (SEIRICH Phase 4)** : bouton qui colore les repères chimie/ATEX par niveau de risque (niveau précalculé serveur via `computeRisqueChimique` + expositions ; couleur au rendu, non persistée) + légende par niveau ; deep-link repère chimie → fiche produit `/securite/chimique/:id`. Route charge `getHseExpositions`. Aucune migration.
 
 
+### Postes : plus de taux ni d'OPEX théorique (14/09/2026)
+- La route `/plans/service` ne calcule plus `computePosteRates` ni l'OPEX théorique (`cout_h × capacité × 220`) : `postesStats[]` = `{id, nom, couleur, activite, nbMachines, machines, nbProcess, process}`. La bulle de survol d'un repère « poste » et le sous-titre du catalogue ne montrent plus que ses process et ses machines. Le taux horaire est porté par le **process** (voir `production.md`).
+
 ### Le plan ne CRÉE rien : il POSE (2026-08-25)
 - Refonte demandée : « on peut ajouter tout ce qu on veut, on va pas faire comme ça ». La légende latérale devient un **catalogue** des fiches de l ERP ; on clique une fiche puis on la place. **Aucune saisie de libellé, aucune création d entité depuis le plan.**
 - `CATS` : 9 catégories, **toutes** avec un `link` obligatoire. Zones — `poste` (passé de point à **rect**, porte ses process et machines), `atelier` (zonage Z1–Z7/A + matrice EPI), `atex`. Objets — `machine`, `chimie`, `perissable`, `ecme` (**nouveau**, 265 fiches), `vgp`, `dechet` (**nouveau**).

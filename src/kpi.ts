@@ -5,7 +5,7 @@
 // 100% défensif : toute table vide / champ manquant → 0 / null / [].
 // ══════════════════════════════════════════════════════════════
 import type { DashboardData } from './queries'
-import { computeNomCostForQty, coutEtapeST } from './shared'
+import { computeNomCostForQty, coutEtapeST, construireTauxAtelier } from './shared'
 import type { DashFilter } from './dash_filter'
 import { period, filterRows } from './dash_filter'
 
@@ -571,7 +571,7 @@ export function maintenance(d: DashboardData, f?: DashFilter) {
   const mopex = ((d.machinesOpex || []) as any[]).filter(m => passeMachine(nameById.get(String(m.machine_id)) || m.machine_nom))
   const heuresProd = sumBy(mopex, m => num(m.heures_productives))
   const coutOpexTotal = sumBy(mopex, m => num(m.cout_total_ht) || num(m.achats_ht))
-  const coutHoraireReel = heuresProd > 0 ? Math.round(coutOpexTotal / heuresProd) : null
+  // (14/09/2026) Plus de « coût horaire réel » OPEX ÷ heures : seul le PROCESS porte un taux horaire. L'OPEX reste en euros.
   const opexParMachine = topN(groupSum(mopex, m => nameById.get(String(m.machine_id)) || m.machine_nom || m.machine_id || '—', m => num(m.cout_total_ht) || num(m.achats_ht)), 6)
   // MTBF/MTTR par machine (classement, le plus critique en tête)
   const mtbfParMachine = (mtbf as any[]).map(m => ({ nom: m.machine_nom || nameById.get(String(m.machine_id)) || m.machine_id || '—', mtbf: num(m.mtbf_h), mttr: num(m.mttr_h), dispo: num(m.disponibilite_pct), pannes: num(m.nb_pannes) })).sort((a, b) => b.mttr - a.mttr).slice(0, 6)
@@ -581,7 +581,7 @@ export function maintenance(d: DashboardData, f?: DashFilter) {
     dispoParc, disponibilite, oee, pannes: pannes.length, mtbfMoyen, mttrMoyen: mttrMoyen ?? mttrCalc,
     omOpen: omOpen.length, omTotal: oms.length, ratioPreventif, prev, corr, coutMaint,
     prevPlan: prevPlan.length, machinesTotal: machines.length,
-    heuresProd: Math.round(heuresProd), coutOpexTotal: Math.round(coutOpexTotal), coutHoraireReel, opexParMachine, mtbfParMachine,
+    heuresProd: Math.round(heuresProd), coutOpexTotal: Math.round(coutOpexTotal), opexParMachine, mtbfParMachine,
     backlog, backlogTop, serieCoutMaint, serieCoutMaintPrev,
     monthLabels: P.months.map(m => m.label), periodLabel: (f && f.active) ? 'période' : String(curYear()),
   }
@@ -815,9 +815,14 @@ export function be(d: DashboardData, f?: DashFilter) {
   const fournitures = (d.fournitures || []) as any[]
   const byNom = new Map<string, any[]>()
   for (const fo of fournitures) { const k = String(fo.nomenclature_id || ''); if (!byNom.has(k)) byNom.set(k, []); byNom.get(k)!.push(fo) }
+  // Taux de l'atelier (14/09/2026) : taux machine porté par le PROCESS, taux homme = coût chargé RH moyen du site.
+  //   process / salaries / machines font partie du socle toujours chargé par getDashboardData (aucune requête en plus).
+  const tx = construireTauxAtelier((d.process || []) as any[], (d.salaries || []) as any[], (d.machines || []) as any[])
+  let coutsIncomplets = 0
   const lignes = noms.map((n: any) => {
-    const c = computeNomCostForQty(n, byNom.get(String(n.id)) || [], 1)
-    return { ref: n.code_ref_produit || n.num_nom || n.id, desc: n.description || '', perPiece: c.perPiece, matiere: c.matierePiece, mo: c.moPiece, machine: c.machinePiece, st: c.stOrder, activite: lc(n.entite || '') }
+    const c = computeNomCostForQty(n, byNom.get(String(n.id)) || [], 1, { taux: tx })
+    if (c.manquants.length) coutsIncomplets++
+    return { ref: n.code_ref_produit || n.num_nom || n.id, desc: n.description || '', perPiece: c.perPiece, matiere: c.matierePiece, mo: c.moPiece, machine: c.machinePiece, st: c.stOrder, activite: lc(n.entite || ''), manquants: c.manquants }
   }).filter(l => l.perPiece > 0)
   const crus = lignes.map(l => l.perPiece)
   const cruMoyen = crus.length ? round2(crus.reduce((s, v) => s + v, 0) / crus.length) : 0
@@ -848,6 +853,7 @@ export function be(d: DashboardData, f?: DashFilter) {
 
   return {
     cruMoyen, topCher, nbChiffrees: crus.length, lignes, structureCout, tauxCompletude, complet, nbNoms: noms.length,
+    coutsIncomplets, hommeManquant: tx.hommeManquant,   // nomenclatures dont le coût manque d'un taux (process machine / coût RH)
     margeMoy, margeSeem: avg(margesSeem), margeSemrac: avg(margesSemrac), cruMarge,
     dtAAnalyser, dtAnalysees, dtTotal: dts.length, tauxAnalyse: pctOf(dtAnalysees, dts.length), dtOpen,
     serieDt, serieDtPrev, monthLabels: P.months.map(m => m.label), periodLabel: (f && f.active) ? 'période' : 'mois',

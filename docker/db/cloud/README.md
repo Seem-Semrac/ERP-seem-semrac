@@ -25,6 +25,7 @@ dans **Supabase Studio → SQL Editor**.
 | `cloud-4-bdt-debut-numerique.sql` | **à faire** — équivalent de la migration 005 | passe `bons_de_travail.debut` d'entier à décimal (aucune perte). Sans lui, un BDT déposé au quart d'heure est arrondi à l'heure pleine |
 | `cloud-5-nomenclature-journal.sql` | **à faire** — équivalent de la migration 006 | crée le journal EN 9100 des nomenclatures (table en ajout seul). Sans lui, les modifications s'enregistrent mais ne sont pas tracées |
 | `cloud-6-reception-fournisseur-avoirs.sql` | **à faire** — équivalent de la migration 008 | décision sur un lot fournisseur non conforme (retour / dérogation / entrée partielle) + registre des avoirs fournisseurs. Sans lui, la Qualité ne peut pas statuer sur une réception non conforme et l'onglet Achats « Avoirs fournisseurs » reste vide |
+| `cloud-7-process-taux-horaire-machine.sql` | **à faire** — équivalent de la migration 009 | ajoute `process_atelier.taux_horaire_machine` (coût horaire machine saisi sur le process) et y recopie le `cout_h` actuel de la machine des process machine — une seule fois, à la création de la colonne (rejoué, il ne ré-alimente pas un taux vidé volontairement). Sans lui, le calcul lit encore `machines.cout_h` (transition) et la saisie du taux sur un process est refusée avec un message qui renvoie ici |
 
 > La migration Docker **007** (identifiant généré par défaut) n'a **pas** d'équivalent cloud : le
 > cloud génère déjà ses identifiants — c'est la base Docker, née de `schema.sql`, qui les avait perdus.

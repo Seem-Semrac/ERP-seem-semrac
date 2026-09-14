@@ -2,6 +2,7 @@
 
 > **Fichier généré** par `python scripts_doc/gen_db_ref.py` (sonde REST par table). Régénéré le 2026-09-11.
 > `n/c` = table absente ; colonnes listées uniquement si la table contient au moins une ligne.
+> ⚠ 14/09/2026 : `process_atelier.taux_horaire_machine` est ajouté à la main (migration Docker 009, jouée ; **cloud : `cloud-7` pas encore joué**, la sonde REST cloud ne la verra qu'après). Les colonnes `machines.cout_h`, `machines_opex.taux_horaire` / `base_cout_h` et `nomenclatures.taux_mo` / `cout_machine_h` restent en base mais ne sont plus lues (voir `03-base-de-donnees.md`).
 
 
 ## Commercial
@@ -53,7 +54,7 @@
 | `absences` | 4 | created_at, date_absence, id, operateur_id, type |
 | `presences` | _absente_ | — |
 | `affectations_poste` | _absente_ | — |
-| `process_atelier` | 31 | activite, categorie, code, couleur, created_at, est_oas, id, machine_id, nom, operations, ordre, poste_id, requiert_machine, statut |
+| `process_atelier` | 31 | activite, categorie, code, couleur, created_at, est_oas, id, machine_id, nom, operations, ordre, poste_id, requiert_machine, statut, taux_horaire_machine |
 
 ## Qualite
 
