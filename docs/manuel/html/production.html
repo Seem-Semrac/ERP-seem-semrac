@@ -156,15 +156,28 @@
           <li>le réglage ne peut pas dépasser la durée du BDT.</li>
         </ul>
         Si la lecture du réglage échoue (réseau), « Découper » reste grisé : cliquez <b>« Relire le réglage »</b>, ou saisissez-le vous-même.</li>
-      <li>Saisissez la <b>réalisation</b> (en heures) de chaque morceau : deux morceaux sont proposés, pré-remplis à la moitié de la réalisation. Le morceau 1 indique « soit … h au total » (réglage + réalisation) ; il peut ne porter que le réglage (réalisation 0).</li>
-      <li><b>« + Ajouter un morceau »</b> ajoute une ligne (12 morceaux au maximum) ; la <b>corbeille</b> retire une ligne (il en faut au moins 2). Ajouter ou retirer une ligne ne touche pas aux temps déjà saisis.</li>
-      <li>Le pied de la fenêtre affiche la <b>réalisation répartie</b> (comparée à la réalisation d'origine, à titre indicatif) et le <b>temps alloué total</b> (réglage + réalisation). Le temps est libre : le total peut différer de la durée d'origine.</li>
-      <li>Cliquez <b>« Découper »</b>. Le BDT d'origine devient le premier morceau, garde son numéro et le réglage ; les suivants sont créés avec les suffixes <b>-M2</b>, <b>-M3</b>… (réglage 0). Chaque morceau reste dans la goulotte : programmez-les ensuite séparément.</li>
+      <li>La <b>jauge</b> montre <b>tout le temps de réalisation à répartir</b> (« Temps de réalisation à répartir : 3,5 h ») :
+        <ul>
+          <li>un <b>segment de couleur par morceau</b>, numéroté, dont la longueur est proportionnelle au temps qui lui est alloué ;</li>
+          <li>la partie encore libre en <b>gris</b> : « <b>reste à répartir</b> 0,75 h » ;</li>
+          <li>un dépassement en <b>orange rayé</b>, avec un repère « ▲ prévu 3,5 h » : « <b>+0,5 h au-delà du temps prévu</b> » ; quand tout est alloué, la jauge affiche « tout le temps est réparti » (vert) ;</li>
+          <li>le <b>réglage</b> est affiché <b>à part</b>, dans un bloc gris <b>hachuré</b> avec un cadenas (« Réglage 0,5 h · morceau 1 ») : il est fixe et ne se déplace pas.</li>
+        </ul>
+        La jauge reste visible en haut de la fenêtre quand on fait défiler une longue liste de morceaux. Un BDT sans temps de réalisation affiche « aucun temps de réalisation à répartir » (les curseurs vont alors de 0 à 8 h, saisie libre).</li>
+      <li>Chaque morceau a sa ligne, de la même couleur que son segment : un <b>curseur</b> qui va de 0 à la totalité du temps de réalisation, un <b>champ en heures</b> pour saisir une valeur exacte au centième (le curseur suit), et la <b>part en %</b> du temps à répartir. Deux morceaux sont proposés à l'ouverture, chacun à la moitié de la réalisation (le 2ᵉ prend le reste de l'arrondi).
+        <ul>
+          <li><b>À la souris</b> : glissez le curseur ; il avance par <b>quart d'heure</b> et s'arrête de lui-même sur la valeur qui <b>complète exactement</b> le temps prévu. La jauge se met à jour pendant le glissement. Rien ne bloque : on peut dépasser le temps prévu, la jauge et le pied de la fenêtre l'indiquent.</li>
+          <li><b>Au clavier</b> (curseur sélectionné) : flèches ← → (ou ↑ ↓) = ± 0,25 h, Page préc. / Page suiv. = ± 1 h, Début = 0, Fin = tout le temps.</li>
+          <li>Le morceau 1 rappelle qu'il porte aussi le réglage (« soit 2,25 h au total ») ; il peut ne porter que le réglage (réalisation 0). Les autres morceaux doivent recevoir du temps : un morceau à 0 est signalé en orange.</li>
+        </ul></li>
+      <li>Aides : <b>« Répartir également »</b> partage le temps de réalisation en parts égales au centième (le dernier morceau prend le reste de l'arrondi) ; <b>« Mettre le reste sur le dernier morceau »</b> donne au dernier morceau exactement ce qui complète le temps prévu (il est réduit s'il y a dépassement). <b>« + Ajouter un morceau »</b> ajoute une ligne (12 morceaux au maximum), qui reçoit le reste à répartir s'il y en a ; la <b>corbeille</b> retire une ligne (il en faut au moins 2). Ajouter ou retirer une ligne ne touche pas aux temps des autres morceaux.</li>
+      <li>Le pied de la fenêtre affiche la <b>réalisation répartie</b> sur le temps prévu (« Réalisation répartie : 3,25 h sur 3,5 h (reste 0,25 h à répartir) ») et le <b>temps alloué total</b> (réglage + réalisation).</li>
+      <li>Cliquez <b>« Découper »</b> (actif dès que chaque morceau a du temps, sauf le morceau 1 qui peut ne porter que le réglage). Si le temps réparti est égal au temps prévu, la découpe part directement ; sinon une confirmation le signale : « <b>Le temps réparti (3,75 h) diffère du temps de réalisation prévu (3,5 h) : découper quand même ?</b> » — « Découper quand même » applique les temps tels qu'alloués. Le BDT d'origine devient le premier morceau, garde son numéro et le réglage ; les suivants sont créés avec les suffixes <b>-M2</b>, <b>-M3</b>… (réglage 0). Chaque morceau reste dans la goulotte : programmez-les ensuite séparément.</li>
     </ol>
     <div class="note"><b>Un BDT déjà posé sur le planning ne se découpe pas.</b> Remettez-le d'abord dans la goulotte (clic droit sur sa barre → « Déprogrammer », ou glissez la barre dans la goulotte), puis découpez-le. Un BDT reçu, soldé, annulé ou sous-traité ne se découpe pas non plus. Les morceaux gardent le rattachement du BDT d'origine (affaire, lot, commande, étape de gamme). Si le BDT a changé depuis l'ouverture de la fenêtre (découpé depuis un autre écran, durée modifiée), la découpe est refusée avec « <b>Page périmée</b> » : rechargez le planning.</div>
     <figure class="shot">
       <img src="../../assets/form-production-separer.png" alt="Fenêtre de découpe d'un BDT en morceaux" loading="lazy">
-      <figcaption><b>Découper le BDT en morceaux</b> — la durée décomposée en réglage + réalisation, le champ Réglage (verrouillé ou saisissable), une ligne de réalisation par morceau avec sa corbeille, puis la réalisation répartie et le temps alloué total.</figcaption>
+      <figcaption><b>Découper le BDT en morceaux</b> — la durée décomposée en réglage + réalisation, le champ Réglage (verrouillé ou saisissable), la jauge du temps de réalisation à répartir (un segment coloré par morceau, reste en gris, réglage hachuré à part), un curseur par morceau avec sa valeur en heures, sa part en % et sa corbeille, puis la réalisation répartie et le temps alloué total.</figcaption>
     </figure>
 
     <h3>Annuler une découpe</h3>

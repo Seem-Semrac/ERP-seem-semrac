@@ -222,9 +222,12 @@ const _frDate = (s: any) => { const p = String(s || '').slice(0, 10).split('-');
 // c'est le cas du lot à REMPLACER décidé par la Qualité (le BC est rouvert, qte_recue diminuée). Sans cela,
 // « Traiter » disparaissait du planning alors que la route de réception accepte le reste : le lot de
 // remplacement ne pouvait plus être réceptionné à l'écran (la quantité n'est plus saisie depuis le lot D).
-// reste_a_recevoir vient de bcsView (quantitesBc) : 0 = tout reçu, null = quantité commandée inconnue.
+// 15/09/2026 : le seul reste à recevoir ne suffit pas — des BC déjà réceptionnés et passés au PV avec
+// l'ancienne saisie de quantité revenaient dans « À réceptionner ». « recu_partiel » n'est à réceptionner
+// QUE si un reliquat est réellement attendu (attend_reliquat, calculé par bcsView : livraison partielle
+// déclarée, ou lot de remplacement décidé par la Qualité). Sinon c'est une réception faite.
 const _bcRecu = (b: any) => String(b.statut) === 'recu_partiel'
-  ? b.reste_a_recevoir === 0
+  ? b.attend_reliquat !== true
   : (['recu_total', 'recu', 'controle', 'cloture'].includes(String(b.statut)) || !!b.bl_id)
 
 // Construit TOUS les mouvements à partir des tables réelles. Utilisé par les 3 onglets.

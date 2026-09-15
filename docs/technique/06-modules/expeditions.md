@@ -89,9 +89,13 @@ Un écart de quantité hors de ces cas se signale **au PV non conforme**, sur la
 6. greffe OPEX machine (inchangée), puis `date_reception_reelle` à la 1ʳᵉ réception — son échec est **dit**
    (plus de `.catch` muet).
 
-**Planning** : `_bcRecu` considère un BC `recu_partiel` qui a encore un reste à recevoir comme **non reçu** —
-cas du lot à **remplacer** décidé par la Qualité : « Traiter » réapparaît pour réceptionner le
-remplacement.
+**Planning** : `_bcRecu` considère un BC `recu_partiel` comme **non reçu** seulement si `bcsView` a posé
+`attend_reliquat` : reste à recevoir > 0 (ou inconnu) **et** soit la dernière réception (`bc.bl_id`) est une
+livraison partielle déclarée (`bons_de_livraison.partiel = true`, écrit par `construireBlReception`), soit
+une quarantaine de ce BL a été décidée avec `compensation = 'remplacement'` (le fournisseur relivre).
+⚠ **Correctif du 15/09/2026** : la première version (reste à recevoir seul) faisait revenir dans « À
+réceptionner » des BC déjà réceptionnés et passés au PV avec l'ancienne saisie de quantité (`recu_partiel`
+historique, `partiel` null) ; ils sont de nouveau considérés comme reçus.
 
 **Correction des informations** — `POST /api/expeditions/bl/:id/reception-infos`, lien **« Corriger »** sous
 chaque réception fournisseur de l'onglet Réceptions (même fenêtre, mode « Corriger les informations »,

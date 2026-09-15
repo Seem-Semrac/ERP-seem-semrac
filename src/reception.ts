@@ -423,6 +423,9 @@ export function construireBlReception(bc: any, saisie: SaisieReception, plan: Ex
     client_nom: bc?.fournisseur_nom || null,
     date_bl: ctx.today,
     qte: plan.qte_bl,   // reste à recevoir, ou null si inconnu — JAMAIS 0
+    // Livraison partielle DÉCLARÉE : c'est ce drapeau (colonne existante, cloud comme Docker) qui garde le BC
+    // dans « À réceptionner » pour son reliquat. Un ancien « recu_partiel » sans ce drapeau est une réception faite.
+    partiel: plan.partielle === true,
     statut: 'recu',
     piece: bc?.articles || null,
     operation: ctx.affaireRaw && !ctx.affaireId ? ('Réf. affaire ' + ctx.affaireRaw) : null,

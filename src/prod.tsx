@@ -1840,10 +1840,19 @@ ${serviceHeader({
   </div>
   <!-- Modal découpe d'un BDT de la GOULOTTE (ciseaux d'une carte) : seul le temps de RÉALISATION se découpe,
        le réglage (fait une seule fois) reste sur le morceau 1. Réglage lu par GET /api/production/bdt/:id/temps.
-       Rangée dans CE panneau (planning) : dans un autre onglet, masqué, elle ne s'affichait pas. -->
+       Rangée dans CE panneau (planning) : dans un autre onglet, masqué, elle ne s'affichait pas.
+       Répartition (15/09/2026) : une JAUGE montre tout le temps de réalisation à répartir (segment par morceau,
+       reste en gris, dépassement en orange ; réglage à part, hachuré) et un CURSEUR par morceau l'alloue. -->
+  <style>
+    #splitModal .split-range{-webkit-appearance:auto;appearance:auto;height:22px;margin:0;cursor:pointer;background:transparent;}
+    #splitModal .split-range:disabled{cursor:not-allowed;opacity:.5;}
+    #splitModal .split-range:focus-visible,#splitModal .split-part:focus-visible,#splitModal .split-aide:focus-visible,#splitModal .split-del:focus-visible{outline:2px solid #6d28d9;outline-offset:2px;}
+    #splitModal .split-aide{font-size:.72rem;font-weight:700;color:#5b21b6;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;padding:5px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;}
+    #splitModal .split-aide:disabled{opacity:.45;cursor:not-allowed;}
+  </style>
   <div id="splitModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center;z-index:500;">
-    <div style="background:white;border-radius:20px;box-shadow:0 24px 64px rgba(0,0,0,.25);width:100%;max-width:560px;margin:1rem;overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
-      <div style="padding:14px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#8b5cf6,#7c3aed);"><h3 style="font-weight:700;color:white;font-size:.95rem;"><i class="fas fa-scissors" style="margin-right:8px;"></i>Découper le BDT en morceaux</h3><button type="button" onclick="closeModal('splitModal')" style="color:rgba(255,255,255,.7);background:none;border:none;font-size:1.2rem;cursor:pointer;"><i class="fas fa-times"></i></button></div>
+    <div role="dialog" aria-modal="true" aria-labelledby="splitTitre" style="background:white;border-radius:20px;box-shadow:0 24px 64px rgba(0,0,0,.25);width:100%;max-width:720px;margin:1rem;overflow:hidden;max-height:92vh;display:flex;flex-direction:column;">
+      <div style="padding:14px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#8b5cf6,#7c3aed);"><h3 id="splitTitre" style="font-weight:700;color:white;font-size:.95rem;"><i class="fas fa-scissors" style="margin-right:8px;"></i>Découper le BDT en morceaux</h3><button type="button" onclick="closeModal('splitModal')" aria-label="Fermer" style="color:rgba(255,255,255,.85);background:none;border:none;font-size:1.2rem;cursor:pointer;"><i class="fas fa-times"></i></button></div>
       <div id="splitRappel" style="display:none;padding:8px 20px;background:#fffbeb;border-bottom:1px solid #fde68a;font-size:.72rem;color:#92400e;"></div>
       <div style="padding:20px;overflow-y:auto;">
         <div id="splitInfo" style="background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:12px;font-size:.82rem;"></div>
@@ -1853,10 +1862,17 @@ ${serviceHeader({
           <span style="font-size:.72rem;color:#94a3b8;">h</span>
           <span id="splitReglageAide" style="flex:1;min-width:160px;font-size:.7rem;color:#64748b;"></span>
         </div>
-        <div style="font-size:.72rem;color:#64748b;background:#f5f3ff;border:1px solid #ede9fe;border-radius:9px;padding:8px 11px;margin-bottom:12px;"><i class="fas fa-circle-info" style="color:#7c3aed;margin-right:5px;"></i>Seul le temps de <strong>réalisation</strong> se découpe : saisissez-le pour chaque morceau. Le <strong>réglage</strong> est fixe, fait une seule fois : il reste sur le morceau 1, qui garde le numéro du BDT (il peut ne porter que le réglage, réalisation 0). Chaque morceau reste dans la goulotte : vous le programmerez séparément.</div>
-        <div style="font-size:.72rem;font-weight:700;color:#475569;margin-bottom:6px;">Réalisation (h) par morceau</div>
+        <div style="font-size:.72rem;color:#475569;background:#f5f3ff;border:1px solid #ede9fe;border-radius:9px;padding:8px 11px;margin-bottom:12px;"><i class="fas fa-circle-info" style="color:#7c3aed;margin-right:5px;"></i>Seul le temps de <strong>réalisation</strong> se répartit : la jauge le montre en entier, <strong>glissez le curseur</strong> de chaque morceau pour lui en allouer une part (ou saisissez la valeur exacte, au centième). Le <strong>réglage</strong> est fixe, fait une seule fois : il reste sur le morceau 1, qui garde le numéro du BDT (il peut ne porter que le réglage, réalisation 0). Chaque morceau reste dans la goulotte : vous le programmerez séparément.</div>
+        <div id="splitJauge" role="group" aria-label="Jauge du temps de réalisation à répartir" style="position:sticky;top:-20px;z-index:3;background:white;padding-block:8px 10px;margin-bottom:6px;border-bottom:1px solid #f1f5f9;"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <div style="font-size:.74rem;font-weight:700;color:#334155;">Répartition par morceau <span style="font-weight:500;color:#64748b;">— curseur (pas de 0,25 h) ou saisie au centième</span></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button type="button" id="splitEgalBtn" class="split-aide" onclick="splitRepartirEgal()"><i class="fas fa-equals" aria-hidden="true"></i>Répartir également</button>
+            <button type="button" id="splitResteBtn" class="split-aide" onclick="splitResteDernier()"><i class="fas fa-arrow-right-to-bracket" aria-hidden="true"></i>Mettre le reste sur le dernier morceau</button>
+          </div>
+        </div>
         <div id="splitParts" style="display:grid;gap:8px;"></div>
-        <button type="button" id="splitAddBtn" onclick="splitAdd()" style="margin-top:10px;font-size:.74rem;font-weight:700;color:#7c3aed;background:#f5f3ff;border:1px dashed #c4b5fd;border-radius:8px;padding:6px 12px;cursor:pointer;"><i class="fas fa-plus" style="margin-right:5px;"></i>Ajouter un morceau</button>
+        <button type="button" id="splitAddBtn" onclick="splitAdd()" style="margin-top:10px;font-size:.74rem;font-weight:700;color:#6d28d9;background:#f5f3ff;border:1px dashed #a78bfa;border-radius:8px;padding:6px 12px;cursor:pointer;"><i class="fas fa-plus" style="margin-right:5px;"></i>Ajouter un morceau</button>
         <div id="splitTotal" style="margin-top:12px;font-size:.8rem;"></div>
       </div>
       <div style="padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;"><button type="button" onclick="closeModal('splitModal')" class="btn btn-secondary">Annuler</button><button type="button" id="splitConfirmBtn" onclick="splitSave()" class="btn btn-primary" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);"><i class="fas fa-scissors"></i> Découper</button></div>
@@ -4524,9 +4540,15 @@ function confirmDup(){ var m=document.getElementById('dupModal'); if(m) m.style.
 //    Seul point d entrée : les ciseaux d une carte de goulotte (plus rien depuis le planning).
 //    Le réglage (fait une seule fois) reste sur le morceau 1 : lu à l ouverture par
 //    GET /api/production/bdt/:id/temps (verrouillé s il est connu, saisissable sinon).
-//    Chaque morceau reçoit EXACTEMENT le temps saisi ; la somme peut différer de la réalisation
-//    d origine (comparaison purement informative). Le serveur refuse (409) un BDT posé.
+//    Chaque morceau reçoit EXACTEMENT le temps alloué ; la somme peut différer de la réalisation
+//    d origine (confirmation demandée avant d envoyer). Le serveur refuse (409) un BDT posé.
+//    Interface (15/09/2026) : une JAUGE de tout le temps de réalisation V (un segment coloré par morceau,
+//    reste en gris, dépassement en orange, réglage à part et hachuré) + un CURSEUR par morceau (0 à V,
+//    pas de 0,25 h à la souris et au clavier, aimanté sur le reste exact) + un champ au centième synchronisé.
 var _splitBdt=null, _splitWired=false, SPLIT_MIN=2, SPLIT_MAX=12;
+// Couleur de chaque morceau (texte blanc lisible, contraste ≥ 4,5:1) ; l orange est réservé au dépassement.
+var SPLIT_COULEURS=['#7c3aed','#2563eb','#0f766e','#be185d','#4d7c0f','#0369a1','#86198f','#15803d','#4338ca','#0e7490','#9f1239','#475569'];
+function splitCouleur(i){ return SPLIT_COULEURS[i%SPLIT_COULEURS.length]; }
 function splitEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(ch){ return ch==='&'?'&amp;':ch==='<'?'&lt;':ch==='>'?'&gt;':'&quot;'; }); }
 function splitFmtH(x){ var r=Math.round((Number(x)||0)*1000)/1000; return String(r).replace('.',','); }
 // Durée actuelle lue comme le serveur : duree, sinon temps alloué (0 si aucune).
@@ -4545,12 +4567,77 @@ function splitReglageVal(){
 // Réalisation valide : supérieure à 0 au centième ; le morceau 1 peut valoir 0 s il porte un réglage (« réglage seul »).
 function splitValidAt(x,i){ if(!isFinite(x)||x<0) return false; var cts=Math.round(x*100); var R=splitReglageVal(); return (i===0&&isFinite(R)&&R>0)?cts>=0:cts>0; }
 // Délégation d événements sur la liste des morceaux (posée une seule fois) + saisie du réglage.
+//   curseur (input) : valeur aimantée (quart d heure, reste exact, bout de l échelle) puis jauge en direct ;
+//   curseur (clavier) : flèches ± 0,25 h, Page ± 1 h, Début = 0, Fin = tout le temps ; champ : valeur libre au centième.
 function splitWire(){
   if(_splitWired) return; var box=document.getElementById('splitParts'); if(!box) return; _splitWired=true;
-  box.addEventListener('input',function(e){ var t=e.target; if(!_splitBdt||!t||!t.classList||!t.classList.contains('split-part')) return; var i=Number(t.getAttribute('data-i')); if(i>=0&&i<_splitBdt.vals.length){ _splitBdt.vals[i]=t.value; _splitBdt.valsTouchees=true; splitTotalCheck(); } });
+  box.addEventListener('input',function(e){
+    var t=e.target; if(!_splitBdt||_splitBdt.loading||!t||!t.classList) return;
+    var i=Number(t.getAttribute('data-i')); if(!(i>=0&&i<_splitBdt.vals.length)) return;
+    if(t.classList.contains('split-range')) splitPoser(i,splitAimant(Number(t.value),i));
+    else if(t.classList.contains('split-part')){ _splitBdt.vals[i]=t.value; _splitBdt.valsTouchees=true; splitSyncCurseur(i); splitTotalCheck(); }
+  });
+  box.addEventListener('keydown',function(e){
+    var t=e.target; if(!_splitBdt||_splitBdt.loading||!t||!t.classList||!t.classList.contains('split-range')) return;
+    var i=Number(t.getAttribute('data-i')); if(!(i>=0&&i<_splitBdt.vals.length)) return;
+    var k=e.key, x=splitValeur(i), nx=null;
+    if(k==='ArrowRight'||k==='ArrowUp') nx=splitPas(x,1,0.25,i);
+    else if(k==='ArrowLeft'||k==='ArrowDown') nx=splitPas(x,-1,0.25,i);
+    else if(k==='PageUp') nx=splitPas(x,1,1,i);
+    else if(k==='PageDown') nx=splitPas(x,-1,1,i);
+    else if(k==='Home') nx=0;
+    else if(k==='End') nx=splitEchelle();
+    if(nx===null) return;
+    e.preventDefault(); splitPoser(i,nx);
+  });
   box.addEventListener('click',function(e){ var t=(e.target&&e.target.closest)?e.target.closest('.split-del'):null; if(!t||t.disabled||!_splitBdt) return; splitRemove(Number(t.getAttribute('data-i'))); });
   var rg=document.getElementById('splitReglage');
-  if(rg) rg.addEventListener('input',function(){ if(!_splitBdt||_splitBdt.reglageConnu||_splitBdt.loading||_splitBdt.saisiePossible===false) return; _splitBdt.reglageSaisi=rg.value; splitRecap(); splitTotalCheck(); });
+  // Réglage saisi : la réalisation V change, donc l échelle des curseurs aussi (pré-remplissage refait tant que rien n a été touché).
+  if(rg) rg.addEventListener('input',function(){ if(!_splitBdt||_splitBdt.reglageConnu||_splitBdt.loading||_splitBdt.saisiePossible===false) return; _splitBdt.reglageSaisi=rg.value; splitPrefill(_splitBdt); splitRecap(); splitRender(); });
+}
+// Lecture d une valeur saisie (virgule acceptée) : NaN si vide ou invalide.
+function splitNum(v){ var s=String(v==null?'':v).trim().replace(',','.'); return s===''?NaN:Number(s); }
+function splitValeur(i){ var x=_splitBdt?splitNum(_splitBdt.vals[i]):NaN; return (isFinite(x)&&x>0)?x:0; }
+// Réalisation à répartir V = durée − réglage (réglage invalide compté 0) ; échelle des curseurs = V, ou 8 h si V = 0.
+function splitV(){ var cur=_splitBdt; if(!cur) return 0; var R=splitReglageVal(); var Rn=isFinite(R)?R:0; return Math.max(0,splitR2(cur.total-Rn)); }
+function splitEchelle(){ var V=splitV(); return V>0?V:8; }
+// Somme des temps alloués (en centièmes, sans erreur d arrondi), le morceau i exclu (i = -1 : tous).
+function splitSommeSauf(i){ var cur=_splitBdt; if(!cur) return 0; var c=0; for(var k=0;k<cur.vals.length;k++){ if(k===i) continue; var x=splitNum(cur.vals[k]); if(isFinite(x)&&x>0) c+=Math.round(x*100); } return c/100; }
+function splitRow(i){ return document.querySelector('#splitParts .split-row[data-i="'+i+'"]'); }
+// Curseur à la souris : quart d heure, mais aimanté sur le reste exact (ce qui complète V) et sur le bout de l échelle.
+function splitAimant(x,i){
+  var E=splitEchelle(), V=splitV();
+  if(!isFinite(x)||x<0) x=0; if(x>E) x=E;
+  var seuil=Math.max(0.125,E*0.015), reste=splitR2(V-splitSommeSauf(i));
+  if(V>0&&reste>0&&reste<=E&&Math.abs(x-reste)<=seuil) return reste;
+  if(E-x<=seuil) return splitR2(E);
+  return splitR2(Math.round(x*4)/4);
+}
+// Curseur au clavier : quart d heure (ou heure) suivant, avec un arrêt sur le reste exact s il est franchi.
+function splitPas(x,dir,p,i){
+  var E=splitEchelle(), V=splitV(), nx;
+  if(dir>0&&x>=E-0.004) return splitR2(x);
+  nx=dir>0?(Math.floor(x/p+1e-6)+1)*p:(Math.ceil(x/p-1e-6)-1)*p;
+  var reste=splitR2(V-splitSommeSauf(i));
+  if(V>0&&reste>0){ if(dir>0&&reste>x+0.004&&reste<nx-0.004) nx=reste; if(dir<0&&reste<x-0.004&&reste>nx+0.004) nx=reste; }
+  return splitR2(Math.min(E,Math.max(0,nx)));
+}
+// Pose une valeur sur le morceau i (curseur, clavier, bouton) : champ et curseur alignés, jauge et pied recalculés.
+function splitPoser(i,x){
+  var cur=_splitBdt; if(!cur||!(i>=0&&i<cur.vals.length)) return;
+  x=splitR2(Math.max(0,x)); cur.vals[i]=String(x); cur.valsTouchees=true;
+  var row=splitRow(i);
+  if(row){
+    var num=row.querySelector('.split-part'); if(num&&splitNum(num.value)!==x) num.value=String(x);
+    var r=row.querySelector('.split-range'), rv=String(Math.min(splitEchelle(),x)); if(r&&r.value!==rv) r.value=rv;
+  }
+  splitTotalCheck();
+}
+// Champ au centième modifié : le curseur suit (borné à son échelle ; la valeur réelle reste celle du champ).
+function splitSyncCurseur(i){
+  var row=splitRow(i); if(!row||!_splitBdt) return;
+  var r=row.querySelector('.split-range'); if(!r) return;
+  var x=splitNum(_splitBdt.vals[i]); r.value=String((isFinite(x)&&x>0)?Math.min(splitEchelle(),x):0);
 }
 // Pré-remplissage : la moitié de la RÉALISATION (durée moins réglage) ; le 2ᵉ morceau prend le reste.
 // Jamais par-dessus une saisie de l utilisateur (relecture du réglage, bouton « Utiliser … »).
@@ -4603,7 +4690,7 @@ function splitTempsLus(cur,j){
   var rg=document.getElementById('splitReglage');
   if(rg) rg.value=cur.reglageConnu?String(splitR2(cur.reglage)):cur.reglageSaisi;
   splitPrefill(cur); splitRecap(); splitRender();
-  var first=document.querySelector('#splitParts .split-part'); if(first){ try{ first.focus(); }catch(e){} }
+  var first=document.querySelector('#splitParts .split-range'); if(first){ try{ first.focus(); }catch(e){} }
 }
 function splitUtiliserPropose(){
   var cur=_splitBdt; if(!cur||cur.reglageConnu||cur.propose==null||cur.loading) return;
@@ -4651,34 +4738,115 @@ function splitRecap(){
     } else { rap.innerHTML=''; rap.style.display='none'; }
   }
 }
+// Une ligne par morceau : pastille de couleur (celle de son segment dans la jauge), curseur 0 → échelle,
+// champ au centième, part de V en %, corbeille. Pourcentage / état / aria-valuetext : posés par splitTotalCheck.
 function splitRender(){
   if(!_splitBdt) return;
-  var vals=_splitBdt.vals, n=vals.length, lock=n<=SPLIT_MIN, html='';
+  var cur=_splitBdt, vals=cur.vals, n=vals.length, lock=n<=SPLIT_MIN, html='';
+  var E=splitEchelle(), dis=cur.loading?' disabled':'';
   for(var i=0;i<n;i++){
-    html+='<div style="display:flex;align-items:center;gap:8px;">'
-      +'<span style="font-size:.74rem;color:#64748b;width:82px;font-weight:600;">Morceau '+(i+1)+'</span>'
-      +'<input class="split-part" data-i="'+i+'" type="number" step="0.25" min="0" inputmode="decimal" placeholder="réalisation" value="'+splitEsc(vals[i])+'"'+(_splitBdt.loading?' disabled':'')+' style="flex:1;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 9px;font-size:.82rem;"/>'
-      +'<span style="font-size:.72rem;color:#94a3b8;">h</span>'
-      +(i===0?'<span id="splitM1Tot" style="font-size:.7rem;color:#7c3aed;min-width:92px;"></span>':'<span style="min-width:92px;"></span>')
-      +'<button type="button" class="split-del" data-i="'+i+'"'+(lock?' disabled':'')+' title="'+(lock?'Il faut au moins 2 morceaux':'Retirer ce morceau')+'" style="background:#fff1f2;color:#e11d48;border:1px solid #fecdd3;border-radius:7px;padding:5px 8px;font-size:.72rem;cursor:'+(lock?'not-allowed':'pointer')+';opacity:'+(lock?'.4':'1')+';"><i class="fas fa-trash-can"></i></button>'
+    var c=splitCouleur(i), x=splitNum(vals[i]), xr=(isFinite(x)&&x>0)?Math.min(E,x):0;
+    html+='<div class="split-row" data-i="'+i+'" style="display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;padding:7px 10px;border:1px solid #e2e8f0;border-left:5px solid '+c+';border-radius:10px;background:#fff;">'
+      +'<label for="splitRange'+i+'" style="display:flex;align-items:center;gap:6px;min-width:104px;font-size:.76rem;font-weight:700;color:#334155;cursor:pointer;">'
+      +'<span aria-hidden="true" style="width:20px;height:20px;border-radius:6px;background:'+c+';color:#fff;font-size:.68rem;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex:none;">'+(i+1)+'</span>Morceau '+(i+1)+'</label>'
+      +'<input type="range" id="splitRange'+i+'" class="split-range" data-i="'+i+'" min="0" max="'+E+'" step="0.01" value="'+xr+'" aria-label="Temps de réalisation du morceau '+(i+1)+', de 0 à '+splitFmtH(E)+' h"'+dis+' style="flex:1 1 170px;min-width:130px;accent-color:'+c+';"/>'
+      +'<span style="display:inline-flex;align-items:center;gap:4px;"><input type="number" class="split-part" data-i="'+i+'" step="0.01" min="0" inputmode="decimal" placeholder="0" value="'+splitEsc(vals[i])+'" aria-label="Morceau '+(i+1)+' : réalisation en heures, au centième"'+dis+' style="width:82px;border:1.5px solid #e2e8f0;border-radius:8px;padding:5px 8px;font-size:.8rem;font-variant-numeric:tabular-nums;"/><span style="font-size:.72rem;color:#64748b;">h</span></span>'
+      +'<span class="split-pct" data-i="'+i+'" title="Part du temps de réalisation à répartir" style="min-width:48px;text-align:right;font-size:.74rem;font-weight:700;color:#475569;font-variant-numeric:tabular-nums;"></span>'
+      +'<button type="button" class="split-del" data-i="'+i+'"'+(lock?' disabled':'')+' aria-label="'+(lock?'Il faut au moins 2 morceaux':'Retirer le morceau '+(i+1))+'" title="'+(lock?'Il faut au moins 2 morceaux':'Retirer ce morceau (les autres gardent leur temps)')+'" style="background:#fff1f2;color:#be123c;border:1px solid #fecdd3;border-radius:7px;padding:5px 8px;font-size:.72rem;cursor:'+(lock?'not-allowed':'pointer')+';opacity:'+(lock?'.4':'1')+';"><i class="fas fa-trash-can" aria-hidden="true"></i></button>'
+      +'<div class="split-note" data-i="'+i+'" style="flex-basis:100%;font-size:.7rem;display:none;"></div>'
       +'</div>';
   }
   document.getElementById('splitParts').innerHTML=html;
   var add=document.getElementById('splitAddBtn');
-  if(add){ var full=n>=SPLIT_MAX; add.disabled=full; add.style.opacity=full?'.45':'1'; add.style.cursor=full?'not-allowed':'pointer'; add.title=full?'12 morceaux au maximum':''; }
+  if(add){ var full=n>=SPLIT_MAX; add.disabled=full||cur.loading; add.style.opacity=(full||cur.loading)?'.45':'1'; add.style.cursor=(full||cur.loading)?'not-allowed':'pointer'; add.title=full?'12 morceaux au maximum':''; }
   splitTotalCheck();
 }
-// Ajouter / retirer une ligne ne touche PAS aux temps déjà saisis (conservés dans _splitBdt.vals).
+// Ajouter / retirer une ligne ne touche PAS aux temps déjà alloués (conservés dans _splitBdt.vals).
+// Le nouveau morceau reçoit le reste à répartir s il y en a un, sinon rien (à allouer au curseur).
 function splitAdd(){
-  if(!_splitBdt||_splitBdt.vals.length>=SPLIT_MAX) return;
-  _splitBdt.vals.push(''); _splitBdt.valsTouchees=true; splitRender();
-  var ins=document.querySelectorAll('#splitParts .split-part'); var last=ins[ins.length-1]; if(last){ try{ last.focus(); }catch(e){} }
+  if(!_splitBdt||_splitBdt.loading||_splitBdt.vals.length>=SPLIT_MAX) return;
+  var reste=splitR2(splitV()-splitSommeSauf(-1));
+  _splitBdt.vals.push(reste>0?String(reste):''); _splitBdt.valsTouchees=true; splitRender();
+  var ins=document.querySelectorAll('#splitParts .split-range'); var last=ins[ins.length-1]; if(last){ try{ last.focus(); }catch(e){} }
 }
 function splitRemove(i){
   if(!_splitBdt||_splitBdt.vals.length<=SPLIT_MIN||!(i>=0&&i<_splitBdt.vals.length)) return;
   _splitBdt.vals.splice(i,1); _splitBdt.valsTouchees=true; splitRender();
+  var ins=document.querySelectorAll('#splitParts .split-range'); var f=ins[Math.min(i,ins.length-1)]; if(f){ try{ f.focus(); }catch(e){} }
 }
-function splitPartsRead(){ return _splitBdt?_splitBdt.vals.map(function(v){ var s=String(v==null?'':v).trim().replace(',','.'); return s===''?NaN:Number(s); }):[]; }
+// « Répartir également » : V en parts égales au centième (calcul en centièmes entiers), le dernier prend le reste.
+function splitRepartirEgal(){
+  var cur=_splitBdt; if(!cur||cur.loading||cur.busy) return;
+  var n=cur.vals.length, Vc=Math.round(splitV()*100); if(!(Vc>0)||n<1) return;
+  var pc=Math.floor(Vc/n), vals=[];
+  for(var i=0;i<n-1;i++) vals.push(String(pc/100));
+  vals.push(String((Vc-pc*(n-1))/100));
+  cur.vals=vals; cur.valsTouchees=true; splitRender();
+}
+// « Mettre le reste sur le dernier morceau » : le dernier prend exactement ce qui complète V (réduit s il y a dépassement).
+function splitResteDernier(){
+  var cur=_splitBdt; if(!cur||cur.loading||cur.busy) return;
+  var n=cur.vals.length; if(n<1) return;
+  var cible=splitR2(splitV()-splitSommeSauf(n-1));
+  if(!(cible>0)){ pushNotif('warn','fa-exclamation-triangle','Les autres morceaux prennent déjà tout le temps prévu : réduisez-les d’abord.'); return; }
+  splitPoser(n-1,cible);
+}
+function splitPartsRead(){ return _splitBdt?_splitBdt.vals.map(splitNum):[]; }
+// Jauge : tout le temps de réalisation V ; un segment par morceau (proportionnel), reste en gris, dépassement en orange
+// (l échelle devient alors la somme allouée et un repère marque V). Le réglage est à part : bloc hachuré, fixe.
+function splitJauge(parts,V,Rn,okR){
+  var el=document.getElementById('splitJauge'), cur=_splitBdt; if(!el||!cur) return;
+  if(cur.loading){ el.innerHTML='<div style="font-size:.76rem;color:#64748b;padding:6px 0;"><i class="fas fa-spinner fa-spin" style="margin-right:5px;"></i>Lecture du réglage…</div>'; return; }
+  var cents=parts.map(function(x){ return (isFinite(x)&&x>0)?Math.round(x*100):0; });
+  var Sc=0; cents.forEach(function(c){ Sc+=c; });
+  var Vc=Math.round(V*100), Ec=Math.max(Vc,Sc), resteC=Vc-Sc;
+  var etat='', etatTxt='';
+  if(Vc===0&&Sc===0){ etatTxt='aucun temps de réalisation à répartir'; }
+  else if(resteC>0){ etatTxt='reste à répartir '+splitFmtH(resteC/100)+' h'; etat='<span style="color:#334155;font-weight:700;"><i class="fas fa-hourglass-half" aria-hidden="true" style="margin-right:4px;color:#64748b;"></i>'+etatTxt+'</span>'; }
+  else if(resteC<0){ etatTxt='+'+splitFmtH(-resteC/100)+' h au-delà du temps prévu'; etat='<span style="color:#c2410c;font-weight:800;"><i class="fas fa-triangle-exclamation" aria-hidden="true" style="margin-right:4px;"></i>'+etatTxt+'</span>'; }
+  else { etatTxt='tout le temps est réparti'; etat='<span style="color:#15803d;font-weight:800;"><i class="fas fa-circle-check" aria-hidden="true" style="margin-right:4px;"></i>'+etatTxt+'</span>'; }
+  var seg='', lu=[];
+  if(Ec===0){
+    seg='<div style="flex:1;display:flex;align-items:center;justify-content:center;font-size:.74rem;color:#475569;font-style:italic;">aucun temps de réalisation à répartir</div>';
+  } else {
+    cents.forEach(function(c,i){
+      if(c<=0) return;
+      var w=c/Ec*100, h=splitFmtH(c/100);
+      lu.push('morceau '+(i+1)+' '+h+' h');
+      seg+='<div title="Morceau '+(i+1)+' : '+h+' h" style="width:'+w+'%;flex:none;min-width:0;background:'+splitCouleur(i)+';color:#fff;font-size:.7rem;font-weight:800;display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;box-shadow:inset -2px 0 0 #fff;text-shadow:0 0 3px rgba(0,0,0,.55);"><span style="position:relative;z-index:2;">'+(w>=14?(i+1)+' · '+h+' h':(w>=4?String(i+1):''))+'</span></div>';
+    });
+    if(resteC>0){
+      var wr=resteC/Ec*100, hr=splitFmtH(resteC/100);
+      seg+='<div title="Reste à répartir : '+hr+' h" style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#334155;white-space:nowrap;overflow:hidden;">'+(wr>=30?'reste à répartir '+hr+' h':(wr>=9?hr+' h':''))+'</div>';
+    }
+    if(resteC<0){
+      var g=Vc/Ec*100, hd=splitFmtH(-resteC/100);
+      // Rayures orange SUR les segments (les morceaux restent visibles dessous) + repère foncé à V.
+      seg+='<div title="Au-delà du temps prévu : +'+hd+' h" style="position:absolute;top:0;bottom:0;left:'+g+'%;right:0;pointer-events:none;background:repeating-linear-gradient(135deg,rgba(234,88,12,.9) 0 4px,rgba(234,88,12,.12) 4px 10px);border-left:3px solid #7c2d12;box-shadow:inset 0 -5px 0 #ea580c,inset 0 5px 0 #ea580c;"></div>';
+    }
+  }
+  var graduation='';
+  if(Ec>0){
+    if(resteC<0){
+      var gp=Vc/Ec*100, pos=Math.min(90,Math.max(10,gp));
+      graduation=(gp>=18?'<span style="position:absolute;left:0;">0 h</span>':'')
+        +'<span style="position:absolute;left:'+pos+'%;transform:translateX(-50%);color:#9a3412;font-weight:700;white-space:nowrap;">▲ prévu '+splitFmtH(V)+' h</span>'
+        +(gp<=78?'<span style="position:absolute;right:0;color:#9a3412;">'+splitFmtH(Sc/100)+' h</span>':'');
+    } else graduation='<span style="position:absolute;left:0;">0 h</span><span style="position:absolute;right:0;">'+splitFmtH(V)+' h</span>';
+  }
+  var reg=(okR&&Rn>0)?'<div title="Réglage fixe, fait une seule fois : il reste sur le morceau 1 et ne se répartit pas" style="flex:none;display:flex;align-items:center;height:34px;padding:0 8px;border-radius:8px;border:1px dashed #64748b;background:repeating-linear-gradient(135deg,#f1f5f9 0 6px,#cbd5e1 6px 12px);">'
+    +'<span style="background:rgba(255,255,255,.85);border-radius:5px;padding:2px 7px;color:#1e293b;font-size:.72rem;font-weight:800;white-space:nowrap;"><i class="fas fa-lock" aria-hidden="true" style="margin-right:5px;color:#475569;"></i>Réglage '+splitFmtH(Rn)+' h · morceau 1</span></div>':'';
+  var aria='Temps de réalisation à répartir '+splitFmtH(V)+' h'+(lu.length?' ; '+lu.join(', '):'')+' ; '+etatTxt+(reg?' ; réglage fixe '+splitFmtH(Rn)+' h sur le morceau 1, à part':'');
+  el.innerHTML='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px 10px;flex-wrap:wrap;margin-bottom:7px;">'
+      +'<div style="font-size:.8rem;color:#1e293b;"><i class="fas fa-gauge-high" aria-hidden="true" style="margin-right:6px;color:#6d28d9;"></i>Temps de réalisation à répartir : <strong style="font-size:.92rem;">'+splitFmtH(V)+' h</strong></div>'
+      +'<div style="font-size:.76rem;">'+etat+'</div></div>'
+    +'<div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">'+reg
+      +'<div style="flex:1 1 260px;min-width:0;">'
+        +'<div role="img" aria-label="'+aria+'" style="position:relative;height:34px;border-radius:8px;background:#e2e8f0;box-shadow:inset 0 0 0 1px #cbd5e1;overflow:hidden;display:flex;">'+seg+'</div>'
+        +'<div aria-hidden="true" style="position:relative;height:14px;margin-top:3px;font-size:.64rem;color:#64748b;">'+graduation+'</div>'
+      +'</div>'
+    +'</div>';
+}
 function splitTotalCheck(){
   if(!_splitBdt) return;
   var cur=_splitBdt;
@@ -4690,34 +4858,82 @@ function splitTotalCheck(){
   var sansLecture=!!cur.erreurTemps&&!cur.reglageConnu&&String(cur.reglageSaisi==null?'':cur.reglageSaisi).trim()==='';
   var tropGrand=splitReglageTropGrand();
   var ok=!cur.loading&&okR&&okParts&&!sansLecture&&!tropGrand;
-  var sumV=splitR2(parts.reduce(function(s,x){ return s+((isFinite(x)&&x>0)?splitR2(x):0); },0));
+  var sumV=splitSommeSauf(-1);
   var Rn=okR?R:0;
   var V=Math.max(0,splitR2(cur.total-Rn));
   var diff=splitR2(sumV-V);
-  var cmp=diff===0?'identique à la réalisation d’origine ('+splitFmtH(V)+' h)':(diff>0?'+'+splitFmtH(diff)+' h par rapport à la réalisation d’origine ('+splitFmtH(V)+' h)':'−'+splitFmtH(-diff)+' h par rapport à la réalisation d’origine ('+splitFmtH(V)+' h)');
-  var m1=document.getElementById('splitM1Tot');
-  if(m1){ var v1=parts.length?parts[0]:NaN; m1.textContent=(Rn>0&&isFinite(v1)&&v1>=0)?'soit '+splitFmtH(splitR2(Rn+splitR2(v1)))+' h au total':''; }
+  splitJauge(parts,V,Rn,okR);
+  // Lignes : part de V en %, texte lu par les lecteurs d écran, état du morceau (sans réécrire le champ en cours de saisie).
+  for(var i=0;i<parts.length;i++){
+    var row=splitRow(i); if(!row) continue;
+    var x=parts[i], valide=cur.loading||splitValidAt(x,i), connu=isFinite(x)&&x>=0;
+    var pc=(V>0&&connu)?Math.round(x/V*100):null;
+    var pct=row.querySelector('.split-pct'), rng=row.querySelector('.split-range'), num=row.querySelector('.split-part'), note=row.querySelector('.split-note');
+    if(pct) pct.textContent=pc===null?'— %':pc+' %';
+    if(rng) rng.setAttribute('aria-valuetext',connu?splitFmtH(splitR2(x))+' h'+(pc===null?'':', soit '+pc+' % du temps de réalisation'):'non renseigné');
+    if(num){ num.style.borderColor=valide?'#e2e8f0':'#f59e0b'; num.style.background=valide?'white':'#fffbeb'; num.setAttribute('aria-invalid',valide?'false':'true'); }
+    if(note){
+      var t='';
+      if(!valide) t='<span style="color:#b45309;"><i class="fas fa-circle-exclamation" aria-hidden="true" style="margin-right:4px;"></i>'+(!isFinite(x)?'Temps à allouer : glissez le curseur ou saisissez une valeur.':(x<0?'Le temps ne peut pas être négatif.':'Un morceau sans temps ne se découpe pas : glissez le curseur ou retirez ce morceau.'))+'</span>';
+      else if(i===0&&Rn>0&&connu&&!cur.loading) t='<span style="color:#6d28d9;"><i class="fas fa-lock" aria-hidden="true" style="margin-right:4px;"></i>Porte aussi le réglage ('+splitFmtH(Rn)+' h) : soit '+splitFmtH(splitR2(Rn+splitR2(x)))+' h au total.</span>';
+      note.innerHTML=t; note.style.display=t?'block':'none';
+    }
+  }
+  // Aides : désactivées quand elles ne changeraient rien.
+  var eg=document.getElementById('splitEgalBtn'), rs=document.getElementById('splitResteBtn');
+  if(eg){ eg.disabled=cur.loading||cur.busy||!(V>0); eg.title=(V>0)?'Partager '+splitFmtH(V)+' h en '+parts.length+' parts égales':'Aucun temps de réalisation à répartir'; }
+  if(rs&&parts.length){
+    var nD=parts.length, cible=splitR2(V-splitSommeSauf(nD-1)), dern=parts[nD-1], deja=isFinite(dern)&&splitR2(dern)===cible;
+    rs.disabled=cur.loading||cur.busy||!(cible>0)||deja;
+    rs.title=!(cible>0)?'Les autres morceaux prennent déjà tout le temps prévu':(deja?'Le temps prévu est déjà entièrement réparti':'Le morceau '+nD+' prendra '+splitFmtH(cible)+' h');
+  }
+  var cmp, colCmp;
+  if(V===0&&sumV===0){ cmp='aucun temps de réalisation à répartir'; colCmp='#64748b'; }
+  else if(diff===0){ cmp='tout le temps de réalisation prévu est réparti'; colCmp='#15803d'; }
+  else if(diff<0){ cmp='reste '+splitFmtH(-diff)+' h à répartir'; colCmp='#475569'; }
+  else { cmp='+'+splitFmtH(diff)+' h au-delà du temps prévu'; colCmp='#c2410c'; }
   var el=document.getElementById('splitTotal'), btn=document.getElementById('splitConfirmBtn');
   var msg='';
   if(cur.loading) msg='';
   else if(!okR) msg='Le réglage saisi doit être un nombre d’heures positif ou nul.';
   else if(sansLecture) msg='Réglage non lu : relisez-le, ou saisissez-le, avant de découper.';
   else if(tropGrand) msg='Le réglage ('+splitFmtH(R)+' h) ne peut pas dépasser la durée du BDT ('+splitFmtH(cur.total)+' h).';
-  else if(!okParts) msg=Rn>0?'Renseignez une réalisation pour chaque morceau : supérieure à 0, sauf le morceau 1 qui peut ne porter que le réglage (0).':'Renseignez une réalisation supérieure à 0 pour chaque morceau.';
-  if(el) el.innerHTML='<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;"><span style="font-weight:800;color:#1e293b;">Réalisation répartie : '+splitFmtH(sumV)+' h</span><span style="color:'+(diff===0?'#16a34a':'#64748b')+';font-size:.74rem;">('+cmp+')</span></div>'
-    +'<div style="margin-top:3px;font-size:.76rem;color:#475569;">Temps alloué total : <strong>'+splitFmtH(splitR2(Rn+sumV))+' h</strong> <span style="color:#94a3b8;">(réglage '+splitFmtH(Rn)+' h + réalisation '+splitFmtH(sumV)+' h)</span></div>'
-    +(msg?'<div style="margin-top:4px;color:#b45309;font-size:.72rem;"><i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>'+msg+'</div>':'');
+  else if(!okParts) msg=Rn>0?'Allouez du temps à chaque morceau : supérieur à 0, sauf le morceau 1 qui peut ne porter que le réglage (0).':'Allouez un temps supérieur à 0 à chaque morceau.';
+  if(el) el.innerHTML=cur.loading?'':'<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;"><span style="font-weight:800;color:#1e293b;">Réalisation répartie : '+splitFmtH(sumV)+' h sur '+splitFmtH(V)+' h</span><span style="color:'+colCmp+';font-size:.74rem;font-weight:700;">('+cmp+')</span></div>'
+    +'<div style="margin-top:3px;font-size:.76rem;color:#475569;">Temps alloué total : <strong>'+splitFmtH(splitR2(Rn+sumV))+' h</strong> <span style="color:#64748b;">(réglage '+splitFmtH(Rn)+' h + réalisation '+splitFmtH(sumV)+' h)</span></div>'
+    +((ok&&diff!==0)?'<div style="margin-top:4px;color:#475569;font-size:.72rem;"><i class="fas fa-circle-info" aria-hidden="true" style="margin-right:4px;"></i>Le temps réparti diffère du temps prévu : « Découper » demandera une confirmation.</div>':'')
+    +(msg?'<div style="margin-top:4px;color:#b45309;font-size:.72rem;"><i class="fas fa-triangle-exclamation" aria-hidden="true" style="margin-right:4px;"></i>'+msg+'</div>':'');
   if(btn){ var dis=!ok||cur.busy; btn.disabled=dis; btn.style.opacity=dis?'.5':'1'; btn.style.cursor=dis?'not-allowed':'pointer'; }
 }
+// « Découper » : somme ≠ V → confirmation (appConfirm) ; somme = V → envoi direct. Contrat de /separer inchangé.
 function splitSave(){
-  if(!_splitBdt||_splitBdt.busy||_splitBdt.loading) return;
+  var cur=_splitBdt;
+  if(!cur||cur.busy||cur.loading||cur.confirmation) return;
+  if(!splitPretAEnvoyer()) return;
+  var R=splitReglageVal(), V=Math.max(0,splitR2(cur.total-R)), sumV=splitSommeSauf(-1);
+  if(splitR2(sumV-V)!==0){
+    cur.confirmation=true;
+    appConfirm('Le temps réparti ('+splitFmtH(sumV)+' h) diffère du temps de réalisation prévu ('+splitFmtH(V)+' h) : découper quand même ?',{title:'Temps réparti différent du temps prévu',okLabel:'Découper quand même',icon:'fa-scale-unbalanced',danger:false})
+      .then(function(oui){ cur.confirmation=false; if(oui&&_splitBdt===cur&&!cur.busy&&!cur.loading&&splitPretAEnvoyer()) splitEnvoyer(cur); });
+    return;
+  }
+  splitEnvoyer(cur);
+}
+// Contrôles avant envoi (mêmes règles que le bouton) : un message et false si la découpe n est pas possible.
+function splitPretAEnvoyer(){
+  if(!_splitBdt) return false;
   var parts=splitPartsRead();
   var R=splitReglageVal();
-  if(!isFinite(R)){ pushNotif('err','fa-ban','Réglage invalide : nombre d’heures positif ou nul.'); return; }
-  if(splitReglageTropGrand()){ pushNotif('err','fa-ban','Le réglage ne peut pas dépasser la durée du BDT.'); return; }
-  if(_splitBdt.erreurTemps&&!_splitBdt.reglageConnu&&String(_splitBdt.reglageSaisi==null?'':_splitBdt.reglageSaisi).trim()===''){ pushNotif('err','fa-ban','Réglage non lu : relisez-le, ou saisissez-le, avant de découper.'); return; }
-  if(parts.length<SPLIT_MIN||parts.length>SPLIT_MAX||!parts.every(function(x,i){ return splitValidAt(x,i); })){ pushNotif('err','fa-ban','Chaque morceau doit avoir une réalisation supérieure à 0 (le morceau 1 peut valoir 0 s’il porte le réglage).'); return; }
-  var cur=_splitBdt; cur.busy=true; splitTotalCheck();
+  if(!isFinite(R)){ pushNotif('err','fa-ban','Réglage invalide : nombre d’heures positif ou nul.'); return false; }
+  if(splitReglageTropGrand()){ pushNotif('err','fa-ban','Le réglage ne peut pas dépasser la durée du BDT.'); return false; }
+  if(_splitBdt.erreurTemps&&!_splitBdt.reglageConnu&&String(_splitBdt.reglageSaisi==null?'':_splitBdt.reglageSaisi).trim()===''){ pushNotif('err','fa-ban','Réglage non lu : relisez-le, ou saisissez-le, avant de découper.'); return false; }
+  if(parts.length<SPLIT_MIN||parts.length>SPLIT_MAX||!parts.every(function(x,i){ return splitValidAt(x,i); })){ pushNotif('err','fa-ban','Chaque morceau doit avoir une réalisation supérieure à 0 (le morceau 1 peut valoir 0 s’il porte le réglage).'); return false; }
+  return true;
+}
+function splitEnvoyer(cur){
+  var parts=splitPartsRead();
+  var R=splitReglageVal();
+  cur.busy=true; splitTotalCheck();
   // duree_lue / nb_membres : le serveur refuse (409 « page périmée ») si ce BDT ou sa découpe ont changé depuis la lecture.
   var body={realisation:parts.map(splitR2), duree_lue:splitR2(cur.total)};
   if(cur.tempsLus) body.nb_membres=Math.max(1,(cur.famille||[]).length);

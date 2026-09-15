@@ -2,6 +2,29 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-15 — Découpe d'un BDT : jauge et curseurs · commandes réceptionnées revenues « à réceptionner »
+
+*« Pour les temps de découpage, ce que je veux c'est une jauge qui montre tout le temps qu'il faut répartir et
+des slidebar qui permettent de les allouer comme on le souhaite. De plus j'ai deux commandes qui étaient déjà
+arrivées, passées au PV de contrôle, qui se sont remises dans la liste des réceptions attendues. »*
+
+**1 · Jauge + curseurs dans la fenêtre de découpe.** En haut, une jauge représente tout le temps de réalisation
+à répartir : un segment coloré et numéroté par morceau, la part libre en gris (« reste à répartir »), un
+dépassement en rayures orange ; le réglage reste affiché à part, fixe, sur le morceau 1. Chaque morceau a son
+curseur (au quart d'heure, avec arrêt sur la valeur qui complète exactement le total) et un champ en heures pour
+une valeur précise. Aides « Répartir également » et « Mettre le reste sur le dernier morceau ». Si le total réparti
+diffère du temps prévu, une confirmation est demandée. Le contrat serveur de `/separer` ne change pas.
+
+**2 · Commandes réceptionnées revenues dans « À réceptionner » (régression du lot D).** Le calendrier des
+Expéditions considérait tout BC `recu_partiel` ayant un reste à recevoir comme encore attendu : des commandes
+réceptionnées avant le lot D avec une quantité inférieure à la commande (et déjà passées au PV) sont revenues.
+Désormais un BC `recu_partiel` n'est à réceptionner que si un reliquat est **réellement attendu**
+(`attend_reliquat`) : dernière réception déclarée « Livraison partielle » (`bons_de_livraison.partiel`, maintenant
+écrit à la réception) ou lot de remplacement décidé par la Qualité sur la dernière réception.
+
+Vérifié : typecheck 0, harnais 60/0 ; fenêtre de découpe rendue et testée au navigateur (57 + 9 contrôles, aucune
+erreur JS) ; calendrier des Expéditions contrôlé sur Docker. Aucune migration.
+
 ## 2026-09-14 — Expéditions (lot D) : réception fournisseur hors France, PV de contrôle ligne par ligne, contrôleur habilité, certificat matière
 
 *« dans les expéditions dans le formulaire de réception dans le planning il faut mettre : le Numéro de

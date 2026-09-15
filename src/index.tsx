@@ -9457,6 +9457,16 @@ app.get('/expeditions/service', async (c) => {
     // BC à plusieurs articles : l'entrée en stock se fait ligne par ligne, seulement si la réception couvre toute la commande.
     ...(() => { const m = bcMultiArticles(b); return { multi_articles: m, stock_multi_ok: m ? repartitionStockMultiArticles(b, quantitesBc(b).reste).ok : null } })(),
     affaires: bcAffaires(b),                                     // affaire du BC + affaires des lignes (BC fusionné)
+    // Reliquat réellement ATTENDU : BC « recu_partiel » dont la DERNIÈRE réception est une livraison partielle
+    // déclarée (BL.partiel = true). Avant le 15/09, le calendrier se fiait au seul reste à recevoir : des BC
+    // réceptionnés (et déjà passés au PV) avec l'ancienne saisie de quantité revenaient dans « À réceptionner ».
+    //   Autre reliquat légitime : un lot de REMPLACEMENT décidé par la Qualité sur la dernière réception (le BC
+    //   est rouvert, qte_recue diminuée) — une nouvelle réception crée un nouveau BL et clôt l'attente.
+    attend_reliquat: String(b.statut || '') === 'recu_partiel'
+      && !(quantitesBc(b).reste != null && Number(quantitesBc(b).reste) <= 0)
+      && (((blsAll as any[]).find((x: any) => String(x.id) === String(b.bl_id || ''))?.partiel === true)
+        || ((quar as any[]) || []).some((q: any) => String(q.bc_id || '') === String(b.id) && String(q.compensation || '') === 'remplacement'
+          && !!q.issue && !!b.bl_id && String(q.bl_id || '') === String(b.bl_id))),
     certificat_matiere_requis: b.certificat_matiere_requis === true,   // migration 012 / cloud-10 (absente = false)
     montant_ht: Number(b.montant_ht ?? b.montant ?? 0) || 0,
     notes: b.notes || null,
