@@ -10,7 +10,7 @@ Le service **Expéditions** est le dernier maillon avant le client. En entrée, 
 
 Les onglets à connaître :
 - **Bons de Livraison** — créer les BL clients (partiels possibles) et les BST sous-traitants.
-- **Bons de Commande** — réceptionner ce qui arrive des fournisseurs/ST, puis contrôler.
+- **Calendrier** puis **Réceptions** — réceptionner ce qui arrive des fournisseurs/ST (Calendrier › « Traiter »), puis faire le PV de contrôle (Réceptions › « PV à faire »).
 - **Commandes en cours** — voir ce qu'il reste à livrer.
 - **Dashboard** — le suivi OTD (livraison à l'heure).
 
@@ -53,32 +53,37 @@ Sur cet écran, vous renseignez :
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/expeditions.md).
 
 ## Étape 3 — Réceptionner une commande fournisseur
-**⬅️ Avant :** Un **fournisseur ou un sous-traitant livre** une commande (matière, pièces, retour de traitement). Elle figure dans l'onglet « Bons de Commande », liste « Commandes en attente de réception ».
-**📝 Ici, vous :** enregistrez la **réception** — vous liez le BC à un bon de livraison interne et notez qui a livré.
+**⬅️ Avant :** Un **fournisseur ou un sous-traitant livre** une commande (matière, pièces, retour de traitement). Les Achats ont émis le bon de commande et, si besoin, y ont coché « Certificat matière requis ». La commande apparaît dans le **Calendrier**, bloc « à réceptionner aujourd'hui », à sa date d'arrivée prévue.
+**📝 Ici, vous :** cliquez **« Traiter »** et enregistrez la **réception** — vous liez le BC à un bon de livraison interne et vous notez les **références du fournisseur** et, pour une marchandise venue de l'étranger, les informations d'import. Il faut avoir l'**écriture sur les Expéditions**.
+
+![Formulaire de réception : N° de commande et de BL fournisseur, bandeau de quantité, réception hors France avec poids, nomenclature douane, code EWX et mode d'arrivée](../../assets/form-expeditions-reception.png)
 
 Sur cet écran, vous renseignez :
-- **N° BL interne** — laissez vide pour un numéro **automatique**, ou saisissez le vôtre.
-- **N° d'affaire** — l'affaire à relier à cette réception (souvent pré-rempli).
-- **Transporteur** — qui a livré (« Enlèvement direct » = récupéré sur place). Obligatoire : sans lui, la réception ne se valide pas.
-- **N° réf. livraison transporteur** — le numéro de suivi ou du bon de transport.
-- **Quantité reçue** — le nombre d'articles réellement reçus.
+- **N° BL interne** et **N° d'affaire** — repris du bon de commande, rien à ressaisir.
+- **N° de commande fournisseur** — le numéro de votre commande chez le fournisseur. **Obligatoire.**
+- **N° de BL fournisseur** — le numéro du bon de livraison joint au colis. **Obligatoire.**
+- **Aucune quantité à saisir** : le bandeau vert annonce la quantité enregistrée, c'est le **reste à recevoir** du bon de commande. Deux exceptions : la case **« Livraison partielle »** (le fournisseur livre en plusieurs fois : saisissez la quantité livrée) et un bon de commande **sans quantité exploitable** (bandeau jaune : saisissez la quantité lue sur le BL fournisseur).
+- **Réception hors France ?** — Oui ou Non, **obligatoire**. Si **Oui** : **poids matière (kg)**, **N° de nomenclature (douane)** (code douanier du produit), **code EWX** (1 ou 2) et **mode d'arrivée** (Routier, Maritime, Aérien, Ferroviaire, Messagerie / express), tous obligatoires.
 
-**➡️ Ensuite :** la réception est enregistrée et apparaît dans l'onglet Réceptions avec la mention « PV à faire ». **Rien n'entre encore en stock** : enchaînez avec le **PV de contrôle** (étape suivante) — seul un PV conforme fait entrer le contenu en stock.
+**➡️ Ensuite :** un bon de livraison de réception est créé et rattaché au BC, la date d'arrivée réelle est posée, et la réception apparaît dans l'onglet **Réceptions** avec « PV à faire », ses références fournisseur et, le cas échéant, la pastille « Hors France ». Une faute de frappe se rectifie par le lien **« Corriger »** (sans toucher à la quantité ni au stock). **Rien n'entre encore en stock** : enchaînez avec le **PV de contrôle**.
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/expeditions.md).
 
 ## Étape 4 — Contrôler à réception (PV de contrôle)
-**⬅️ Avant :** La commande vient d'être **réceptionnée**. Avant de laisser les pièces entrer dans le flux, il faut **attester du contrôle**.
-**📝 Ici, vous :** remplissez le **PV de contrôle à réception** — vous déclarez si les pièces reçues sont conformes ou non.
+**⬅️ Avant :** La commande vient d'être **réceptionnée**. Avant que les pièces entrent en stock, il faut **attester du contrôle**.
+**📝 Ici, vous :** onglet **Réceptions**, bouton **« PV à faire »** — vous déclarez si la réception est conforme ou non, et qui l'a contrôlée.
+
+![PV de contrôle conforme : résultat, contrôleur choisi dans la liste, certificat matière confirmé](../../assets/form-expeditions-pv.png)
 
 Sur cet écran, vous renseignez :
-- **Résultat du contrôle** — « Conforme (OK) » si tout est bon, ou « Anomalie » si un défaut est constaté. Choisir « Anomalie » fait apparaître les cases ci-dessous.
-- **Gravité NC** (si Anomalie) — le niveau du défaut (Mineure, Majeure, Critique, Bloquante).
-- **Mettre le lot en quarantaine** (si Anomalie) — cochée par défaut : **isole le lot** pour empêcher son utilisation tant que le problème n'est pas traité.
-- **Observations** — les constats, mesures et écarts relevés.
-- **Contrôleur** — qui a fait le contrôle (pré-rempli « Expéditions »).
+- **Résultat du contrôle** — **Conforme** ou **Non conforme** (rien n'est coché d'avance).
+- **Contrôleur** — choisi dans la liste des salariés actifs qui ont l'écriture sur les Expéditions ; vous êtes pré-sélectionné si vous en faites partie.
+- **Certificat matière reçu et conforme** — seulement si le bon de commande l'exige. **Sans cette case, pas de PV conforme** : le PV bascule en non conforme.
+- **Conforme** : rien d'autre. **Non conforme** : la fenêtre affiche tout le bon de commande — en-tête (fournisseur, dates, affaire, montant, conditions, notes, PDF) et **chaque ligne** avec **Oui / Non** ; une **observation est obligatoire** sur chaque ligne en Non. En bas, une **observation générale** (facultative) et la **gravité**.
 
-**➡️ Ensuite :** si « Conforme », la marchandise est libérée pour la suite. Si « Anomalie », une **fiche de non-conformité (NC) est créée automatiquement** et part au service **Qualité** ; le lot peut être **mis en quarantaine** — et c'est justement cette quarantaine qui **bloquera un futur BL** (voir la porte qualité de l'étape 1) tant que la NC n'est pas traitée.
+![PV de contrôle non conforme : en-tête du bon de commande, lignes Oui / Non avec observation, observation générale, gravité](../../assets/form-expeditions-pv-non-conforme.png)
+
+**➡️ Ensuite :** si **Conforme**, le contenu **entre en stock** (ligne par ligne sur son article pour un bon de commande à plusieurs articles) et la porte matière de l'affaire peut s'ouvrir. Si **Non conforme**, une **non-conformité** « réception fournisseur » part au service **Qualité** avec le détail des lignes en écart (détecteur « Réception »), et le lot part **toujours en quarantaine** : rien n'entre en stock, la Qualité décide (renvoi, dérogation, entrée partielle). Cette quarantaine **bloque un futur BL** tant qu'elle n'est pas traitée (voir la porte qualité de l'étape 1).
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/expeditions.md).
 

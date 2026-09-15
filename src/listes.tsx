@@ -105,7 +105,15 @@ function mapBL(b: BonDeLivraison) {
     date: b.date_bl,
     qte: b.qte,
     statut: b.statut,
-    transport: b.transport ?? '',
+    // Réception fournisseur (lot D) : plus de transporteur saisi → à défaut, le N° de BL du fournisseur.
+    transport: b.transport || (b.num_bl_fournisseur ? 'BL fourn. ' + b.num_bl_fournisseur : ''),
+    // Informations de réception (lot D, vérification) : N° de commande fournisseur et, hors France, le bloc douane.
+    recep: [
+      b.num_commande_fournisseur ? 'Cde fourn. ' + b.num_commande_fournisseur : '',
+      b.hors_france === true
+        ? 'Hors France · ' + [b.poids_matiere_kg != null ? String(b.poids_matiere_kg).replace('.', ',') + ' kg' : '', b.num_nomenclature ? 'nomenclature ' + b.num_nomenclature : '', b.code_ewx != null ? 'EWX ' + b.code_ewx : '', b.mode_arrivee || ''].filter(Boolean).join(' · ')
+        : '',
+    ].filter(Boolean),
     otd: b.otd ?? '—',
   }
 }
@@ -543,8 +551,8 @@ ${pageHeader('fas fa-truck-loading','#06b6d4,#0891b2','Suivi Bons de Livraison /
           <td style="padding:10px 14px;font-size:.75rem;color:#6b7280;">${escX(b.cmd)}</td>
           <td style="padding:10px 14px;font-weight:700;">${escX(b.client)}</td>
           <td style="padding:10px 14px;font-size:.75rem;color:#374151;">${b.date}</td>
-          <td style="padding:10px 14px;font-size:.78rem;font-weight:600;">${b.qte} pcs</td>
-          <td style="padding:10px 14px;font-size:.72rem;color:#6b7280;">${escX(b.transport)}</td>
+          <td style="padding:10px 14px;font-size:.78rem;font-weight:600;">${b.qte != null ? escX(String(b.qte)) + ' pcs' : '—'}</td>
+          <td style="padding:10px 14px;font-size:.72rem;color:#6b7280;">${escX(b.transport)}${(b.recep || []).map((x: string) => `<div style="font-size:.64rem;color:#0369a1;margin-top:2px;">${escX(x)}</div>`).join('')}</td>
           <td style="padding:10px 14px;">${badge(b.statut)}</td>
           <td style="padding:10px 14px;"><span style="font-weight:700;color:${b.otd==='À temps'?'#15803d':b.otd==='—'?'#9ca3af':'#b91c1c'};font-size:.75rem;">${b.otd}</span></td>
           <td style="padding:10px 14px;"><a href="/expedition/bl" style="padding:4px 9px;background:#f0fdff;color:#0891b2;border-radius:6px;font-size:.7rem;font-weight:700;text-decoration:none;border:1px solid #a5f3fc;">Voir</a></td>

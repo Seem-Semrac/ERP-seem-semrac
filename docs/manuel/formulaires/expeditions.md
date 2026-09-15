@@ -53,33 +53,55 @@
 ⚠️ **Attention :** Dans le fonctionnement normal, les BC se créent depuis une Demande d'Achat (Service Achats). Ce formulaire de saisie directe reste un complément.
 
 ## Réception — Lier le BC à un BL
-**Quand l'utiliser :** À l'arrivée d'une commande fournisseur/ST, pour enregistrer la réception et générer le bon de livraison interne correspondant.
-**Où le trouver :** Onglet « Bons de Commande », dans la liste « Commandes en attente de réception », bouton « Réceptionner » sur la ligne concernée.
+**Quand l'utiliser :** À l'arrivée d'une commande fournisseur ou sous-traitant, pour enregistrer la réception et créer le bon de livraison interne correspondant.
+**Où le trouver :** Onglet « Calendrier », bloc « à réceptionner aujourd'hui » (ou la frise), bouton « Traiter » sur la ligne du bon de commande. Réservé aux personnes ayant l'**écriture sur les Expéditions** (Direction, rôle Logistique, case « Écrire » des Expéditions cochée sur la fiche salarié).
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
-| N° BL interne | texte | Non | Numéro de bon de livraison interne. Laissez vide pour un numéro automatique. | (vide = auto) |
-| N° d'affaire | texte | Non | Numéro d'affaire à relier à cette réception (pré-rempli si connu). | AFF-2026-XXX |
-| Transporteur | liste déroulante (GLS, DHL, Chronopost, TNT, DPD, Geodis, Coursier, Enlèvement direct) | Oui | Qui a livré la marchandise. « Enlèvement direct » = récupéré sur place. | Geodis |
-| N° réf. livraison transporteur | texte | Non | Numéro de suivi ou du bon du transporteur. | Tracking 1Z999AA10 |
-| Quantité reçue | nombre (décimales acceptées) | Non | Quantité effectivement reçue ; c'est elle qui entrera en stock au PV conforme. | 200 |
+| N° BL interne | texte (repris du BC, verrouillé quand connu) | Non | Numéro du bon de livraison interne, déduit du bon de commande. Laissez vide s'il n'est pas proposé : un numéro est attribué automatiquement. | BL-2026-0142 |
+| N° d'affaire | texte (repris du BC, verrouillé quand connu) | Non | Affaire rattachée au bon de commande. | AFF-2026-014 |
+| N° de commande fournisseur | texte (100 caractères max) | Oui | Le numéro de **votre commande chez le fournisseur**, tel qu'il figure sur ses papiers (confirmation de commande, BL). | CF-88412 |
+| N° de BL fournisseur | texte (100 caractères max) | Oui | Le numéro du **bon de livraison du fournisseur** joint au colis. Il remplace l'ancienne « référence livraison transporteur ». | BL 2026/5531 |
+| Livraison partielle : le fournisseur annonce un reliquat | case à cocher | Non | À cocher seulement quand le fournisseur livre **en plusieurs fois** : la quantité livrée devient alors à saisir. Absente pour un bon de commande à plusieurs articles. | décochée |
+| Quantité livrée | nombre (virgule acceptée) | Oui si « Livraison partielle » est cochée, ou si le BC (à un article) n'a pas de quantité exploitable | Lue sur le BL fournisseur. En livraison partielle, elle doit être **inférieure** au reste à recevoir. Dans les autres cas, ce champ n'apparaît pas : la quantité enregistrée est le **reste à recevoir** du BC, affiché dans le bandeau vert. | 40 |
+| Réception hors France ? | choix Oui / Non | Oui | La marchandise vient-elle de l'étranger ? « Oui » fait apparaître les quatre champs ci-dessous. | Non |
+| Poids matière (kg) | nombre (> 0 ; « 1 250,5 » accepté) | Oui si hors France | Poids de la matière reçue, en kilogrammes. | 125,5 |
+| N° de nomenclature (douane) | texte (100 caractères max) | Oui si hors France | Le **code de nomenclature douanière** du produit importé (indiqué sur la facture ou les documents de transport). | 7606 12 99 |
+| Code EWX | liste déroulante (1, 2) | Oui si hors France | Code EWX de la réception : 1 ou 2. | 1 |
+| Mode d'arrivée | liste déroulante (Routier, Maritime, Aérien, Ferroviaire, Messagerie / express) | Oui si hors France | Par quel moyen la marchandise est arrivée. | Routier |
 
-⚠️ **Attention :** Le transporteur est obligatoire ; sans lui, la réception ne peut pas être validée. Après validation, vous devez enchaîner avec le PV de contrôle. **Rien n'entre en stock à la réception** : le contenu n'entre en stock qu'au PV conforme.
+💡 **Astuce :** Lisez le bandeau sous les numéros : il annonce la **quantité qui sera enregistrée** (reste à recevoir). Un écart (pièces manquantes, abîmées) ne se corrige pas ici : il se signale au **PV de contrôle**, sur la ligne concernée.
+⚠️ **Attention :** Le transporteur et la quantité reçue ne se saisissent plus. S'il manque un champ obligatoire, il s'encadre en rouge et la réception n'est pas envoyée. Un bon de commande **annulé** ou **déjà entièrement reçu** est refusé. **Rien n'entre en stock à la réception** : le contenu n'entre en stock qu'au PV conforme.
+
+## Réception — Corriger les informations
+**Quand l'utiliser :** Pour rectifier une faute de frappe sur une réception déjà enregistrée (N° fournisseur, code douanier, poids…).
+**Où le trouver :** Onglet « Réceptions », lien « Corriger » sous les articles de la réception fournisseur (visible seulement avec l'écriture Expéditions).
+
+| Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
+|---|---|---|---|---|
+| N° de commande fournisseur | texte | Oui | Pré-rempli avec la valeur enregistrée. | CF-88412 |
+| N° de BL fournisseur | texte | Oui | Pré-rempli avec la valeur enregistrée. | BL 2026/5531 |
+| Réception hors France ? | choix Oui / Non | Oui | Passer à « Non » efface poids, nomenclature, code EWX et mode d'arrivée. | Oui |
+| Poids matière (kg) · N° de nomenclature (douane) · Code EWX · Mode d'arrivée | comme à la réception | Oui si hors France | Mêmes règles qu'à la réception. | 1 250,5 · 7606 12 99 · 2 · Maritime |
+
+⚠️ **Attention :** Seules ces informations se corrigent : ni la quantité, ni le contrôle, ni le stock. Un PV déjà signé garde les informations telles qu'elles étaient au moment du contrôle.
 
 ## PV de contrôle à réception
-**Quand l'utiliser :** Après avoir réceptionné une commande, pour attester du contrôle des pièces reçues (conforme ou anomalie) avant de les libérer en Qualité.
-**Où le trouver :** Onglet « Réceptions », colonne « Contrôle » : bouton « PV à faire » sur la ligne de la réception concernée. Un seul PV par réception. Conforme : le contenu entre en stock. Non conforme : non-conformité + quarantaine, rien en stock.
+**Quand l'utiliser :** Après avoir réceptionné une commande, pour attester du contrôle des pièces reçues. Conforme : le contenu entre en stock. Non conforme : non-conformité + quarantaine, rien en stock, la Qualité décide.
+**Où le trouver :** Onglet « Réceptions », colonne « Contrôle » : bouton « PV à faire » sur la ligne de la réception. Un seul PV par réception. Bouton grisé avec un cadenas pour qui n'a pas l'écriture sur les Expéditions.
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
-| Résultat du contrôle | case à cocher (choix unique : Conforme (OK) / Anomalie) | Oui | Cochez « Conforme » si tout est bon, « Anomalie » si un défaut est constaté. « Anomalie » fait apparaître les cases ci-dessous. | Conforme (OK) |
-| Gravité NC | liste déroulante (Mineure, Majeure, Critique, Bloquante) | Non (uniquement si Anomalie) | Niveau de gravité du défaut. « Majeure » proposé par défaut. | Majeure |
-| Mettre le lot en quarantaine | case à cocher | Non (uniquement si Anomalie) | Cochée par défaut : isole le lot pour empêcher son utilisation tant que le problème n'est pas traité. | Cochée |
-| Observations | zone de texte | Non | Détails du contrôle : constats, mesures, écarts relevés. | 3 pièces hors cote sur diamètre |
-| Contrôleur | texte | Non | Nom de la personne qui a fait le contrôle. Pré-rempli avec « Expéditions ». | Sabine |
+| Résultat du contrôle | choix unique (Conforme / Non conforme), rien de coché d'avance | Oui | « Conforme » si tout est bon ; « Non conforme » ouvre l'en-tête et les lignes du bon de commande. | Conforme |
+| Contrôleur | liste déroulante (salariés actifs ayant l'écriture sur les Expéditions) | Oui | La personne qui a fait le contrôle. Si vous êtes dans la liste, vous êtes pré-sélectionné. Le serveur revérifie : un nom hors de la liste est refusé. | DUPONT Marie |
+| Certificat matière reçu et conforme | case à cocher (encadré violet) | Visible seulement si le BC exige un certificat ; **obligatoire pour un PV conforme** | Cochez-la si le certificat matière est arrivé avec la livraison et qu'il est conforme. Sans elle, le PV bascule en « Non conforme » et la NC porte « Certificat matière absent ou non conforme ». | cochée |
+| Ligne — Conforme ? | choix Oui / Non par ligne du bon de commande | Oui, pour chaque ligne (non conforme seulement) | « Oui » = pas de problème sur cette ligne ; « Non » = écart. Le bouton « Tout à Oui » répond Oui aux lignes encore sans réponse. | Non |
+| Ligne — Observation | zone de texte (1 000 caractères max) | Oui si la ligne est en « Non » | Ce qui ne va pas sur cette ligne : quantité manquante, pièces abîmées, mauvaise nuance… | 3 barres sur 10 manquantes |
+| Observation générale | zone de texte (4 000 caractères max) | Non | Constat d'ensemble sur la réception, en bas de la fenêtre. | Emballage humide à l'arrivée |
+| Gravité de la non-conformité | liste déroulante (Mineure, Majeure, Critique, Bloquante) | Non (Majeure par défaut) | Niveau de gravité de la NC créée. | Majeure |
 
-💡 **Astuce :** Si vous choisissez « Anomalie », une fiche de non-conformité (NC) est créée automatiquement et envoyée au service Qualité.
-⚠️ **Attention :** Un contrôle marqué « Anomalie » peut bloquer le lot (quarantaine) et impacter la suite de la commande.
+💡 **Astuce :** En non conforme, la fenêtre affiche **tout le bon de commande** : n° BC, fournisseur, date, livraison prévue, affaire(s), montant HT, conditions de paiement, notes, lien vers le PDF, puis chaque ligne (référence, désignation, quantité commandée, prix unitaire s'il existe, affaire, DA · lot · opération). Un BC sans lignes détaillées affiche une ligne reconstituée, marquée « * ».
+⚠️ **Attention :** Un non conforme demande **au moins une ligne en « Non »**, ou un certificat exigé non confirmé. La NC créée reprend l'observation générale, une ligne « Ligne n · réf · désignation : observation » par écart, le certificat absent et le nom du contrôleur (détecteur « Réception ») ; le lot part **toujours** en quarantaine. Si les Achats ont changé l'exigence de certificat pendant que la page était ouverte, le PV est refusé : rechargez la page.
 
 ## Demande d'achat — Expeditions
 **Quand l'utiliser :** Pour demander l'achat d'un article non rattaché à une commande (besoin libre) ; la demande part au service Achats.

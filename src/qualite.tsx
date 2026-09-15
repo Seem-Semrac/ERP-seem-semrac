@@ -616,7 +616,7 @@ function panelQuarantaine(qs: Quarantaine[]) {
               ${TD(`<span style="font-size:.75rem;font-weight:600;color:#374151;">${escX(q.lot_id ?? '—')}</span>${(q as any).reception ? `<div style="font-size:.63rem;color:#0369a1;">BC ${escX((q as any).reception.num_bc)}${(q as any).reception.st ? ' · sous-traitance' : ''}</div>` : ''}`)}
               ${TD(escX(q.piece ?? '—'))}
               ${TD(escX(q.client_nom ?? '—'))}
-              ${TD(`<span style="font-size:.73rem;color:#6b7280;max-width:180px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escX(q.motif ?? '—')}</span>`)}
+              ${TD(`<span title="${escX(q.motif ?? '')}" style="font-size:.73rem;color:#6b7280;max-width:180px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escX(q.motif ?? '—')}</span>`)}
               ${TDC(`<span style="font-size:.75rem;color:#6b7280;">${q.date_mise_quarantaine}</span>`)}
               ${TDC(`<span style="font-weight:700;color:${(q.duree_jours??0)>5?'#b91c1c':(q.duree_jours??0)>2?'#92400e':'#374151'};">${q.duree_jours ?? '—'}</span>`)}
               ${TDC(quarIssueBadge(q))}
@@ -729,7 +729,7 @@ function panelQuarantaine(qs: Quarantaine[]) {
         var r=q.reception;
         document.getElementById('qf_id').value=id;
         document.getElementById('qf_title').textContent=(q.piece||q.lot_id||q.id||'');
-        document.getElementById('qf_info').innerHTML='<b>'+qfEsc(r.fournisseur||'')+'</b>'+(r.st?' (sous-traitant)':'')+' · BC '+qfEsc(r.num_bc||'')+(r.bl_id?' · BL '+qfEsc(r.bl_id):'')+(q.nc_id?' · NC '+qfEsc(q.nc_id):'')+'<div style="margin-top:4px;color:#6b7280;">Mise en quarantaine : '+qfEsc(q.motif||'—')+'</div>';
+        document.getElementById('qf_info').innerHTML='<b>'+qfEsc(r.fournisseur||'')+'</b>'+(r.st?' (sous-traitant)':'')+' · BC '+qfEsc(r.num_bc||'')+(r.bl_id?' · BL '+qfEsc(r.bl_id):'')+(q.nc_id?' · NC '+qfEsc(q.nc_id):'')+'<div style="margin-top:4px;color:#6b7280;white-space:pre-line;">Mise en quarantaine : '+qfEsc(q.motif||'—')+'</div>';
         document.getElementById('qf_qte').value=(r.qte!=null?r.qte:'');
         document.getElementById('qf_acc').value='';
         document.getElementById('qf_der_ref').value='';

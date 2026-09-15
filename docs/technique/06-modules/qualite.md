@@ -74,5 +74,38 @@ relivraison.
   conforme **ou** décision) ; la porte matière ne s'ouvre pas si une quantité est repartie **sans
   remplacement** (`matiereManquanteBc`) — il faut repasser commande, et la réponse le dit.
 
+## PV de réception détaillé : ce qui arrive en Qualité (lot D, 14/09/2026)
+
+Le PV de contrôle d'une réception fournisseur se remplit aux **Expéditions** (voir
+[Expéditions](expeditions.md), section « Lot D ») ; la Qualité en reçoit les conséquences.
+
+- **Qui signe** : seules les personnes ayant l'**écriture Expéditions** (direction, logistique, jeton
+  `ecrire:expeditions`), choisies dans une liste et revérifiées par le serveur. ⚠ **Le rôle `qualite` ne peut
+  plus faire de PV de réception** (lecture seule sur Expéditions) ; lui cocher `ecrire:expeditions` bascule sa
+  fiche en mode jetons (cocher aussi `qualite`, `securite`… sinon il les perd).
+- **La NC de réception est enfin renseignée** (`champsNcPV`, `src/pv_reception.ts`) :
+  - `description` = observation générale, puis une ligne « Ligne n · réf · désignation : observation » par ligne
+    du BC en « Non », puis « Certificat matière absent ou non conforme » le cas échéant, puis « Contrôleur : X » ;
+  - `ref_article` / `designation` quand **une seule** ligne est en « Non » ;
+  - `nb_pieces` = quantité du BL (repli sans ce nombre si la colonne est entière : 22P02 / 22003) ;
+  - **`detecteur` = « Réception »** — une valeur de la liste du formulaire NC. Avant, le nom du contrôleur y était
+    écrit : absent de la liste, il était **effacé** au premier ré-enregistrement de la NC (`qualEditNC` →
+    `detecteur: null`) et le badge d'origine affichait « Manuel » au lieu de « Fournisseur ».
+- **Quarantaine** : toujours créée, `motif` = même description (plusieurs lignes). La fenêtre « Décider » l'affiche
+  avec ses retours à la ligne (`white-space: pre-line`) et la liste des quarantaines donne le motif complet au
+  survol (`title`).
+- **Origine du PV** (`deriverOriginePV`, lu dans `observations`) : préfixe « Contrôleur : X — » conservé ; un BC de
+  sous-traitance commence par « Retour sous-traitant », d'où le badge « BL Sous-traitant ».
+- **Détail consultable en base** : `pv_controle.detail` (jsonb v1 : instantané du BC et du BL, lignes avec réponse et
+  observation, observation générale, gravité, certificat `{requis, confirme}`, contrôleur, saisi par) +
+  `controleur_id`, `controleur_nom`, `saisi_par`, `certificat_matiere` (migration 012 / `cloud-10` ; sans elles, tout
+  est en texte dans `observations`). L'onglet PV de Contrôle ne l'affiche pas encore.
+- **Décision fournisseur** (`/api/qualite/quarantaine/:id/decision-fournisseur`) : pour un **BC à plusieurs
+  articles**, l'entrée en stock se fait ligne par ligne et **seulement si toute la commande est acceptée** ; une
+  entrée partielle n'est pas répartissable par article → avertissement « Stock non crédité » ou « Entrée en stock
+  incomplète ». Le montant de l'avoir reste à 0 avec avertissement quand la quantité commandée du BC est vide.
+- Valeurs `statut` / `decision` de `pv_controle` **inchangées** (contraintes CHECK du cloud) : `valide` / `libere`
+  (conforme), `nc_ouverte` / `bloque` (non conforme).
+
 ---
 > Fiche générée. Manuel utilisateur correspondant : `docs/manuel/qualite.md`. Voir aussi `04-auth-rbac.md`, `07-api-reference.md`.

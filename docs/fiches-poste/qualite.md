@@ -29,7 +29,7 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 ![qualite-nc](../assets/qualite-nc.png)
 
 ### 3. Décider d'un lot reçu non conforme
-1. Qualité › **Quarantaine** : un lot refusé au contrôle réception porte le bouton rouge **Décider** (les lots de production gardent « Statuer »).
+1. Qualité › **Quarantaine** : un lot refusé au contrôle réception porte le bouton rouge **Décider** (les lots de production gardent « Statuer »). Le motif et la NC (détecteur « Réception ») reprennent le PV ligne par ligne : une ligne par écart, certificat matière absent, contrôleur.
 2. Trois choix : **renvoyer** tout le lot au fournisseur · **dérogation** (il entre en stock en l'état, réfaction possible) · **entrée partielle** (la part acceptée entre, le reste repart ou part au rebut).
 3. Renvoi et entrée partielle : choisir **avoir** (il part aux Achats) ou **remplacement** (le fournisseur relivre).
 4. Le **motif est obligatoire** et la décision ne se prend qu'une fois. Matière renvoyée sans remplacement = il faut repasser commande.
@@ -40,6 +40,12 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 1. Onglet **Rapports 8D**, dérouler D1→D8.
 
 ![qualite-8d](../assets/qualite-8d.png)
+
+### 5. PV de réception fournisseur : qui le signe
+1. Le PV d'une livraison fournisseur se fait aux **Expéditions** (Réceptions › « PV à faire »), par un contrôleur choisi dans la liste des salariés ayant l'**écriture sur les Expéditions**.
+2. ⚠ Depuis le 14/09/2026, le rôle Qualité (lecture seule sur Expéditions) ne le signe plus. Si c'est votre travail : faire cocher « Écrire » sur les Expéditions dans votre fiche (RH › Employés) **en gardant cochés Qualité, Sécurité…**, sinon vous les perdez.
+
+![form-expeditions-pv-non-conforme](../assets/form-expeditions-pv-non-conforme.png)
 
 ---
 > Fiche générée (`scripts_doc/gen_fiches_poste.mjs`). Sécurité & traçabilité : `docs/technique/04-auth-rbac.md`.

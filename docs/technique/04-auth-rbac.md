@@ -13,7 +13,7 @@ Tout est dans `src/auth.ts` (logique) + middleware dans `src/index.tsx` (~L114).
 Le middleware appelle `canAccess(user, path, method)` sur **chaque** requête (hors routes publiques). La décision suit :
 
 1. `perms` contient `all` (rôle **direction**) → **autorisé** (tout).
-2. Route **self-service** atelier (PIN dans le corps) → autorisé (`isSelfService`).
+2. Route **self-service** atelier (PIN dans le corps) → autorisé (`isSelfService`, liste `SELF_SERVICE_RE` : pointage, `bdt/:id/(recu|solder)`, clôture de balancelle OAS, cote contrôlée, NC production). ⚠ **Depuis le 14/09/2026 (lot D), la réception fournisseur et son PV n'en font plus partie** (`/api/expeditions/bc/:id/(receptionner|pv)`) : aucun appelant n'envoyait de PIN, ils étaient donc ouverts à **tout compte connecté**. Ils exigent maintenant l'écriture Expéditions (règle 7).
 3. `accesExplicites(perms)` est calculé **ici**, avant tout le reste : dès que la personne porte au moins un jeton `lire:`/`ecrire:`, ces jetons décident seuls — **y compris** pour `interlocuteurs`, `plans` et `habilitations`, qui les ignoraient jusqu'au 09/09/2026.
 4. `interlocuteurs` (contacts clients ET fournisseurs), **à défaut de jeton** → autorisé si écriture `rw` sur **commercial/achats/be** (cas multi-services).
 5. `serviceFor(path)` déduit le **service** de la route :
@@ -45,6 +45,33 @@ Le middleware appelle `canAccess(user, path, method)` sur **chaque** requête (h
 | **rh** | rh | production, securite, compta |
 | **operateur** | — (aucune) | production, oas, qualite, expeditions |
 
+## Droit d'écriture sur un service : `peutEcrireService(user, svc)` (14/09/2026)
+
+`src/auth.ts` exporte `peutEcrireService(user, svc)` : le droit d'**écriture** sur un service, **sans aucune exception de
+chemin** (ni self-service, ni route neutre). Même règle que `canAccess` sur une route POST ordinaire de la famille :
+`all` → oui ; jetons `lire:`/`ecrire:` présents → `ecrire.has(svc)` ; sinon `ROLE_MATRIX` `rw` ; règles spéciales
+alignées sur `canAccess` pour `plans` et `habilitations`. Invariant testé :
+`peutEcrireService(u, svc) === canAccess(u, '/api/<svc>/x', 'POST')`.
+
+Deux usages :
+1. **Revérifier dans le handler** — message clair au lieu de « Accès refusé », et seul contrôle quand
+   `AUTH_ENFORCE=off` : `POST /api/expeditions/bc/:id/receptionner`, `POST /api/expeditions/bl/:id/reception-infos`,
+   `POST /api/expeditions/bc/:id/pv` ; la page `/expeditions/service` reçoit `peutEcrireExpeditions` pour griser les
+   boutons PV.
+2. **Juger un AUTRE salarié que l'utilisateur connecté** — le **contrôleur d'un PV de réception** doit avoir
+   l'écriture Expéditions. `controleursEligibles` (`src/pv_reception.ts`) reconstruit la session de chaque salarié
+   **actif** exactement comme le login et `droitsAJour` (rôles = `roles` sinon `[role]` ; droits = `autorisations`
+   si non vide, sinon `autorisationsUnion(roles)`, exportée d'`index.tsx`), puis applique `peutEcrireService`. Les
+   salariés sont relus à chaque PV (`getSalariesDroitsStricte`, sans `pin` ni `date_sortie`) : une panne → 503,
+   jamais « accepté par défaut ». Le compte BOOTSTRAP (sans fiche salarié) peut enregistrer, pas être choisi.
+
+⚠ **Ne pas remplacer par `canAccess(user, '/api/…/pv', 'POST')`** : sur un chemin self-service, `canAccess`
+répond toujours `true`.
+
+⚠ **Conséquence métier** : le rôle `qualite` (lecture seule sur Expéditions) ne signe plus les PV de réception.
+Lui cocher `ecrire:expeditions` fait passer sa fiche en **mode jetons** : il faut alors cocher aussi `qualite`,
+`securite`… sinon ces services se ferment (règle 3 ci-dessous).
+
 ## Cas particuliers
 - **`plans` (Plan/Bâtiment)** : **sans jeton**, lecture ouverte à tout connecté et écriture BE/Production/Maintenance/Qualité/Direction. **Avec jetons**, `lire:plans` / `ecrire:plans` décident seuls.
 - **`habilitations`** : **sans jeton**, géré par RH **et** Qualité (jeton `habilitations`), sans donner accès au reste de la RH. **Avec jetons**, suit le niveau accordé sur `rh` ou `qualite` — sinon fermer la RH par les cases laissait les habilitations grandes ouvertes.
@@ -70,7 +97,7 @@ La fiche salarié (**RH › Employés**) porte un tableau des **15 services**, c
 **Règle appliquée par `canAccess()`** — dans cet ordre :
 
 1. `perms` contient `all` (Direction) → accès total, jamais restreint ;
-2. route self-service atelier → autorisée ;
+2. route self-service atelier → autorisée (la réception fournisseur et son PV n'en sont plus depuis le 14/09/2026) ;
 3. **au moins un jeton `lire:` ou `ecrire:` → ces listes font foi** et remplacent la matrice des rôles pour l'accès aux services : elles peuvent aussi bien **ouvrir** un service que **fermer** un service que le rôle accordait. Cela vaut pour **les 15 services sans exception**, `plans` et `habilitations` compris ;
 4. aucun jeton → la matrice `ROLE_MATRIX` s'applique, comme avant.
 

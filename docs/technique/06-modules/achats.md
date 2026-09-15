@@ -82,7 +82,7 @@ Une commande **déjà validée** par le fournisseur reste modifiable — c'étai
 
 Le prédicat est `bcDejaRecu(bc)` (`src/index.tsx`) — **trois signaux, un seul suffit**, volontairement large : `date_reception_reelle`, `bl_id`, ou un statut de la famille reçue (`recu`, `recu_total`, **`recu_partiel`**, `receptionne`, `controle`, `cloture`). Une **réception partielle fige aussi** la date.
 
-**Le verrou vit dans le handler**, pas dans l'écran (`409` avec un message nommant la commande et sa date d'arrivée) : les deux routes le portent, donc ni un bouton contourné ni un appel direct ne passe. L'écran ne fait qu'éviter un clic voué au refus — pastille grise « Figée » à la place du bouton dans l'onglet Achats, champ grisé et mention « Date figée depuis la réception » dans la fenêtre des Expéditions. La page recalcule le drapeau à l'identique (`_RECU` dans `src/achats.tsx`, `recu` dans `expOpenArrivee`) parce qu'elle ne voit que la projection, pas la ligne complète.
+**Le verrou vit dans le handler**, pas dans l'écran (`409` avec un message nommant la commande et sa date d'arrivée) : les deux routes le portent, donc ni un bouton contourné ni un appel direct ne passe. L'écran ne fait qu'éviter un clic voué au refus — pastille grise « Figée » à la place du bouton dans l'onglet Achats. La page recalcule le drapeau à l'identique (`_RECU` / `dateFigee` dans `src/achats.tsx`) parce qu'elle ne voit que la projection, pas la ligne complète. La fenêtre de date des Expéditions (`expOpenArrivee`, avec son champ grisé « Date figée depuis la réception ») n'existe plus : la date ne se change qu'ici ; son entrée de capture `form-expeditions-arrivee` a été retirée de `scripts_doc/capture_forms.mjs` le 14/09/2026.
 
 **Pourquoi cet onglet existe** : le changement de date vivait dans Expéditions, dans une carte « Autres commandes — date modifiable » dont la seule action visible était… un bouton qui téléchargeait le PDF du bon de commande. On croyait corriger une date, on récupérait un document. Cette carte a été supprimée, et avec elle le bouton « BC PDF » de la fenêtre de date — ainsi qu'un bouton « BL &lt;n°&gt; » qui appelait `expShowTab('bl')`, onglet supprimé lors d'une refonte antérieure : il masquait les cinq panneaux et laissait un **écran blanc**.
 
@@ -172,6 +172,53 @@ avoir « presque soldé ».
 
 **Sans la migration** (cloud tant que `cloud-6` n'est pas joué) : lecture en échec détectée
 (`getAvoirsFournisseurs().absente`), bandeau orange dans l'onglet, page Achats intacte pour le reste.
+
+## Certificat matière exigé sur le bon de commande (lot D, 14/09/2026)
+
+> « Il faut aussi pouvoir confirmer le certificat matière s'il le fallait dans le BC d'où il provient. »
+
+**L'exigence est portée par le BC** : `bons_de_commande.certificat_matiere_requis boolean` (migration **012** /
+`cloud-10`, `NULL` = non requis). C'est l'acheteur qui la pose ; le contrôleur la **confirme** au PV de
+réception (voir [Expéditions](expeditions.md), section « Lot D »). Logique pure : `src/certificat_matiere.ts` ;
+lectures et écriture strictes : `src/certificat_matiere_db.ts`.
+
+**Où elle se pose**
+- **À la création** : case « Certificat matière requis », **jamais cochée par défaut** — fenêtre « Traiter la
+  DA → BC » (`bc_certificat`, reprise du brouillon `bc_draft`) et BC direct (`bcw_certificat`). Le corps de
+  `POST /api/achats/bc` et `POST /api/achats/da/:id/soumettre` porte `certificat_matiere_requis` (booléen,
+  `certificatDemande` : seul un vrai « oui » vaut requis). Base sans la colonne (`colCertificatAbsente` :
+  PGRST204 / 42703 citant la colonne) : le BC est **créé quand même**, sans l'exigence, et la réponse porte
+  `avertissement` (`AVERT_CLOUD10`) **seulement si la case était cochée** — affiché à l'écran.
+- **Sur un BC existant** : colonne **« Certificat matière »** de l'onglet Bons de commande — badge « Certificat
+  requis » / « non requis », bouton **Exiger** / **Retirer** (`.ach-bc-cert[data-id]`, délégation d'événements,
+  confirmation, anti double-clic) → `POST /api/achats/bc/:id/certificat-matiere` `{ requis }` (famille `achats`,
+  écriture Achats). Verrouillée (cadenas « PV conforme ») dès qu'un **PV de réception conforme** existe pour ce
+  BC : changer l'exigence après coup réécrirait ce que le contrôleur a vérifié — le serveur refuse (409 `pv_id`),
+  dans les deux sens. 409 aussi sur un BC annulé ; 409 `needsMigration` sans la colonne (bandeau « jouer 012 /
+  cloud-10 » et aucun bouton quand la colonne manque sur toutes les lignes). La valeur **relue** en base fait foi
+  (500 si elle diffère de la demande).
+- **Sur le PDF du BC** (`GET /api/bc/:id/pdf`) : encadré violet « Certificat matière exigé : il doit accompagner
+  la livraison. Sans certificat, la réception sera déclarée non conforme. », entre le destinataire et le tableau.
+  Aucune norme citée (le type de document dépend de la matière, non saisi). Poser l'exigence sur un BC déjà
+  envoyé → **rééditer le PDF** pour le fournisseur (l'écran le rappelle).
+
+**Au PV de réception** (`certificatRequis(bc)`) : case « Certificat matière reçu et conforme » ; **conforme
+impossible sans elle** ; le PV non conforme porte « Certificat matière absent ou non conforme » dans la NC ;
+`pv_controle.certificat_matiere` = `non_requis` / `confirme` / `absent`. Si l'exigence a changé depuis
+l'ouverture de la page du contrôleur, le PV est refusé (409 `certificat_change`, « rechargez »).
+`pvReceptionConforme(pv)` : PV `reception`, non anomalie, `decision = 'libere'` (et `detail.resultat =
+'conforme'` s'il existe) — une dérogation (`libere_derogation`) ne verrouille pas.
+
+**Page** : `GET /achats/service` ajoute à chaque BC `certificat_requis`, `certificat_col` (colonne présente dans
+la ligne lue) et `pv_conforme` (`bcIdsAvecPvReceptionConforme` ; lecture en échec ⇒ rien n'est verrouillé à
+l'écran, le serveur reste l'autorité) ; projection `ACH_BCS` étendue ; tableau à 12 colonnes.
+
+⚠ **Limites** : aucune trace de qui a posé ou retiré l'exigence ; fenêtre de concurrence (un PV signé dans la
+même seconde que la bascule passerait) ; case non pré-cochée pour une catégorie matière ou une affaire
+EN 9100 (non demandé).
+
+**Autres retouches du lot** : `bcw_qte` (quantité du BC direct) devient un champ **numérique** — c'est la base
+du reste à recevoir à la réception ; la fenêtre du BC direct défile (`max-height: 92vh`).
 
 ---
 > Fiche générée. Manuel utilisateur correspondant : `docs/manuel/achats.md`. Voir aussi `04-auth-rbac.md`, `07-api-reference.md`.

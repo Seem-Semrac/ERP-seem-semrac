@@ -32,7 +32,7 @@ L'ERP couvre **toute la chaîne** d'un atelier d'usinage/traitement de surface a
 ## Les parcours métier (le fil rouge)
 - **Vendre → produire → livrer → facturer** : offre → commande → OF/BDT au planning → BL → facture.
 - **Retour client** : non-conformité → avoir *ou* commande prioritaire → relance de production.
-- **Acheter** : demande d'achat → bon de commande → réception → contrôle.
+- **Acheter** : demande d'achat → bon de commande (certificat matière exigé ou non) → réception (références du fournisseur, hors France) → PV de contrôle ligne par ligne par un contrôleur ayant l'écriture Expéditions → stock, ou NC + quarantaine → décision Qualité.
 - **Traiter une non-conformité** : NC → analyse 8D → actions correctives.
 - **Nouvelle pièce** : DT → nomenclature (BE) → planning de production.
 

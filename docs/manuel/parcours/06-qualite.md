@@ -23,6 +23,8 @@ Sur cet écran, vous renseignez :
 
 **➡️ Ensuite :** le PV est archivé et sert de preuve de contrôle. Si le contrôle révèle un défaut, on enchaîne sur une **non-conformité** (étape 2). Un PV conforme accompagne le lot vers l'expédition.
 
+**⚠️ Réception fournisseur :** le PV d'une livraison fournisseur ne se saisit pas ici mais aux **Expéditions** (onglet Réceptions › « PV à faire »), ligne par ligne sur le bon de commande, par un contrôleur ayant l'**écriture sur les Expéditions**. Depuis le 14/09/2026, un compte Qualité ne peut plus le signer, sauf si sa fiche porte l'écriture Expéditions (en gardant cochés ses autres services). Un PV de réception non conforme arrive ici tout seul : une **NC « réception fournisseur »** (détecteur « Réception », une ligne de description par écart) et le lot **en quarantaine**, à décider par le bouton « Décider ».
+
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/qualite.md).
 
 ## Étape 2 — Déclarer une non-conformité (NC)

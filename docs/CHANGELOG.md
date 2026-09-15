@@ -2,6 +2,118 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-14 — Expéditions (lot D) : réception fournisseur hors France, PV de contrôle ligne par ligne, contrôleur habilité, certificat matière
+
+*« dans les expéditions dans le formulaire de réception dans le planning il faut mettre : le Numéro de
+commande de chez eux et le num de bl de chez eux, retirer le nom du transporteur, et la quantité. Quand on
+reçoit de pays hors France (case oui non). Si c'est oui il faut renseigner : Le poids matière, Le num de
+nomenclature, Un code EWX soit 1 soit 2, Mode d'arrivée. Pour le PV de contrôle quand c'est conforme rien à
+mettre à part le fait que c'est conforme, quand c'est non conforme afficher tout ce qui appartient au bon de
+commandes et indiquer sur quelle ligne il y a un problème avec deux cases oui non quand c'est oui il n'y a pas
+de problèmes et quand c'est non il faut une case pour noter les observations. Laisser en bas une case
+d'observation générale. il faut aussi pouvoir confirmer le certificat matière s'il le fallait dans le bc d'où
+il provient. Le contrôleur qui ne peut être que quelqu'un qui a les accès écriture dans expéditions. »*
+
+**Ce qui change**
+- **Réception** (Expéditions › Calendrier › « Traiter ») : **N° de commande fournisseur** et **N° de BL
+  fournisseur** obligatoires ; **« Réception hors France ? » Oui / Non** obligatoire — si Oui : **poids matière
+  (kg)**, **N° de nomenclature (douane)**, **code EWX** (1 ou 2), **mode d'arrivée**. Transporteur, référence
+  transporteur et quantité reçue **retirés**. Un bandeau dit la quantité que la réception va enregistrer.
+  Validation identique à l'écran et au serveur (champ fautif en rouge), anti double-clic.
+- **Relecture et correction** : ces informations s'affichent dans l'onglet Réceptions (« BL fourn. · Cde fourn. »,
+  pastille « Hors France »), dans le bandeau du PV et dans la liste des BL ; lien **« Corriger »** pour une faute
+  de frappe (code douanier, poids), sans toucher quantité, contrôle ni stock.
+- **PV de contrôle** (Réceptions › « PV à faire ») : **Conforme** = le résultat, le contrôleur et, si le BC l'exige,
+  la case « Certificat matière reçu et conforme » — rien d'autre. **Non conforme** = en-tête du BC (fournisseur,
+  dates, affaire(s), montant, conditions, notes, lien PDF), **toutes les lignes du BC** avec **Oui / Non** et une
+  **observation obligatoire sur Non**, bouton « Tout à Oui », **observation générale** en bas, gravité. Aucun
+  résultat pré-sélectionné ; case « quarantaine » retirée (la réception refusée part toujours en quarantaine).
+- **La NC de réception est renseignée** : description ligne par ligne, référence et désignation (une seule ligne en
+  Non), nombre de pièces, **détecteur « Réception »** (le nom du contrôleur s'effaçait à la réédition de la NC).
+- **Contrôleur** : liste des seuls salariés **actifs ayant l'écriture sur les Expéditions**, la personne connectée
+  pré-sélectionnée si elle en fait partie ; revérifié par le serveur ; la personne qui saisit est tracée à part.
+- **Certificat matière** (Achats) : case « Certificat matière requis » à la création du BC (DA → BC et BC direct),
+  colonne **« Certificat matière »** dans Achats › Bons de commande (Exiger / Retirer, verrouillée dès qu'un PV de
+  réception conforme existe), mention imprimée sur le **PDF du BC**.
+- **Droits** : réception, correction et PV exigent l'**écriture Expéditions** — ils étaient ouverts à tout compte
+  connecté (routes classées « self-service » sans PIN). Boutons PV grisés avec cadenas pour un lecteur.
+
+**Décisions prises** (annoncées, modifiables)
+1. **Quantité retirée** : quantité du BL = **reste à recevoir** du BC (quantité commandée − déjà reçue ; à défaut,
+   somme des lignes). Jamais 0 : inconnue = `null`, dit à l'écran. Un écart se signale au **PV non conforme**, sur la
+   ligne. Deux exceptions ajoutées à la vérification, **à faire confirmer** : case **« Livraison partielle »** (le
+   fournisseur annonce un reliquat : quantité livrée saisie, BC reçu partiellement, reliquat à réceptionner) et BC
+   **sans quantité exploitable** (quantité livrée lue sur le BL fournisseur).
+2. **« N° de nomenclature » = code de nomenclature douanière** du produit importé (texte libre).
+3. **Code EWX** : liste **1 / 2**, libellé tel quel.
+4. **Mode d'arrivée** : Routier, Maritime, Aérien, Ferroviaire, Messagerie / express.
+5. **Contrôleur** = liste des personnes ayant l'écriture Expéditions (direction, rôle logistique, jeton
+   `ecrire:expeditions`) ; le compte de secours peut enregistrer mais n'est pas choisissable.
+6. **Certificat exigé sur le BC** (pas sur la ligne) ; **conforme impossible sans la case cochée** : le PV bascule en
+   non conforme avec « Certificat matière absent ou non conforme » dans la NC.
+7. ⚠ **La Qualité ne peut plus signer un PV de réception**, sauf si sa fiche porte `ecrire:expeditions` — cocher ce
+   jeton fait passer la fiche en mode jetons : cocher aussi `qualite`, `securite`… sinon elle les perd.
+
+**Causes et défauts trouvés en route**
+- Le champ texte « Contrôleur » du PV était **ignoré** par le serveur, et n'importe quel compte pouvait signer.
+- La réception **écrasait à vide** le transporteur du BC et avalait l'échec de sa mise à jour (un second clic créait
+  un BL `-02`) ; deux réceptions simultanées créaient deux BL ; un BL pouvait naître avec `qte = 0` (BC jamais
+  « contrôlé », rien en stock, porte matière fermée).
+- **BC à plusieurs articles** : le PV conforme créditait **tout le BL sur l'article de la 1ʳᵉ ligne** — désormais une
+  entrée par ligne, sur son article, quand la réception couvre toute la commande (sinon refus expliqué).
+- Un BC rouvert pour **remplacement** par la Qualité ne réapparaissait pas dans « À réceptionner ».
+- Revue adverse avant livraison : **15 signalements, 12 défauts distincts, tous corrigés** (dont livraison
+  fractionnée, BC sans quantité, données de réception jamais relues, erreur ambiguë à la création du BL, BC figé,
+  contenu commercial exposé aux lecteurs, exigence de certificat changée pendant le PV → 409 « rechargez »,
+  `nb_pieces` entier en cloud, tableau du PV qui débordait, poids « 1 250,5 » refusé, capture périmée).
+
+**Vérifications** : `tsc` 0 erreur · `npm run build` OK · harnais toutes pages 60 PASS / 0 FAIL / 1 SKIP
+(`pageManuel`, non touché) · règles de réception 167 contrôles · PV 124 · correctifs sur la base Docker avec un proxy
+qui injecte des pannes (réponse perdue, coupure, 22P02) 54 · Playwright 16 (charges exactes, bascule du certificat,
+tentative d'injection, lecteur sans écriture, aucun débordement à 1920 / 1366 / 1280 px) · certificat 54 purs + 25 e2e
+(colonne présente) · application Docker authentifiée 21 (réception simultanée : une 200, une 409 ; 403 opérateur,
+Qualité, compte de secours ; 401 sans session ; base injoignable → 503) · migration 012 rejouée en transactions
+annulées (idempotente ; doublon de PV refusé par l'index ; doublons préalables → WARNING sans création ni
+effacement ; garde-fou de `cloud-10` sur Docker ; filtre de mots-clés de `migrate.sh`) · `erp-docker.sh maj` :
+012 appliquée, `/api/version` sert le commit · jeux `-TEST-` supprimés par psql puis relus (compteurs revenus à
+l'état de départ) · phase documentation (15/09/2026) : `gen_api_ref.mjs` sans écart, `npm run build` OK
+(`src/manuels_contenu.ts` régénéré), harnais 60 PASS / 0 FAIL / 1 SKIP, `lint_docs` 116 images · 180 liens · 0 cassé.
+
+**Scripts à jouer**
+- **Docker / VM** : `~/erp/docker/scripts/erp-docker.sh maj` applique **012** (déjà fait sur le Docker local).
+- **Cloud (Studio Supabase EN LIGNE, SQL Editor — jamais celui du Docker)** :
+  `docker/db/cloud/cloud-10-reception-fournisseur-pv.sql` **à jouer**. Lire les messages : un WARNING « N BL portent
+  plusieurs PV de reception » = doublons à traiter à la main avant de créer l'index (commande donnée dans le message).
+  Tant qu'il n'est pas joué : la réception s'enregistre **sans** les références fournisseur ni le bloc hors France
+  (avertissement à chaque réception), « Corriger » est refusé, l'exigence de certificat n'est pas enregistrée
+  (bandeau Achats), le PV garde son détail en texte dans les observations.
+- **Avant la mise en ligne** : donner `ecrire:expeditions` aux personnes qui font les PV et ne sont ni logistique
+  ni direction (en cochant aussi leurs autres services).
+
+**Limites connues** : BC à plusieurs articles reçu partiellement ou accepté partiellement → rien n'entre en stock
+automatiquement et l'ERP n'a pas d'entrée de stock manuelle ; KPI « taux de service fournisseur » proche de 100 %
+(quantité = reste à recevoir) ; PV écrit avant la NC et la quarantaine (échecs partiels signalés) ; retour de
+sous-traitance sans BL sans anti-doublon ; aucune trace de qui corrige une réception ou bascule un certificat ;
+pas d'export des réceptions hors France (déclaration douane) ; `date_sortie` non prise en compte pour le contrôleur.
+
+- Fichiers : `src/reception.ts`, `src/pv_reception.ts`, `src/certificat_matiere.ts`, `src/certificat_matiere_db.ts`
+  (nouveaux), `src/index.tsx`, `src/expeditions.tsx`, `src/achats.tsx`, `src/auth.ts`, `src/queries.ts`,
+  `src/listes.tsx`, `src/qualite.tsx`, `src/types.ts` · Migration DB : **oui**
+  (`docker/db/migrations/012-reception-fournisseur-pv.sql` ; cloud : `cloud-10` ; bloc en fin de
+  `docker/db/seed/schema.sql` ; ligne dans `docker/db/cloud/README.md`).
+- Doc mise à jour : `technique/06-modules/{expeditions,achats,qualite}.md`, `07-api-reference.md` (contrats du lot D,
+  référence régénérée), `03-base-de-donnees.md`, `03b-tables-reference.md`, `04-auth-rbac.md` (sortie du
+  self-service, `peutEcrireService`), `02-exploitation-runbook.md` (`cloud-10`, incidents),
+  `manuel/html/{expeditions,qualite,achats}.html` (+ `src/manuels_contenu.ts`), `manuel/{expeditions,qualite,achats}.md`,
+  `manuel/formulaires/{expeditions,achats}.md`, `manuel/parcours/{08-expeditions,03-achats,06-qualite}.md`,
+  `fiches-poste/{logistique,qualite}.md`, cerveau · Outillage : `capture_forms.mjs` (entrée « arrivée » retirée,
+  réception hors France, correction, PV conforme avec certificat réel, PV non conforme sur le BC le plus détaillé,
+  cases certificat des deux fenêtres Achats) · Captures refaites sur la stack Docker locale (jeu `-TEST-` créé par
+  les vraies routes puis supprimé et relu) : `form-expeditions-reception`, nouvelle
+  `form-expeditions-reception-correction`, `form-expeditions-pv`, nouvelle `form-expeditions-pv-non-conforme`,
+  `form-achats-bc`, `achats-bc`, `expeditions-receptions`, `expeditions-fournisseurs` (colonne « Transporteur / BL
+  fourn. ») ; `form-expeditions-arrivee.png` supprimée (orpheline).
+
 ## 2026-09-14 — Production (lot C) : présences qui s'enregistrent, 4 créneaux, réglage et réalisation, découpe réversible, chemin critique
 
 *« il faudrait que quand on a découpé notre bdt on puisse revenir en arrière, dans production on a un

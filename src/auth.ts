@@ -91,7 +91,7 @@ export async function verifySession(token: string, env: any): Promise<SessionUse
 // ─── Matrice de permissions par RÔLE × SERVICE ────────────────
 // Niveaux : 'rw' = lecture+écriture · 'r' = lecture seule · absent = REFUSÉ.
 // direction (perm 'all') = accès total (court-circuit). Les actions atelier
-// (solder/réception/autocontrôle/pointage) sont "self-service" (cf SELF_SERVICE_RE).
+// (solder/autocontrôle/pointage) sont "self-service" (cf SELF_SERVICE_RE) — plus la réception fournisseur ni son PV (14/09/2026).
 type Lvl = 'rw' | 'r'
 const ROLE_MATRIX: Record<string, Record<string, Lvl>> = {
   commercial:  { commercial: 'rw', be: 'r', production: 'r', qualite: 'r', expeditions: 'r', stock: 'r' },
@@ -136,7 +136,9 @@ const SELF_SERVICE_RE: RegExp[] = [
   /^\/api\/pointage\//,
   /^\/api\/production\/bdt\/[^/]+\/(recu|solder)$/,
   /^\/api\/oas\/balancelle\/[^/]+\/cloturer$/,
-  /^\/api\/expeditions\/bc\/[^/]+\/(receptionner|pv)$/,
+  // ⚠ /api/expeditions/bc/:id/(receptionner|pv) SORTIS du self-service le 14/09/2026 (lot D) :
+  //   aucun appelant n'envoyait de PIN, ils étaient donc ouverts à TOUT compte connecté. Réception
+  //   et PV de contrôle exigent désormais l'écriture sur les Expéditions (voir peutEcrireService).
   /^\/api\/controles\/cote$/,
   /^\/api\/production\/non-conformites$/,
 ]
@@ -279,6 +281,27 @@ export function canAccess(user: SessionUser | null, path: string, method: string
   for (const r of rolesOf(user)) { const l = (ROLE_MATRIX[r] || {})[svc]; if (l === 'rw') { level = 'rw'; break } if (l === 'r') level = 'r' }
   if (!level) return false                               // refusé
   return isW ? level === 'rw' : true                     // écriture → 'rw' ; lecture → 'r' ou 'rw'
+}
+
+// Droit d'ÉCRITURE sur un service, sans aucune exception de chemin (ni self-service, ni route
+// neutre). Même règle que canAccess sur une route POST ordinaire de la famille du service :
+//   peutEcrireService(u, 'expeditions') === canAccess(u, '/api/expeditions/bl-partiel', 'POST').
+// Sert quand le handler doit revérifier le droit (message clair, AUTH_ENFORCE=off) ou quand
+// il faut juger un AUTRE salarié que l'utilisateur connecté (ex. le contrôleur d'un PV).
+// ⚠ Ne pas remplacer par canAccess(user, '/api/…/pv', 'POST') : un chemin self-service y
+//   répondrait toujours true.
+export function peutEcrireService(user: SessionUser | null | undefined, svc: string): boolean {
+  if (!user) return false
+  const perms = Array.isArray(user.perms) ? user.perms : []
+  if (perms.includes('all')) return true                         // direction / BOOTSTRAP
+  const ex = accesExplicites(perms)
+  if (svc === 'habilitations') return ex.actif ? (ex.ecrire.has('rh') || ex.ecrire.has('qualite')) : perms.includes('habilitations')
+  if (svc === 'plans') {                                           // aligné sur la règle spéciale de canAccess
+    if (ex.actif) return ex.ecrire.has('plans')
+    return rolesOf(user).some(r => r === 'direction' || r === 'maintenance' || r === 'qualite' || r === 'bei' || r === 'production')
+  }
+  if (ex.actif) return ex.ecrire.has(svc)                          // jetons de la fiche salarié : ils font foi
+  return rolesOf(user).some(r => (ROLE_MATRIX[r] || {})[svc] === 'rw')
 }
 
 // Services LISIBLES par l'utilisateur (pour filtrer le menu côté client).

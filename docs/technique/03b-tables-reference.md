@@ -7,6 +7,10 @@
 > - `bons_de_travail` **`+ temps_reglage`**, **`+ duree_avant_decoupe`**, **`+ temps_machine_avant_decoupe`** (numeric, heures ; contrainte `bons_de_travail_temps_reglage_positif`) — migration Docker **011** (jouée) ; **cloud : `cloud-9` pas encore joué**, puis `POST /api/production/bdt/reglage/reconstituer`.
 > - Index uniques des upserts (migration Docker **010**, jouée ; cloud : `cloud-8` à contrôler) : `ux_operateur_presence_upsert (operateur_id, date_presence)`, `ux_affectation_poste_upsert (operateur_id, date_affectation, process_id, shift)`, `ux_competences_operateur_upsert (salarie_id, operation)`, `ux_produits_fournisseurs_upsert (fournisseur_id, reference)`, `ux_kpi_objectifs_upsert (code, entite)` — créés seulement sans index équivalent ni doublons.
 > - ⚠ Le générateur sonde `presences` et `affectations_poste`, qui n'existent pas : les vraies tables sont **`operateur_presence`** et **`affectation_poste`** (et `competences_operateur`, non sondée). Détail : `03-base-de-donnees.md`.
+> ⚠ 14/09/2026 (lot D Expéditions), ajouts à la main — migration Docker **012** (jouée sur le Docker local) ; **cloud : `cloud-10` pas encore joué**, la sonde REST cloud ne les verra qu'après :
+> - `bons_de_livraison` **`+ num_commande_fournisseur`**, **`+ num_bl_fournisseur`**, **`+ hors_france`** (boolean), **`+ poids_matiere_kg`** (numeric ≥ 0), **`+ num_nomenclature`** (code douanier), **`+ code_ewx`** (smallint 1 ou 2), **`+ mode_arrivee`** ; `qte` d'une réception : `NULL` = inconnue.
+> - `bons_de_commande` **`+ certificat_matiere_requis`** (boolean).
+> - `pv_controle` **`+ detail`** (jsonb), **`+ controleur_id`**, **`+ controleur_nom`**, **`+ saisi_par`**, **`+ certificat_matiere`** (`non_requis` / `confirme` / `absent`) ; index unique partiel `ux_pv_controle_reception_bl (bl_id) where type_controle = 'reception'`. ⚠ La table réelle est **`pv_controle`** (le générateur sonde `pv_controles`, qui n'existe pas, d'où « absente » ci-dessous).
 
 
 ## Commercial

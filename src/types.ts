@@ -301,18 +301,38 @@ export interface BonDeLivraison {
   cmd_id?: string
   client_nom?: string
   date_bl: string
-  qte: number
+  /** Réception fournisseur : reste à recevoir du BC ; null si la quantité commandée est inconnue (jamais 0). */
+  qte: number | null
   statut: string
   transport?: string
   otd?: string
   created_at?: string
   updated_at?: string
-  type_bl?: 'client' | 'bst'
+  type_bl?: 'client' | 'bst' | 'reception'
   fournisseur_st_id?: string
   date_envoi_prevu?: string
   lot_id?: string
   piece?: string
   operation?: string
+  affaire_id?: string | null
+  bc_id?: string | null
+  transporteur_ref?: string | null
+  nc_id?: string | null
+  num_bl?: string | null
+  lignes?: string | null
+  prix_transport?: string | null
+  facture_id?: string | null
+  partiel?: boolean | null
+  // Réception fournisseur (migration 012 / cloud-10) — absentes en cloud tant que le script n'est pas joué
+  num_commande_fournisseur?: string | null
+  num_bl_fournisseur?: string | null
+  hors_france?: boolean | null
+  poids_matiere_kg?: number | null
+  /** Code de nomenclature douanière du produit importé. */
+  num_nomenclature?: string | null
+  code_ewx?: 1 | 2 | null
+  /** Routier · Maritime · Aérien · Ferroviaire · Messagerie / express (MODES_ARRIVEE, src/reception.ts). */
+  mode_arrivee?: string | null
 }
 
 export interface BonDeCommande {

@@ -61,6 +61,7 @@ Sur cet écran, vous renseignez :
 - **Articles / Prestation** — la désignation de ce qui est commandé, pré-remplie depuis la DA (ou depuis le catalogue si vous choisissez une référence et que le champ est vide).
 - **Montant HT / Livraison prévue** — le total à engager et la date attendue de la marchandise.
 - **N° d'affaire (optionnel)** — le rattachement à une commande client précise, si concerné.
+- **Certificat matière requis** — à cocher si le fournisseur doit **joindre un certificat matière** à la livraison (jamais cochée d'avance). La mention est imprimée sur le bon de commande ; à la réception, le PV de contrôle ne pourra être conforme que si le contrôleur confirme le certificat.
 
 Le bouton **« Enregistrer (brouillon) »** met la DA de côté sans créer le BC : vous la reprendrez plus tard.
 
@@ -80,6 +81,8 @@ Sur cet écran, vous renseignez :
 - **Destinataire** — Fournisseur ou Sous-traitant, selon la nature de la commande.
 - **Fournisseur / sous-traitant** — l'entreprise destinataire ; obligatoire.
 - **Articles / désignation** — ce qui est commandé ; se remplit tout seul si vous détaillez les lignes.
+- **Quantité** — un **nombre** : c'est la base du **reste à recevoir** quand les Expéditions réceptionneront la commande (l'unité se met dans les articles ou les lignes).
+- **Certificat matière requis** — même case que dans l'étape 3 ; elle se pose aussi après coup dans l'onglet **Bons de commande** (colonne « Certificat matière », bouton « Exiger »), tant qu'aucun PV de réception conforme n'est signé.
 - **Lignes détaillées (Réf. / Désignation / Catégorie / Qté / PU)** — le détail article par article ; le **Montant HT se recalcule automatiquement** (Qté × PU additionnés). Une ligne **sans référence est ignorée**.
 - **Soumettre ce BC à la validation de la Direction** — à cocher pour un achat stratégique ou un gros montant : la Direction devra valider avant l'engagement.
 

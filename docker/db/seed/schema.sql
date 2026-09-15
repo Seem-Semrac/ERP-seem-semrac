@@ -5058,3 +5058,128 @@ end
 $$;
 
 notify pgrst, 'reload schema';
+
+--
+-- 012 · Réception fournisseur (références, import hors France), certificat matière du BC,
+--       PV de contrôle de réception détaillé (lignes, contrôleur) — lot D Expéditions
+-- (report de docker/db/migrations/012-reception-fournisseur-pv.sql — une base neuve naît déjà à jour,
+--  le lanceur de migrations rejouera le fichier sans effet)
+--
+
+do $$
+begin
+  if to_regclass('public.bons_de_livraison') is null then
+    raise notice '012 : table bons_de_livraison absente, ignoree.';
+    return;
+  end if;
+
+  alter table public.bons_de_livraison add column if not exists num_commande_fournisseur text;   -- N° de commande chez le fournisseur
+  alter table public.bons_de_livraison add column if not exists num_bl_fournisseur text;         -- N° du BL du fournisseur
+  alter table public.bons_de_livraison add column if not exists hors_france boolean;             -- null = non renseigné
+  alter table public.bons_de_livraison add column if not exists poids_matiere_kg numeric;        -- hors France
+  alter table public.bons_de_livraison add column if not exists num_nomenclature text;           -- hors France : code douanier
+  alter table public.bons_de_livraison add column if not exists code_ewx smallint;               -- hors France : 1 ou 2
+  alter table public.bons_de_livraison add column if not exists mode_arrivee text;               -- hors France : liste applicative
+
+  if not exists (select 1 from pg_constraint
+                  where conrelid = 'public.bons_de_livraison'::regclass
+                    and conname = 'bons_de_livraison_poids_matiere_positif') then
+    alter table public.bons_de_livraison add constraint bons_de_livraison_poids_matiere_positif
+      check (poids_matiere_kg is null or poids_matiere_kg >= 0);
+  end if;
+  if not exists (select 1 from pg_constraint
+                  where conrelid = 'public.bons_de_livraison'::regclass
+                    and conname = 'bons_de_livraison_code_ewx_valide') then
+    alter table public.bons_de_livraison add constraint bons_de_livraison_code_ewx_valide
+      check (code_ewx is null or code_ewx in (1, 2));
+  end if;
+
+  comment on column public.bons_de_livraison.num_commande_fournisseur is
+    'Reception fournisseur : numero de commande chez le fournisseur (saisi a la reception).';
+  comment on column public.bons_de_livraison.num_bl_fournisseur is
+    'Reception fournisseur : numero du bon de livraison du fournisseur.';
+  comment on column public.bons_de_livraison.hors_france is
+    'Reception fournisseur : marchandise recue de hors France. NULL = non renseigne (reception anterieure).';
+  comment on column public.bons_de_livraison.poids_matiere_kg is
+    'Reception hors France : poids matiere en kg (obligatoire si hors_france, controle applicatif).';
+  comment on column public.bons_de_livraison.num_nomenclature is
+    'Reception hors France : code de nomenclature douaniere du produit importe.';
+  comment on column public.bons_de_livraison.code_ewx is
+    'Reception hors France : code EWX, 1 ou 2.';
+  comment on column public.bons_de_livraison.mode_arrivee is
+    'Reception hors France : mode d arrivee (Routier, Maritime, Aerien, Ferroviaire, Messagerie / express).';
+end
+$$;
+
+do $$
+begin
+  if to_regclass('public.bons_de_commande') is null then
+    raise notice '012 : table bons_de_commande absente, ignoree.';
+    return;
+  end if;
+
+  alter table public.bons_de_commande add column if not exists certificat_matiere_requis boolean;   -- null = non requis
+
+  comment on column public.bons_de_commande.certificat_matiere_requis is
+    'Le fournisseur doit joindre un certificat matiere. Confirme au PV de controle de reception (conforme impossible sans). NULL = non requis.';
+end
+$$;
+
+do $$
+begin
+  if to_regclass('public.pv_controle') is null then
+    raise notice '012 : table pv_controle absente, ignoree.';
+    return;
+  end if;
+
+  alter table public.pv_controle add column if not exists detail jsonb;
+  alter table public.pv_controle add column if not exists controleur_id text;
+  alter table public.pv_controle add column if not exists controleur_nom text;
+  alter table public.pv_controle add column if not exists saisi_par text;
+  alter table public.pv_controle add column if not exists certificat_matiere text;
+
+  if not exists (select 1 from pg_constraint
+                  where conrelid = 'public.pv_controle'::regclass
+                    and conname = 'pv_controle_certificat_matiere_valide') then
+    alter table public.pv_controle add constraint pv_controle_certificat_matiere_valide
+      check (certificat_matiere is null or certificat_matiere in ('non_requis', 'confirme', 'absent'));
+  end if;
+
+  comment on column public.pv_controle.detail is
+    'PV de reception : instantane du BC, lignes (idx, reference, designation, quantite, conforme, observation), observation generale, certificat, controleur. Version dans la cle v.';
+  comment on column public.pv_controle.controleur_id is
+    'PV de reception : id du salarie controleur (ecriture sur les Expeditions), sans cle etrangere.';
+  comment on column public.pv_controle.controleur_nom is
+    'PV de reception : nom du controleur au moment du PV.';
+  comment on column public.pv_controle.saisi_par is
+    'PV de reception : personne connectee qui a enregistre le PV.';
+  comment on column public.pv_controle.certificat_matiere is
+    'PV de reception : non_requis, confirme ou absent.';
+end
+$$;
+
+-- Un seul PV de réception par BL : index créé seulement sans doublons (même garde que la migration 012).
+do $$
+declare
+  doublons bigint;
+begin
+  if to_regclass('public.pv_controle') is null then
+    return;
+  end if;
+  if to_regclass('public.ux_pv_controle_reception_bl') is not null then
+    return;
+  end if;
+  select count(*) into doublons from (
+    select 1 from public.pv_controle
+     where type_controle = 'reception' and bl_id is not null
+     group by bl_id having count(*) > 1) d;
+  if doublons > 0 then
+    raise warning '012 : % BL portent plusieurs PV de reception : index unique ux_pv_controle_reception_bl NON cree (rien n est efface).', doublons;
+    return;
+  end if;
+  create unique index if not exists ux_pv_controle_reception_bl on public.pv_controle (bl_id)
+    where type_controle = 'reception' and bl_id is not null;
+end
+$$;
+
+notify pgrst, 'reload schema';

@@ -32,8 +32,16 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 ### 3. Transformer une DA en BC
 1. Onglet **Demandes d'achat**, sélectionner la DA.
 2. Générer le bon de commande fournisseur.
+3. Si le fournisseur doit joindre un certificat matière : cocher **Certificat matière requis** (jamais cochée d'avance).
 
 ![achats-da](../assets/achats-da.png)
+
+### 4. Exiger un certificat matière sur un BC
+1. Achats › **Bons de commande**, colonne **Certificat matière** : **Exiger** ou **Retirer**, puis confirmer.
+2. BC déjà envoyé : rééditer son PDF (la mention y est imprimée) et le renvoyer au fournisseur.
+3. À la réception, le contrôleur confirme le certificat : sans lui, pas de PV conforme. Verrouillé (cadenas « PV conforme ») dès qu'un PV de réception conforme est signé.
+
+![achats-bc](../assets/achats-bc.png)
 
 ---
 > Fiche générée (`scripts_doc/gen_fiches_poste.mjs`). Sécurité & traçabilité : `docs/technique/04-auth-rbac.md`.

@@ -33,8 +33,11 @@ Maîtrise de la conformité : PV de contrôle, non-conformités, 8D, libération
 3. Saisir le **prix de vente unitaire** (→ montant de l'avoir) et/ou le **coût de revient** (→ commande prioritaire).
 4. Choisir : **Refuser** · **Faire un avoir** (part dans Commercial › Avoirs) · **Commande prioritaire** (part dans Commercial › Commandes P).
 
+### PV de réception fournisseur : qui le signe
+Le PV de contrôle d’une livraison fournisseur se fait aux **Expéditions** (onglet Réceptions › « PV à faire »), par un **contrôleur choisi dans la liste des salariés ayant l’écriture sur les Expéditions**. ⚠ Depuis le 14/09/2026, un compte **Qualité** ne peut plus le signer : si c’est votre rôle, faites cocher « Écrire » sur les Expéditions dans votre fiche (RH › Employés) **en gardant cochés vos autres services** (Qualité, Sécurité…), sinon vous les perdez. Le détail du contrôle (lignes Oui / Non, observations, certificat matière, contrôleur) est conservé avec le PV.
+
 ### Décider du sort d’un lot reçu non conforme (fournisseur)
-1. Un PV de contrôle réception **non conforme** (Expéditions › Réceptions) envoie **toujours** le lot en quarantaine, avec une NC « réception fournisseur ».
+1. Un PV de contrôle réception **non conforme** (Expéditions › Réceptions) envoie **toujours** le lot en quarantaine, avec une NC « réception fournisseur ». Depuis le 14/09/2026, ce PV se fait **ligne par ligne** sur le bon de commande : le **motif** de quarantaine et la **description** de la NC reprennent l'observation générale, une ligne « Ligne n · réf · désignation : observation » par écart, « Certificat matière absent ou non conforme » le cas échéant et le nom du contrôleur ; le détecteur de la NC est « Réception » (il n'est plus effacé quand on ré-enregistre la NC).
 2. Onglet **Quarantaine**, sur la ligne du lot, cliquer le bouton rouge **« Décider »**. Les quarantaines internes (lots de production) gardent le bouton **« Statuer »**.
 3. La fenêtre rappelle le **fournisseur**, le **n° de bon de commande**, le **n° de BL**, la **NC** et le **motif de mise en quarantaine**. La quantité vient du bon de livraison : ne la corriger que si elle est inconnue.
 4. Choisir ce qu’on fait du lot :
@@ -45,6 +48,7 @@ Maîtrise de la conformité : PV de contrôle, non-conformités, 8D, libération
 6. Saisir le **motif** (obligatoire, 3 caractères minimum), puis **« Enregistrer la décision »**. Elle est enregistrée avec l’auteur et la date.
 
 > **Une décision ne se prend qu’une fois** : un second clic est refusé.
+> **Bon de commande à plusieurs articles** : l’entrée en stock se fait ligne par ligne, et seulement si tout le lot est accepté ; une entrée partielle n’est pas créditée automatiquement (message « Stock non crédité » / « Entrée en stock incomplète »).
 > Après décision, la ligne affiche ce qui a été fait (**Renvoyé au fournisseur**, **Dérogation fournisseur**, **Entrée partielle 6/10**) et ce qui reste à faire (**Retour à expédier**, **Avoir réclamé (Achats)**, **Remplacement attendu**).
 > Si la matière est **renvoyée sans remplacement**, un message prévient qu’elle manque à l’affaire et qu’il faut **repasser commande** : la porte matière n’est pas ouverte.
 

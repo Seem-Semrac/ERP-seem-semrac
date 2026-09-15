@@ -41,9 +41,11 @@ const M = [
       + "if(ph){nomAddEtape();var j=nomEtapes.length-1;nomOnEtapeProcessChange(j,ph.id);nomEtapes[j].temps_mo_min=3;}"
       + "nomRenderEtapes();if(typeof nomCalcTotaux==='function') nomCalcTotaux();})()" },
   // Achats
-  { file: 'form-achats-bc',            path: '/achats/service', fn: "achNewBC()" },
+  //   BC direct : case « Certificat matière requis » cochée DANS LE NAVIGATEUR (lot D, 14/09/2026) — rien n'est envoyé.
+  { file: 'form-achats-bc',            path: '/achats/service', fn: "(function(){achNewBC();var c=document.getElementById('bcw_certificat');if(c) c.checked=true;})()" },
   // Fenetre « Traiter la DA -> BC » : celle qui porte la reference du materiel. Necessite une DA a traiter.
-  { file: 'form-achats-da-bc',         path: '/achats/service', fn: "achOpenBC((ACH_DA[0]||{}).id)", wait: 900 },
+  //   Case « Certificat matière requis » cochée dans le navigateur seulement (lot D).
+  { file: 'form-achats-da-bc',         path: '/achats/service', wait: 900, fn: "(function(){achOpenBC((ACH_DA[0]||{}).id);var c=document.getElementById('bc_certificat');if(c) c.checked=true;})()" },
   // Fenetre « Date d'arrivee » d'un bon de commande (onglet Bons de commande). Necessite un BC en base.
   { file: 'form-achats-bc-date',       path: '/achats/service', tabClick: '#ach-tab-bc', fn: "achOpenBcDate((ACH_BCS[0]||{}).id)", wait: 700 },
   // Production
@@ -120,10 +122,32 @@ const M = [
     fn: "(function(){openMachineModal();var c=document.getElementById('mc_proc_new');if(c&&!c.checked){c.checked=true;}if(typeof mcProcNewChange==='function') mcProcNewChange();})()" },
   // OAS — clôture avec autocontrôle (≠ création de balancelle)
   { file: 'form-oas-cloture-balancelle', path: '/oas/service', fn: "openCloreBalModal('BAL-DEMO','OAS-2026-1042','LOT-2026-014','Bride alu 7075')", wait: 800 },
-  // Expéditions (dépendent des tableaux globaux EXP_PLAN / EXP_BC)
-  { file: 'form-expeditions-arrivee', path: '/expeditions/service', tabClick: '#exp-tab-receptions', fn: "expOpenArrivee(EXP_PLAN[0].id)", wait: 800 },
-  { file: 'form-expeditions-reception', path: '/expeditions/service', fn: "expOpenReception(EXP_BC[0].id)", wait: 800 },
-  { file: 'form-expeditions-pv',      path: '/expeditions/service', fn: "expOpenPV(EXP_BC[0].id)", wait: 800 },
+  // Expéditions (lot D, 14/09/2026 — tableaux globaux EXP_BC / EXP_PV / EXP_BLREC). Aucune écriture : on ouvre, on remplit
+  //   dans le navigateur seulement, on capture. ⚠ form-expeditions-arrivee retirée : sa fenêtre (expOpenArrivee / EXP_PLAN)
+  //   n'existe plus depuis le passage de la date d'arrivée aux Achats (form-achats-bc-date).
+  //   Réception : BC qui attend encore un reste, « Hors France ? » = Oui pour montrer le bloc douane.
+  { file: 'form-expeditions-reception', path: '/expeditions/service', wait: 800,
+    fn: "(function(){var b=EXP_BC.filter(function(x){return x.reste>0&&!x.multi_articles;})[0]||EXP_BC[0];if(!b) throw new Error('aucun BC');expOpenReception(b.id);"
+      + "document.getElementById('rec_hf_oui').checked=true;expRecHF();})()" },
+  //   Correction des informations de réception d'un BL déjà enregistré (bouton « Corriger » de l'onglet Réceptions) :
+  //   de préférence une réception hors France (bloc douane rempli). Aucune écriture : on ouvre, on capture.
+  { file: 'form-expeditions-reception-correction', path: '/expeditions/service', tabClick: '#exp-tab-receptions', wait: 800,
+    fn: "(function(){var bs=Array.prototype.slice.call(document.querySelectorAll('.exp-rec-edit'));var hf=function(el){var r=(typeof EXP_BLREC!=='undefined'&&EXP_BLREC)?EXP_BLREC[el.getAttribute('data-bl')]:null;return r&&r.hors_france===true;};"
+      + "var btn=bs.filter(hf)[0]||bs[0];if(!btn) throw new Error('aucun bouton « Corriger »');expOpenCorrectionReception(btn.getAttribute('data-bl'));})()" },
+  //   PV conforme : une réception « PV à faire » ; BC qui exige le certificat de préférence. La case certificat n'est
+  //   cochée que si le BC l'exige vraiment (plus de case forcée à l'écran : la capture montrerait une exigence inexistante).
+  { file: 'form-expeditions-pv', path: '/expeditions/service', tabClick: '#exp-tab-receptions', wait: 800,
+    fn: "(function(){var bs=Array.prototype.slice.call(document.querySelectorAll('.exp-pv-open'));var cert=function(el){var b=EXP_BC.find(function(x){return x.id===el.getAttribute('data-bc');});return b&&b.certificat_matiere_requis;};"
+      + "var btn=bs.filter(cert)[0]||bs[0];if(!btn) throw new Error('aucune réception « PV à faire »');expOpenPV(btn.getAttribute('data-bc'),btn.getAttribute('data-bl'));"
+      + "document.getElementById('pv_res_ok').checked=true;expPVToggle();if(cert(btn)) document.getElementById('pv_cert').checked=true;})()" },
+  //   PV non conforme : réception du BC qui a le PLUS de lignes (tableau parlant), 1re ligne en « Non » avec son observation,
+  //   les autres à « Oui », observation générale ; la fenêtre défile jusqu'à la case certificat (sinon au bloc « Bon de commande ») : en-tête, lignes, observation.
+  { file: 'form-expeditions-pv-non-conforme', path: '/expeditions/service', tabClick: '#exp-tab-receptions', wait: 900,
+    fn: "(function(){var bs=Array.prototype.slice.call(document.querySelectorAll('.exp-pv-open'));var nb=function(el){var b=EXP_BC.find(function(x){return x.id===el.getAttribute('data-bc');});return b&&Array.isArray(b.lignes)?b.lignes.length:0;};"
+      + "bs.sort(function(a,b){return nb(b)-nb(a);});var btn=bs[0];if(!btn) throw new Error('aucune réception « PV à faire »');expOpenPV(btn.getAttribute('data-bc'),btn.getAttribute('data-bl'));"
+      + "document.getElementById('pv_res_nc').checked=true;expPVToggle();expPvToutOui();var r=document.querySelector('input[name=pv_l_0][value=non]');if(r){r.checked=true;expPvLigneMaj(0);"
+      + "document.getElementById('pv_lobs_0').value='Rayures sur 2 tubes';}document.getElementById('pv_obs_gen').value='Emballage abîmé à l’arrivée';"
+      + "var t=document.getElementById('pv_cert_box');if(!t||t.style.display==='none') t=document.getElementById('pv_nc_box');if(t&&t.scrollIntoView) t.scrollIntoView({block:'start'});})()" },
   // Environnement — ⚠ les noms d'ENTITÉ diffèrent des ids d'onglet
   { file: 'form-environnement-dechets', path: '/environnement/service', tabClick: '#sec-tab-dechets', fn: "secOpen('dechets')" },
   { file: 'form-environnement-mesures', path: '/environnement/service', tabClick: '#sec-tab-rejets',  fn: "secOpen('mesures-env')" },

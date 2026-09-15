@@ -1266,6 +1266,23 @@ export async function getBonDeCommande(id: string): Promise<any | null> {
   const { data } = await supabase.from('bons_de_commande').select('*').eq('id', id).maybeSingle()
   return data ?? null
 }
+// ─── BON DE COMMANDE : lecture et transition STRICTES (réception fournisseur, lot D 14/09/2026) ───
+// `getBonDeCommande` rend null sur une panne : la réception confondait alors « base injoignable »
+// et « BC introuvable ». Ici l'échec remonte.
+export async function getBonDeCommandeStricte(id: string): Promise<{ data: any | null; error: string | null }> {
+  const { data, error } = await supabase.from('bons_de_commande').select('*').eq('id', id).maybeSingle()
+  return { data: data ?? null, error: error ? error.message : null }
+}
+// Mise à jour CONDITIONNELLE : le BC ne bouge que s'il est encore dans l'état lu (statut…). Deux
+// réceptions simultanées du même BC ⇒ la seconde voit `conflit` au lieu de créer un second BL.
+export async function majBonDeCommandeSi(id: string, payload: Record<string, any>, attendu: Record<string, any>): Promise<{ data: any | null; error: string | null; code: string | null; conflit: boolean }> {
+  let r: any = supabase.from('bons_de_commande').update(payload).eq('id', id)
+  for (const [k, v] of Object.entries(attendu)) r = (v === null) ? r.is(k, null) : r.eq(k, v)
+  const { data, error } = await r.select()
+  if (error) return { data: null, error: error.message, code: (error as any).code ?? null, conflit: false }
+  const rows = (data ?? []) as any[]
+  return { data: rows[0] ?? null, error: null, code: null, conflit: rows.length === 0 }
+}
 // La colonne accuse_fournisseur_le existe-t-elle ? (gate « validation fournisseur » du BC ;
 // absente tant que la migration bc_accuse_fournisseur.sql n'a pas été jouée, ex. sur Cloudflare).
 export async function bcHasAckColumn(): Promise<boolean> {
@@ -2418,6 +2435,32 @@ export async function getDroitsSalaries(): Promise<Record<string, { roles: strin
     }
   }
   return out
+}
+
+// ─── PV DE CONTRÔLE DE RÉCEPTION (lot D · D2, 14/09/2026) : lectures STRICTES ───
+// Qui peut être contrôleur (écriture Expéditions) : relu à chaque PV, jamais « personne » sur une panne.
+// Projection sans `pin` ni `date_sortie` (colonne RSE optionnelle, absente de certaines bases).
+export async function getSalariesDroitsStricte(): Promise<{ data: any[] | null; error: string | null }> {
+  const { data, error } = await supabase.from('salaries').select('id,matricule,nom,prenom,role,roles,autorisations,actif').order('nom')
+  if (error || !Array.isArray(data)) return { data: null, error: error?.message || 'lecture des salariés impossible' }
+  return { data, error: null }
+}
+// Un BL par son id : une panne n'est pas « BL absent » (réception dont la réponse s'est perdue, correction des infos de réception).
+export async function getBonDeLivraisonStricte(id: string): Promise<{ data: any | null; error: string | null }> {
+  const { data, error } = await supabase.from('bons_de_livraison').select('*').eq('id', id).maybeSingle()
+  return { data: data ?? null, error: error ? (error.message || String((error as any).code || 'erreur inconnue')) : null }
+}
+// BL de réception d'un bon de commande : une panne n'est pas « aucune réception enregistrée ».
+export async function getBlsDuBcStricte(bcId: string): Promise<{ data: any[] | null; error: string | null }> {
+  const { data, error } = await supabase.from('bons_de_livraison').select('*').eq('bc_id', bcId)
+  if (error || !Array.isArray(data)) return { data: null, error: error?.message || 'lecture des bons de livraison impossible' }
+  return { data, error: null }
+}
+// PV existants (numérotation + « un PV par réception ») : une panne n'est pas « aucun PV ».
+export async function getPVControlesResumeStricte(): Promise<{ data: any[] | null; error: string | null }> {
+  const { data, error } = await supabase.from('pv_controle').select('id,num_pv,bl_id,bc_id,type_controle')
+  if (error || !Array.isArray(data)) return { data: null, error: error?.message || 'lecture des PV de contrôle impossible' }
+  return { data, error: null }
 }
 
 export async function getSalarie(id: string): Promise<any | null> {

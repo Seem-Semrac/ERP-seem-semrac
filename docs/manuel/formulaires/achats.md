@@ -16,8 +16,10 @@
 | Livraison prévue | date | Non | La date à laquelle vous attendez la marchandise. | 2026-07-20 |
 | N° d'affaire (optionnel) | texte | Non | Le numéro de l'affaire / du chantier à rattacher, si la commande concerne une commande client précise. | AFF-2026-018 |
 | Notes | zone de texte | Non | Remarques ou conditions particulières à joindre à la commande. | Livraison sur palette consignée |
+| Certificat matière requis | case à cocher (encadré violet) | Non (jamais cochée d'avance) | Cochez-la si le fournisseur doit **joindre un certificat matière** à la livraison. La mention est imprimée sur le PDF du bon de commande ; à la réception, le PV de contrôle ne pourra être **conforme** que si le contrôleur confirme le certificat. Reprise du brouillon. | cochée |
 
 💡 **Astuce :** Le bouton « Enregistrer (brouillon) » met la DA de côté sans créer le BC : vous pourrez la reprendre plus tard.
+💡 **Certificat oublié ?** L'exigence se pose aussi après coup : onglet « Bons de commande », colonne « Certificat matière », bouton « Exiger » (puis rééditez le PDF pour le fournisseur).
 ⚠️ **Attention :** Le bouton « Soumettre → créer BC » refuse de valider si le fournisseur / sous-traitant est vide. Une fois créé, le BC part côté Expéditions.
 
 ## Nouveau bon de commande (création directe)
@@ -29,11 +31,12 @@
 | Destinataire | liste déroulante (Fournisseur, Sous-traitant) | Non | Indique si la commande va à un fournisseur (fourniture) ou à un sous-traitant (prestation). | Fournisseur |
 | Fournisseur / sous-traitant | texte | Oui | Le nom de l'entreprise destinataire de la commande. | Vis & Boulons SARL |
 | Articles / désignation | texte | Oui | Ce qui est commandé, en clair. Si vous remplissez plutôt les lignes détaillées ci-dessous, ce champ se complète tout seul. | Visserie inox M6 |
-| Quantité | texte | Non | La quantité globale commandée (texte libre, avec l'unité). | 500 vis |
+| Quantité (nombre) | nombre | Non | La quantité globale commandée, **en chiffres seulement** (l'unité se met dans les articles ou les lignes). C'est elle qui donne le **reste à recevoir** quand les Expéditions réceptionnent la commande : sans quantité exploitable, la réception devra saisir la quantité livrée. | 500 |
 | Montant HT (€) | nombre | Non | Le total hors taxes. Se calcule automatiquement si vous saisissez les lignes détaillées. | 340.00 |
 | Livraison prévue | date | Non | La date de livraison attendue. | 2026-07-15 |
 | N° d'affaire (option) | texte | Non | Le numéro d'affaire à rattacher, si concerné. | AFF-2026-018 |
 | Notes | texte | Non | Remarques libres. | Urgent |
+| Certificat matière requis | case à cocher (encadré violet) | Non (jamais cochée d'avance) | Le fournisseur doit joindre un certificat matière à la livraison : mention imprimée sur le PDF du BC, certificat confirmé au PV de réception (sans lui, pas de PV conforme). | cochée |
 | Ligne — Référence | texte | Non | La référence article de la ligne détaillée. Il faut une référence pour que la ligne soit prise en compte. | REF-VIS-M6 |
 | Ligne — Désignation | texte | Non | Le libellé de l'article de la ligne. | Vis inox M6x20 |
 | Ligne — Catégorie | liste déroulante (Matière, Accessoires, Outils, Chimique, Consommable, Autres) | Non | La famille du produit commandé. | Accessoires |

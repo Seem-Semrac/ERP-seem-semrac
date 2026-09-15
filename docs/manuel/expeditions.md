@@ -7,20 +7,33 @@ Porte d'entrée et de sortie des marchandises, organisée par **sens du flux** :
 ![expeditions](../assets/expeditions.png)
 
 ## Les onglets
-- **Réceptions** — Tout ce qui arrive : commandes fournisseurs et sous-traitants à réceptionner, retours de sous-traitance, **retours clients** attendus, BC en attente de validation fournisseur, puis les arrivées déjà enregistrées.
+- **Réceptions** — Ce qui est arrivé : réceptions fournisseurs (avec leurs références fournisseur, le bloc hors France et le lien « Corriger »), retours de sous-traitance, **retours clients** ; c'est ici qu'on fait le **PV de contrôle** (« PV à faire »).
 - **Envois** — Tout ce qui part : commandes prêtes à expédier (lot libéré), BL à envoyer, pièces à confier en sous-traitance, et les **retours fournisseurs** décidés par la Qualité.
-- **Calendrier** — Frise unique **arrivées + départs**, puis le bloc **« Aujourd'hui »** listant ce qui doit entrer et sortir dans la journée, retards compris.
-- **Fournisseurs** — Référentiel (consulter, ajouter, supprimer) et, par fournisseur, ses **bons de commande envoyés** et les **bons de livraison reçus** (avec transporteur et date).
+- **Calendrier** — Frise unique **arrivées + départs**, puis le bloc **« Aujourd'hui »** listant ce qui doit entrer et sortir dans la journée, retards compris ; bouton **« Traiter »** pour réceptionner une commande.
+- **Fournisseurs** — Référentiel (consulter, ajouter, supprimer) et, par fournisseur, ses **bons de commande envoyés** et les **bons de livraison reçus** (avec transporteur ou N° de BL fournisseur, et date).
 - **Dashboard** — Volumes, OTD client et fournisseur, en-cours.
 
 ## Procédures
 
 ### Enregistrer une réception fournisseur
-1. Onglet **Réceptions**, bloc « À réceptionner » : cliquer le bouton d'action de la ligne.
-2. Saisir la **quantité reçue** (inférieure à la commande = réception partielle, le BC reste ouvert pour le solde).
-3. Renseigner le **transporteur** et sa référence.
-4. Valider : un BL de réception est créé et rattaché au BC, la date d'arrivée réelle est posée.
-5. Faire le **PV de contrôle** sur la ligne : le contenu n'entre en stock qu'au PV **conforme**. Un **PV non conforme envoie toujours le lot en quarantaine** — rien n'entre en stock, et c'est la Qualité qui décide de la suite.
+> Réception, correction et PV de contrôle sont réservés aux personnes ayant l'**écriture sur les Expéditions** (Direction, rôle Logistique, ou case « Écrire » des Expéditions cochée sur la fiche salarié). ⚠ Depuis le 14/09/2026, la Qualité ne signe plus les PV de réception sans cette case.
+
+1. Onglet **Calendrier**, bloc « à réceptionner aujourd'hui » : cliquer **« Traiter »** sur la ligne du bon de commande. N° BL interne et N° d'affaire sont repris du BC.
+2. Saisir le **N° de commande fournisseur** et le **N° de BL fournisseur** (obligatoires).
+3. Lire le bandeau : la quantité enregistrée est le **reste à recevoir** du BC — **aucune quantité à saisir**. Exceptions : case **« Livraison partielle »** (le fournisseur annonce un reliquat : saisir la quantité livrée, le BC reste ouvert) et BC **sans quantité exploitable** (saisir la quantité lue sur le BL fournisseur).
+4. Répondre à **« Réception hors France ? »** (obligatoire). Si **Oui** : **poids matière (kg)**, **N° de nomenclature (douane)**, **code EWX** (1 ou 2), **mode d'arrivée** (Routier, Maritime, Aérien, Ferroviaire, Messagerie / express).
+5. **« Valider la réception »** : un BL de réception est créé et rattaché au BC, la date d'arrivée réelle est posée ; la réception apparaît dans l'onglet **Réceptions** avec « PV à faire ». Une faute de frappe se rectifie ensuite par le lien **« Corriger »** (ni la quantité ni le stock ne changent).
+
+![Réception hors France](../assets/form-expeditions-reception.png)
+
+### Faire le PV de contrôle
+1. Onglet **Réceptions**, bouton **« PV à faire »** sur la réception (grisé avec un cadenas sans écriture Expéditions).
+2. Choisir **Conforme** ou **Non conforme** (rien n'est coché d'avance) et le **contrôleur** dans la liste (salariés actifs ayant l'écriture sur les Expéditions).
+3. Si le BC exige un **certificat matière** : cocher « Certificat matière reçu et conforme » s'il est là. **Sans cette case, pas de PV conforme** : le PV bascule en non conforme.
+4. **Conforme** : valider — le contenu entre en stock (ligne par ligne sur son article pour un BC à plusieurs articles, si la réception couvre toute la commande).
+5. **Non conforme** : la fenêtre affiche l'en-tête du BC et **toutes ses lignes** ; répondre **Oui / Non** sur chaque ligne (« Tout à Oui » pour les lignes sans écart), **observation obligatoire** sur chaque Non, **observation générale** facultative, gravité. Valider : une **NC « réception fournisseur »** part en Qualité avec une ligne par écart, et le lot part **toujours en quarantaine** — rien n'entre en stock, la Qualité décide de la suite.
+
+![PV non conforme, lignes du bon de commande](../assets/form-expeditions-pv-non-conforme.png)
 
 > Sous un PV non conforme, la ligne dit ce que la Qualité en a fait : **« renvoyé au fournisseur · à expédier / expédié »**, **« dérogation fournisseur · entré en stock »**, **« entrée partielle 6/10 »** — ou **« en quarantaine — décision Qualité attendue »** tant que rien n'est décidé.
 
@@ -47,7 +60,7 @@ Porte d'entrée et de sortie des marchandises, organisée par **sens du flux** :
 
 ### Consulter l'historique d'un fournisseur
 1. Onglet **Fournisseurs** : rechercher par nom, puis cliquer le fournisseur.
-2. Le détail affiche ses **bons de commande envoyés** (n°, date, montant, réception, affaire) et ses **bons de livraison reçus** (n°, date, **transporteur**, BC lié, affaire).
+2. Le détail affiche ses **bons de commande envoyés** (n°, date, montant, réception, affaire) et ses **bons de livraison reçus** (n°, date, **transporteur** — à défaut, depuis le 14/09/2026, le **N° de BL fournisseur** —, BC lié, affaire).
 3. **Cliquer une ligne** ouvre la **fiche de l'affaire** correspondante.
 4. Les compteurs de la liste (`N BC` / `N BL`) repèrent les fournisseurs à relancer : beaucoup de BC, peu de BL.
 

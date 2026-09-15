@@ -574,6 +574,17 @@ export const pageServiceAchats = (
       return { ...b, recu, dateFigee: !!b.accuse || recu, motifGel: b.accuse ? 'valid\u00e9e par le fournisseur' : 'r\u00e9ceptionn\u00e9e' }
     })
   const BC_A_DATER = BCS.filter((b: any) => !b.prevue && !b.recu).length
+  // Certificat matière (Lot D) : exigence portée par le BC. `certificat_col === false` sur TOUTES les
+  // lignes = base sans migration 012 / cloud-10 (la colonne n'est pas revenue du select *).
+  const CERT_COL_ABSENTE = BCS.length > 0 && BCS.every((b: any) => b.certificat_col === false)
+  const certCell = (b: any) => {
+    const badge = b.certificat_requis
+      ? `<span title="Le fournisseur doit joindre un certificat matière : il sera vérifié au PV de réception" style="background:#f5f3ff;color:#5b21b6;border:1px solid #ddd6fe;border-radius:999px;padding:2px 10px;font-size:.65rem;font-weight:800;white-space:nowrap;"><i class="fas fa-certificate" style="margin-right:4px;"></i>Certificat requis</span>`
+      : '<span style="color:#cbd5e1;font-size:.68rem;">non requis</span>'
+    if (b.pv_conforme) return `${badge}<div title="Un PV de réception conforme est déjà signé : l&#39;exigence ne se modifie plus" style="font-size:.6rem;color:#94a3b8;margin-top:3px;white-space:nowrap;"><i class="fas fa-lock" style="margin-right:3px;"></i>PV conforme</div>`
+    if (CERT_COL_ABSENTE) return badge
+    return `${badge}<div style="margin-top:4px;"><button type="button" class="ach-bc-cert" data-id="${escX(b.id)}" title="${b.certificat_requis ? 'Ne plus exiger de certificat matière pour ce bon de commande' : 'Exiger un certificat matière pour ce bon de commande'}" style="padding:3px 9px;background:${b.certificat_requis ? '#f1f5f9' : '#ede9fe'};color:${b.certificat_requis ? '#475569' : '#5b21b6'};border:none;border-radius:7px;font-size:.64rem;font-weight:700;cursor:pointer;white-space:nowrap;">${b.certificat_requis ? '<i class="fas fa-xmark" style="margin-right:4px;"></i>Retirer' : '<i class="fas fa-certificate" style="margin-right:4px;"></i>Exiger'}</button></div>`
+  }
 
   const rowBC = (b: any) => `
     <tr data-num="${escX(b.num_bc)}" data-fournisseur="${escX(b.fournisseur)}" data-articles="${escX(b.articles)}" data-affaire="${escX(b.num_affaire)}" data-statut="${escX(b.statut)}"
@@ -589,6 +600,7 @@ export const pageServiceAchats = (
           : '<span style="color:#cbd5e1;">\u00e0 planifier</span>'}</td>
       <td style="${TD}text-align:center;">${b.reception ? `<span style="font-weight:700;color:#15803d;">${frD(b.reception)}</span>` : '<span style="color:#cbd5e1;">\u2014</span>'}</td>
       <td style="${TD}text-align:center;">${bcStatutBadge(b.statut)}</td>
+      <td style="${TD}text-align:center;">${certCell(b)}</td>
       <td style="${TD}text-align:center;">${b.accuse
           ? `<span title="Commande confirm\u00e9e par le fournisseur" style="background:#dcfce7;color:#166534;border-radius:999px;padding:2px 10px;font-size:.65rem;font-weight:800;white-space:nowrap;"><i class="fas fa-check" style="margin-right:4px;"></i>${frD(b.accuse)}</span>`
           : (b.recu ? '<span style="color:#cbd5e1;">\u2014</span>'
@@ -610,6 +622,7 @@ export const pageServiceAchats = (
       </div>
       ${searchBar('ach-bc', [['num', 'N\u00b0 BC'], ['fournisseur', 'Fournisseur'], ['articles', 'Articles'], ['affaire', 'Affaire'], ['statut', 'Statut']])}
     </div>
+    ${CERT_COL_ABSENTE ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:.8rem;color:#92400e;"><i class="fas fa-database" style="margin-right:7px;"></i><strong>Certificat mati\u00e8re indisponible sur cette base</strong> \u2014 jouer la migration <code>012</code> (VM : <code>erp-docker.sh maj</code>) ou le script <code>cloud-10</code> (Supabase Studio). Tant que c&#39;est le cas, l&#39;exigence ne peut pas \u00eatre enregistr\u00e9e sur les bons de commande.</div>` : ''}
     <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;">
       <div style="overflow-x:auto;">
         <table id="ach-bc" style="width:100%;border-collapse:collapse;font-size:.8rem;">
@@ -623,10 +636,11 @@ export const pageServiceAchats = (
             <th style="text-align:center;${TH}">Arriv\u00e9e pr\u00e9vue</th>
             <th style="text-align:center;${TH}">Re\u00e7u le</th>
             <th style="text-align:center;${TH}">Statut</th>
+            <th style="text-align:center;${TH}">Certificat mati\u00e8re</th>
             <th style="text-align:center;${TH}">Validation fournisseur</th>
             <th style="text-align:center;${TH}">Date d&#39;arriv\u00e9e</th>
           </tr></thead>
-          <tbody>${BCS.length === 0 ? emptyRow(11, 'Aucun bon de commande') : BCS.map(rowBC).join('')}</tbody>
+          <tbody>${BCS.length === 0 ? emptyRow(12, 'Aucun bon de commande') : BCS.map(rowBC).join('')}</tbody>
         </table>
       </div>
     </div>
@@ -638,6 +652,8 @@ export const pageServiceAchats = (
     id: b.id, num_bc: b.num_bc, type: b.type, fournisseur: b.fournisseur, articles: b.articles,
     prevue: b.prevue || '', initiale: b.initiale || '', reception: b.reception || '', statut: b.statut,
     recu: !!b.recu, dateFigee: !!b.dateFigee, motifGel: b.motifGel || '', accuse: b.accuse || '',
+    // Certificat matière (Lot D) : lus par achBcCertificat (la bascule n'envoie que { requis }).
+    certificat_requis: b.certificat_requis === true, pv_conforme: b.pv_conforme === true,
   })))
 
   // ── ONGLET AVOIRS FOURNISSEURS / SOUS-TRAITANTS ───────────────────────────────────────────
@@ -1061,6 +1077,13 @@ export const pageServiceAchats = (
             <datalist id="dl_bc_affaires">${AFFAIRES_CONNUES.map((a: string) => `<option value="${escX(a)}"></option>`).join('')}</datalist>
             <div style="font-size:.66rem;color:#94a3b8;margin-top:3px;">Repris de la demande. Une demande libre peut être rattachée à une affaire.</div>
           </div>
+          <div style="grid-column:1/-1;border:1.5px solid #ede9fe;border-radius:10px;padding:9px 13px;background:#faf5ff;">
+            <label for="bc_certificat" style="display:flex;align-items:center;gap:8px;font-size:.8rem;font-weight:700;color:#5b21b6;cursor:pointer;margin:0;">
+              <input id="bc_certificat" type="checkbox" style="width:16px;height:16px;accent-color:#6d28d9;cursor:pointer;"/>
+              <i class="fas fa-certificate"></i>Certificat matière requis
+            </label>
+            <div style="font-size:.66rem;color:#7c3aed;margin-top:3px;">Imprimé sur le bon de commande. À la réception, le PV ne pourra être conforme que si le certificat est reçu et conforme.</div>
+          </div>
           <div style="grid-column:1/-1;"><label style="${LBL}">Facture du fournisseur (PDF, image)</label>
             <input id="bc_facture" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" style="${INP}padding:7px;"/>
             <div style="font-size:.66rem;color:#94a3b8;margin-top:3px;">Jointe au bon de commande et consultable depuis la facture fournisseur en Comptabilité.</div>
@@ -1083,7 +1106,7 @@ export const pageServiceAchats = (
 
   <!-- MODAL : Création directe d'un Bon de Commande -->
   <div id="ach-newda-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:white;border-radius:16px;padding:0;max-width:540px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+    <div style="background:white;border-radius:16px;padding:0;max-width:540px;width:92%;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">
       <div style="padding:16px 22px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#0ea5e9,#0369a1);border-radius:16px 16px 0 0;">
         <div style="font-weight:800;font-size:1rem;color:white;display:flex;align-items:center;gap:8px;"><i class="fas fa-file-contract"></i>Nouveau bon de commande</div>
         <button onclick="achCloseNewBC()" style="color:rgba(255,255,255,.8);background:none;border:none;font-size:1.2rem;cursor:pointer;"><i class="fas fa-times"></i></button>
@@ -1093,11 +1116,18 @@ export const pageServiceAchats = (
         <div><label style="${LBL}">Destinataire</label><select id="bcw_type" style="${INP}"><option value="fournisseur">Fournisseur</option><option value="st">Sous-traitant</option></select></div>
         <div><label style="${LBL}">Fournisseur / sous-traitant *</label><input id="bcw_fourn" type="text" placeholder="Nom" style="${INP}"/></div>
         <div style="grid-column:1/-1;"><label style="${LBL}">Articles / désignation *</label><input id="bcw_articles" type="text" placeholder="Désignation des articles commandés" style="${INP}"/></div>
-        <div><label style="${LBL}">Quantité</label><input id="bcw_qte" type="text" placeholder="ex : 12 barres" style="${INP}"/></div>
+        <div><label style="${LBL}">Quantité <span style="font-weight:500;text-transform:none;color:#94a3b8;">(nombre)</span></label><input id="bcw_qte" type="number" step="any" min="0" inputmode="decimal" placeholder="ex : 12" title="Nombre seulement : c’est la base du reste à recevoir à la réception (l’unité va dans les articles ou les lignes)" style="${INP}"/></div>
         <div><label style="${LBL}">Montant HT (€)</label><input id="bcw_montant" type="number" step="0.01" min="0" placeholder="0.00" style="${INP}"/></div>
         <div><label style="${LBL}">Livraison prévue</label><input id="bcw_liv" type="date" style="${INP}"/></div>
         <div><label style="${LBL}">N° d'affaire (option)</label><input id="bcw_aff" type="text" placeholder="AFF-2026-XXX" style="${INP}"/></div>
         <div style="grid-column:1/-1;"><label style="${LBL}">Notes</label><input id="bcw_notes" type="text" placeholder="Remarques…" style="${INP}"/></div>
+        <div style="grid-column:1/-1;border:1.5px solid #ede9fe;border-radius:10px;padding:9px 13px;background:#faf5ff;">
+          <label for="bcw_certificat" style="display:flex;align-items:center;gap:8px;font-size:.8rem;font-weight:700;color:#5b21b6;cursor:pointer;margin:0;">
+            <input id="bcw_certificat" type="checkbox" style="width:16px;height:16px;accent-color:#6d28d9;cursor:pointer;"/>
+            <i class="fas fa-certificate"></i>Certificat matière requis
+          </label>
+          <div style="font-size:.66rem;color:#7c3aed;margin-top:3px;">Imprimé sur le bon de commande. À la réception, le PV ne pourra être conforme que si le certificat est reçu et conforme.</div>
+        </div>
         <div style="grid-column:1/-1;border-top:1px dashed #e2e8f0;padding-top:10px;margin-top:2px;">
           <label style="${LBL}">Lignes commandées <span style="font-weight:500;text-transform:none;color:#94a3b8;">(détail de la commande · réf · qté · prix)</span></label>
           <table style="width:100%;border-collapse:collapse;margin-top:4px;">
@@ -1311,6 +1341,43 @@ export const pageServiceAchats = (
         location.hash='bc'; setTimeout(function(){softReload();},900);
       }).catch(function(){ pushNotif('err','fa-ban','Erreur reseau.'); });
   }
+
+  // Certificat matière (Lot D) : poser / retirer l’exigence sur un BC existant.
+  // Délégation d’événements : le bouton ne porte que data-id, le reste est relu dans ACH_BCS
+  // (aucune chaîne venant de la base dans un onclick). Appel /api/achats/... : écriture achats.
+  // Le serveur refuse (409) si un PV de réception conforme existe déjà : l’écran ne fait qu’éviter le clic.
+  var _achCertEnCours=false;
+  async function achBcCertificat(id){
+    if(_achCertEnCours) return;
+    var b=null; for(var i=0;i<ACH_BCS.length;i++){ if(ACH_BCS[i].id===id){ b=ACH_BCS[i]; break; } }
+    if(!b){ pushNotif('err','fa-ban','Bon de commande introuvable : '+achEsc(id)); return; }
+    if(b.pv_conforme){ pushNotif('err','fa-lock','Le bon de commande '+achEsc(b.num_bc)+' a déjà un PV de réception conforme : l’exigence de certificat matière ne se modifie plus.',8000); return; }
+    var requis=!b.certificat_requis;
+    var q = requis
+      ? 'Exiger un certificat matière pour le bon de commande '+b.num_bc+' ('+b.fournisseur+') ?\\n\\nLa mention sera imprimée sur le bon de commande : pensez à le renvoyer au fournisseur. À la réception, le PV ne pourra être conforme que si le certificat est reçu et conforme.'
+      : 'Ne plus exiger de certificat matière pour le bon de commande '+b.num_bc+' ('+b.fournisseur+') ?\\n\\nLe PV de réception ne demandera plus le certificat.';
+    if(!await appConfirm(q)) return;
+    _achCertEnCours=true;
+    document.querySelectorAll('.ach-bc-cert').forEach(function(x){ x.disabled=true; });
+    fetch('/api/achats/bc/'+encodeURIComponent(id)+'/certificat-matiere',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requis:requis})})
+      .then(function(r){ return r.json().catch(function(){ return {ok:false,error:'Réponse illisible du serveur ('+r.status+').'}; }); })
+      .then(function(j){
+        _achCertEnCours=false;
+        document.querySelectorAll('.ach-bc-cert').forEach(function(x){ x.disabled=false; });
+        if(!j||!j.ok){ pushNotif('err','fa-triangle-exclamation',achEsc((j&&j.error)||'Échec.'),10000); return; }
+        pushNotif('ok','fa-certificate', j.certificat_matiere_requis
+          ? 'Certificat matière exigé pour '+achEsc(b.num_bc)+'. Rééditez le bon de commande pour le fournisseur.'
+          : 'Certificat matière retiré pour '+achEsc(b.num_bc)+'.', 6000);
+        location.hash='bc'; setTimeout(function(){softReload();},800);
+      })
+      .catch(function(){ _achCertEnCours=false; document.querySelectorAll('.ach-bc-cert').forEach(function(x){ x.disabled=false; }); pushNotif('err','fa-ban','Erreur réseau.'); });
+  }
+  document.addEventListener('click', function(e){
+    var t=e.target && e.target.closest ? e.target.closest('.ach-bc-cert') : null;
+    if(!t) return;
+    e.preventDefault();
+    achBcCertificat(t.getAttribute('data-id')||'');
+  });
   function achSaveBcDate(){
     if(!_achBcCur) return;
     var d=document.getElementById('ach_bcdate_input').value;
@@ -1634,6 +1701,8 @@ export const pageServiceAchats = (
     document.getElementById('bc_livraison').value=dr.date_livraison||da.livraison||'';
     // (l'affaire est deja posee plus haut : la reaffecter ici ecrasait le repli « demande libre »)
     document.getElementById('bc_notes').value=dr.notes||'';
+    // Certificat matière : repris du brouillon seulement (jamais coché par défaut).
+    var _cm=document.getElementById('bc_certificat'); if(_cm){ _cm.checked = dr.certificat_matiere_requis===true; }
     document.getElementById('ach-bc-overlay').style.display='flex';
   }
   function achCloseBC(){ document.getElementById('ach-bc-overlay').style.display='none'; }
@@ -1667,7 +1736,8 @@ export const pageServiceAchats = (
       date_livraison:document.getElementById('bc_livraison').value||null,
       affaire_id:document.getElementById('bc_affaire').value.trim()||null,
       conditions_paiement:(document.getElementById('bc_reglement')||{}).value||null,
-      notes:document.getElementById('bc_notes').value.trim()||null
+      notes:document.getElementById('bc_notes').value.trim()||null,
+      certificat_matiere_requis:!!(document.getElementById('bc_certificat')||{}).checked
     };
   }
   function achSaveDraft(){
@@ -1687,6 +1757,8 @@ export const pageServiceAchats = (
         var _msg='BC <strong>'+j.bc_id+'</strong> créé ('+(j.type_bc==='st'?'sous-traitant':'fournisseur')+').';
         if(j.facture_proforma){ _msg+=' Facture <strong>'+j.facture_proforma+'</strong> à régler en Comptabilité — le BC attend le paiement.'; }
         else { _msg+=' Visible dans Expéditions.'; }
+        if(j.certificat_matiere_requis){ _msg+=' Certificat matière exigé.'; }
+        if(j.avertissement){ pushNotif('warn','fa-certificate',achEsc(j.avertissement),12000); }
         achCloseBC();
         bcEnvoyerFacture(j.bc_id).then(function(joint){
           pushNotif('ok','fa-paper-plane', _msg + (joint ? ' Facture jointe.' : ''), 7000);
@@ -1717,10 +1789,11 @@ export const pageServiceAchats = (
     if(!articles && lines.length) articles=lines.map(function(l){return l.designation;}).join(', ');
     if(!fourn){ pushNotif('err','fa-exclamation-circle','Indiquez le fournisseur / sous-traitant.'); return; }
     if(!articles){ pushNotif('err','fa-exclamation-circle','Indiquez les articles ou au moins une ligne.'); return; }
-    var payload={ type_bc:document.getElementById('bcw_type').value, fournisseur:fourn, articles:articles, qte:document.getElementById('bcw_qte').value.trim(), montant_ht:parseFloat(document.getElementById('bcw_montant').value)||0, date_livraison:document.getElementById('bcw_liv').value||null, affaire_id:document.getElementById('bcw_aff').value.trim()||null, notes:document.getElementById('bcw_notes').value.trim()||null, lignes_detail:lines };
+    var payload={ type_bc:document.getElementById('bcw_type').value, fournisseur:fourn, articles:articles, qte:document.getElementById('bcw_qte').value.trim(), montant_ht:parseFloat(document.getElementById('bcw_montant').value)||0, date_livraison:document.getElementById('bcw_liv').value||null, affaire_id:document.getElementById('bcw_aff').value.trim()||null, notes:document.getElementById('bcw_notes').value.trim()||null, lignes_detail:lines, certificat_matiere_requis:!!(document.getElementById('bcw_certificat')||{}).checked };
     fetch('/api/achats/bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
       .then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Création BC échouée.'); return; }
+        if(j.avertissement){ pushNotif('warn','fa-certificate',achEsc(j.avertissement),12000); }
         achCloseNewBC(); if(window.submitValidation) submitValidation('achats','bcw_vd',{type:'Bon de commande',objet:fourn+' — '+articles,montant:payload.montant_ht,priorite:'normal',ref_table:'bons_de_commande',ref_id:j.bc_id||null}); pushNotif('ok','fa-paper-plane','BC <strong>'+j.bc_id+'</strong> créé ('+(j.type_bc==='st'?'sous-traitant':'fournisseur')+'). Visible dans Expéditions.',6000); setTimeout(function(){softReload();},900);
       }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
   }

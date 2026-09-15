@@ -5,7 +5,199 @@
 - **Accès (RBAC)** : écriture — expéditions, stock (logistique) · lecture — commercial, achats, production
 <!-- /auto -->
 
+## Lot D — réception fournisseur et PV de contrôle détaillé (14/09/2026)
+
+> « Dans le formulaire de réception […] le numéro de commande de chez eux et le num de BL de chez eux,
+> retirer le nom du transporteur, et la quantité. Quand on reçoit de pays hors France (case oui non) […]
+> Pour le PV de contrôle quand c'est conforme rien à mettre à part le fait que c'est conforme, quand c'est
+> non conforme afficher tout ce qui appartient au bon de commande […] Le contrôleur ne peut être que
+> quelqu'un qui a les accès écriture dans expéditions. »
+
+Règles pures (testables sans base ni DOM) : `src/reception.ts` (réception), `src/pv_reception.ts` (PV),
+`src/certificat_matiere.ts` (exigence du BC, voir [Achats](achats.md)). Lectures strictes dans
+`src/queries.ts` (`getBonDeCommandeStricte`, `majBonDeCommandeSi`, `getBonDeLivraisonStricte`,
+`getBlsDuBcStricte`, `getPVControlesResumeStricte`, `getSalariesDroitsStricte`) : une panne répond 503,
+jamais « introuvable » ni « aucun PV ». Base : migration **012** / `cloud-10` (voir
+[03-base-de-donnees](../03-base-de-donnees.md)). Contrats : [07-api-reference](../07-api-reference.md), bloc « Lot D ».
+
+### Qui peut réceptionner, corriger, faire le PV
+
+- `POST /api/expeditions/bc/:id/receptionner` et `/pv` **sortent du self-service** (`SELF_SERVICE_RE`,
+  `src/auth.ts`) : ils étaient ouverts à **tout compte connecté**, aucun appelant n'envoyant de PIN. Le
+  middleware exige désormais l'écriture Expéditions, et chaque handler la **revérifie** avec
+  `peutEcrireService(user, 'expeditions')` (message clair ; seul contrôle quand `AUTH_ENFORCE=off`). Même
+  double contrôle sur la nouvelle route `POST /api/expeditions/bl/:id/reception-infos`.
+- Ont l'écriture : direction (`all`), rôle `logistique`, ou fiche portant le jeton `ecrire:expeditions`.
+  ⚠ **La Qualité ne peut plus signer un PV de réception** (lecture seule sur Expéditions). Lui cocher
+  `ecrire:expeditions` fait passer sa fiche en mode jetons : cocher aussi ses autres services, sinon elle
+  les perd (voir [04-auth-rbac](../04-auth-rbac.md)).
+- Écran : boutons « PV à faire » **grisés avec cadenas** et lien « Corriger » masqué pour un lecteur
+  (`extra.peutEcrireExpeditions`). Le bouton « Traiter » du Calendrier reste affiché : le serveur répond
+  403 et la fenêtre explique le refus.
+
+### Formulaire de réception (Calendrier › « Traiter »)
+
+| Champ (id) | Règle |
+|---|---|
+| N° BL interne (`rec_numbl`), N° d'affaire (`rec_affaire`) | repris du BC, verrouillés quand connus (inchangé) |
+| **N° de commande fournisseur** (`rec_numcmdf`) | obligatoire, 100 caractères max |
+| **N° de BL fournisseur** (`rec_numblf`) | obligatoire, 100 caractères max — remplace « N° réf. livraison transporteur » |
+| **Réception hors France ?** (`rec_hf_oui` / `rec_hf_non`) | Oui / Non obligatoire |
+| si Oui : **Poids matière (kg)** (`rec_poids`) | nombre > 0 et ≤ 1 000 000, « 125,5 » et « 1 250,5 » acceptés |
+| si Oui : **N° de nomenclature (douane)** (`rec_nomenc`) | code de nomenclature douanière, texte ≤ 100 |
+| si Oui : **Code EWX** (`rec_ewx`) | 1 ou 2 |
+| si Oui : **Mode d'arrivée** (`rec_mode`) | `MODES_ARRIVEE` : Routier, Maritime, Aérien, Ferroviaire, Messagerie / express |
+| Livraison partielle (`rec_partiel`) + Quantité livrée (`rec_qte_livree`) | exceptions à la règle de quantité, ci-dessous |
+
+**Retirés** : Transporteur, N° réf. livraison transporteur, Quantité reçue. Si « Non », les quatre champs
+d'import sont forcés à `null` même s'ils sont envoyés. Pas de contrainte « hors France ⇒ 4 champs » en
+base : contrôle applicatif, identique côté client (`expSubmitRecep`) et serveur (`validerSaisieReception`,
+400 + `champ`, le champ fautif est encadré en rouge).
+
+**Quantité du BL = reste à recevoir** (`quantitesBc`, `planReception`) : `qte_commandee − qte_recue`, où la
+quantité commandée est `qte_commandee` si numérique, sinon la somme des `lignes[].qte` quand toutes les
+lignes en portent une numérique, sinon **inconnue**. Un bandeau (`rec_qte_info`) affiche ce que la
+réception va écrire. Jamais `qte = 0`. Deux exceptions, ajoutées à la vérification du lot :
+
+- **Livraison partielle** (le fournisseur annonce un reliquat) : la quantité livrée est saisie, strictement
+  inférieure au reste ; BL = cette quantité, BC `recu_partiel`, le reliquat reste à « Traiter ». Refusée (400)
+  sur un BC à plusieurs articles.
+- **Quantité commandée inconnue** : la quantité livrée (lue sur le BL fournisseur) est **obligatoire** pour
+  un BC à un article, **facultative** pour un BC à plusieurs articles — sans elle, `bl.qte = null` et un
+  avertissement. « Corriger le BC » était impossible : aucun écran ne modifie la quantité d'un BC
+  (`bcw_qte` du BC direct est désormais un champ numérique).
+
+Un écart de quantité hors de ces cas se signale **au PV non conforme**, sur la ligne concernée.
+
+**Déroulé serveur** (`POST /api/expeditions/bc/:id/receptionner`) :
+
+1. écriture Expéditions (403) → validation de la saisie (400 + `champ`) → lecture **stricte** du BC (503 / 404) ;
+2. `planReception` : BC annulé → 409 `annule` ; déjà entièrement reçu (`recu_total`, `recu`, `receptionne`,
+   `controle`, `cloture`, ou reste ≤ 0) → 409 `deja_recu`. **Reprise d'un BC figé** : BC `recu_total`
+   pointant un BL inexistant, sans aucune réception ni date d'arrivée réelle (réception interrompue) → la
+   réception repart, avec avertissement ;
+3. **le BC d'abord, conditionnellement** (`majBonDeCommandeSi`, sur le statut lu) : `statut`, `bl_id` et
+   `qte_recue` (seulement si la quantité est connue). Deux réceptions simultanées : une seule passe (409
+   « modifié par ailleurs »). ⚠ `transporteur` / `transporteur_ref` ne sont **plus écrits** : ils
+   écrasaient à `null` ce que le BC portait ;
+4. le BL (`construireBlReception`) : `type_bl 'reception'`, `qte`, `statut 'recu'`, les 7 colonnes 012 ; plus
+   de `transport` ni `transporteur_ref`. Colonnes absentes (cloud avant `cloud-10`) → nouvel essai sans elles
+   + avertissement `AVERT_MIGRATION_012` ;
+5. erreur **sans code** (réponse perdue) : le BL est **relu** avant toute remise en état — présent → 200 avec
+   avertissement ; base muette → **503 `incertain`**, rien n'est défait. Autre échec → le BC est remis dans
+   l'état lu (`bc_remis`), 23505 → 409 ;
+6. greffe OPEX machine (inchangée), puis `date_reception_reelle` à la 1ʳᵉ réception — son échec est **dit**
+   (plus de `.catch` muet).
+
+**Planning** : `_bcRecu` considère un BC `recu_partiel` qui a encore un reste à recevoir comme **non reçu** —
+cas du lot à **remplacer** décidé par la Qualité : « Traiter » réapparaît pour réceptionner le
+remplacement.
+
+**Correction des informations** — `POST /api/expeditions/bl/:id/reception-infos`, lien **« Corriger »** sous
+chaque réception fournisseur de l'onglet Réceptions (même fenêtre, mode « Corriger les informations »,
+`expOpenCorrectionReception`). N'écrit que les 7 colonnes 012 : ni la quantité, ni le statut, ni le stock ; un
+PV déjà signé garde l'instantané de `pv_controle.detail`. 409 si le BL n'est pas une réception fournisseur ou
+si les colonnes manquent (`needsMigration`). ⚠ Aucune trace de qui a corrigé ni quand.
+
+**Relecture des informations** : onglet Réceptions (« BL fourn. … · Cde fourn. … », pastille « Hors France »
++ poids · nomenclature · EWX · mode), bandeau du PV, `/expedition/bl-liste` (colonne Transport : à défaut de
+transporteur, « BL fourn. … » ; commande fournisseur et bloc hors France dessous ; quantité `null` affichée
+« — »), historique de l'onglet Fournisseurs (colonne « Transporteur / BL fourn. »).
+
+### PV de contrôle (Réceptions › « PV à faire »)
+
+**Conforme** : le résultat, le contrôleur et — si le BC l'exige — la case « Certificat matière reçu et
+conforme ». Rien d'autre (plus d'observation, plus de champ texte « Contrôleur », plus de case quarantaine).
+**Conforme impossible sans la case** : l'écran bascule le PV en non conforme et le serveur répond 400
+`certificat_confirme`. Aucun résultat n'est pré-sélectionné.
+
+**Non conforme** : en-tête du BC (n° BC, fournisseur, date, livraison prévue, affaire(s) via `bcAffaires`,
+montant HT, conditions de paiement, articles, notes, lien PDF si `canAccess(user,'/api/bc/x/pdf','GET')`),
+puis **toutes les lignes du BC** (`lignesBc` : n°, référence, désignation, quantité commandée, Conforme ?
+Oui / Non, observation, PU HT si un prix existe, affaire, DA · lot · opération). Chaque ligne exige une
+réponse ; **observation obligatoire sur « Non »** (1 000 caractères) ; bouton « Tout à Oui » (n'écrase
+aucune réponse donnée) ; **observation générale** facultative (4 000) ; gravité Mineure / **Majeure** /
+Critique / Bloquante. Au moins une ligne en « Non » **ou** le certificat exigé absent. BC sans lignes → une
+ligne **reconstituée** depuis `articles` + `qte_commandee` (marquée `*`).
+
+**Contrôleur** (décision 3) : liste des salariés **actifs** ayant l'écriture Expéditions, calculée comme au
+login (`controleursEligibles` : rôles = `roles` sinon `[role]`, droits = `autorisations` sinon
+`autorisationsUnion(roles)`, puis `peutEcrireService`), identifiés par `id` (matricules partagés). Liste
+passée à la page (`extra.controleurs`, `id` + `nom` seulement) ; personne connectée pré-sélectionnée si elle
+est éligible. Le serveur **relit les salariés** à chaque PV : contrôleur hors liste → 403 ; lecture en échec
+→ 503. Le compte de secours peut enregistrer mais n'est pas choisissable (pas de fiche salarié). La personne
+connectée est tracée à part (`saisi_par`). ⚠ `date_sortie` n'est pas prise en compte (comme au login).
+
+**Déroulé serveur** (`POST /api/expeditions/bc/:id/pv`) : écriture Expéditions (403) → contrôleur fourni
+(400) → BC strict (503 / 404) → BL de la réception visée, lus strictement (503 ; 409 « aucune réception »
+hors sous-traitance) → PV existants stricts (503 ; **409 si le BL a déjà son PV**) → **409
+`certificat_change`** si l'exigence du BC a changé depuis l'ouverture de la page (`certificat_requis_affiche`)
+→ `validerSaisiePV` contre les lignes **relues** (le client n'envoie que `{idx, conforme, observation}` ; 400 +
+`champ` + `idx`) → éligibilité du contrôleur (503 / 403) → écriture.
+
+**Écriture `pv_controle`** : `operateur_id` = id du contrôleur (repli `null` sur 23503, clé étrangère cloud) ;
+`statut` / `decision` / `anomalie` / `nc_ouverte` **aux valeurs historiques** (contraintes CHECK cloud) ;
+`observations` = « Contrôleur : X — » + résumé (préfixe lu par `deriverOriginePV` ; un BC de sous-traitance
+commence par « Retour sous-traitant ») ; colonnes 012 : `detail` (jsonb v1 : instantané du BC et du BL,
+lignes avec réponse et observation, observation générale, gravité, certificat, contrôleur, saisi par),
+`controleur_id`, `controleur_nom`, `saisi_par`, `certificat_matiere` (`non_requis` / `confirme` / `absent`).
+Sans ces colonnes : nouvel essai sans elles, **détail complet en texte dans `observations`**, avertissement.
+Index unique partiel `ux_pv_controle_reception_bl` : deux PV simultanés → 409.
+
+**Non conforme → NC + quarantaine** (une par BL, `champsNcPV`) : `description` = observation générale +
+« Ligne n · réf · désignation : observation » par ligne en « Non » + « Certificat matière absent ou non
+conforme » + « Contrôleur : X » ; `ref_article` / `designation` si **une seule** ligne est en « Non » ;
+`nb_pieces` = quantité du BL ; **`detecteur` = « Réception »** (valeur de la liste Qualité : l'édition de la
+NC ne l'efface plus et le badge dit « Fournisseur »). Numéro renuméroté une fois sur 23505 ; colonnes absentes
+→ NC sans description (le détail reste dans le motif de quarantaine) ; `nb_pieces` refusé (22P02 / 22003,
+colonne entière) → NC sans ce nombre, quantité exacte sur la quarantaine. **Quarantaine toujours créée**
+(motif = description, `qte` = quantité du BL). Tout échec partiel est rendu dans `avertissements`.
+⚠ Non transactionnel : le PV est écrit avant la NC et la quarantaine.
+
+**Conforme → stock** (`entrerStockReception`, inchangé sur le principe) :
+
+- BL **sans quantité** → rien n'est crédité, raison `MSG_QTE_INCONNUE` (« quantité reçue inconnue sur le BL :
+  entrée en stock non faite ») ; le BC peut tout de même passer `controle`. Corriger le BC ensuite ne
+  recrédite rien.
+- **BC à plusieurs articles** (`bcMultiArticles` : références différentes, ou désignations / unités
+  différentes) : **une entrée par ligne**, sur l'article de la ligne et pour sa quantité, motif
+  « Réception BC … · BL … · ligne n ». Seulement si la quantité entrée couvre **toute** la commande
+  (`repartitionStockMultiArticles`) ; sinon refus expliqué (« à régulariser article par article »), annoncé dès
+  la réception. Une ancienne entrée « tout le BL » bloque tout double crédit. Avant : tout le BL était crédité
+  à l'article de la 1ʳᵉ ligne. Même règle pour l'entrée partielle décidée par la Qualité.
+- Statut du BC (`recalculerStatutBc`) et porte matière inchangés.
+
+### Données de la page (`GET /expeditions/service`)
+
+- `bcsView` gagne, calculés par les fonctions de la route : `qte_commandee_num`, `qte_source`,
+  `qte_recue_num`, `reste_a_recevoir`, `lignes` (normalisées), `multi_articles`, `stock_multi_ok`, `affaires`,
+  `certificat_matiere_requis`, `montant_ht`, `notes`, `conditions_paiement`.
+- `BC_JSON` (`EXP_BC`) : `qte_commandee`, `qte_commandee_texte`, `qte_source`, `qte_recue`, `reste`,
+  `multi_articles`, `stock_multi_ok`, `lignes`, `affaires`, `certificat_matiere_requis`, `date_bc`,
+  `montant_ht`, `notes`, `conditions_paiement`, `categorie`. **Contenu commercial restreint** : sans écriture
+  Expéditions, `lignes` vides et montant / notes / conditions vidés ; sans droit au PDF du BC, `prix_unitaire`
+  à `null`.
+- `EXP_PV = { controleurs, indisponibles, utilisateur, peutEcrire, pdfBc }` et
+  `EXP_BLREC = { <bl_id>: { bc_id, qte, date_bl, 7 champs de réception, infos_col } }`.
+- Délégation d'événements (aucune chaîne de la base dans un `onclick`) : `.exp-pv-open[data-bc][data-bl]`,
+  `.exp-rec-edit[data-bl]`, radios `.pv-l-rep`. Bandeaux et tableau du PV construits en texte.
+
+### Limites connues (lot D)
+
+- Livraison partielle, reliquat et entrée partielle d'un **BC à plusieurs articles** : rien n'entre en stock
+  automatiquement, et l'ERP n'a pas d'entrée de stock manuelle (Stock › Entrée n'enregistre rien). Lever la
+  limite demande des quantités par ligne sur le BL.
+- Quantité = reste à recevoir : le KPI « taux de service fournisseur » (Σ reçu / Σ commandé) tend vers 100 % ;
+  un écart ne se voit plus qu'au PV.
+- Retour de sous-traitance **sans BL** : toujours pas d'anti-doublon de PV.
+- Aucune trace de qui corrige les informations de réception ; pas d'export des réceptions hors France sur une
+  période (déclaration douane).
+- Le bouton « Traiter » du Calendrier porte encore un `onclick` avec l'id du BC (défaut antérieur au lot).
+
 ## Réception → PV de contrôle → stock (11/09/2026)
+
+> ⚠ Contrat du PV et de la réception **remplacé le 14/09/2026** (section « Lot D » ci-dessus) : quantité du BL,
+> contrôleur, PV ligne par ligne. Le principe ci-dessous (stock au PV conforme) reste valable.
 
 > « On reçoit, ensuite on doit faire le PV de contrôle, et il faut qu'il soit fait et conforme
 > pour que le contenu rentre en stock. »
@@ -138,10 +330,10 @@ Bons de commande, bons de livraison, commandes en cours, OTD.
 - **OTD figé** : changer la date via `POST /api/expeditions/bc/:id/date-arrivee` **gèle la 1ʳᵉ date** dans `date_livraison_initiale` (au 1ᵉʳ changement) ; l'OTD se calcule toujours sur cette 1ʳᵉ promesse (jamais la date repoussée). Marqueur « ⟲ » + date fantôme quand la date a glissé.
 
 ## API (familles de routes)
-`bl` · `bst` · `expeditions` (dont `POST /api/expeditions/bc/:id/date-arrivee` — change la date prévue en gardant l'initiale)
+`bl` · `bst` · `expeditions` (dont `POST /api/expeditions/bc/:id/date-arrivee` — change la date prévue en gardant l'initiale ; `POST /api/expeditions/bc/:id/receptionner`, `POST /api/expeditions/bl/:id/reception-infos` et `POST /api/expeditions/bc/:id/pv`, réservés à l'écriture Expéditions depuis le lot D)
 
 ## Tables principales
-`bons_de_commande` (`+ date_livraison_initiale`, `+ date_reception_reelle`) · `bons_de_livraison` · `factures_client`
+`bons_de_commande` (`+ date_livraison_initiale`, `+ date_reception_reelle`, `+ certificat_matiere_requis` — 012) · `bons_de_livraison` (`+ num_commande_fournisseur`, `num_bl_fournisseur`, `hors_france`, `poids_matiere_kg`, `num_nomenclature`, `code_ewx`, `mode_arrivee` — 012) · `pv_controle` (`+ detail`, `controleur_id`, `controleur_nom`, `saisi_par`, `certificat_matiere` — 012) · `factures_client`
 
 ## Points d'attention
 - BL partiels → factures_client + écriture VTE. BL bloqué si porte qualité active.
@@ -153,7 +345,7 @@ Bons de commande, bons de livraison, commandes en cours, OTD.
 - **Retour client** : annoncé en Qualité sur la NC (`retour_attendu`, `n_commande`, `qte_retour_attendue`, `date_retour_prevue`), réceptionné ici via `POST /api/expeditions/retour-client/:ncId/receptionner` → BL `type_bl='retour_client'` rattaché à la commande + NC marquée « reçu » (`bl_retour_id` ↔ `nc_id`). Migration `scripts_import/nc_retour_client_attendu.sql` — **fail-soft** via `ncHasRetourCols()` tant qu'elle n'est pas jouée en cloud.
 
 ### Onglet « Fournisseurs » (2026-08-24)
-- 5ᵉ onglet, **à droite du Calendrier** : référentiel fournisseurs (liste filtrable, ajout, suppression) + par fournisseur ses **BC envoyés** et ses **BL reçus** (n°, date, **transporteur**, BC lié, affaire). Clic sur une ligne → `/commercial/affaire/:num`.
+- 5ᵉ onglet, **à droite du Calendrier** : référentiel fournisseurs (liste filtrable, ajout, suppression) + par fournisseur ses **BC envoyés** et ses **BL reçus** (n°, date, **transporteur** — à défaut, depuis le lot D, le **N° de BL fournisseur** —, BC lié, affaire). Clic sur une ligne → `/commercial/affaire/:num`.
 - Rendu par `panelFournisseurs(FOURNS, BCS, allBLs)` (`src/expeditions.tsx`). Réutilise `POST /api/achats/fournisseur` (création) et `DELETE /api/fournisseurs/:id` (suppression) — **aucun nouvel endpoint**.
 - Route : `getFournisseurs()` ajouté au `Promise.all` ; `fournisseurs` passé via `extra`. `bcsView` porte désormais `fournisseur_id` et `num_affaire` (ils manquaient — sans eux ni le rattachement ni le lien affaire n'étaient possibles).
 - **Rattachement BC → fournisseur** : par `fournisseur_id` si présent, sinon repli sur le **nom normalisé** (`fournisseur_nom`), car beaucoup de BC anciens ne portent pas l'id. BL joints par `bons_de_livraison.bc_id`, avec repli sur `bons_de_commande.bl_id`.

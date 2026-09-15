@@ -120,6 +120,7 @@
       <li>Sur la ligne de la DA, cliquez <b>« Traiter → BC »</b>. La fenêtre « Traiter la DA — Bon de Commande » s'ouvre, pré-remplie avec l'article, le fournisseur pressenti et la livraison souhaitée.</li>
       <li>Renseignez la <b>Référence du matériel</b>. C'est le point important : tant qu'elle est vide, l'ERP ne peut que deviner le fournisseur à partir du libellé. Dès que vous choisissez une référence du catalogue, la liste « Fournisseur / ST » place en tête, sous « Référencés pour … », <b>les seuls fournisseurs qui portent vraiment cette référence</b>, chacun avec sa désignation catalogue — et s'il n'y en a qu'un, il est sélectionné automatiquement. Un message sous les deux champs dit ce qui a été trouvé : un fournisseur, plusieurs (vérifiez alors la désignation, un même code peut couvrir deux produits différents), ou aucun. Les autres fournisseurs restent toujours accessibles dans le second groupe : rien ne vous bloque si le produit n'est pas encore au catalogue.</li>
       <li>Choisissez le <b>type de commande</b> (BC Fournisseur ou BC Sous-Traitant), vérifiez le <b>fournisseur / ST</b>, les <b>articles</b>, saisissez le <b>montant HT</b> et la <b>livraison prévue</b> ; le <b>n° d'affaire</b> et les <b>notes</b> sont optionnels.</li>
+      <li>Si le fournisseur doit joindre un <b>certificat matière</b> à la livraison, cochez <b>« Certificat matière requis »</b> (case violette, jamais cochée d'avance). La mention sera imprimée sur le bon de commande, et à la réception le PV de contrôle ne pourra être <b>conforme</b> que si le certificat est reçu et conforme.</li>
       <li>Deux issues possibles : <b>« Enregistrer (brouillon) »</b> garde la DA dans la liste « à traiter » avec la pastille <span class="b b-mut">Brouillon</span> — le bouton devient « Reprendre » pour continuer plus tard. <b>« Soumettre → créer BC »</b> crée le bon de commande (le fournisseur est alors obligatoire).</li>
       <li>Après soumission, l'ERP confirme le numéro du BC créé : la DA bascule dans « traitées » et le BC apparaît dans l'onglet <a href="#tab-bc">Bons de commande</a>, en attente de réception.</li>
     </ol>
@@ -136,6 +137,7 @@
           <tr><td>Livraison prévue</td><td>Date</td><td>Non</td><td>Date attendue — elle sert au suivi des arrivées et au calcul de ponctualité (OTD) côté Expéditions.</td></tr>
           <tr><td>N° d'affaire</td><td>Texte (AFF-2026-XXX)</td><td>Non</td><td>Rattache la dépense à une affaire cliente.</td></tr>
           <tr><td>Notes</td><td>Texte libre</td><td>Non</td><td>Conditions, remarques pour le fournisseur.</td></tr>
+          <tr><td>Certificat matière requis</td><td>Case à cocher</td><td>Non (décochée par défaut)</td><td>Le fournisseur doit joindre un certificat matière. Imprimé sur le PDF du bon de commande ; confirmé par le contrôleur au PV de réception — sans certificat, pas de PV conforme. Repris du brouillon.</td></tr>
         </tbody>
       </table>
     </div>
@@ -143,14 +145,15 @@
     <h3>Pas à pas — créer un bon de commande direct (sans DA)</h3>
     <ol class="steps">
       <li>Cliquez <b>« Créer un BC »</b> en haut de l'onglet : la fenêtre « Nouveau bon de commande » s'ouvre.</li>
-      <li>Choisissez le <b>destinataire</b> (Fournisseur ou Sous-traitant), saisissez son <b>nom</b> (obligatoire) et les <b>articles / désignation</b> (obligatoire), puis quantité, montant HT, livraison prévue, n° d'affaire et notes.</li>
+      <li>Choisissez le <b>destinataire</b> (Fournisseur ou Sous-traitant), saisissez son <b>nom</b> (obligatoire) et les <b>articles / désignation</b> (obligatoire), puis la <b>quantité</b> (un <b>nombre</b> : c'est elle qui donne le reste à recevoir à la réception — l'unité se met dans les articles ou les lignes), montant HT, livraison prévue, n° d'affaire et notes.</li>
+      <li>Cochez <b>« Certificat matière requis »</b> si le fournisseur doit joindre un certificat matière à la livraison.</li>
       <li>Détaillez la commande dans <b>« Lignes commandées »</b> : pour chaque ligne, référence, désignation, catégorie (Matière, Accessoires, Outils, Chimique, Consommable, Autres), quantité et prix unitaire. Le <b>montant HT se calcule tout seul</b> à partir des lignes.</li>
       <li>Pour un achat stratégique ou d'un montant élevé, cochez <b>« Soumettre ce BC à la validation de la Direction »</b> : le BC sera présenté dans l'onglet « À valider » du service Direction.</li>
       <li>Cliquez <b>« Créer le BC »</b> : il apparaît aussitôt dans l'onglet <a href="#tab-bc">Bons de commande</a>, en attente de réception.</li>
     </ol>
     <figure class="shot">
       <img src="../../assets/form-achats-bc.png" alt="Formulaire de création d'un bon de commande" loading="lazy">
-      <figcaption><b>Créer un BC</b> — destinataire, articles, montant HT, livraison prévue et lignes détaillées ; le montant se recalcule à partir des lignes.</figcaption>
+      <figcaption><b>Créer un BC</b> — destinataire, articles, quantité (nombre), montant HT, livraison prévue, case « Certificat matière requis » (ici cochée) et lignes détaillées ; le montant se recalcule à partir des lignes.</figcaption>
     </figure>
 
     <h3>Pas à pas — modifier ou retirer une demande d'achat</h3>
@@ -186,10 +189,10 @@
     <p class="tab-but"><b>À quoi ça sert.</b> Cet onglet réunit <b>tous les bons de commande</b> émis par l'ERP — fournisseurs et sous-traitants confondus, qu'ils viennent d'une demande d'achat ou d'une création directe. Vous y voyez d'un seul écran ce qui est commandé, pour quelle affaire, à quel montant et surtout <b>pour quand</b>. C'est aussi ici que vous <b>changez la date d'arrivée</b> d'une commande dès que le fournisseur vous annonce un décalage, sans quitter votre service — <b>tant que la marchandise n'est pas arrivée</b>. Dès qu'elle est arrivée, la date prévue est <b>figée</b> : elle reste la trace de ce que le fournisseur avait promis. Seules les commandes <b>annulées</b> n'apparaissent pas dans la liste.</p>
 
     <h3>Ce que vous voyez</h3>
-    <p>En haut, le titre avec le nombre de bons de commande, suivi d'un rappel de la règle en petits caractères gris — <i>« la date d'arrivée reste modifiable tant que la marchandise n'est pas arrivée — après réception elle est figée »</i> —, une <b>barre de recherche</b> (elle filtre sur le n° de BC, le fournisseur, les articles, l'affaire et le statut) et un <b>compteur ambre</b> qui annonce le nombre de commandes <b>encore attendues sans date d'arrivée</b> — celles pour lesquelles personne ne sait encore quand la marchandise doit tomber. Le tableau liste ensuite chaque commande : <b>N° BC</b> (avec, dessous, le type — Fournisseur ou Sous-traitant — et la demande d'achat dont elle est issue s'il y en a une), <b>Fournisseur / ST</b>, <b>Articles</b>, <b>Affaire</b>, <b>Montant HT</b>, <b>Émis le</b>, <b>Arrivée prévue</b>, <b>Reçu le</b>, <b>Statut</b>, et au bout de la ligne le bouton bleu <b>« Date d'arrivée »</b> (icône calendrier). Quand une date a déjà été repoussée, la <b>première date promise</b> reste affichée en petit sous la nouvelle, en ambre, avec la mention <b>« 1re »</b> : vous gardez sous les yeux ce que le fournisseur avait annoncé au départ. Sur les lignes dont la marchandise est <b>déjà arrivée</b>, le bouton bleu laisse place à une <b>pastille grise portant un cadenas</b> et la mention <b>« Figée »</b> : il n'y a plus rien à changer sur cette commande.</p>
+    <p>En haut, le titre avec le nombre de bons de commande, suivi d'un rappel de la règle en petits caractères gris — <i>« la date d'arrivée reste modifiable tant que la marchandise n'est pas arrivée — après réception elle est figée »</i> —, une <b>barre de recherche</b> (elle filtre sur le n° de BC, le fournisseur, les articles, l'affaire et le statut) et un <b>compteur ambre</b> qui annonce le nombre de commandes <b>encore attendues sans date d'arrivée</b> — celles pour lesquelles personne ne sait encore quand la marchandise doit tomber. Le tableau liste ensuite chaque commande : <b>N° BC</b> (avec, dessous, le type — Fournisseur ou Sous-traitant — et la demande d'achat dont elle est issue s'il y en a une), <b>Fournisseur / ST</b>, <b>Articles</b>, <b>Affaire</b>, <b>Montant HT</b>, <b>Émis le</b>, <b>Arrivée prévue</b>, <b>Reçu le</b>, <b>Statut</b>, <b>Certificat matière</b> (pastille violette <b>« Certificat requis »</b> ou « non requis », avec le bouton <b>Exiger</b> ou <b>Retirer</b>), <b>Validation fournisseur</b>, et au bout de la ligne le bouton bleu <b>« Date d'arrivée »</b> (icône calendrier). Quand une date a déjà été repoussée, la <b>première date promise</b> reste affichée en petit sous la nouvelle, en ambre, avec la mention <b>« 1re »</b> : vous gardez sous les yeux ce que le fournisseur avait annoncé au départ. Sur les lignes dont la marchandise est <b>déjà arrivée</b>, le bouton bleu laisse place à une <b>pastille grise portant un cadenas</b> et la mention <b>« Figée »</b> : il n'y a plus rien à changer sur cette commande.</p>
     <figure class="shot">
       <img src="../../assets/achats-bc.png" alt="Capture de l'onglet Bons de commande" loading="lazy">
-      <figcaption><b>Bons de commande</b> — la recherche et le compteur ambre « sans date d'arrivée » au-dessus du tableau ; sur chaque ligne, l'arrivée prévue (avec la 1re date en ambre si elle a été repoussée) et le bouton « Date d'arrivée » — remplacé par la pastille grise « Figée » sur les commandes déjà réceptionnées.</figcaption>
+      <figcaption><b>Bons de commande</b> — la recherche et le compteur ambre « sans date d'arrivée » au-dessus du tableau ; sur chaque ligne, l'arrivée prévue (avec la 1re date en ambre si elle a été repoussée) et le bouton « Date d'arrivée » — remplacé par la pastille grise « Figée » sur les commandes déjà réceptionnées ; la colonne « Certificat matière » dit si le fournisseur doit joindre un certificat et permet de l'exiger ou de le retirer.</figcaption>
     </figure>
 
     <h3>Pas à pas — changer la date d'arrivée d'un bon de commande</h3>
@@ -201,6 +204,14 @@
       <li>La liste se remet à jour : la nouvelle date s'affiche dans la colonne <b>Arrivée prévue</b>, la date promise à l'origine passe juste en dessous en ambre avec la mention <b>« 1re »</b>, et la commande disparaît du compteur « sans date d'arrivée » si elle n'en avait pas.</li>
     </ol>
 
+    <h3>Pas à pas — exiger (ou retirer) un certificat matière sur un bon de commande</h3>
+    <ol class="steps">
+      <li>Dans la colonne <b>Certificat matière</b>, cliquez <b>« Exiger »</b> sur la commande concernée (ou <b>« Retirer »</b> si l'exigence n'a plus lieu d'être).</li>
+      <li>Confirmez. La pastille passe à <b>« Certificat requis »</b> (ou « non requis »).</li>
+      <li>Si le bon de commande est <b>déjà parti chez le fournisseur</b>, rééditez son PDF et renvoyez-le : la mention « Certificat matière exigé : il doit accompagner la livraison. Sans certificat, la réception sera déclarée non conforme. » y figure désormais.</li>
+    </ol>
+    <div class="warn"><b>Verrou après contrôle.</b> Dès qu'un <b>PV de réception conforme</b> est signé pour ce bon de commande, l'exigence ne se modifie plus : le bouton laisse place à un <b>cadenas « PV conforme »</b>. La marchandise a été acceptée sur la base de ce que le contrôleur a vérifié — changer l'exigence après coup le réécrirait. Une commande annulée ne se modifie pas non plus.</div>
+
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
       <li>La date d'arrivée reste modifiable <b>tant que la marchandise n'est pas arrivée</b> — y compris sur une commande <b>déjà validée par le fournisseur</b> : celui-ci peut annoncer un décalage après coup, et une date saisie de travers peut toujours être corrigée tant que rien n'est livré.</li>
@@ -209,8 +220,9 @@
       <li>L'ERP <b>gèle la première date promise</b>. C'est elle, et non la date repoussée, qui sert à calculer l'<b>OTD</b> (ponctualité) du fournisseur affiché dans l'onglet <a href="#tab-scorecard">Scorecard</a> : un fournisseur ne peut pas « racheter » sa ponctualité en décalant ses dates. C'est aussi pour cela que la 1re date reste visible en ambre.</li>
       <li>La liste ne filtre rien : elle couvre les BC fournisseurs <b>et</b> sous-traitants, en attente comme déjà reçus, y compris les proformas en attente de paiement. Seules les commandes <b>annulées</b> en sont exclues.</li>
       <li>Une commande <b>sans date d'arrivée</b> n'est attendue par personne : elle ne peut être ni relancée à temps, ni comptée dans la ponctualité du fournisseur. Le compteur ambre est là pour vous les faire renseigner.</li>
+      <li><b>Certificat matière</b> : l'exigence se pose à la création (case « Certificat matière requis ») ou ici, sur une commande existante. À la réception, le contrôleur des Expéditions confirme le certificat ; sans lui, le PV est non conforme et la non-conformité le mentionne. Si vous changez l'exigence pendant qu'un contrôleur a la page ouverte, son PV est refusé et il doit recharger : prévenez-le.</li>
     </ul>
-    <div class="note"><b>Bon à savoir :</b> le réceptionnaire dispose du même geste de son côté — dans <b>Expéditions → Réceptions</b>, un crayon sur les files « À réceptionner » et « En attente de validation fournisseur » permet de corriger la date quand le fournisseur annonce un retard. Les deux chemins écrivent la même date : peu importe qui la saisit. La même règle s'y applique — ces deux files ne contiennent que des commandes <b>encore attendues</b>, donc le geste y reste possible ; sur une commande déjà arrivée, la fenêtre grise le champ date et affiche <b>« Date figée depuis la réception »</b> à la place du bouton d'enregistrement.</div>
+    <div class="note"><b>Bon à savoir :</b> la date d'arrivée ne se change <b>que dans cet onglet</b> : la fenêtre de date des Expéditions a été retirée. Les Expéditions, elles, voient la commande dans leur <b>Calendrier</b> à la date que vous saisissez ici, et c'est de là qu'elles la réceptionnent.</div>
     <div class="astuce"><b>Astuce :</b> commencez votre semaine par le compteur ambre « sans date d'arrivée ». Une fois toutes les commandes datées, la colonne <b>Arrivée prévue</b> vous dit d'un coup d'œil ce qui doit tomber dans les jours qui viennent, et donc qui relancer.</div>
   </section>
 

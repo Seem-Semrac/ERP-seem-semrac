@@ -93,7 +93,9 @@
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
       <li>La plupart des PV arrivent <b>automatiquement</b> depuis les autres services (OAS, Production, Expéditions) : la création manuelle sert surtout aux cas hors flux.</li>
-      <li>Utilisez le filtre d'origine avant de chercher : un PV de réception se trouve sous « BL Fournisseur », pas sous « BDT ».</li>
+      <li>Utilisez le filtre d'origine avant de chercher : un PV de réception se trouve sous « BL Fournisseur », pas sous « BDT » (et un retour de sous-traitance sous « BL Sous-traitant »).</li>
+      <li><b>Les PV de réception fournisseur se font aux Expéditions</b> (onglet Réceptions → « PV à faire »), par une personne qui a l'<b>écriture sur les Expéditions</b>, choisie comme contrôleur dans une liste. ⚠ Depuis le 14/09/2026, un compte Qualité <b>ne peut plus signer un PV de réception</b> : si c'est votre rôle dans l'entreprise, faites cocher « Écrire » sur les Expéditions dans votre fiche salarié (RH → Employés) — <b>en gardant cochés vos autres services</b>, Qualité compris, sinon vous les perdriez.</li>
+      <li>Le PV de réception garde en base le détail du contrôle : les lignes du bon de commande avec la réponse Oui / Non et l'observation, l'observation générale, le certificat matière (non requis, confirmé ou absent) et le contrôleur. Ce détail n'est pas repris dans le tableau de cet onglet : pour le lire, ouvrez la non-conformité liée ou la quarantaine du lot, qui en reprennent les écarts.</li>
     </ul>
     <div class="astuce"><b>Astuce :</b> le bouton « Libérer lot » d'une ligne de PV est le raccourci le plus court vers l'onglet Libération Lots quand le contrôle final vient d'être passé.</div>
   </section>
@@ -148,7 +150,7 @@
         <tr><td>Catégorie</td><td>Administratif / Production</td><td>Oui</td><td>Détermine le filtre de la liste et si une entité est requise.</td></tr>
         <tr><td>Entité</td><td>Seem / Semrac</td><td>Oui si Production</td><td>Site concerné — masqué pour une NC administrative.</td></tr>
         <tr><td>Gravité</td><td>Mineure / Majeure / Critique / Bloquante</td><td>Non (Majeure par défaut)</td><td>Pilote l'urgence ; Critique/Bloquante = priorité « urgent » en validation Direction.</td></tr>
-        <tr><td>Détecteur</td><td>Opérateur / Contrôleur / Client / Auditeur / Réception</td><td>Non</td><td>Qui a détecté — détermine le badge d'origine (Auto-BDT, Auto-OAS, Client, Fournisseur, Audit, Manuel).</td></tr>
+        <tr><td>Détecteur</td><td>Opérateur / Contrôleur / Client / Auditeur / Réception</td><td>Non</td><td>Qui a détecté — détermine le badge d'origine (Auto-BDT, Auto-OAS, Client, Fournisseur, Audit, Manuel). Une NC née d'un PV de réception non conforme porte « <b>Réception</b> » : elle garde ce détecteur quand vous la ré-enregistrez, et le nom du contrôleur figure dans sa description.</td></tr>
         <tr><td>Nature de la NC / de la cause</td><td>Listes</td><td>Non</td><td>Vocabulaires contrôlés — alimentent le Pareto du Dashboard.</td></tr>
         <tr><td>Action immédiate / Statut / Responsable</td><td>Listes</td><td>Non</td><td>Suivi du traitement.</td></tr>
         <tr><td>Fournisseur / ST · Client</td><td>Texte</td><td>Non</td><td>Raison sociale selon l'origine — le champ Client active le bouton « Retour ».</td></tr>
@@ -327,8 +329,9 @@
 
     <h3>Pas à pas — décider d'un lot reçu d'un fournisseur (bouton « Décider »)</h3>
     <p>Un <b>PV de contrôle de réception non conforme</b> (Expéditions → Réceptions) envoie <b>toujours</b> le lot en quarantaine, avec une non-conformité « réception fournisseur ». Rien n'est entré en stock : c'est ici qu'on tranche.</p>
+    <p>Le <b>motif de mise en quarantaine</b> et la <b>description de la NC</b> reprennent le détail du contrôle, une ligne par écart : l'observation générale, puis « Ligne n · référence · désignation : observation » pour chaque ligne du bon de commande jugée non conforme, puis « Certificat matière absent ou non conforme » si le bon de commande l'exigeait et qu'il manquait, et le nom du contrôleur. Quand une seule ligne est en écart, la NC porte aussi sa référence et sa désignation ; le nombre de pièces est la quantité reçue.</p>
     <ol class="steps">
-      <li>Sur la ligne du lot, cliquez le bouton rouge <b>« Décider »</b>. La fenêtre rappelle le <b>fournisseur</b>, le <b>n° de bon de commande</b>, le <b>n° de BL</b>, la <b>NC</b> et le <b>motif de mise en quarantaine</b>.</li>
+      <li>Sur la ligne du lot, cliquez le bouton rouge <b>« Décider »</b>. La fenêtre rappelle le <b>fournisseur</b>, le <b>n° de bon de commande</b>, le <b>n° de BL</b>, la <b>NC</b> et le <b>motif de mise en quarantaine</b>, affiché ligne par ligne (dans la liste, le motif complet s'affiche au survol).</li>
       <li>Vérifiez la <b>quantité du lot</b> : elle est reprise du bon de livraison. Ne la corrigez que si elle est <b>inconnue</b>.</li>
       <li>Choisissez ce qu'on fait du lot :
         <ul class="points">
@@ -343,6 +346,7 @@
     </ol>
     <ul class="points">
       <li>Le <b>rebut</b> décidé ici est inscrit au <b>registre des déchets</b> du service Environnement.</li>
+      <li><b>Bon de commande à plusieurs articles</b> : l'entrée en stock se fait ligne par ligne, sur l'article de chaque ligne, <b>seulement si tout le lot est accepté</b> (dérogation sur tout le lot). Une entrée partielle ne dit pas quelles lignes entrent : rien n'est crédité automatiquement et l'ERP le signale (« Stock non crédité » ou « Entrée en stock incomplète »).</li>
       <li>L'<b>avoir</b> part dans <b>Achats → Avoirs fournisseurs</b>, au statut « À recevoir » : c'est l'acheteur qui le réclame et le suit ensuite.</li>
       <li>Le <b>retour</b> à expédier apparaît dans <b>Expéditions → Envois</b>, carte « Retours fournisseurs ».</li>
     </ul>
