@@ -6,7 +6,7 @@
 
 La Production reçoit les **commandes** acceptées côté Commercial. Chaque commande est découpée en **lots**, et chaque lot en **BDT** (bons de travail) : une opération précise (tronçonnage, pliage, usinage…) à faire sur une pièce. Le service **planifie** ces BDT sur le planning Gantt, les **affecte** aux opérateurs ou aux postes atelier, suit leur **démarrage** et leur **clôture**, enregistre la **matière consommée**, et envoie certaines opérations en **sous-traitance** chez un prestataire extérieur.
 
-En sortie, la Production alimente : la **Qualité** (une non-conformité déclarée en fin d'opération crée une fiche NC), le **Stock** (les sorties matière décrémentent le stock), et le **coût de revient** de la commande (temps réel × coût chargé de l'opérateur, + taux horaire machine du process pour un BDT machine, + matière). Quand tous les BDT d'une commande sont soldés, l'affaire peut avancer vers l'expédition et la facturation.
+En sortie, la Production alimente : la **Qualité** (une non-conformité déclarée en fin d'opération, ou un **PV de non-conformité** émis depuis le bandeau, crée une fiche NC), les **Achats** (demandes d'achat de l'atelier), le **Stock** (les sorties matière décrémentent le stock), et le **coût de revient** de la commande (temps réel × coût chargé de l'opérateur, + taux horaire machine du process pour un BDT machine, + matière). Quand tous les BDT d'une commande sont soldés, l'affaire peut avancer vers l'expédition et la facturation.
 
 ## Étape 1 — Créer et affecter un BDT (bon de travail)
 **⬅️ Avant :** Une commande client a été acceptée (Commercial) et découpée en lots. Il reste à programmer les opérations une par une.
@@ -37,10 +37,10 @@ Sur cet écran, vous renseignez :
 ![Planning Gantt de la production avec les BDT affectés aux opérateurs](../../assets/production-service.png)
 
 Depuis le planning, clic droit sur la barre du BDT → « Passer à Reçu ». Une petite fenêtre de signature s'ouvre :
-- **Matricule** — le matricule de l'opérateur qui prend le travail : c'est la preuve de **qui** a démarré.
-- **Code PIN** — son code secret à 4 chiffres, qui confirme son identité.
+- **Matricule** — le matricule de la personne qui prend le travail : un **opérateur**, ou une personne qui **écrit en Production** (chef d'atelier). C'est la preuve de **qui** a démarré.
+- **Code PIN** — son code secret, qui confirme son identité.
 
-**➡️ Ensuite :** le BDT passe au statut « Reçu / En cours » et l'**heure de début** est figée. C'est elle qui servira à calculer le temps réellement passé au moment du soldage.
+**➡️ Ensuite :** le BDT passe au statut « Reçu / En cours » et l'**heure de début** est figée. C'est elle qui servira à calculer le temps réellement passé au moment du soldage. La personne qui a reçu le bon en devient la **réalisatrice** (« Reçu par ») : c'est son coût horaire qui valorise le temps, et c'est elle — ou une personne qui écrit en Production — qui pourra le solder.
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/production.md).
 
@@ -68,9 +68,11 @@ Sur le planning, clic droit sur la barre → « Solder le BDT ». Vous renseigne
 - **Résultat** — Conforme / Reprise partielle / Non-conformité. « Non-conformité » crée **automatiquement une fiche NC** envoyée à la Qualité.
 - **Quantité produite** — le nombre de pièces réellement fabriquées.
 - **Observations / incidents** — anomalies, casses d'outils, écarts constatés.
-- **Matricule + Code PIN** — la signature de l'opérateur qui solde : elle trace **qui** a clôturé.
+- **Matricule + Code PIN** — la signature de la personne qui solde : elle trace **qui** a clôturé. Seuls **l'opérateur qui a reçu ce BDT** (nommé en « Reçu par ») ou **une personne habilitée à écrire en Production** peuvent solder ; tout autre matricule est refusé avec ce message.
 
-**➡️ Ensuite :** le BDT passe à « Soldé », le temps réel est comparé à l'estimé (l'écart nourrit les indicateurs). Si vous avez choisi « Non-conformité », une **fiche NC part vers la Qualité**. Quand tous les BDT d'une commande sont soldés, l'affaire peut avancer vers l'**expédition** et la **facturation**.
+![Fenêtre de soldage d'un BDT](../../assets/form-production-soldage.png)
+
+**➡️ Ensuite :** le BDT passe à « Soldé », le temps réel est comparé à l'estimé (l'écart nourrit les indicateurs). Si vous avez choisi « Non-conformité », une **fiche NC part vers la Qualité**. Quand tous les BDT d'une commande sont soldés, l'affaire peut avancer vers l'**expédition** et la **facturation**. La **matrice de compétences** ne bloque plus le soldage : si l'opérateur n'a pas de niveau pour ce process, le soldage passe et une notification orange invite à la mettre à jour (RH › Compétences).
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/production.md).
 
@@ -102,6 +104,20 @@ Onglet Présence opérateurs → « Programmer la semaine ». Vous renseignez :
 - **Opérateurs cibles** — une case par opérateur ; des boutons permettent de tout cocher/décocher ou de sélectionner par site (Seem / Semrac).
 
 **➡️ Ensuite :** les créneaux de présence s'affichent sur le **planning Gantt**. Les opérateurs disponibles deviennent des lignes cibles pour glisser les BDT. Les jours déjà marqués en absence RH ne sont **pas** modifiés, même si l'opérateur est coché.
+
+> 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/production.md).
+
+## Étape 7 — Demander un achat ou signaler une non-conformité depuis l'atelier
+**⬅️ Avant :** À l'atelier, il manque une matière, un accessoire ou une fourniture pour une machine ; ou un défaut est constaté sur des pièces, rattaché ou non à une affaire.
+**📝 Ici, vous :** (personne ayant l'**écriture sur la Production**, par exemple le chef d'atelier) utilisez les deux boutons du bandeau du service, en haut à droite, depuis n'importe quel onglet — chacun signé par **matricule + code PIN** :
+- **« Demande d'achat »** — le formulaire complet s'ouvre dès le clic : nature (Matière / Accessoire / Machine (OPEX) avec la machine concernée), article, référence, quantité et unité, affaire, poste, priorité, livraison souhaitée, fournisseur suggéré.
+- **« PV de non-conformité »** (rouge) — constat (date, type, entité, gravité), rattachement facultatif (affaire, puis lot et BDT de cette affaire, code pièce, quantité, poste de détection), défaut (nature, imputation, description, cause, action immédiate, traitement proposé) et case « Mettre en quarantaine ».
+
+![Formulaire Demande d'achat — Production](../../assets/form-production-da.png)
+
+![Formulaire PV de non-conformité — Production](../../assets/form-production-pvnc.png)
+
+**➡️ Ensuite :** la demande d'achat arrive dans **Achats › Demandes d'achat** (« Prénom Nom (Production) », à traiter) ; l'acheteur en fait un bon de commande. Le PV devient une non-conformité **NC-2026-…** dans **Qualité › Non-Conformités** (catégorie Production, statut Ouvert, à votre nom). Une gravité Critique ou Bloquante rattachée à une affaire **bloque son expédition** ; une quarantaine bloque l'expédition du lot. Un matricule sans écriture Production est refusé — un opérateur fait saisir sa demande par son chef.
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/production.md).
 

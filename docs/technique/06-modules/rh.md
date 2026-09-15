@@ -53,5 +53,14 @@ Navigation par pages (pas de serviceHeader). Habilitations partagées RH+Qualit�
   `src/shared.ts`) : Matin 6h-14h · Journée 7h-17h · Après-midi 14h-22h · **Soirée 22h-6h** (ancien libellé
   « Nuit » ; identifiant `soir` et horaires inchangés). ⚠ `SHIFT_HMS` (pointages déduits des présences) et la
   table `shifts` n'ont pas été modifiés.
+- **Matrice de compétences = identifiants de process** (constat du 15/09/2026) : `competences_operateur.operation`
+  contient l'**id** du process (`buildOpsForMatrix` : `code = p.id`, ex. `proc-man-s1`, `PROC-2026-018`), pas le libellé
+  d'opération. Tout contrôle qui la lit doit comparer `bons_de_travail.process_id` (le soldage d'un BDT comparait le
+  libellé : il refusait tout le monde ; il n'avertit plus que, voir `production.md`). Remettre une cellule à « — » laisse
+  une ligne de niveau 0.
+- **`PATCH /api/rh/salarie/:id` avec `acces_services`** (15/09/2026) : quand la fiche n'a **aucune** autorisation
+  fonctionnelle (hors jetons `lire:`/`ecrire:`), la base de fusion est `autorisationsUnion(rôles de la fiche)`. Avant,
+  cocher un accès enregistrait des jetons seuls : au login la liste n'était plus vide et la personne perdait `pointage`,
+  `soldage`… (un opérateur ne pouvait plus solder le BDT qu'il avait reçu).
 ---
 > Fiche générée. Manuel utilisateur correspondant : `docs/manuel/rh.md`. Voir aussi `04-auth-rbac.md`, `07-api-reference.md`.

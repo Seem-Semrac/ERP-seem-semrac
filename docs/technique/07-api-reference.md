@@ -63,504 +63,663 @@
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| PATCH | `/api/production/bds/:id` | L6575 |
-| POST | `/api/production/bds/:id/envoyer` | L6638 |
-| POST | `/api/production/bds/:id/retour` | L6640 |
-| POST | `/api/production/bdt/:id/affecter` | L6988 |
-| POST | `/api/production/bdt/:id/deprogrammer` | L7063 |
-| POST | `/api/production/bdt/:id/recoller` | L7339 |
-| POST | `/api/production/bdt/:id/recu` | L7502 |
-| POST | `/api/production/bdt/:id/separer` | L7087 |
-| POST | `/api/production/bdt/:id/solder` | L7553 |
-| GET | `/api/production/bdt/:id/temps` | L7275 |
-| POST | `/api/production/bdt/reglage/reconstituer` | L7445 |
-| POST | `/api/production/bdts` | L6530 |
-| PATCH | `/api/production/bdts/:id` | L6496 |
-| POST | `/api/production/bst/:id/affecter-st` | L7784 |
-| POST | `/api/production/bst/affecter` | L7727 |
-| POST | `/api/production/conge/:id/valider` | L10268 |
-| POST | `/api/production/demande-achat-operateur` | L2245 |
-| POST | `/api/production/machine` | L7846 |
-| DELETE | `/api/production/machine/:id` | L7953 |
-| PATCH | `/api/production/machine/:id` | L7921 |
-| POST | `/api/production/machine/:id/panne` | L9650 |
-| POST | `/api/production/machine/:id/reparer` | L9657 |
-| POST | `/api/production/machine/reorder` | L6935 |
-| POST | `/api/production/non-conformites` | L6642 |
-| POST | `/api/production/operateur-contexte` | L2226 |
-| POST | `/api/production/poste` | L6946 |
-| DELETE | `/api/production/poste/:id` | L6967 |
-| PATCH | `/api/production/poste/:id` | L6958 |
-| POST | `/api/production/poste/reorder` | L6979 |
-| DELETE | `/api/production/presence` | L8014 |
-| GET | `/api/production/presence` | L7982 |
-| POST | `/api/production/presence` | L7993 |
-| POST | `/api/production/process` | L6875 |
-| DELETE | `/api/production/process/:id` | L6920 |
-| PATCH | `/api/production/process/:id` | L6899 |
-| POST | `/api/production/process/reorder` | L6928 |
-| POST | `/api/production/sortie-matiere` | L8295 |
+| PATCH | `/api/production/bds/:id` | L6686 |
+| POST | `/api/production/bds/:id/envoyer` | L6749 |
+| POST | `/api/production/bds/:id/retour` | L6751 |
+| POST | `/api/production/bdt/:id/affecter` | L7105 |
+| POST | `/api/production/bdt/:id/deprogrammer` | L7180 |
+| POST | `/api/production/bdt/:id/recoller` | L7456 |
+| POST | `/api/production/bdt/:id/recu` | L7619 |
+| POST | `/api/production/bdt/:id/separer` | L7204 |
+| POST | `/api/production/bdt/:id/solder` | L7686 |
+| GET | `/api/production/bdt/:id/temps` | L7392 |
+| POST | `/api/production/bdt/reglage/reconstituer` | L7562 |
+| POST | `/api/production/bdts` | L6641 |
+| PATCH | `/api/production/bdts/:id` | L6607 |
+| POST | `/api/production/bst/:id/affecter-st` | L7925 |
+| POST | `/api/production/bst/affecter` | L7868 |
+| POST | `/api/production/conge/:id/valider` | L10426 |
+| POST | `/api/production/demande-achat-operateur` | L2281 |
+| POST | `/api/production/machine` | L7987 |
+| DELETE | `/api/production/machine/:id` | L8094 |
+| PATCH | `/api/production/machine/:id` | L8062 |
+| POST | `/api/production/machine/:id/panne` | L9801 |
+| POST | `/api/production/machine/:id/reparer` | L9808 |
+| POST | `/api/production/machine/reorder` | L7052 |
+| POST | `/api/production/nc` | L2319 |
+| POST | `/api/production/non-conformites` | L6753 |
+| POST | `/api/production/poste` | L7063 |
+| DELETE | `/api/production/poste/:id` | L7084 |
+| PATCH | `/api/production/poste/:id` | L7075 |
+| POST | `/api/production/poste/reorder` | L7096 |
+| DELETE | `/api/production/presence` | L8155 |
+| GET | `/api/production/presence` | L8123 |
+| POST | `/api/production/presence` | L8134 |
+| POST | `/api/production/process` | L6992 |
+| DELETE | `/api/production/process/:id` | L7037 |
+| PATCH | `/api/production/process/:id` | L7016 |
+| POST | `/api/production/process/reorder` | L7045 |
+| POST | `/api/production/sortie-matiere` | L8436 |
 
 ### api/qualite
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/qualite/capabilite` | L9333 |
-| DELETE | `/api/qualite/capabilite/:id` | L9362 |
-| POST | `/api/qualite/derogation` | L8829 |
-| PATCH | `/api/qualite/derogation/:id` | L8843 |
-| POST | `/api/qualite/derogation/:id/traiter-refus` | L10587 |
-| POST | `/api/qualite/ecme` | L9170 |
-| DELETE | `/api/qualite/ecme/:id` | L9209 |
-| PATCH | `/api/qualite/ecme/:id` | L9182 |
-| POST | `/api/qualite/ecme/:id/etalonner` | L9196 |
-| GET | `/api/qualite/ecme/:id/fiche-vie.pdf` | L9258 |
-| POST | `/api/qualite/ecme/:id/verification` | L9215 |
-| DELETE | `/api/qualite/ecme/verification/:vid` | L9252 |
-| PATCH | `/api/qualite/ecme/verification/:vid` | L9244 |
-| POST | `/api/qualite/lot/:id/liberer` | L6717 |
-| POST | `/api/qualite/nc/:id/quarantaine` | L10643 |
-| POST | `/api/qualite/nc/:id/traiter-retour` | L10527 |
-| PATCH | `/api/qualite/non-conformites/:id` | L10504 |
-| POST | `/api/qualite/perissable` | L8684 |
-| DELETE | `/api/qualite/perissable/:id` | L8698 |
-| PATCH | `/api/qualite/perissable/:id` | L8692 |
-| POST | `/api/qualite/perissable/:id/sortie` | L8704 |
-| POST | `/api/qualite/plan-controle` | L8723 |
-| DELETE | `/api/qualite/plan-controle/:id` | L8741 |
-| PATCH | `/api/qualite/plan-controle/:id` | L8732 |
-| POST | `/api/qualite/quarantaine/:id/decision-fournisseur` | L10746 |
-| POST | `/api/qualite/quarantaine/:id/statuer` | L10662 |
-| POST | `/api/qualite/rapports-8d` | L10460 |
-| PATCH | `/api/qualite/rapports-8d/:id` | L10485 |
+| POST | `/api/qualite/capabilite` | L9474 |
+| DELETE | `/api/qualite/capabilite/:id` | L9503 |
+| POST | `/api/qualite/derogation` | L8970 |
+| PATCH | `/api/qualite/derogation/:id` | L8984 |
+| POST | `/api/qualite/derogation/:id/traiter-refus` | L10745 |
+| POST | `/api/qualite/ecme` | L9311 |
+| DELETE | `/api/qualite/ecme/:id` | L9350 |
+| PATCH | `/api/qualite/ecme/:id` | L9323 |
+| POST | `/api/qualite/ecme/:id/etalonner` | L9337 |
+| GET | `/api/qualite/ecme/:id/fiche-vie.pdf` | L9399 |
+| POST | `/api/qualite/ecme/:id/verification` | L9356 |
+| DELETE | `/api/qualite/ecme/verification/:vid` | L9393 |
+| PATCH | `/api/qualite/ecme/verification/:vid` | L9385 |
+| POST | `/api/qualite/lot/:id/liberer` | L6834 |
+| POST | `/api/qualite/nc/:id/quarantaine` | L10801 |
+| POST | `/api/qualite/nc/:id/traiter-retour` | L10685 |
+| PATCH | `/api/qualite/non-conformites/:id` | L10662 |
+| POST | `/api/qualite/perissable` | L8825 |
+| DELETE | `/api/qualite/perissable/:id` | L8839 |
+| PATCH | `/api/qualite/perissable/:id` | L8833 |
+| POST | `/api/qualite/perissable/:id/sortie` | L8845 |
+| POST | `/api/qualite/plan-controle` | L8864 |
+| DELETE | `/api/qualite/plan-controle/:id` | L8882 |
+| PATCH | `/api/qualite/plan-controle/:id` | L8873 |
+| POST | `/api/qualite/quarantaine/:id/decision-fournisseur` | L10904 |
+| POST | `/api/qualite/quarantaine/:id/statuer` | L10820 |
+| POST | `/api/qualite/rapports-8d` | L10618 |
+| PATCH | `/api/qualite/rapports-8d/:id` | L10643 |
 
 ### api/achats
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/achats/avoirs-fournisseurs` | L1836 |
-| POST | `/api/achats/avoirs-fournisseurs/:id/annuler` | L1936 |
-| POST | `/api/achats/avoirs-fournisseurs/:id/imputer` | L1896 |
-| POST | `/api/achats/avoirs-fournisseurs/:id/recu` | L1871 |
-| POST | `/api/achats/bc` | L2528 |
-| POST | `/api/achats/bc/:id/certificat-matiere` | L4083 |
-| POST | `/api/achats/da` | L2198 |
-| PATCH | `/api/achats/da/:id` | L2329 |
-| POST | `/api/achats/da/:id/defusionner` | L2465 |
-| POST | `/api/achats/da/:id/editer` | L2348 |
-| POST | `/api/achats/da/:id/masquer` | L2379 |
-| POST | `/api/achats/da/:id/soumettre` | L2574 |
-| POST | `/api/achats/da/fusionner` | L2406 |
-| POST | `/api/achats/da/regrouper` | L2496 |
-| POST | `/api/achats/fournisseur` | L2069 |
-| POST | `/api/achats/sous-traitant` | L2091 |
+| POST | `/api/achats/avoirs-fournisseurs` | L1841 |
+| POST | `/api/achats/avoirs-fournisseurs/:id/annuler` | L1941 |
+| POST | `/api/achats/avoirs-fournisseurs/:id/imputer` | L1901 |
+| POST | `/api/achats/avoirs-fournisseurs/:id/recu` | L1876 |
+| POST | `/api/achats/bc` | L2639 |
+| POST | `/api/achats/bc/:id/certificat-matiere` | L4194 |
+| POST | `/api/achats/da` | L2203 |
+| PATCH | `/api/achats/da/:id` | L2440 |
+| POST | `/api/achats/da/:id/defusionner` | L2576 |
+| POST | `/api/achats/da/:id/editer` | L2459 |
+| POST | `/api/achats/da/:id/masquer` | L2490 |
+| POST | `/api/achats/da/:id/soumettre` | L2685 |
+| POST | `/api/achats/da/fusionner` | L2517 |
+| POST | `/api/achats/da/regrouper` | L2607 |
+| POST | `/api/achats/fournisseur` | L2074 |
+| POST | `/api/achats/sous-traitant` | L2096 |
 
 ### api/audit
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/audit/constat-to-nc` | L8798 |
-| POST | `/api/audit/fai` | L8794 |
-| DELETE | `/api/audit/fai/:id` | L8796 |
-| PATCH | `/api/audit/fai/:id` | L8795 |
-| POST | `/api/audit/grille` | L8786 |
-| DELETE | `/api/audit/grille/:id` | L8788 |
-| PATCH | `/api/audit/grille/:id` | L8787 |
-| GET | `/api/audit/grille/:id/vierge.pdf` | L4047 |
-| POST | `/api/audit/programme` | L8759 |
-| DELETE | `/api/audit/programme/:id` | L8771 |
-| PATCH | `/api/audit/programme/:id` | L8765 |
-| GET | `/api/audit/programme/:id/rapport.pdf` | L4017 |
-| POST | `/api/audit/programme/reconduire` | L8777 |
-| POST | `/api/audit/question` | L8790 |
-| DELETE | `/api/audit/question/:id` | L8792 |
-| PATCH | `/api/audit/question/:id` | L8791 |
+| POST | `/api/audit/constat-to-nc` | L8939 |
+| POST | `/api/audit/fai` | L8935 |
+| DELETE | `/api/audit/fai/:id` | L8937 |
+| PATCH | `/api/audit/fai/:id` | L8936 |
+| POST | `/api/audit/grille` | L8927 |
+| DELETE | `/api/audit/grille/:id` | L8929 |
+| PATCH | `/api/audit/grille/:id` | L8928 |
+| GET | `/api/audit/grille/:id/vierge.pdf` | L4158 |
+| POST | `/api/audit/programme` | L8900 |
+| DELETE | `/api/audit/programme/:id` | L8912 |
+| PATCH | `/api/audit/programme/:id` | L8906 |
+| GET | `/api/audit/programme/:id/rapport.pdf` | L4128 |
+| POST | `/api/audit/programme/reconduire` | L8918 |
+| POST | `/api/audit/question` | L8931 |
+| DELETE | `/api/audit/question/:id` | L8933 |
+| PATCH | `/api/audit/question/:id` | L8932 |
 
 ### api/rh
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/rh/certification` | L10103 |
-| DELETE | `/api/rh/certification/:id` | L10133 |
-| PATCH | `/api/rh/certification/:id` | L10123 |
-| POST | `/api/rh/competence` | L9871 |
-| POST | `/api/rh/conge` | L10141 |
-| POST | `/api/rh/conge/:id/valider` | L10249 |
-| GET | `/api/rh/export-silae` | L10010 |
-| POST | `/api/rh/pointage` | L10318 |
-| POST | `/api/rh/salarie` | L9955 |
-| DELETE | `/api/rh/salarie/:id` | L10086 |
-| PATCH | `/api/rh/salarie/:id` | L10043 |
+| POST | `/api/rh/certification` | L10261 |
+| DELETE | `/api/rh/certification/:id` | L10291 |
+| PATCH | `/api/rh/certification/:id` | L10281 |
+| POST | `/api/rh/competence` | L10022 |
+| POST | `/api/rh/conge` | L10299 |
+| POST | `/api/rh/conge/:id/valider` | L10407 |
+| GET | `/api/rh/export-silae` | L10161 |
+| POST | `/api/rh/pointage` | L10476 |
+| POST | `/api/rh/salarie` | L10106 |
+| DELETE | `/api/rh/salarie/:id` | L10244 |
+| PATCH | `/api/rh/salarie/:id` | L10194 |
 
 ### api/offre
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| DELETE | `/api/offre/:id` | L1336 |
-| PATCH | `/api/offre/:id` | L1259 |
-| POST | `/api/offre/:id/accepter` | L1174 |
-| GET | `/api/offre/:id/devis` | L849 |
-| POST | `/api/offre/:id/envoyer` | L821 |
-| POST | `/api/offre/:id/negocier` | L896 |
-| POST | `/api/offre/:id/pricing` | L1285 |
-| POST | `/api/offre/:id/refuser` | L887 |
-| POST | `/api/offre/:id/valider` | L839 |
+| DELETE | `/api/offre/:id` | L1341 |
+| PATCH | `/api/offre/:id` | L1264 |
+| POST | `/api/offre/:id/accepter` | L1179 |
+| GET | `/api/offre/:id/devis` | L854 |
+| POST | `/api/offre/:id/envoyer` | L826 |
+| POST | `/api/offre/:id/negocier` | L901 |
+| POST | `/api/offre/:id/pricing` | L1290 |
+| POST | `/api/offre/:id/refuser` | L892 |
+| POST | `/api/offre/:id/valider` | L844 |
 
 ### api/expeditions
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/expeditions/bc/:id/date-arrivee` | L3208 |
-| POST | `/api/expeditions/bc/:id/pv` | L3230 |
-| POST | `/api/expeditions/bc/:id/receptionner` | L2962 |
-| POST | `/api/expeditions/bds/:id/envoyer` | L6637 |
-| POST | `/api/expeditions/bds/:id/retour` | L6639 |
-| POST | `/api/expeditions/bl-partiel` | L3440 |
-| POST | `/api/expeditions/bl/:id/reception-infos` | L3079 |
-| POST | `/api/expeditions/retour-client/:ncId/receptionner` | L3109 |
-| POST | `/api/expeditions/retour-fournisseur/:qid/expedie` | L3421 |
+| POST | `/api/expeditions/bc/:id/date-arrivee` | L3319 |
+| POST | `/api/expeditions/bc/:id/pv` | L3341 |
+| POST | `/api/expeditions/bc/:id/receptionner` | L3073 |
+| POST | `/api/expeditions/bds/:id/envoyer` | L6748 |
+| POST | `/api/expeditions/bds/:id/retour` | L6750 |
+| POST | `/api/expeditions/bl-partiel` | L3551 |
+| POST | `/api/expeditions/bl/:id/reception-infos` | L3190 |
+| POST | `/api/expeditions/retour-client/:ncId/receptionner` | L3220 |
+| POST | `/api/expeditions/retour-fournisseur/:qid/expedie` | L3532 |
 
 ### api/demandes-prix
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/demandes-prix` | L3875 |
-| DELETE | `/api/demandes-prix/:id` | L4176 |
-| GET | `/api/demandes-prix/:id` | L4112 |
-| POST | `/api/demandes-prix/:id/envoyer` | L4120 |
-| GET | `/api/demandes-prix/:id/pdf` | L3967 |
-| POST | `/api/demandes-prix/:id/reponses` | L4127 |
-| POST | `/api/demandes-prix/:id/valider` | L4147 |
-| POST | `/api/demandes-prix/grouped` | L3905 |
+| POST | `/api/demandes-prix` | L3986 |
+| DELETE | `/api/demandes-prix/:id` | L4287 |
+| GET | `/api/demandes-prix/:id` | L4223 |
+| POST | `/api/demandes-prix/:id/envoyer` | L4231 |
+| GET | `/api/demandes-prix/:id/pdf` | L4078 |
+| POST | `/api/demandes-prix/:id/reponses` | L4238 |
+| POST | `/api/demandes-prix/:id/valider` | L4258 |
+| POST | `/api/demandes-prix/grouped` | L4016 |
 
 ### api/nomenclature
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/nomenclature` | L4854 |
-| DELETE | `/api/nomenclature/:id` | L5093 |
-| PUT | `/api/nomenclature/:id` | L4937 |
-| GET | `/api/nomenclature/:id/fournitures` | L4225 |
-| GET | `/api/nomenclature/:id/journal` | L4209 |
-| POST | `/api/nomenclature/:id/nouvel-indice` | L5049 |
-| POST | `/api/nomenclature/:id/prepa-validee` | L11531 |
-| POST | `/api/nomenclature/:id/programmes` | L5018 |
+| POST | `/api/nomenclature` | L4965 |
+| DELETE | `/api/nomenclature/:id` | L5204 |
+| PUT | `/api/nomenclature/:id` | L5048 |
+| GET | `/api/nomenclature/:id/fournitures` | L4336 |
+| GET | `/api/nomenclature/:id/journal` | L4320 |
+| POST | `/api/nomenclature/:id/nouvel-indice` | L5160 |
+| POST | `/api/nomenclature/:id/prepa-validee` | L11689 |
+| POST | `/api/nomenclature/:id/programmes` | L5129 |
 
 ### api/maintenance
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/maintenance/om` | L9663 |
-| PATCH | `/api/maintenance/om/:id` | L9729 |
-| POST | `/api/maintenance/om/:id/cloturer` | L9741 |
-| POST | `/api/maintenance/piece` | L9758 |
-| DELETE | `/api/maintenance/piece/:id` | L9787 |
-| PATCH | `/api/maintenance/piece/:id` | L9775 |
-| POST | `/api/maintenance/preventif/generer` | L9725 |
+| POST | `/api/maintenance/om` | L9814 |
+| PATCH | `/api/maintenance/om/:id` | L9880 |
+| POST | `/api/maintenance/om/:id/cloturer` | L9892 |
+| POST | `/api/maintenance/piece` | L9909 |
+| DELETE | `/api/maintenance/piece/:id` | L9938 |
+| PATCH | `/api/maintenance/piece/:id` | L9926 |
+| POST | `/api/maintenance/preventif/generer` | L9876 |
 
 ### api/plans
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/plans` | L4662 |
-| PATCH | `/api/plans/:id` | L4670 |
-| GET | `/api/plans/:id/marqueurs` | L4678 |
-| POST | `/api/plans/:id/marqueurs` | L4681 |
-| POST | `/api/plans/entity` | L4707 |
-| DELETE | `/api/plans/marqueur/:id` | L4699 |
+| POST | `/api/plans` | L4773 |
+| PATCH | `/api/plans/:id` | L4781 |
+| GET | `/api/plans/:id/marqueurs` | L4789 |
+| POST | `/api/plans/:id/marqueurs` | L4792 |
+| POST | `/api/plans/entity` | L4818 |
+| DELETE | `/api/plans/marqueur/:id` | L4810 |
 
 ### api/dt
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/dt` | L705 |
-| GET | `/api/dt/:id` | L677 |
-| PUT | `/api/dt/:id` | L747 |
-| POST | `/api/dt/:id/analyse` | L1444 |
-| POST | `/api/dt/:id/valider` | L1419 |
+| POST | `/api/dt` | L710 |
+| GET | `/api/dt/:id` | L682 |
+| PUT | `/api/dt/:id` | L752 |
+| POST | `/api/dt/:id/analyse` | L1449 |
+| POST | `/api/dt/:id/valider` | L1424 |
 
 ### api/be
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/be/analyse-dt/:id` | L4235 |
-| POST | `/api/be/analyse-dt/:id/etapes-libres` | L4421 |
-| POST | `/api/be/analyse-dt/:id/generer-bdt` | L4464 |
-| GET | `/api/be/noms-signature` | L2724 |
-| GET | `/api/be/refs` | L4201 |
+| GET | `/api/be/analyse-dt/:id` | L4346 |
+| POST | `/api/be/analyse-dt/:id/etapes-libres` | L4532 |
+| POST | `/api/be/analyse-dt/:id/generer-bdt` | L4575 |
+| GET | `/api/be/noms-signature` | L2835 |
+| GET | `/api/be/refs` | L4312 |
 
 ### api/produits-fournisseurs
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/produits-fournisseurs` | L3814 |
-| DELETE | `/api/produits-fournisseurs/:id` | L3868 |
-| PUT | `/api/produits-fournisseurs/:id` | L3839 |
-| POST | `/api/produits-fournisseurs/purge` | L4189 |
-| GET | `/api/produits-fournisseurs/sans-prix` | L4183 |
+| POST | `/api/produits-fournisseurs` | L3925 |
+| DELETE | `/api/produits-fournisseurs/:id` | L3979 |
+| PUT | `/api/produits-fournisseurs/:id` | L3950 |
+| POST | `/api/produits-fournisseurs/purge` | L4300 |
+| GET | `/api/produits-fournisseurs/sans-prix` | L4294 |
 
 ### api/ged
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| DELETE | `/api/ged/:id` | L4615 |
-| GET | `/api/ged/file/:id` | L4596 |
-| GET | `/api/ged/nomenclature/:id` | L4582 |
-| GET | `/api/ged/ref/:ref` | L4586 |
-| POST | `/api/ged/upload` | L4539 |
+| DELETE | `/api/ged/:id` | L4726 |
+| GET | `/api/ged/file/:id` | L4707 |
+| GET | `/api/ged/nomenclature/:id` | L4693 |
+| GET | `/api/ged/ref/:ref` | L4697 |
+| POST | `/api/ged/upload` | L4650 |
 
 ### api/oas
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/oas/balancelle` | L8117 |
-| PATCH | `/api/oas/balancelle/:id` | L8283 |
-| POST | `/api/oas/balancelle/:id/cloturer` | L7654 |
-| POST | `/api/oas/releve-bain` | L8219 |
-| POST | `/api/oas/releve-eau` | L8170 |
+| POST | `/api/oas/balancelle` | L8258 |
+| PATCH | `/api/oas/balancelle/:id` | L8424 |
+| POST | `/api/oas/balancelle/:id/cloturer` | L7795 |
+| POST | `/api/oas/releve-bain` | L8360 |
+| POST | `/api/oas/releve-eau` | L8311 |
 
 ### api/clients
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/clients` | L644 |
-| DELETE | `/api/clients/:id` | L662 |
-| PATCH | `/api/clients/:id` | L652 |
-| GET | `/api/clients/search` | L622 |
+| POST | `/api/clients` | L649 |
+| DELETE | `/api/clients/:id` | L667 |
+| PATCH | `/api/clients/:id` | L657 |
+| GET | `/api/clients/search` | L627 |
 
 ### api/locks
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/locks/acquire` | L2673 |
-| POST | `/api/locks/heartbeat` | L2693 |
-| POST | `/api/locks/release` | L2705 |
-| GET | `/api/locks/status` | L2714 |
+| POST | `/api/locks/acquire` | L2784 |
+| POST | `/api/locks/heartbeat` | L2804 |
+| POST | `/api/locks/release` | L2816 |
+| GET | `/api/locks/status` | L2825 |
 
 ### api/bc
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/bc/:id/accuse` | L4063 |
-| POST | `/api/bc/:id/date-arrivee` | L3209 |
-| GET | `/api/bc/:id/pdf` | L3990 |
-| POST | `/api/bc/:id/relance` | L4071 |
+| POST | `/api/bc/:id/accuse` | L4174 |
+| POST | `/api/bc/:id/date-arrivee` | L3320 |
+| GET | `/api/bc/:id/pdf` | L4101 |
+| POST | `/api/bc/:id/relance` | L4182 |
 
 ### api/interlocuteurs
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/interlocuteurs` | L8068 |
-| POST | `/api/interlocuteurs` | L8076 |
-| DELETE | `/api/interlocuteurs/:id` | L8108 |
-| PATCH | `/api/interlocuteurs/:id` | L8096 |
+| GET | `/api/interlocuteurs` | L8209 |
+| POST | `/api/interlocuteurs` | L8217 |
+| DELETE | `/api/interlocuteurs/:id` | L8249 |
+| PATCH | `/api/interlocuteurs/:id` | L8237 |
 
 ### api/securite
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| DELETE | `/api/securite/` | L8987 |
-| PATCH | `/api/securite/` | L8980 |
-| POST | `/api/securite/` | L8973 |
-| POST | `/api/securite/duer/cloner-annee` | L9005 |
+| DELETE | `/api/securite/` | L9128 |
+| PATCH | `/api/securite/` | L9121 |
+| POST | `/api/securite/` | L9114 |
+| POST | `/api/securite/duer/cloner-annee` | L9146 |
 
 ### api/references-clients
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/references-clients` | L786 |
-| POST | `/api/references-clients` | L795 |
-| DELETE | `/api/references-clients/:id` | L809 |
+| GET | `/api/references-clients` | L791 |
+| POST | `/api/references-clients` | L800 |
+| DELETE | `/api/references-clients/:id` | L814 |
 
 ### api/credits
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/credits` | L1345 |
-| DELETE | `/api/credits/:id` | L1409 |
-| PATCH | `/api/credits/:id` | L1388 |
+| POST | `/api/credits` | L1350 |
+| DELETE | `/api/credits/:id` | L1414 |
+| PATCH | `/api/credits/:id` | L1393 |
 
 ### api/export
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/export/clients.xlsx` | L6792 |
-| GET | `/api/export/fournisseurs.xlsx` | L6761 |
-| GET | `/api/export/seirich.xlsx` | L6814 |
+| GET | `/api/export/clients.xlsx` | L6909 |
+| GET | `/api/export/fournisseurs.xlsx` | L6878 |
+| GET | `/api/export/seirich.xlsx` | L6931 |
 
 ### api/environnement
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/environnement/diagnostic-iso/init` | L9127 |
-| POST | `/api/environnement/diagnostic-iso26000/init` | L9141 |
-| POST | `/api/environnement/perissables-expires/declarer` | L9032 |
+| POST | `/api/environnement/diagnostic-iso/init` | L9268 |
+| POST | `/api/environnement/diagnostic-iso26000/init` | L9282 |
+| POST | `/api/environnement/perissables-expires/declarer` | L9173 |
 
 ### api/direction
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/direction/jalon-traite` | L11332 |
-| POST | `/api/direction/scan-alertes` | L11241 |
-| GET | `/api/direction/source` | L11365 |
+| POST | `/api/direction/jalon-traite` | L11490 |
+| POST | `/api/direction/scan-alertes` | L11399 |
+| GET | `/api/direction/source` | L11523 |
 
 ### api/quarantaine
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/quarantaine/:id/liberer` | L1237 |
-| POST | `/api/quarantaine/:id/rejeter` | L1247 |
+| POST | `/api/quarantaine/:id/liberer` | L1242 |
+| POST | `/api/quarantaine/:id/rejeter` | L1252 |
 
 ### api/fournisseurs
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| DELETE | `/api/fournisseurs/:id` | L2019 |
-| PATCH | `/api/fournisseurs/:id` | L1983 |
+| DELETE | `/api/fournisseurs/:id` | L2024 |
+| PATCH | `/api/fournisseurs/:id` | L1988 |
 
 ### api/sous-traitants
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| DELETE | `/api/sous-traitants/:id` | L2024 |
-| PATCH | `/api/sous-traitants/:id` | L2000 |
+| DELETE | `/api/sous-traitants/:id` | L2029 |
+| PATCH | `/api/sous-traitants/:id` | L2005 |
 
 ### api/factures
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| PATCH | `/api/factures/:id` | L3544 |
-| POST | `/api/factures/:id/valider-paiement` | L3593 |
+| PATCH | `/api/factures/:id` | L3655 |
+| POST | `/api/factures/:id/valider-paiement` | L3704 |
 
 ### api/factures-fournisseur
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/factures-fournisseur` | L3608 |
-| PATCH | `/api/factures-fournisseur/:id` | L3648 |
+| POST | `/api/factures-fournisseur` | L3719 |
+| PATCH | `/api/factures-fournisseur/:id` | L3759 |
 
 ### api/planning
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| DELETE | `/api/planning/affectation-poste` | L8052 |
-| POST | `/api/planning/affectation-poste` | L8028 |
+| DELETE | `/api/planning/affectation-poste` | L8193 |
+| POST | `/api/planning/affectation-poste` | L8169 |
 
 ### api/controles
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/controles/cote` | L9369 |
-| DELETE | `/api/controles/cote/:id` | L9394 |
+| POST | `/api/controles/cote` | L9510 |
+| DELETE | `/api/controles/cote/:id` | L9535 |
 
 ### api/validations
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/validations` | L11290 |
-| POST | `/api/validations/:id/decision` | L11302 |
+| POST | `/api/validations` | L11448 |
+| POST | `/api/validations/:id/decision` | L11460 |
 
 ### api/kpi-objectifs
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/kpi-objectifs` | L11490 |
-| DELETE | `/api/kpi-objectifs/:id` | L11502 |
+| POST | `/api/kpi-objectifs` | L11648 |
+| DELETE | `/api/kpi-objectifs/:id` | L11660 |
 
 ### api/login
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/login` | L245 |
+| POST | `/api/login` | L249 |
 
 ### api/version
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/version` | L283 |
+| GET | `/api/version` | L287 |
 
 ### api/me
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/me` | L295 |
+| GET | `/api/me` | L300 |
 
 ### api/contact
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/contact` | L553 |
+| POST | `/api/contact` | L558 |
 
 ### api/catalogue-fournisseurs
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/catalogue-fournisseurs` | L2032 |
+| GET | `/api/catalogue-fournisseurs` | L2037 |
 
 ### api/commandes
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/commandes/:id/generer-da` | L3694 |
+| POST | `/api/commandes/:id/generer-da` | L3805 |
 
 ### api/produit-prix
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/produit-prix` | L3792 |
+| GET | `/api/produit-prix` | L3903 |
 
 ### api/ref-prix
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/ref-prix/:reference` | L3802 |
+| GET | `/api/ref-prix/:reference` | L3913 |
 
 ### api/atex
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/atex/:id/drpce.pdf` | L9062 |
+| GET | `/api/atex/:id/drpce.pdf` | L9203 |
 
 ### api/stock
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| PATCH | `/api/stock/:id/seuils` | L9535 |
+| PATCH | `/api/stock/:id/seuils` | L9686 |
 
 ### api/commande
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/commande/:id/detail` | L9583 |
+| GET | `/api/commande/:id/detail` | L9734 |
 
 ### api/compta
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/compta/export-fec` | L10027 |
+| GET | `/api/compta/export-fec` | L10178 |
 
 ### api/pointage
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/pointage/demande-conge` | L10164 |
+| POST | `/api/pointage/demande-conge` | L10322 |
 
 ### api/commandes-p
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/commandes-p/:id/lancer` | L10909 |
+| POST | `/api/commandes-p/:id/lancer` | L11067 |
 
 ### api/prepa-technique
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/prepa-technique/:id/statut` | L11576 |
+| POST | `/api/prepa-technique/:id/statut` | L11734 |
 
 <!-- manuel:contrats -->
 ## Contrats détaillés (écrits à la main)
 
 Bloc conservé par `gen_api_ref.mjs` : les tableaux ci-dessus sont régénérés, ce bloc ne l'est pas.
+
+### Production (15/09/2026) — soldage et réception d'un BDT, demande d'achat et PV de non-conformité signés à l'atelier
+
+Famille **`production`**, aucune nouvelle famille, **aucune migration**. Les quatre routes `bdt/:id/recu`,
+`bdt/:id/solder`, `demande-achat-operateur` et `nc` sont **self-service** (`SELF_SERVICE_RE`, borne partagée) : le
+middleware laisse passer tout compte connecté, et c'est le **handler** qui juge le salarié du matricule + PIN — jamais la
+personne connectée, jamais un nom envoyé par le navigateur. « Écriture Production » d'un salarié = droits recalculés comme
+au login : `sessionDeSalarie` (rôles = `roles` sinon `[role]` ; droits = `autorisations` non vides sinon
+`autorisationsUnion(rôles)`) puis `peutEcrireService(…, 'production')` (`all`, rôle `production`, jeton
+`ecrire:production`). Règles et causes : `06-modules/production.md`, section du 15/09/2026 ; règles pures
+`src/soldage_bdt.ts` et `src/prod_da_nc.ts`.
+
+#### `POST /api/production/bdt/:id/solder` (réécrite)
+- **Corps** : `{ matricule, pin, fin: 'HH:MM', resultat?: 'ok'|'reprise'|'nc' (défaut ok), obs?, gravite_nc?:
+  'Mineure'|'Majeure'|'Critique'|'Bloquante' }`. **`bypass_competence` n'existe plus.**
+- **Réponses, dans l'ordre** (toujours `{ok:false, error}` en cas d'échec) :
+  - **400** « Matricule et code PIN requis pour solder. » · **400** « Heure de fin réelle requise (HH:MM). »
+    (`heureFinValide` : `HH` ≤ 23, `MM` ≤ 59) ;
+  - **401** « Matricule ou code PIN incorrect. » — `verifySalariePin` : **tout salarié actif**, `est_operateur`
+    indifférent. ⚠ Non stricte : Supabase en panne répond aussi 401. Le compte de secours (sans fiche salarié) : 401 ;
+  - **503** « Lecture du BDT impossible : … » (`getBDTStrict`) · **404** « BDT introuvable. » ;
+  - **409** « BDT déjà soldé. » · **409** « Ce BDT n'est pas « Reçu » : il doit d'abord être reçu (double-clic sur le
+    planning, matricule + PIN) avant d'être soldé. » (le serveur ne le vérifiait pas) ;
+  - **403** `MSG_SOLDAGE_RESERVE` « Seuls l'opérateur qui a reçu ce BDT ou une personne habilitée à écrire en Production
+    peuvent le solder. » · **403** « X a reçu ce BDT, mais sa fiche ne comporte pas le soldage (opérateur OAS :
+    autocontrôle et passage de lots uniquement | autorisations de la fiche salarié, RH). Faites solder par une personne
+    habilitée à écrire en Production. » ;
+  - **500** « Soldage non enregistré : … » · **409** « Ce BDT vient de changer (déjà soldé ou plus « Reçu ») :
+    rechargez le planning. » (`majBDTConditionnelle(id, patch, { statut: 'recu' })`).
+  - **200** `{ ok, data (ligne BDT soldée), operateur (nom du soldeur), operateur_id (soldeur), voie:
+    'ecriture_production'|'operateur_recu', recu_par: {id, nom} | null, avertissement: string | null }`.
+- **Droit** (`droitSoldageBDT`) : voie `ecriture_production` (solde tout BDT reçu) ; sinon voie `operateur_recu` si
+  `bons_de_travail.operateur_id` = id du signataire **et** autorisations **fonctionnelles** de sa fiche (jetons
+  `lire:`/`ecrire:` exclus ; vide ⇒ celles des rôles, `autorisationsFonctionnelles`) contenant `soldage` ou `all`.
+- **Avertissement non bloquant** (`avertissementCompetence`) : « Matrice de compétences : X n'a pas de niveau renseigné
+  pour ce process. Soldage enregistré ; pensez à mettre la matrice à jour (RH › Compétences). » — lignes de
+  `competences_operateur` de l'opérateur **qui a reçu** le bon, comparées au `process_id` du BDT (clé réelle de la
+  matrice) **et** à son libellé `operation` ; niveau ≥ 1 ; aucune ligne pour lui ⇒ `null`.
+- **Écritures** : BDT `{statut:'solde', fin_reel, resultat, temps_reel}` — `operateur_id` **inchangé** (réceptionnaire,
+  base du coût réel) ; recalcul avancement + coût de la commande ; historique opérateur (et machine) avec
+  `operateur_id` / `operateur_nom` / `matricule` du **soldeur** ; NC si `resultat = nc` (`detecteur` = soldeur) ; PV
+  `autocontrole` (`operateur_id` = soldeur ; observations « BDT reçu par X, soldé par Y (écriture Production) » quand ce
+  sont deux personnes).
+
+#### `POST /api/production/bdt/:id/recu` (élargie)
+- **Corps** `{ matricule, pin }`. Signataire : `verifyOperateurPin` (fiche `est_operateur`, comme avant) ; à défaut
+  `verifySalariePinStricte` — un salarié actif ayant l'**écriture Production** (chef d'atelier, direction) reçoit aussi.
+- **Réponses** : **503** « Vérification du matricule impossible (lecture des salariés), rien n'a été enregistré : … »
+  (2ᵉ voie seulement) · **403** « Seuls un opérateur ou une personne habilitée à écrire en Production peuvent recevoir un
+  BDT. » (PIN juste, ni opérateur ni écriture Production) · **200 `{ok:false, error:'Matricule ou code PIN incorrect.'}`**
+  (code HTTP inchangé, historique) · **404** · **409** « BDT déjà reçu. » / « BDT déjà soldé. » / « Programmez d'abord ce
+  BDT … » · porte OAS (200 `ok:false`) · **200** `{ ok, data, operateur, operateur_id }`.
+- **Effet** : `statut recu`, `debut_reel` (heure de Paris), **`operateur_id` = le signataire** — un chef qui reçoit
+  devient le réalisateur du bon : c'est son coût chargé RH qui valorise le temps réel (`coutReelBdt`), et lui seul (ou une
+  personne qui écrit en Production) peut le solder.
+
+#### Signature commune de la DA et du PV de non-conformité (`signataireProduction`)
+- **400** `{champ:'matricule'}` « Saisissez votre matricule. » · **400** `{champ:'pin'}` « Saisissez votre code PIN. »
+  (matricule ou PIN > 60 caractères : 400 `{champ:'pin'}` « Matricule ou PIN incorrect. ») ;
+- **503** « Vérification du matricule impossible (lecture des salariés), rien n'a été enregistré : … »
+  (`verifySalariePinStricte` : une panne n'est jamais « PIN incorrect ») ;
+- **401** `{champ:'pin', error:'Matricule ou PIN incorrect.'}` — mauvais couple, salarié inactif, ou matricule contenant
+  `% _ , * ( ) \` (jokers PostgREST refusés, comme `verifyOperateurPin`) ;
+- **403** `{champ:'matricule'}` — `MSG_DA_RESERVE` « Seules les personnes habilitées à écrire en Production peuvent faire
+  une demande d'achat depuis la Production. » ou `MSG_NC_RESERVE` « … peuvent émettre un PV de non-conformité depuis la
+  Production. ».
+- La saisie n'est validée **qu'après** : un non-habilité n'apprend rien du formulaire.
+
+#### `POST /api/production/demande-achat-operateur` (même URL, contrat changé)
+- **Corps** : `matricule*`, `pin*`, `categorie*` (`matiere`|`accessoire`|`machine`), `article*` (≤ 200), `reference`
+  (≤ 80), `qte*` (> 0, ≤ 1 000 000, virgule acceptée), `unite` (`u` `kg` `g` `t` `m` `mm` `m²` `m³` `l` `lot` `boîte`
+  `rouleau` `paire` `jeu`), `machine_id` (obligatoire et retenu **seulement** pour `machine`), `poste_id`, `num_affaire`,
+  `priorite` (`normal`|`urgent`|`critique`, défaut normal), `livraison` (`AAAA-MM-JJ`, pas avant le jour de l'atelier),
+  `fournisseur` (≤ 120). **Ignoré** : tout nom de demandeur.
+- **Réponses** : signature (ci-dessus) → **400** `{champ}` ∈ `categorie` | `article` | `reference` | `qte` | `unite` |
+  `machine_id` | `poste_id` | `num_affaire` | `priorite` | `livraison` | `fournisseur` → **503** « Vérification de la
+  demande impossible (lecture de la base) … » → **400** `{champ}` machine / poste inconnus (« rechargez la page »),
+  « Affaire X inconnue : choisissez-la dans la liste. » (doit exister dans `commandes`) → **503** « Numérotation
+  impossible … » → **500** « Demande d'achat non enregistrée : … » → **200** `{ ok, id, da, avertissements: string[] }`.
+- **Ligne `demandes_achat`** (`payloadDaProd`) : `id` `DA-AAAA-NNN` (`nextSeqId('DA', ids, année de l'atelier)` sur une
+  lecture **paginée** `lireToutesLignesStricte`), `demandeur` « Prénom Nom (Production) », `type_da` Matière | Accessoire
+  | Machine, `article` « désignation (réf. X) », `qte` « 12,5 kg », `priorite`, `statut 'a_traiter'`, `date_da` (jour de
+  l'atelier, `dateAtelier()` = Europe/Paris), `livraison`, `visible true`, `genere_par_adt false`, `type_bc
+  'fournisseur'`, `fournisseur`, `categorie`, `machine_id`, `poste_id` (le poste de la machine prime), `operateur_id` = id
+  du salarié authentifié, `num_affaire`, `affaire_id` (commande, sinon `resolveAffaireId`).
+- Colonne **facultative** absente de la base (PGRST204 / 42703) : retirée une à une, avertissement « Information « k »
+  non enregistrée : colonne absente de la base (migration à jouer). » ; jamais les obligatoires
+  (`COLONNES_DA_OBLIGATOIRES` : id, demandeur, type_da, article, qte, priorite, statut, date_da, visible). Renumérotation
+  **une fois** sur 23505.
+
+#### `POST /api/production/nc` (nouvelle)
+- **Corps** : `matricule*`, `pin*`, `entite*` (Seem | Semrac), `description*` (≤ 4 000), `date_nc` (≤ jour de l'atelier,
+  défaut ce jour), `type_nc` (Interne | Client | Fournisseur, défaut Interne), `gravite` (Mineure | Majeure | Critique |
+  Bloquante, défaut Majeure), `num_affaire`, `lot_ref`, `bdt_id`, `ref_article` (≤ 80), `designation` (≤ 200),
+  `nb_pieces` (entier > 0), `lieu_detection` (`NC_POSTES_LISTE`), `lieu_imputation` (`NC_IMPUTATIONS`), `type_defaut`
+  (`NC_NATURES`), `type_cause` (`NC_CAUSE_OPTS`), `action_corrective` (`NC_ACTIONS_IMMEDIATES`), `cause_detail` (≤ 1 000),
+  `traitement` (≤ 1 000), `quarantaine` (booléen : `true` `1` `oui` `on`). Listes de `src/qref.ts`, **sans casse**,
+  ramenées à la valeur canonique ; une valeur hors liste → 400.
+- **Réponses** : signature → **400** `{champ}` (saisie ; `quarantaine` sans lot, BDT, code article ni désignation) →
+  **503** « Vérification du rattachement impossible (lecture de la base) … » → **400** rattachement (`rattacherNcProd`,
+  `champ` `num_affaire` | `lot_ref` | `bdt_id`) : « Affaire X inconnue … », « Lot X inconnu. », « BDT Y inconnu. », « Le
+  BDT Y appartient au lot X, pas au lot Z. », « Le lot X du BDT Y est introuvable : rattachement impossible à vérifier. »,
+  « Le lot X appartient à l'affaire A, pas à l'affaire B. », « Le BDT Y appartient à l'affaire A, pas à l'affaire B. »,
+  « Le BDT Y (affaire A) et le lot X (affaire B) ne désignent pas la même affaire. », « Impossible de vérifier que le lot
+  X appartient à l'affaire A (lot sans commande connue). », « Impossible de vérifier que le BDT Y appartient à l'affaire A
+  (BDT sans affaire ni commande connues). », « Le BDT Y et le lot X ne désignent pas la même affaire. » (sans affaire,
+  `affaire_id` divergents) → **503** numérotation → **500** « Non-conformité non enregistrée : … » → **200** `{ ok, id,
+  data, quarantaine_id, avertissements: string[] }`.
+- **Lectures** (strictes, `lireLignesStricte`) : commande de l'affaire saisie, lot saisi, BDT saisi ; si seul le BDT est
+  saisi, **son lot** (`lot_ref`, sinon `lot_id`) ; la commande du lot et celle du BDT (`cmd_id`). Affaire d'un lot = celle
+  de sa commande ; d'un BDT = son `num_affaire`, sinon celle de sa commande, sinon celle de son lot vérifié.
+- **Ligne `non_conformites`** (`payloadNcProd`) : `id` `NC-AAAA-NNN` (**compteur continu toutes années**,
+  `prochainNumeroNc`, même règle que le formulaire Qualité, lecture paginée), `date_nc`, `type_nc`, `gravite`, `statut
+  'Ouvert'`, `categorie 'prod'`, `entite`, `lot_ref`, `num_affaire`, `affaire_id` (commandes uniquement, sinon
+  `resolveAffaireId` ; sans affaire, celui du lot ou du BDT), `bdt_id`, `operation` (du BDT), `client_nom`, `ref_article`
+  (saisi, sinon pièce du BDT / du lot), `designation`, `nb_pieces`, `lieu_detection`, `lieu_imputation`, `type_defaut`,
+  `type_cause`, `action_corrective`, `description` = défaut + « Cause présumée : … » + « Traitement proposé : … » + « PV de
+  non-conformité émis en Production par X (constat du JJ/MM/AAAA). », **`detecteur` = nom du salarié authentifié**.
+  Colonnes obligatoires jamais retirées : id, date_nc, type_nc, gravite, statut, description, detecteur.
+- **Quarantaine** (case cochée) : `createQuarantaine({ nc_id, lot_id, piece, client_nom, date_mise_quarantaine, motif:
+  'NC … : 1ʳᵉ ligne (N pièces)', statut: 'en_cours' })` puis NC `statut 'quarantaine'` (comme `POST
+  /api/qualite/nc/:id/quarantaine`). Échec → avertissement « Quarantaine NON créée (…) : mettez le lot en quarantaine
+  depuis Qualité › Non-conformités (NC …). » ou « Quarantaine créée, mais le statut de la NC … n'a pas été mis à jour … ».
+- **Action immédiate contenant « Rebut »** : `ensureHseDechet('nc_rebut', id, …)` (idempotent) ; erreur lue →
+  avertissement « Rebut non inscrit au registre des déchets (…) : saisissez-le dans Sécurité › Déchets (NC …). ».
+
+#### `POST /api/production/operateur-contexte` — **supprimée**
+- Identification préalable de l'ancienne DA « restreinte au poste de l'affectation du jour » : elle refusait tout le monde
+  (403) dès que `affectation_poste` n'avait rien pour le jour, et tout non-opérateur (401).
+
+#### `POST /api/production/non-conformites` (formulaire « Nouvelle NC » de la Qualité) — droit changé
+- **N'est plus self-service** ; `serviceFor` la classe `qualite` (règle explicite avant la famille `production`).
+- **403** middleware « Accès refusé », ou (si `AUTH_ENFORCE` ≠ `off`) handler « La création d'une non-conformité depuis
+  la Qualité est réservée aux personnes ayant l'écriture Qualité. En Production, utilisez « PV de non-conformité »
+  (matricule + PIN). ». Corps, numérotation (`getNonConformites()`) et effets inchangés.
+
+#### Autres contrats touchés le même jour
+- `PATCH /api/rh/salarie/:id` avec `acces_services` : si la fiche n'a **aucune** autorisation fonctionnelle (hors jetons),
+  la base devient `autorisationsUnion(rôles de la fiche)` avant d'y ajouter les jetons — sinon la fiche perdait
+  `pointage`, `soldage`… au login.
+- `GET /api/version` : `commit` = « <sha>-dirty » quand `erp-docker.sh maj` a construit l'image depuis un dossier de
+  travail non commité ; `commit_court` garde le suffixe (« 8451cb3b80-dirty »).
+- `GET /direction/service` et `POST /api/direction/scan-alertes` : une NC est ouverte si `!ncEstClose(statut)` ;
+  `ncEstClose` (`src/queries.ts`) reconnaît « Soldé » (`sold[ée](?!r)`, pas « à solder »).
+- `src/queries.ts` : `verifySalariePinStricte(matricule, pin)` → `{data | null, error | null}` (sans le hash du PIN) ;
+  `lireLignesStricte(table, select, {colonne, valeur, op:'eq'|'like'}?, limite)` ; `lireToutesLignesStricte(table, select,
+  filtre?, {ordre='id', taillePage ≤ 1000, maxLignes = 500 000})` — pages `.range()` triées jusqu'à une page **vide**
+  (PostgREST plafonne chaque réponse à `PGRST_DB_MAX_ROWS` sans le dire ; une page courte ne prouve pas la fin).
+
+#### Page `GET /production/service` (rendu serveur)
+- `blocDaNcProduction(refFormulairesProd({ commandes, lots, bdts, machines, postes }))` : `#prod-hdr-actions` (déplacé
+  dans `#svc-hdr-bar`) avec `#oda-hdr-btn` → `odaOpen()` et `#pvnc-hdr-btn` → `pvncOpen()` ; fenêtres `#odaModal` /
+  `#oda_form` et `#pvncModal` / `#pvnc_form` hors des panneaux ; champs `<prefixe>_<champ>` (le `champ` renvoyé surligne
+  et focalise), `#oda_err` / `#pvnc_err`, `#oda_envoyer` / `#pvnc_envoyer` désactivés pendant l'envoi.
+- `PRODFORM_REF` (`sjX`) : `affaires [{num, client}]` (commandes non annulées avec `num_affaire`), `lots [{id, aff,
+  piece}]`, `bdts [{id, lot, aff, piece, op}]` (non annulés, rattachés à une affaire), `machines [{id, nom, poste_id,
+  poste, cnc}]`, `postes [{id, nom}]` (non inactifs). Bornes des dates = jour de l'atelier.
+- Fenêtre de soldage : `#s_qui` (qui peut solder), ligne « Reçu par » (`OPERATEURS`), `#s_solder_btn` désactivé pendant
+  l'envoi, PIN effacé sur refus, message du serveur échappé (`ccEsc`), notification orange si `avertissement`.
 
 ### Lot D (14/09/2026) — réception fournisseur, PV de contrôle détaillé, certificat matière
 
@@ -951,136 +1110,136 @@ réouverture retombe alors sur le taux du jour).
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/production/affectation` | L6398 |
-| GET | `/production/bdt` | L8421 |
-| GET | `/production/bdt-liste` | L11519 |
-| GET | `/production/bdts-a-programmer` | L11587 |
-| GET | `/production/commande/:id` | L8359 |
-| GET | `/production/commandes` | L8350 |
-| GET | `/production/competences` | L6399 |
-| GET | `/production/dashboard-production` | L8409 |
-| GET | `/production/dashboard-programmation` | L8408 |
-| GET | `/production/fiches-suivi` | L8415 |
-| GET | `/production/gantt-bdt` | L8338 |
-| GET | `/production/gantt-bst` | L8346 |
-| GET | `/production/habilitations` | L12148 |
-| GET | `/production/horaires` | L6400 |
-| GET | `/production/lot-liste` | L11520 |
-| GET | `/production/lot/:id` | L8375 |
-| GET | `/production/lots` | L8354 |
-| GET | `/production/matricule` | L8413 |
-| GET | `/production/non-faits` | L8414 |
-| GET | `/production/operateur` | L6401 |
-| GET | `/production/ordonnancement` | L6360 |
-| GET | `/production/pilotage` | L8514 |
-| GET | `/production/planning` | L6483 |
-| GET | `/production/pointage` | L8412 |
-| GET | `/production/service` | L6404 |
-| GET | `/production/soustraitance` | L8487 |
-| GET | `/production/st-liste` | L8416 |
-| GET | `/production/suivi-st` | L8417 |
-| GET | `/commercial/affaire/:num` | L536 |
-| GET | `/commercial/avoirs` | L619 |
-| GET | `/commercial/avoirs-liste` | L11523 |
-| GET | `/commercial/client/:id` | L524 |
-| GET | `/commercial/cmd-liste` | L11515 |
-| GET | `/commercial/commande` | L1692 |
-| GET | `/commercial/commande-old` | L1689 |
-| GET | `/commercial/commandes-validees` | L611 |
-| GET | `/commercial/dt` | L1582 |
-| GET | `/commercial/dt-liste` | L615 |
-| GET | `/commercial/dt-liste` | L11513 |
-| GET | `/commercial/offre` | L590 |
-| GET | `/commercial/offre-old` | L1664 |
-| GET | `/commercial/offre/edit` | L600 |
-| GET | `/commercial/offres-liste` | L594 |
-| GET | `/commercial/offres-liste` | L11514 |
-| GET | `/commercial/references-pieces` | L11525 |
-| GET | `/commercial/rentree` | L589 |
-| GET | `/commercial/service` | L513 |
-| GET | `/dashboard` | L11419 |
-| GET | `/dashboard/achats` | L11422 |
-| GET | `/dashboard/be` | L11421 |
-| GET | `/dashboard/commercial` | L11420 |
-| GET | `/dashboard/direction` | L11430 |
-| GET | `/dashboard/environnement` | L11432 |
-| GET | `/dashboard/expedition` | L11426 |
-| GET | `/dashboard/finance` | L11433 |
-| GET | `/dashboard/fournisseurs` | L11435 |
-| GET | `/dashboard/maintenance` | L11427 |
-| GET | `/dashboard/oas` | L11431 |
-| GET | `/dashboard/production` | L11424 |
-| GET | `/dashboard/programmation` | L11423 |
-| GET | `/dashboard/qualite` | L11425 |
-| GET | `/dashboard/rh` | L11429 |
-| GET | `/dashboard/stock` | L11434 |
-| GET | `/qualite/8d` | L10400 |
-| GET | `/qualite/anomalie` | L10374 |
-| GET | `/qualite/audit-9001` | L11849 |
-| GET | `/qualite/audit-en9100` | L11908 |
-| GET | `/qualite/ecme` | L11014 |
-| GET | `/qualite/liberation` | L10990 |
-| GET | `/qualite/nc-liste` | L11517 |
-| GET | `/qualite/perishables` | L11961 |
-| GET | `/qualite/pv` | L10964 |
-| GET | `/qualite/service` | L8620 |
-| GET | `/rh/competences` | L9854 |
-| GET | `/rh/conge` | L11095 |
-| GET | `/rh/conge-liste` | L11522 |
-| GET | `/rh/employes` | L9830 |
-| GET | `/rh/habilitations` | L9846 |
-| GET | `/rh/organigramme` | L9842 |
-| GET | `/rh/pointage` | L10311 |
-| GET | `/rh/pointage` | L11124 |
-| GET | `/rh/service` | L9825 |
-| GET | `/rh/temps` | L10298 |
-| GET | `/achats/da-auto` | L8419 |
-| GET | `/achats/da-liste` | L11516 |
-| GET | `/achats/demande` | L6281 |
-| GET | `/achats/fournisseur` | L6332 |
-| GET | `/achats/fournisseur/:id` | L1961 |
-| GET | `/achats/fournisseurs-st` | L11524 |
-| GET | `/achats/reception` | L6308 |
-| GET | `/achats/service` | L1760 |
-| GET | `/achats/sous-traitant/:id` | L1971 |
-| GET | `/be/analyse` | L5139 |
-| GET | `/be/ged` | L6255 |
-| GET | `/be/preparation` | L6021 |
-| GET | `/be/references-pieces` | L11526 |
-| GET | `/be/service` | L3766 |
-| GET | `/stock` | L12030 |
-| GET | `/stock/alertes` | L12033 |
-| GET | `/stock/entrees` | L12031 |
-| GET | `/stock/service` | L9549 |
-| GET | `/stock/sorties` | L12032 |
-| GET | `/oas/balancelles` | L11636 |
-| GET | `/oas/rejets-eau` | L11724 |
-| GET | `/oas/service` | L8577 |
-| GET | `/oas/session` | L8589 |
-| GET | `/maintenance/intervention` | L11067 |
-| GET | `/maintenance/liste` | L11521 |
-| GET | `/maintenance/mtbf` | L11428 |
-| GET | `/maintenance/service` | L9590 |
-| GET | `/finances/couts` | L12041 |
-| GET | `/finances/imputations` | L12044 |
-| GET | `/finances/machines` | L12043 |
-| GET | `/finances/taux` | L12042 |
-| GET | `/expedition/bl` | L11040 |
-| GET | `/expedition/bl-liste` | L11518 |
-| GET | `/expedition/envoi-client` | L11592 |
-| GET | `/manuels` | L315 |
-| GET | `/manuels/:slug` | L319 |
-| GET | `/securite/chimique/:id` | L8960 |
-| GET | `/securite/service` | L8857 |
-| GET | `/direction/service` | L11159 |
-| GET | `/direction/validation` | L11375 |
-| GET | `/comptabilite/dashboard` | L12336 |
-| GET | `/comptabilite/factures` | L12337 |
-| GET | `/login` | L234 |
-| GET | `/logout` | L277 |
-| GET | `/` | L357 |
-| GET | `/plans/service` | L4634 |
-| GET | `/environnement/service` | L8934 |
-| GET | `/expeditions/service` | L9403 |
-| GET | `/compta/service` | L10357 |
-| GET | `/reglages/objectifs` | L11438 |
+| GET | `/production/affectation` | L6509 |
+| GET | `/production/bdt` | L8562 |
+| GET | `/production/bdt-liste` | L11677 |
+| GET | `/production/bdts-a-programmer` | L11745 |
+| GET | `/production/commande/:id` | L8500 |
+| GET | `/production/commandes` | L8491 |
+| GET | `/production/competences` | L6510 |
+| GET | `/production/dashboard-production` | L8550 |
+| GET | `/production/dashboard-programmation` | L8549 |
+| GET | `/production/fiches-suivi` | L8556 |
+| GET | `/production/gantt-bdt` | L8479 |
+| GET | `/production/gantt-bst` | L8487 |
+| GET | `/production/habilitations` | L12306 |
+| GET | `/production/horaires` | L6511 |
+| GET | `/production/lot-liste` | L11678 |
+| GET | `/production/lot/:id` | L8516 |
+| GET | `/production/lots` | L8495 |
+| GET | `/production/matricule` | L8554 |
+| GET | `/production/non-faits` | L8555 |
+| GET | `/production/operateur` | L6512 |
+| GET | `/production/ordonnancement` | L6471 |
+| GET | `/production/pilotage` | L8655 |
+| GET | `/production/planning` | L6594 |
+| GET | `/production/pointage` | L8553 |
+| GET | `/production/service` | L6515 |
+| GET | `/production/soustraitance` | L8628 |
+| GET | `/production/st-liste` | L8557 |
+| GET | `/production/suivi-st` | L8558 |
+| GET | `/commercial/affaire/:num` | L541 |
+| GET | `/commercial/avoirs` | L624 |
+| GET | `/commercial/avoirs-liste` | L11681 |
+| GET | `/commercial/client/:id` | L529 |
+| GET | `/commercial/cmd-liste` | L11673 |
+| GET | `/commercial/commande` | L1697 |
+| GET | `/commercial/commande-old` | L1694 |
+| GET | `/commercial/commandes-validees` | L616 |
+| GET | `/commercial/dt` | L1587 |
+| GET | `/commercial/dt-liste` | L620 |
+| GET | `/commercial/dt-liste` | L11671 |
+| GET | `/commercial/offre` | L595 |
+| GET | `/commercial/offre-old` | L1669 |
+| GET | `/commercial/offre/edit` | L605 |
+| GET | `/commercial/offres-liste` | L599 |
+| GET | `/commercial/offres-liste` | L11672 |
+| GET | `/commercial/references-pieces` | L11683 |
+| GET | `/commercial/rentree` | L594 |
+| GET | `/commercial/service` | L518 |
+| GET | `/dashboard` | L11577 |
+| GET | `/dashboard/achats` | L11580 |
+| GET | `/dashboard/be` | L11579 |
+| GET | `/dashboard/commercial` | L11578 |
+| GET | `/dashboard/direction` | L11588 |
+| GET | `/dashboard/environnement` | L11590 |
+| GET | `/dashboard/expedition` | L11584 |
+| GET | `/dashboard/finance` | L11591 |
+| GET | `/dashboard/fournisseurs` | L11593 |
+| GET | `/dashboard/maintenance` | L11585 |
+| GET | `/dashboard/oas` | L11589 |
+| GET | `/dashboard/production` | L11582 |
+| GET | `/dashboard/programmation` | L11581 |
+| GET | `/dashboard/qualite` | L11583 |
+| GET | `/dashboard/rh` | L11587 |
+| GET | `/dashboard/stock` | L11592 |
+| GET | `/qualite/8d` | L10558 |
+| GET | `/qualite/anomalie` | L10532 |
+| GET | `/qualite/audit-9001` | L12007 |
+| GET | `/qualite/audit-en9100` | L12066 |
+| GET | `/qualite/ecme` | L11172 |
+| GET | `/qualite/liberation` | L11148 |
+| GET | `/qualite/nc-liste` | L11675 |
+| GET | `/qualite/perishables` | L12119 |
+| GET | `/qualite/pv` | L11122 |
+| GET | `/qualite/service` | L8761 |
+| GET | `/rh/competences` | L10005 |
+| GET | `/rh/conge` | L11253 |
+| GET | `/rh/conge-liste` | L11680 |
+| GET | `/rh/employes` | L9981 |
+| GET | `/rh/habilitations` | L9997 |
+| GET | `/rh/organigramme` | L9993 |
+| GET | `/rh/pointage` | L10469 |
+| GET | `/rh/pointage` | L11282 |
+| GET | `/rh/service` | L9976 |
+| GET | `/rh/temps` | L10456 |
+| GET | `/achats/da-auto` | L8560 |
+| GET | `/achats/da-liste` | L11674 |
+| GET | `/achats/demande` | L6392 |
+| GET | `/achats/fournisseur` | L6443 |
+| GET | `/achats/fournisseur/:id` | L1966 |
+| GET | `/achats/fournisseurs-st` | L11682 |
+| GET | `/achats/reception` | L6419 |
+| GET | `/achats/service` | L1765 |
+| GET | `/achats/sous-traitant/:id` | L1976 |
+| GET | `/be/analyse` | L5250 |
+| GET | `/be/ged` | L6366 |
+| GET | `/be/preparation` | L6132 |
+| GET | `/be/references-pieces` | L11684 |
+| GET | `/be/service` | L3877 |
+| GET | `/stock` | L12188 |
+| GET | `/stock/alertes` | L12191 |
+| GET | `/stock/entrees` | L12189 |
+| GET | `/stock/service` | L9700 |
+| GET | `/stock/sorties` | L12190 |
+| GET | `/oas/balancelles` | L11794 |
+| GET | `/oas/rejets-eau` | L11882 |
+| GET | `/oas/service` | L8718 |
+| GET | `/oas/session` | L8730 |
+| GET | `/maintenance/intervention` | L11225 |
+| GET | `/maintenance/liste` | L11679 |
+| GET | `/maintenance/mtbf` | L11586 |
+| GET | `/maintenance/service` | L9741 |
+| GET | `/finances/couts` | L12199 |
+| GET | `/finances/imputations` | L12202 |
+| GET | `/finances/machines` | L12201 |
+| GET | `/finances/taux` | L12200 |
+| GET | `/expedition/bl` | L11198 |
+| GET | `/expedition/bl-liste` | L11676 |
+| GET | `/expedition/envoi-client` | L11750 |
+| GET | `/manuels` | L320 |
+| GET | `/manuels/:slug` | L324 |
+| GET | `/securite/chimique/:id` | L9101 |
+| GET | `/securite/service` | L8998 |
+| GET | `/direction/service` | L11317 |
+| GET | `/direction/validation` | L11533 |
+| GET | `/comptabilite/dashboard` | L12494 |
+| GET | `/comptabilite/factures` | L12495 |
+| GET | `/login` | L238 |
+| GET | `/logout` | L281 |
+| GET | `/` | L362 |
+| GET | `/plans/service` | L4745 |
+| GET | `/environnement/service` | L9075 |
+| GET | `/expeditions/service` | L9544 |
+| GET | `/compta/service` | L10515 |
+| GET | `/reglages/objectifs` | L11596 |

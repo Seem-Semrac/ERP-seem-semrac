@@ -220,5 +220,38 @@ EN 9100 (non demandé).
 **Autres retouches du lot** : `bcw_qte` (quantité du BC direct) devient un champ **numérique** — c'est la base
 du reste à recevoir à la réception ; la fenêtre du BC direct défile (`max-height: 92vh`).
 
+## Demandes d'achat émises depuis la Production (15/09/2026)
+
+> « pour la demande d'achat seules les personnes ayant l'autorisation d'écriture sur la production peuvent en faire
+> une depuis ici. Le matricule et le mot de passe doivent être mis […] il faut aussi afficher le formulaire de
+> demande d'achat dès qu'on appuie sur le bouton ».
+
+Le bouton « Demande d'achat » de la Production (`src/prod_da_nc.ts`) ouvre désormais **le formulaire complet** ;
+`POST /api/production/demande-achat-operateur` vérifie à l'envoi le matricule + PIN et l'**écriture Production** du
+salarié (règles et cause du formulaire invisible : [Production](production.md), section du 15/09/2026). La
+restriction « poste de l'affectation du jour » et `POST /api/production/operateur-contexte` sont **supprimées**.
+Ce qui arrive dans **Achats › Demandes d'achat** (`statut a_traiter`, `visible true`, `genere_par_adt false`, donc
+sans pastille AUTO, modifiable et retirable comme toute DA libre) :
+
+| Colonne `demandes_achat` | Valeur |
+|---|---|
+| `id` | `DA-AAAA-NNN` (année de l'atelier, lecture paginée de toutes les DA de l'année) |
+| `demandeur` | « Prénom Nom (Production) » — le salarié authentifié ; `operateur_id` = son id |
+| `type_da` / `categorie` | Matière · Accessoire · Machine / `matiere` · `accessoire` · `machine` |
+| `article` | désignation, suivie de « (réf. X) » si une référence est saisie |
+| `qte` | « 12,5 kg » : quantité (virgule) + unité de la liste (`u`, `kg`, `g`, `t`, `m`, `mm`, `m²`, `m³`, `l`, `lot`, `boîte`, `rouleau`, `paire`, `jeu`) — lue par les Achats avec `parseFloat` après remplacement de la virgule |
+| `machine_id` | seulement pour « Machine » : le prix ira sur l'**OPEX** de la machine à la réception |
+| `poste_id` | poste choisi ; le poste de la machine prime |
+| `num_affaire` / `affaire_id` | affaire facultative (doit exister dans `commandes`) ; `affaire_id` de la commande, sinon `resolveAffaireId` |
+| `priorite`, `livraison`, `fournisseur`, `type_bc` | normal/urgent/critique · date souhaitée (pas dans le passé) · fournisseur suggéré (texte) · `fournisseur` |
+| `date_da` | jour de l'atelier (Europe/Paris) |
+
+⚠ `demandes_achat` n'a **ni colonne référence ni unité ni commentaire** : aucune colonne n'a été ajoutée, la
+référence et l'unité voyagent dans `article` et `qte` (l'acheteur arrête la référence du matériel au traitement
+DA → BC, voir plus haut). Une colonne facultative absente de la base (ex. `categorie`, `machine_id`, `poste_id`,
+`operateur_id`, `num_affaire`, `type_bc` sur un cloud ancien) est retirée à l'insertion avec un avertissement ; les
+colonnes obligatoires ne le sont jamais. Colonnes supposées présentes en cloud (déjà écrites par d'autres routes),
+non vérifiées sur le cloud.
+
 ---
 > Fiche générée. Manuel utilisateur correspondant : `docs/manuel/achats.md`. Voir aussi `04-auth-rbac.md`, `07-api-reference.md`.

@@ -6,6 +6,7 @@ import { cleLot, violationsEnchainement, PLAN_DEBUT_JOUR, PLAN_FIN_JOUR, PLAN_HE
 import { LOGO_SVG, BRAND } from './brand'
 import { CRENEAUX, paletteCreneaux, joursChargesPage } from './presences'
 import type { BonDeTravail, Machine, Operateur, Lot, Commande, FournisseurSt } from './types'
+import { blocDaNcProduction, refFormulairesProd } from './prod_da_nc'
 
 const sjX = (v: any) => JSON.stringify(v).replace(/</g, '\\u003c')
 
@@ -1786,8 +1787,8 @@ ${serviceHeader({
   <div id="soldageModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center;z-index:500;">
     <div style="background:white;border-radius:20px;box-shadow:0 24px 64px rgba(0,0,0,.25);width:100%;max-width:480px;margin:1rem;overflow:hidden;">
       <div style="padding:14px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#22c55e,#16a34a);"><h3 style="font-weight:700;color:white;font-size:.95rem;"><i class="fas fa-check-double" style="margin-right:8px;"></i>Soldage BDT</h3><button onclick="closeModal('soldageModal')" style="color:rgba(255,255,255,.7);background:none;border:none;font-size:1.2rem;cursor:pointer;"><i class="fas fa-times"></i></button></div>
-      <div style="padding:20px;"><div id="soldageInfo" style="background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:12px;font-size:.82rem;"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div><label class="form-label">Heure fin réelle *</label><input id="s_fin" type="time" class="form-input"/></div><div><label class="form-label">Résultat</label><select id="s_resultat" class="form-input" onchange="sResultatChange()"><option value="ok">✅ Conforme</option><option value="reprise">⚠️ Reprise partielle</option><option value="nc">❌ Non-conformité</option></select></div></div><div id="s_grav_wrap" style="display:none;margin-top:10px;"><label class="form-label"><i class="fas fa-triangle-exclamation" style="margin-right:5px;color:#dc2626;"></i>Gravité de la non-conformité *</label><select id="s_gravite" class="form-input"><option value="Mineure">Mineure — non bloquant</option><option value="Majeure" selected>Majeure — non bloquant</option><option value="Critique">Critique — BLOQUE l'expédition</option><option value="Bloquante">Bloquante — BLOQUE l'expédition</option></select></div><div style="margin-top:10px;"><label class="form-label">Observations</label><textarea id="s_obs" rows="2" class="form-input" style="resize:vertical;"></textarea></div><div style="margin-top:12px;padding:12px;background:#fefce8;border:1px solid #fde68a;border-radius:10px;"><div style="font-size:.7rem;font-weight:700;color:#92400e;margin-bottom:8px;"><i class="fas fa-id-badge" style="margin-right:5px;"></i>Identification opérateur (matricule + code PIN)</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div><label class="form-label">Matricule *</label><input id="s_matricule" type="text" placeholder="OP-001" class="form-input" autocomplete="off"/></div><div><label class="form-label">Code PIN *</label><input id="s_pin" type="password" inputmode="numeric" placeholder="••••" class="form-input" autocomplete="off"/></div></div></div></div>
-      <div style="padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;"><button onclick="closeModal('soldageModal')" class="btn btn-secondary">Annuler</button><button onclick="confirmerSoldage()" class="btn btn-success"><i class="fas fa-check-double"></i> Solder</button></div>
+      <div style="padding:20px;"><div id="soldageInfo" style="background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:12px;font-size:.82rem;"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div><label class="form-label">Heure fin réelle *</label><input id="s_fin" type="time" class="form-input"/></div><div><label class="form-label">Résultat</label><select id="s_resultat" class="form-input" onchange="sResultatChange()"><option value="ok">✅ Conforme</option><option value="reprise">⚠️ Reprise partielle</option><option value="nc">❌ Non-conformité</option></select></div></div><div id="s_grav_wrap" style="display:none;margin-top:10px;"><label class="form-label"><i class="fas fa-triangle-exclamation" style="margin-right:5px;color:#dc2626;"></i>Gravité de la non-conformité *</label><select id="s_gravite" class="form-input"><option value="Mineure">Mineure — non bloquant</option><option value="Majeure" selected>Majeure — non bloquant</option><option value="Critique">Critique — BLOQUE l'expédition</option><option value="Bloquante">Bloquante — BLOQUE l'expédition</option></select></div><div style="margin-top:10px;"><label class="form-label">Observations</label><textarea id="s_obs" rows="2" class="form-input" style="resize:vertical;"></textarea></div><div style="margin-top:12px;padding:12px;background:#fefce8;border:1px solid #fde68a;border-radius:10px;"><div style="font-size:.7rem;font-weight:700;color:#92400e;margin-bottom:8px;"><i class="fas fa-id-badge" style="margin-right:5px;"></i>Signature du soldage (matricule + code PIN)</div><div id="s_qui" style="font-size:.7rem;color:#78350f;line-height:1.35;margin:-2px 0 8px;">Seuls l’opérateur qui a reçu ce BDT ou une personne habilitée à écrire en Production peuvent le solder.</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div><label class="form-label">Matricule *</label><input id="s_matricule" type="text" placeholder="OP-001" class="form-input" autocomplete="off"/></div><div><label class="form-label">Code PIN *</label><input id="s_pin" type="password" inputmode="numeric" placeholder="••••" class="form-input" autocomplete="off"/></div></div></div></div>
+      <div style="padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;"><button onclick="closeModal('soldageModal')" class="btn btn-secondary">Annuler</button><button id="s_solder_btn" type="button" onclick="confirmerSoldage()" class="btn btn-success"><i class="fas fa-check-double"></i> Solder</button></div>
     </div>
   </div>
   <!-- Modal Réception (matricule + PIN) -->
@@ -1880,38 +1881,9 @@ ${serviceHeader({
   </div>
 </div>
 
-<!-- Bouton « Demande d'achat » OPÉRATEUR (borne PIN) : en haut à droite de la bannière (comme les autres services), plus flottant -->
-<button id="oda-hdr-btn" onclick="odaOpen()" title="Demande d'achat (opérateur)" style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.3);border-radius:8px;font-size:.77rem;font-weight:700;cursor:pointer;"><i class="fas fa-cart-plus"></i>Demande d'achat</button>
-<script>
-(function(){ try{ var b=document.getElementById('oda-hdr-btn'), bar=document.getElementById('svc-hdr-bar'); if(b&&bar){ b.style.marginLeft='auto'; bar.appendChild(b); } else if(b){ b.style.position='fixed'; b.style.top='12px'; b.style.right='24px'; b.style.zIndex='6900'; b.style.boxShadow='0 4px 14px rgba(0,0,0,.2)'; b.style.background='rgba(15,23,42,.85)'; b.style.borderRadius='999px'; b.style.padding='9px 16px'; } }catch(e){} })();
-</script>
-<div id="odaModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center;z-index:520;">
-  <div style="background:white;border-radius:20px;box-shadow:0 24px 64px rgba(0,0,0,.25);width:100%;max-width:520px;margin:1rem;overflow:hidden;">
-    <div style="padding:14px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#f59e0b,#d97706);"><h3 style="font-weight:700;color:white;font-size:.95rem;"><i class="fas fa-cart-plus" style="margin-right:8px;"></i>Demande d'achat opérateur</h3><button onclick="closeModal('odaModal')" style="color:rgba(255,255,255,.7);background:none;border:none;font-size:1.2rem;cursor:pointer;"><i class="fas fa-times"></i></button></div>
-    <div style="padding:20px;">
-      <div id="oda-ident" style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;">
-        <div><label class="form-label">Matricule</label><input id="oda_mat" type="text" placeholder="Votre matricule" class="form-input"/></div>
-        <div><label class="form-label">PIN</label><input id="oda_pin" type="password" placeholder="••••" class="form-input"/></div>
-        <button onclick="odaIdentify()" class="btn btn-primary" style="height:38px;"><i class="fas fa-right-to-bracket"></i> Identifier</button>
-      </div>
-      <div id="oda-context" style="display:none;">
-        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:8px 12px;font-size:.78rem;color:#92400e;margin:0 0 12px;"><i class="fas fa-user-check" style="margin-right:5px;"></i><span id="oda_who"></span> · Poste : <select id="oda_poste" onchange="odaFillMachines()" style="border:1px solid #fde68a;border-radius:6px;padding:2px 6px;font-size:.76rem;font-weight:700;color:#92400e;background:white;"></select></div>
-        <div style="display:flex;gap:8px;margin-bottom:12px;">
-          <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:1.5px solid #e2e8f0;border-radius:9px;padding:8px 10px;cursor:pointer;font-size:.78rem;font-weight:700;color:#374151;"><input type="radio" name="oda_cat" value="matiere" checked onchange="odaToggleCat()"/> Matière</label>
-          <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:1.5px solid #e2e8f0;border-radius:9px;padding:8px 10px;cursor:pointer;font-size:.78rem;font-weight:700;color:#374151;"><input type="radio" name="oda_cat" value="accessoire" onchange="odaToggleCat()"/> Accessoire</label>
-          <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:1.5px solid #e2e8f0;border-radius:9px;padding:8px 10px;cursor:pointer;font-size:.78rem;font-weight:700;color:#0369a1;"><input type="radio" name="oda_cat" value="machine" onchange="odaToggleCat()"/> Machine</label>
-        </div>
-        <div id="oda_machine_wrap" style="display:none;margin-bottom:12px;"><label class="form-label">Machine concernée (OPEX) *</label><select id="oda_machine" class="form-input"></select><div style="font-size:.66rem;color:#c2410c;margin-top:4px;"><i class="fas fa-bolt" style="margin-right:3px;"></i>Le prix ira sur l'OPEX de cette machine à la réception.</div></div>
-        <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:12px;">
-          <div><label class="form-label">Article / désignation *</label><input id="oda_article" type="text" placeholder="Ex : plaquette carbure, huile de coupe…" class="form-input"/></div>
-          <div><label class="form-label">Quantité</label><input id="oda_qte" type="number" min="1" value="1" class="form-input"/></div>
-        </div>
-        <div><label class="form-label">Priorité</label><select id="oda_prio" class="form-input"><option value="normal">Normale</option><option value="urgent">Urgente</option><option value="critique">Critique</option></select></div>
-      </div>
-    </div>
-    <div style="padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;"><button onclick="closeModal('odaModal')" class="btn btn-secondary">Annuler</button><button id="oda_submit" onclick="odaSubmit()" class="btn btn-primary" style="display:none;background:linear-gradient(135deg,#f59e0b,#d97706);"><i class="fas fa-paper-plane"></i> Envoyer aux Achats</button></div>
-  </div>
-</div>
+<!-- Boutons « Demande d'achat » + « PV de non-conformité » (borne PIN, écriture Production) : en haut à droite de la bannière.
+     Formulaires, fenêtres et JS : src/prod_da_nc.ts (15/09/2026). Rangés HORS des panneaux : ouvrables depuis tout onglet. -->
+${blocDaNcProduction(refFormulairesProd({ commandes: dbCmds ?? [], lots: dbLots ?? [], bdts: dbBDTs ?? [], machines: dbMachines ?? [], postes: dbPostes ?? [] }))}
 
 <!-- ═══ PANEL 2 : GANTT BST (jour-par-jour) ═══════════════════ -->
 <div id="ppanel-gantt-bst" style="display:none;">
@@ -2550,34 +2522,7 @@ function _avertTaux(j){
 //    Le rattachement/déplacement d'un process se fait via sa modale d'édition (champ « Poste ») — plus de glisser-déposer.
 function openProcModalForPoste(pid){ openProcModal(); var pp=document.getElementById('p_poste'); if(pp) pp.value=pid; }
 window.openProcModalForPoste=openProcModalForPoste;
-// ── Demande d'achat opérateur (borne PIN, restreinte au poste de l'affectation du jour) ──
-var ODA={op:null,postes:[],machines:[]};
-function odaOpen(){ document.getElementById('oda_mat').value=''; document.getElementById('oda_pin').value=''; document.getElementById('oda-ident').style.display=''; document.getElementById('oda-context').style.display='none'; document.getElementById('oda_submit').style.display='none'; document.getElementById('odaModal').style.display='flex'; }
-function odaIdentify(){
-  var mat=(document.getElementById('oda_mat').value||'').trim(), pin=(document.getElementById('oda_pin').value||'').trim();
-  if(!mat||!pin){ pushNotif('err','fa-exclamation-circle','Matricule + PIN requis.'); return; }
-  fetch('/api/production/operateur-contexte',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({matricule:mat,pin:pin})}).then(function(r){return r.json();}).then(function(j){
-    if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Identification échouée.',4500); return; }
-    ODA.op=j.operateur; ODA.postes=j.postes||[]; ODA.machines=j.machines||[];
-    document.getElementById('oda_who').textContent=j.operateur.nom;
-    document.getElementById('oda_poste').innerHTML=ODA.postes.map(function(p){return '<option value="'+p.id+'">'+String(p.nom).replace(/</g,'&lt;')+'</option>';}).join('');
-    document.getElementById('oda-ident').style.display='none'; document.getElementById('oda-context').style.display=''; document.getElementById('oda_submit').style.display='';
-    odaFillMachines(); odaToggleCat();
-  }).catch(function(){ pushNotif('err','fa-times','Erreur réseau.'); });
-}
-function odaFillMachines(){ var pid=document.getElementById('oda_poste').value; var sel=document.getElementById('oda_machine'); if(!sel) return; sel.innerHTML='<option value="">— Choisir —</option>'+ODA.machines.filter(function(m){return String(m.poste_id)===String(pid);}).map(function(m){return '<option value="'+m.id+'">'+String(m.nom).replace(/</g,'&lt;')+(m.cnc?' (CNC)':'')+'</option>';}).join(''); }
-function odaToggleCat(){ var c=(document.querySelector('input[name=oda_cat]:checked')||{}).value; document.getElementById('oda_machine_wrap').style.display=(c==='machine')?'block':'none'; }
-function odaSubmit(){
-  var cat=(document.querySelector('input[name=oda_cat]:checked')||{}).value;
-  var payload={ matricule:(document.getElementById('oda_mat').value||'').trim(), pin:(document.getElementById('oda_pin').value||'').trim(), categorie:cat, poste_id:document.getElementById('oda_poste').value, article:(document.getElementById('oda_article').value||'').trim(), qte:parseInt(document.getElementById('oda_qte').value,10)||1, priorite:document.getElementById('oda_prio').value };
-  if(cat==='machine') payload.machine_id=document.getElementById('oda_machine').value;
-  if(!payload.article){ pushNotif('err','fa-exclamation-circle','Désignation requise.'); return; }
-  if(cat==='machine'&&!payload.machine_id){ pushNotif('err','fa-exclamation-circle','Choisissez la machine.'); return; }
-  fetch('/api/production/demande-achat-operateur',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json();}).then(function(j){
-    if(j&&j.ok){ closeModal('odaModal'); pushNotif('ok','fa-cart-plus','Demande '+j.id+' envoyée aux Achats.',5000); }
-    else pushNotif('err','fa-ban',(j&&j.error)||'Envoi échoué.',4500);
-  }).catch(function(){ pushNotif('err','fa-times','Erreur réseau.'); });
-}
+// (Demande d'achat depuis la Production : fonctions odaOpen/odaSubmit déplacées dans src/prod_da_nc.ts, 15/09/2026.)
 function volShow(which){
   var m=document.getElementById('vol-mach'), p=document.getElementById('vol-pp');
   var bm=document.getElementById('volbtn-mach'), bp=document.getElementById('volbtn-pp');
@@ -3601,7 +3546,9 @@ function openSoldageModal(bdtId){
   if(bdt.statut==='solde'){ pushNotif('info','fa-info-circle','Déjà soldé.'); return; }
   if(bdt.statut!=='recu'){ pushNotif('warn','fa-exclamation-triangle','Le BDT doit être « Reçu » avant le soldage.'); return; }
   var proc=PROCESS.find(function(p){return p.id===bdt.process;});
-  document.getElementById('soldageInfo').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.78rem;"><div><span style="color:#94a3b8;">BDT : </span><strong>'+bdt.id+'</strong></div><div><span style="color:#94a3b8;">Opération : </span>'+bdt.operation+'</div><div><span style="color:#94a3b8;">Process : </span>'+(proc?proc.nom:'—')+'</div><div><span style="color:#94a3b8;">Client : </span>'+bdt.client+'</div><div><span style="color:#94a3b8;">Durée allouée : </span><strong>'+bdt.tempsAlloue+'h</strong></div><div><span style="color:#94a3b8;">Pièce : </span>'+bdt.piece+'</div>'+ccCellulesTemps(bdt)+'</div>';
+  // Opérateur qui a reçu le bon (seul opérateur autorisé à solder sans écriture Production).
+  var recuId=bdt.operateurId||bdt.op||''; var recuOp=recuId?OPERATEURS.find(function(o){return String(o.id)===String(recuId);}):null; var recuNom=recuOp?recuOp.nom:(recuId||'—');
+  document.getElementById('soldageInfo').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.78rem;"><div><span style="color:#94a3b8;">BDT : </span><strong>'+ccEsc(bdt.id)+'</strong></div><div><span style="color:#94a3b8;">Opération : </span>'+ccEsc(bdt.operation)+'</div><div><span style="color:#94a3b8;">Process : </span>'+ccEsc(proc?proc.nom:'—')+'</div><div><span style="color:#94a3b8;">Client : </span>'+ccEsc(bdt.client)+'</div><div><span style="color:#94a3b8;">Durée allouée : </span><strong>'+ccEsc(bdt.tempsAlloue)+'h</strong></div><div><span style="color:#94a3b8;">Pièce : </span>'+ccEsc(bdt.piece)+'</div><div style="grid-column:span 2;"><span style="color:#94a3b8;">Reçu par : </span><strong>'+ccEsc(recuNom)+'</strong></div>'+ccCellulesTemps(bdt)+'</div>';
   var now=new Date(); document.getElementById('s_fin').value=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
   document.getElementById('s_resultat').value='ok'; document.getElementById('s_obs').value=''; document.getElementById('s_matricule').value=''; document.getElementById('s_pin').value='';
   var sg=document.getElementById('s_gravite'); if(sg) sg.value='Majeure';
@@ -3613,21 +3560,28 @@ function sResultatChange(){ var r=(document.getElementById('s_resultat')||{}).va
 window.sResultatChange=sResultatChange;
 function confirmerSoldage(){
   var bdt=BDTS.find(function(b){return b.id===soldageBdtId;}); if(!bdt) return;
+  // Anti double-clic : un seul envoi à la fois (le second partait en 409 « vient de changer » pendant que le premier réussissait).
+  var btn=document.getElementById('s_solder_btn'); if(btn&&btn.disabled) return;
   var finStr=document.getElementById('s_fin').value; var resultat=document.getElementById('s_resultat').value;
   var matricule=(document.getElementById('s_matricule').value||'').trim(); var pin=(document.getElementById('s_pin').value||'').trim();
   var obs=document.getElementById('s_obs').value||'';
   var gravNc=(document.getElementById('s_gravite')||{value:'Majeure'}).value||'Majeure';
   if(!finStr){ pushNotif('err','fa-exclamation-circle','Heure de fin manquante.'); return; }
   if(!matricule||!pin){ pushNotif('err','fa-id-badge','Matricule + code PIN requis pour solder.'); return; }
+  if(btn){ btn.disabled=true; btn.setAttribute('aria-busy','true'); }
   fetch('/api/production/bdt/'+encodeURIComponent(soldageBdtId)+'/solder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({matricule:matricule,pin:pin,fin:finStr,resultat:resultat,obs:obs,gravite_nc:(resultat==='nc'?gravNc:null)})})
-    .then(function(r){return r.json();}).then(function(j){
-      if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Soldage refusé (matricule / PIN incorrect ?).'); return; }
+    .then(function(r){ return r.json().catch(function(){ return {ok:false,error:'Réponse inattendue du serveur (HTTP '+r.status+').'}; }); }).then(function(j){
+      // Message du serveur affiché tel quel (échappé) : 400 saisie, 401 PIN, 403 non habilité, 404, 409 statut, 503 panne.
+      // Refus : le PIN est effacé (borne partagée), le matricule reste pour corriger.
+      if(!j||!j.ok){ var sp=document.getElementById('s_pin'); if(sp) sp.value=''; pushNotif('err','fa-ban',ccEsc((j&&j.error)||'Soldage refusé.'),7000); return; }
       bdt.statut='solde'; bdt.finReel=finStr; bdt.resultat=resultat; if(j.data&&j.data.temps_reel!=null) bdt.tempsReel=j.data.temps_reel;
       closeModal('soldageModal'); buildAll();
-      pushNotif('ok','fa-check-double','BDT <strong>'+soldageBdtId+'</strong> soldé par <strong>'+(j.operateur||matricule)+'</strong>'+(bdt.tempsReel!=null?'. Temps réel : '+bdt.tempsReel+'h':'')+'.');
+      pushNotif('ok','fa-check-double','BDT <strong>'+ccEsc(soldageBdtId)+'</strong> soldé par <strong>'+ccEsc(j.operateur||matricule)+'</strong>'+(j.recu_par&&j.operateur_id&&String(j.recu_par.id)!==String(j.operateur_id)?' (reçu par '+ccEsc(j.recu_par.nom)+')':'')+(bdt.tempsReel!=null?'. Temps réel : '+bdt.tempsReel+'h':'')+'.');
+      if(j.avertissement) pushNotif('warn','fa-user-graduate',ccEsc(j.avertissement),9000);
       if(resultat==='nc') pushNotif('err','fa-exclamation-triangle','Non-conformité <strong>'+gravNc+'</strong> enregistrée → Qualité notifiée'+((gravNc==='Critique'||gravNc==='Bloquante')?' · <strong>expédition BLOQUÉE</strong>':' (non bloquant)')+'.');
       soldageBdtId=null;
-    }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
+    }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); })
+    .then(function(){ if(btn){ btn.disabled=false; btn.removeAttribute('aria-busy'); } });
 }
 function affectBDT(bdtId,procId,debut){
   var bdt=BDTS.find(function(b){return b.id===bdtId;}); if(!bdt) return;

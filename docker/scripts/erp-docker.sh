@@ -74,6 +74,13 @@ case "$cmd" in
     git -C "$REPO_ROOT" pull --ff-only || { echo "✗ git pull a echoue — resolvez le conflit puis relancez."; exit 1; }
     # Grave le commit dans l'image : /api/version dira ensuite quel code tourne vraiment.
     GIT_COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo '')"
+    # L'image COPIE le dossier de travail (src, public, package*.json, tsconfig.json) : des modifications
+    # NON COMMITEES y partent aussi. Le commit seul mentirait (« code servi = code du depot ») : suffixe -dirty.
+    _sale="$(git -C "$REPO_ROOT" status --porcelain -- src public package.json package-lock.json tsconfig.json docker/app.Dockerfile 2>/dev/null || true)"
+    if [ -n "$GIT_COMMIT" ] && [ -n "$_sale" ]; then
+      GIT_COMMIT="${GIT_COMMIT}-dirty"
+      echo "  ! dossier de travail NON COMMITE (src/public…) : l'image embarque ces modifications, version ${GIT_COMMIT:0:10}…-dirty"
+    fi
     BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     export GIT_COMMIT BUILD_DATE
     # Filet de securite AVANT les migrations de schema : elles ne suppriment rien, mais
@@ -104,7 +111,9 @@ case "$cmd" in
     # Verification finale : le code SERVI est-il bien celui du depot ?
     _srv="$(curl -s --max-time 5 "http://localhost:${_port}/api/version" 2>/dev/null | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p' || true)"   # app pas encore prete : curl echoue, sans || true set -e sortait ici
     if [ -n "$_srv" ] && [ -n "$GIT_COMMIT" ]; then
-      if [ "$_srv" = "$GIT_COMMIT" ]; then
+      if [ "$_srv" = "$GIT_COMMIT" ] && [ "${GIT_COMMIT%-dirty}" != "$GIT_COMMIT" ]; then
+        echo "  ! code servi = commit ${_srv:0:10} + modifications NON COMMITEES (-dirty) : committez puis relancez maj."
+      elif [ "$_srv" = "$GIT_COMMIT" ]; then
         echo "  ✓ code servi = code du depot (${_srv:0:10})"
       else
         echo "  ! ATTENTION : l'application sert ${_srv:0:10} alors que le depot est a ${GIT_COMMIT:0:10}."

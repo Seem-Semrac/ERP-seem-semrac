@@ -107,5 +107,39 @@ Le PV de contrôle d'une réception fournisseur se remplit aux **Expéditions** 
 - Valeurs `statut` / `decision` de `pv_controle` **inchangées** (contraintes CHECK du cloud) : `valide` / `libere`
   (conforme), `nc_ouverte` / `bloque` (non conforme).
 
+## NC émises depuis la Production : le « PV de non-conformité » (15/09/2026)
+
+> « Il faut dans la production que les personnes habilitées à écrire puissent instruire des non-conformités
+> librement en la rattachant à une affaire ou pas pour que ça aille ensuite dans la liste des NC en qualité. »
+
+Le formulaire vit en Production (bouton rouge « PV de non-conformité » du bandeau, `src/prod_da_nc.ts`) et écrit par
+`POST /api/production/nc` ; détail des règles : [Production](production.md), section du 15/09/2026. Ce qui arrive dans
+**Qualité › Non-Conformités** :
+
+- **Qui** : un salarié actif ayant l'**écriture Production**, identifié par matricule + PIN et revérifié par le serveur
+  (droits recalculés comme au login). Rattachement **facultatif** à une affaire, un lot, un BDT.
+- **Mêmes valeurs que le formulaire Qualité** : type (Interne / Client / Fournisseur), gravité, listes `qref.ts`
+  (poste de détection, imputation, nature, cause, action immédiate) ramenées à la valeur canonique ; `statut 'Ouvert'` ;
+  `categorie 'prod'` (filtre « Production ») ; `entite` obligatoire.
+- **Numéro** `NC-AAAA-NNN` sur le **compteur continu** du formulaire Qualité (lecture paginée, renumérotation une fois
+  sur conflit).
+- **`detecteur` = nom de l'émetteur**. ⚠ Défaut existant : le select « Détecteur » de la fenêtre d'édition (Opérateur,
+  Contrôleur, Client, Auditeur, Réception) **efface** cette valeur au ré-enregistrement, ainsi que le statut
+  « quarantaine ». L'émetteur est donc **aussi écrit dans la description** (« PV de non-conformité émis en Production
+  par X (constat du JJ/MM/AAAA). »), avec la cause présumée et le traitement proposé.
+- **Case quarantaine** → quarantaine `en_cours` liée à la NC et NC en `quarantaine`, comme « Mettre en quarantaine ».
+  **Action immédiate « Rebut »** → registre des déchets (`nc_rebut`), comme la création Qualité ; un échec est rendu en
+  avertissement.
+- **Portes qualité inchangées** : NC Critique/Bloquante rattachée à une affaire → BL de l'affaire bloqués ; quarantaine →
+  expédition du lot bloquée, quelle que soit la gravité.
+
+**Changements côté Qualité, même jour**
+- `POST /api/production/non-conformites` (formulaire « Nouvelle NC » de la Qualité) **n'est plus self-service** :
+  `serviceFor` le classe `qualite` et le handler revérifie `peutEcrireService(user, 'qualite')`. Avant, tout compte
+  connecté — y compris une borne en lecture seule — créait une NC, même Bloquante. ⚠ Le bouton reste affiché aux
+  lecteurs : l'envoi répond 403 et renvoie au PV de la Production.
+- `ncEstClose` (`src/queries.ts`) reconnaît **« Soldé »**, statut de clôture de `NC_STATUTS_LISTE` : une NC soldée ne
+  bloque plus l'expédition et ne remonte plus dans le cockpit Direction (qui utilise désormais ce même prédicat).
+
 ---
 > Fiche générée. Manuel utilisateur correspondant : `docs/manuel/qualite.md`. Voir aussi `04-auth-rbac.md`, `07-api-reference.md`.

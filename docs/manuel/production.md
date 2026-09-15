@@ -6,6 +6,8 @@ Planification et suivi de la fabrication : planning Gantt des BDT (bons de trava
 
 ![production-service](../assets/production-service.png)
 
+En haut à droite du bandeau, deux boutons ouverts depuis **n'importe quel onglet** : **« Demande d'achat »** et **« PV de non-conformité »** (rouge). Ils sont réservés aux personnes qui ont l'**écriture sur la Production** et se signent avec le **matricule + code PIN** (voir les procédures ci-dessous).
+
 ## Les onglets
 - **Planning Gantt BDT** — **Le seul planning de l'atelier.** Files « BDT à classer » et « BST à planifier » **au-dessus** du Gantt, puis un Gantt par poste, puis le bloc « Affectation des ressources aux postes » (opérateurs du jour par créneau). BDT/BDS prioritaires encadrés rouge. Bouton « Agrandir le planning ».
 - **Planning Gantt BST** — Planning de la sous-traitance (vue de 21 jours). Chaque carte « BST à planifier » indique « **Dispo le …** » quand l'étape précédente du lot fixe un jour au plus tôt.
@@ -20,8 +22,36 @@ Planification et suivi de la fabrication : planning Gantt des BDT (bons de trava
 ### Affecter et solder un BDT
 1. Ouvrir **/production/service** (onglet **Planning Gantt BDT**) — c'est le seul planning.
 2. Dans « **BDT à classer** » (au-dessus du planning), **glisser** une carte sur le poste voulu, ou sur une sous-case **Matin / Journée / Après-midi / Soirée** pour affecter l'opérateur du créneau. Le **chemin critique** s'applique à la pose (voir ci-dessous).
-3. Quand l'opération démarre : clic droit sur la barre → **Reçu**.
-4. À la fin : clic droit → **Solder** → saisir le temps réel + **PIN** de l'opérateur (traçabilité). Un écart déclenche éventuellement une NC.
+3. Quand l'opération démarre : **double-clic** sur la barre (ou clic droit → **Reçu**) → matricule + code PIN. Peuvent recevoir : un **opérateur**, ou une personne qui **écrit en Production** (chef d'atelier) — celle qui reçoit devient la personne qui réalise le bon (« Reçu par »), et c'est son coût horaire qui compte.
+4. À la fin : clic droit → **Solder le BDT** → heure de fin réelle, résultat, observations, puis **matricule + code PIN**. La fenêtre rappelle **« Reçu par »** et dit qui peut solder : **l'opérateur qui a reçu ce BDT**, ou **une personne habilitée à écrire en Production** (qui peut solder le bon reçu par un autre). Tout autre matricule est refusé avec ce message. Le bouton « Solder » se grise pendant l'envoi (un seul clic suffit) ; en cas de refus, le PIN est effacé et le message du serveur s'affiche tel quel. Un résultat « Non-conformité » crée une NC pour la Qualité.
+
+> **La matrice de compétences ne bloque plus le soldage** (15/09/2026). Elle refusait tout le monde (« n'est pas habilité(e) à solder … (matrice de compétences) ») : la matrice RH enregistre l'identifiant du process, le contrôle le comparait au nom de l'opération. Désormais, si l'opérateur qui a reçu le bon n'a pas de niveau pour ce process, le soldage est **enregistré** et une notification orange invite à mettre la matrice à jour (RH › Compétences).
+
+![Fenêtre de soldage d'un BDT](../assets/form-production-soldage.png)
+
+### Faire une demande d'achat depuis la Production
+Réservé aux personnes qui ont l'**écriture sur la Production**. La demande part aux **Achats** (onglet Demandes d'achat), au nom de la personne qui signe.
+1. Bandeau du service → **« Demande d'achat »** : le **formulaire complet** s'ouvre tout de suite (le curseur est sur le matricule).
+2. **Qui fait la demande ?** : matricule + code PIN.
+3. **Nature de l'achat** : Matière · Accessoire · **Machine (OPEX)** — pour « Machine », choisir la **machine concernée** : le prix ira sur l'OPEX de cette machine à la réception, et le poste se remplit tout seul.
+4. **Article / désignation** (obligatoire), **Référence**, **Quantité** (obligatoire, virgule acceptée) et **Unité**, puis au besoin **Affaire**, **Poste concerné**, **Priorité**, **Livraison souhaitée** (pas dans le passé) et **Fournisseur suggéré**.
+5. **« Envoyer aux Achats »** → « Demande d'achat DA-2026-012 envoyée aux Achats. ». Une erreur s'affiche **dans la fenêtre**, le champ en cause en rouge (PIN incorrect : le PIN est effacé ; matricule sans écriture Production : « Seules les personnes habilitées à écrire en Production peuvent faire une demande d'achat depuis la Production. »).
+
+> Changement du 15/09/2026 : il n'y a plus d'étape « Identifier » ni de limite « poste de l'affectation du jour » (qui refusait tout le monde quand le planning du jour n'était pas saisi). En contrepartie, un **opérateur sans écriture Production** ne peut plus faire de demande d'achat : il la fait saisir par son chef d'atelier.
+
+![Formulaire Demande d'achat — Production](../assets/form-production-da.png)
+
+### Émettre un PV de non-conformité depuis la Production
+Réservé aux personnes qui ont l'**écriture sur la Production**. La NC arrive dans **Qualité › Non-Conformités** (catégorie « Production », statut « Ouvert »), à votre nom, avec un numéro **NC-2026-…**. Le rattachement à une affaire est **facultatif**.
+1. Bandeau du service → **« PV de non-conformité »** (bouton rouge, juste à côté de « Demande d'achat »).
+2. **Qui émet le PV ?** : matricule + code PIN.
+3. **Constat** : date du constat (aujourd'hui par défaut, jamais dans le futur), type de NC (Interne / Client / Fournisseur), **entité** (Seem / Semrac, obligatoire), gravité (Majeure par défaut). Une gravité **Critique** ou **Bloquante** rattachée à une affaire **bloque l'expédition** de cette affaire tant que la Qualité n'a pas clos la NC.
+4. **Rattachement (facultatif)** : affaire, puis lot et BDT (listes filtrées par l'affaire ; choisir un BDT complète le lot et le code pièce), code article / pièce, désignation, quantité concernée (pièces), poste de détection. L'ERP vérifie que le lot et le BDT appartiennent bien à l'affaire.
+5. **Défaut** : nature de la NC, imputation (service responsable), **description du défaut** (obligatoire), nature de la cause, cause présumée, action immédiate, traitement proposé — mêmes listes que le formulaire de la Qualité.
+6. Case **« Mettre en quarantaine »** au besoin (il faut désigner un lot, un BDT, un code article ou une désignation) : le lot est isolé et son expédition bloquée jusqu'à la décision de la Qualité.
+7. **« Émettre le PV »** → « PV de non-conformité NC-2026-… émis : il est dans la liste des NC de la Qualité ». Action immédiate « Rebut » : le rebut est aussi inscrit au registre des déchets (Sécurité).
+
+![Formulaire PV de non-conformité — Production](../assets/form-production-pvnc.png)
 
 ### Programmer la présence des opérateurs
 1. Onglet **Présence opérateurs** → **Planning de présence** (grille opérateurs × 7 jours, ‹ › pour changer de semaine).

@@ -132,6 +132,8 @@ Elle reconstruit les conteneurs locaux, attend que les 8 services soient sains, 
 
 `maj` fait le pendant côté serveur : `git pull --ff-only`, reconstruction, redémarrage, puis l'état des 8 conteneurs et l'URL. Les données ne sont jamais touchées — seule l'application est remplacée.
 
+> **Commit gravé et suffixe `-dirty` (15/09/2026).** `maj` grave le commit dans l'image (`GIT_COMMIT`, relu par `GET /api/version`). L'image **copie le dossier de travail** : si `src`, `public`, `package.json`, `package-lock.json`, `tsconfig.json` ou `docker/app.Dockerfile` ont des modifications non commitées, le commit est suffixé **`-dirty`**, un avertissement s'affiche au début, et la vérification finale dit « code servi = commit … + modifications NON COMMITEES (-dirty) : committez puis relancez maj. ». `/api/version` garde le suffixe dans `commit_court`. Sur la VM (dossier propre, `pull --ff-only`) il ne doit jamais apparaître. Si l'application démarre encore au moment du `curl` final, la vérification ne s'affiche pas : interroger `/api/version` ensuite.
+
 ### Ce que fait `install.sh`
 
 | Étape | Détail | Pourquoi |

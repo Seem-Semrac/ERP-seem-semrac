@@ -621,7 +621,8 @@ export async function getDemandesAchat(): Promise<DemandeAchat[]> {
 
 // ── Portes qualité : helpers canoniques (unifient les définitions divergentes) ──
 // Un statut de NC est « clos » → ne bloque plus l'expédition.
-export function ncEstClose(s: any): boolean { return /clotur|clôtur|ferm|clos|libér|liber|rejet|résolu|resolu|trait|annul/i.test(String(s || '')) }
+// « Soldé » = statut de clôture de la liste Qualité (NC_STATUTS_LISTE, qref.ts) ; `sold[ée](?!r)` n'attrape pas « à solder ».
+export function ncEstClose(s: any): boolean { return /sold[ée](?!r)|clotur|clôtur|ferm|clos|libér|liber|rejet|résolu|resolu|trait|annul/i.test(String(s || '')) }
 // Gravité bloquante = Critique ou Bloquante (la gravité est choisie par l'opérateur au soldage).
 export function ncEstBloquante(g: any): boolean { return /critique|bloquante/i.test(String(g || '')) }
 // Rattachement FIABLE d'une NC à une commande/affaire : affaire_id → num_affaire → repli sous-chaîne lot_ref.
@@ -3219,6 +3220,57 @@ export async function verifySalariePin(matricule: string, pin: string): Promise<
     }
   }
   return null
+}
+
+// Variante STRICTE de verifySalariePin (DA et PV de non-conformité émis depuis la Production, 15/09/2026) :
+// une panne de lecture n'est jamais « matricule ou PIN incorrect » — { data: null, error } ; mauvais couple = { data: null, error: null }.
+export async function verifySalariePinStricte(matricule: string, pin: string): Promise<{ data: any | null; error: string | null }> {
+  if (!matricule || !pin) return { data: null, error: null }
+  const mat = String(matricule).trim()
+  if (!mat || /[%_,*()\\]/.test(mat)) return { data: null, error: null }   // jokers LIKE/PostgREST refusés (voir verifyOperateurPin)
+  const { data, error } = await supabase
+    .from('salaries')
+    .select('id,nom,prenom,matricule,entite,role,roles,autorisations,est_operateur,actif,pin')
+    .ilike('matricule', mat)
+    .eq('actif', true)
+  if (error || !Array.isArray(data)) return { data: null, error: error?.message || 'lecture des salariés impossible' }
+  for (const row of data) {
+    if (await verifyPin(pin, (row as any).pin)) {
+      await rehashPinIfLegacy(row as any, pin)
+      const { pin: _omit, ...safe } = row as any
+      return { data: safe, error: null }
+    }
+  }
+  return { data: null, error: null }
+}
+
+// Lecture STRICTE de lignes (une panne n'est jamais « introuvable ») : [] = aucune ligne, null = échec.
+export async function lireLignesStricte(table: string, select: string, filtre?: { colonne: string; valeur: string; op?: 'eq' | 'like' }, limite = 1000): Promise<{ data: any[] | null; error: string | null }> {
+  let q: any = supabase.from(table).select(select)
+  if (filtre) q = filtre.op === 'like' ? q.like(filtre.colonne, filtre.valeur) : q.eq(filtre.colonne, filtre.valeur)
+  const { data, error } = await q.limit(limite)
+  if (error || !Array.isArray(data)) return { data: null, error: error?.message || ('lecture de ' + table + ' impossible') }
+  return { data, error: null }
+}
+
+// Lecture STRICTE et PAGINÉE de TOUTES les lignes (numérotations) : PostgREST plafonne silencieusement chaque
+// réponse (PGRST_DB_MAX_ROWS, 1000 en Docker comme en cloud) — un `.limit(100000)` ne rend donc qu'un sous-ensemble
+// arbitraire au-delà. Tri stable sur `ordre` (clé unique), pages demandées jusqu'à une page VIDE : le plafond réel
+// du serveur peut être inférieur à `taillePage`, une page courte ne prouve donc pas la fin. Une page en échec = échec.
+export async function lireToutesLignesStricte(table: string, select: string, filtre?: { colonne: string; valeur: string; op?: 'eq' | 'like' }, opts: { ordre?: string; taillePage?: number; maxLignes?: number } = {}): Promise<{ data: any[] | null; error: string | null }> {
+  const ordre = opts.ordre || 'id'
+  const taille = Math.max(1, Math.min(1000, Math.floor(opts.taillePage || 1000)))
+  const max = Math.max(1, Math.floor(opts.maxLignes || 500000))
+  const out: any[] = []
+  while (out.length < max) {
+    let q: any = supabase.from(table).select(select)
+    if (filtre) q = filtre.op === 'like' ? q.like(filtre.colonne, filtre.valeur) : q.eq(filtre.colonne, filtre.valeur)
+    const { data, error } = await q.order(ordre, { ascending: true }).range(out.length, out.length + taille - 1)
+    if (error || !Array.isArray(data)) return { data: null, error: error?.message || ('lecture de ' + table + ' impossible') }
+    if (!data.length) return { data: out, error: null }
+    out.push(...data)
+  }
+  return { data: null, error: 'lecture de ' + table + ' interrompue : plus de ' + max + ' lignes' }
 }
 
 // ─── Historiques BDT (par machine / par opérateur) ────────────

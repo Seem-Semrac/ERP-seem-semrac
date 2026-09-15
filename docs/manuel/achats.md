@@ -8,7 +8,7 @@ Consultations fournisseurs (RFQ), demandes d'achat, bons de commande, évaluatio
 
 ## Les onglets
 - **Demandes de prix** — RFQ : source de vérité des prix → alimente le catalogue.
-- **Demandes d'achat** — DA à transformer en BC.
+- **Demandes d'achat** — DA à transformer en BC. Celles de l'atelier (bouton « Demande d'achat » de la Production, réservé à l'écriture Production) arrivent au nom « Prénom Nom (Production) », avec la référence dans l'article (« (réf. …) ») et l'unité dans la quantité (« 12,5 kg ») ; une DA « Machine » envoie son prix sur l'OPEX de la machine à la réception.
 - **Bons de commande** — Tous les BC émis, la date d'arrivée annoncée par le fournisseur et l'exigence de **certificat matière** (colonne « Certificat matière »).
 - **Avoirs fournisseurs** — Registre de ce que nos **fournisseurs et sous-traitants nous doivent**. À ne pas confondre avec les avoirs **clients**, qui restent au service Commercial.
 - **Fournisseurs / ST** — Référentiel fournisseurs et sous-traitants.

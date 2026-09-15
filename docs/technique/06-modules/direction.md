@@ -37,5 +37,8 @@ lot C, la décision est **conditionnelle** (409 si le congé n'est plus `demande
 et un effet raté (absences, BDT renvoyés au pool, solde) revient dans `warning`, affiché en notification
 orange. Les congés des **opérateurs** se traitent aussi dans Production › Présence
 (`/api/production/conge/:id/valider`). Détail : `06-modules/rh.md`.
+- **NC critiques ouvertes** (15/09/2026) : `/direction/service` et `POST /api/direction/scan-alertes` jugent une NC ouverte
+  par `!ncEstClose(statut)` (`src/queries.ts`), la définition de la porte d'expédition. Elles avaient chacune leur regex,
+  sans « Soldé » (statut de clôture de la liste Qualité) : une NC Critique soldée restait listée et alertée.
 ---
 > Fiche générée. Manuel utilisateur correspondant : `docs/manuel/direction.md`. Voir aussi `04-auth-rbac.md`, `07-api-reference.md`.

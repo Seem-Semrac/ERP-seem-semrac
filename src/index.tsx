@@ -149,6 +149,10 @@ import { peutEcrireService } from './auth'
 // Lot D · D2 (14/09/2026) — PV de contrôle de réception : règles pures + lectures strictes (contrôleur, BL, PV)
 import { validerSaisiePV, controleursEligibles, construireDetailPV, champsNcPV, observationsPV, sansColonnesPV, MSG_PV_RESERVE, MSG_CONTROLEUR_NON_ELIGIBLE, AVERT_MIGRATION_012_PV, type ControleurPV } from './pv_reception'
 import { getSalariesDroitsStricte, getBlsDuBcStricte, getPVControlesResumeStricte } from './queries'
+import { verifySalariePinStricte, lireLignesStricte, lireToutesLignesStricte } from './queries'
+import { lireIdentification, ecritEnProduction, MSG_DA_RESERVE, MSG_NC_RESERVE, MSG_PIN_INCORRECT, validerSaisieDaProd, rattacherDaProd, payloadDaProd, COLONNES_DA_OBLIGATOIRES, validerSaisieNcProd, rattacherNcProd, payloadNcProd, COLONNES_NC_OBLIGATOIRES, prochainNumeroNc, quarantaineNcProd, colonneAbsente, dateAtelier, lotDuBdt } from './prod_da_nc'
+// Soldage d'un BDT (15/09/2026) : opérateur qui l'a reçu OU écriture Production ; la matrice de compétences n'avertit plus que
+import { droitSoldageBDT, avertissementCompetence, heureFinValide, nomSalarie } from './soldage_bdt'
 import { pageLogin, pageAccesRefuse } from './login'
 import { signSession, verifySession, canAccess, isPublicPath, hashPin, navServices, MENU_SERVICES_PUBLIC } from './auth'
 import { MANUELS, manuelsFor, manuelBySlug, pageManuelsHub, pageManuel } from './manuels'
@@ -287,7 +291,8 @@ app.get('/api/version', (c) => {
     ok: true,
     version: APP_VERSION,
     commit: commit || 'inconnu',
-    commit_court: commit ? commit.slice(0, 10) : 'inconnu',
+    // « -dirty » (image construite depuis un dossier de travail non commité, erp-docker.sh) reste visible dans la forme courte.
+    commit_court: commit ? commit.slice(0, 10) + (commit.endsWith('-dirty') ? '-dirty' : '') : 'inconnu',
     construit_le: String(env?.BUILD_DATE || '').trim() || null,
   })
 })
@@ -2182,8 +2187,8 @@ export function nextAffaireId(prefix: 'BC' | 'BL', affaire: any, ids: (string | 
   return prefix + '-' + year + '-' + aff + '-' + String(max + 1).padStart(2, '0')
 }
 
-function nextSeqId(prefix: string, ids: (string | undefined | null)[]): string {
-  const year = new Date().getFullYear()
+// `year` : année du numéro, par défaut l'année UTC du serveur ; la borne Production passe l'année de l'atelier (dateAtelier).
+function nextSeqId(prefix: string, ids: (string | undefined | null)[], year: number = new Date().getFullYear()): string {
   const re = new RegExp('^' + prefix + '-' + year + '-(\\d+)$')
   let max = 0
   for (const id of ids) {
@@ -2221,62 +2226,168 @@ app.post('/api/achats/da', async (c) => {
   return c.json({ ok: true, da: data })
 })
 
-// ─── DA opérateur (borne PIN) : demande d'achat libre, RESTREINTE au poste de l'affectation du jour ───
-// L'opérateur s'identifie (matricule + PIN) → contexte : ses postes du jour + les machines de ces postes.
-app.post('/api/production/operateur-contexte', async (c) => {
-  const b = await c.req.json().catch(() => ({} as any))
-  if (!b.matricule || !b.pin) return c.json({ ok: false, error: 'Matricule + PIN requis' }, 400)
-  const op = await verifyOperateurPin(String(b.matricule), String(b.pin))
-  if (!op) return c.json({ ok: false, error: 'Matricule ou PIN incorrect' }, 401)
-  const today = new Date().toISOString().slice(0, 10)
-  const [affs, procs, machs, postes] = await Promise.all([
-    getAffectationsPoste(today, today).catch(() => [] as any[]), getProcessAtelier().catch(() => [] as any[]),
-    getMachines().catch(() => [] as any[]), getPostes().catch(() => [] as any[]),
-  ])
-  const procById: Record<string, any> = {}; (procs as any[]).forEach((p: any) => { procById[String(p.id)] = p })
-  const posteIds = new Set<string>()
-  ;(affs as any[]).filter((a: any) => String(a.operateur_id) === String(op.id)).forEach((a: any) => { const pr = procById[String(a.process_id)]; if (pr && pr.poste_id) posteIds.add(String(pr.poste_id)) })
-  if (!posteIds.size) return c.json({ ok: false, error: "Vous n'êtes affecté à aucun poste aujourd'hui — voir le planning." }, 403)
-  const myPostes = (postes as any[]).filter((p: any) => posteIds.has(String(p.id))).map((p: any) => ({ id: p.id, nom: p.nom }))
-  const myMachines = (machs as any[]).filter((m: any) => m.poste_id && posteIds.has(String(m.poste_id))).map((m: any) => ({ id: m.id, nom: m.nom, poste_id: m.poste_id, cnc: !!m.cnc }))
-  return c.json({ ok: true, operateur: { id: op.id, nom: (`${op.prenom || ''} ${op.nom || ''}`).trim() || String(op.matricule) }, postes: myPostes, machines: myMachines })
-})
+// ─── DEMANDE D'ACHAT et PV DE NON-CONFORMITÉ depuis la PRODUCTION (15/09/2026) ───
+// Borne partagée : tout compte connecté ouvre les formulaires (routes self-service, src/auth.ts). Celui qui
+// signe est le salarié du matricule + PIN, relu en lecture STRICTE (une panne = 503, jamais « PIN incorrect »),
+// et il doit avoir l'ÉCRITURE Production, droits recalculés comme au login (ecritEnProduction). Sinon 403.
+// Supprimé : POST /api/production/operateur-contexte et la restriction « poste de l'affectation du jour » —
+// elle refusait tout le monde dès que le planning du jour n'était pas saisi, et verifyOperateurPin écartait
+// les salariés non opérateurs (chef d'atelier) : le formulaire ne s'affichait donc jamais.
+// Ordre des refus : identification (400) → PIN (401) → droit (403) → saisie (400) : un non-habilité
+// n'apprend rien du formulaire. Règles pures et formulaires : src/prod_da_nc.ts.
+type RefusSignature = { ok: false; status: 400 | 401 | 403 | 503; body: Record<string, any> }
+async function signataireProduction(b: any, msgReserve: string): Promise<{ ok: true; sal: any } | RefusSignature> {
+  const ident = lireIdentification(b)
+  if (!ident.ok) return { ok: false, status: 400, body: { ok: false, error: ident.error, champ: ident.champ } }
+  const r = await verifySalariePinStricte(ident.matricule, ident.pin)
+  if (r.error) return { ok: false, status: 503, body: { ok: false, error: 'Vérification du matricule impossible (lecture des salariés), rien n’a été enregistré : ' + r.error } }
+  if (!r.data) return { ok: false, status: 401, body: { ok: false, error: MSG_PIN_INCORRECT, champ: 'pin' } }
+  if (!ecritEnProduction(r.data, autorisationsUnion)) return { ok: false, status: 403, body: { ok: false, error: msgReserve, champ: 'matricule' } }
+  return { ok: true, sal: r.data }
+}
+const LECTURE_VIDE = { data: [] as any[], error: null as string | null }
+
+// Insère une ligne numérotée : renumérote UNE fois sur 23505 (saisie simultanée) et retire, une à une, les
+// colonnes FACULTATIVES que la base n'a pas encore (PGRST204 / 42703) — jamais les obligatoires.
+async function insererNumeroteAvecRepli(
+  construire: (numero: string) => Record<string, any>,
+  numeroter: () => Promise<{ numero: string | null; error: string | null }>,
+  inserer: (p: Record<string, any>) => Promise<{ data: any; error: any }>,
+  obligatoires: Set<string>,
+): Promise<{ data: any; numero: string | null; error: string | null; status: 200 | 500 | 503; retirees: string[] }> {
+  const retirees: string[] = []
+  let n = await numeroter()
+  if (n.error || !n.numero) return { data: null, numero: null, error: n.error || 'numérotation impossible', status: 503, retirees }
+  let renumerote = false
+  for (let essai = 0; essai < 12; essai++) {
+    const p = construire(n.numero)
+    for (const k of retirees) delete p[k]
+    const r = await inserer(p)
+    if (!r.error) return { data: r.data, numero: n.numero, error: null, status: 200, retirees }
+    if (String(r.error.code || '') === '23505' && !renumerote) {
+      renumerote = true
+      n = await numeroter()
+      if (n.error || !n.numero) return { data: null, numero: null, error: n.error || 'numérotation impossible', status: 503, retirees }
+      continue
+    }
+    const col = colonneAbsente(r.error)
+    if (col && col in p && !obligatoires.has(col)) { retirees.push(col); continue }
+    return { data: null, numero: n.numero, error: r.error.message || String(r.error.code || 'erreur inconnue'), status: 500, retirees }
+  }
+  return { data: null, numero: n.numero, error: 'trop de colonnes absentes de la base', status: 500, retirees }
+}
+const avertColonnes = (cols: string[]) => cols.map(k => 'Information « ' + k + ' » non enregistrée : colonne absente de la base (migration à jouer).')
 
 app.post('/api/production/demande-achat-operateur', async (c) => {
   const b = await c.req.json().catch(() => ({} as any))
-  if (!b.matricule || !b.pin) return c.json({ ok: false, error: 'Matricule + PIN requis' }, 400)
-  const op = await verifyOperateurPin(String(b.matricule), String(b.pin))
-  if (!op) return c.json({ ok: false, error: 'Matricule ou PIN incorrect' }, 401)
-  const categorie = ['machine', 'matiere', 'accessoire'].includes(String(b.categorie)) ? String(b.categorie) : ''
-  if (!categorie) return c.json({ ok: false, error: 'Choisissez : machine, matière ou accessoire.' }, 400)
-  const article = String(b.article || '').trim()
-  if (!article) return c.json({ ok: false, error: "Désignation de l'article requise." }, 400)
-  const qte = Math.max(1, Math.floor(Number(b.qte)) || 1)
-  const posteId = String(b.poste_id || '')
-  const today = new Date().toISOString().slice(0, 10)
-  const [affs, procs, machs] = await Promise.all([getAffectationsPoste(today, today).catch(() => [] as any[]), getProcessAtelier().catch(() => [] as any[]), getMachines().catch(() => [] as any[])])
-  const procById: Record<string, any> = {}; (procs as any[]).forEach((p: any) => { procById[String(p.id)] = p })
-  const myPosteIds = new Set<string>()
-  ;(affs as any[]).filter((a: any) => String(a.operateur_id) === String(op.id)).forEach((a: any) => { const pr = procById[String(a.process_id)]; if (pr && pr.poste_id) myPosteIds.add(String(pr.poste_id)) })
-  if (!posteId || !myPosteIds.has(posteId)) return c.json({ ok: false, error: "Poste non autorisé (vous n'y êtes pas affecté aujourd'hui)." }, 403)
-  let machineId: string | null = null
-  if (categorie === 'machine') {
-    machineId = String(b.machine_id || '')
-    const m = (machs as any[]).find((x: any) => String(x.id) === machineId)
-    if (!m || String(m.poste_id) !== posteId) return c.json({ ok: false, error: 'Machine invalide ou hors de votre poste.' }, 403)
+  const sig = await signataireProduction(b, MSG_DA_RESERVE)
+  if (!sig.ok) return c.json(sig.body, sig.status)
+  const today = dateAtelier()   // jour de l'atelier (Europe/Paris) : date_da et « livraison pas dans le passé »
+  const s = validerSaisieDaProd(b, today)
+  if (!s.ok) return c.json({ ok: false, error: s.error, champ: s.champ }, 400)
+  const v = s.valeurs
+  const [rm, rp, rc] = await Promise.all([
+    v.machine_id ? lireLignesStricte('machines', 'id,nom,poste_id', { colonne: 'id', valeur: v.machine_id }, 1) : LECTURE_VIDE,
+    v.poste_id ? lireLignesStricte('postes', 'id,nom', { colonne: 'id', valeur: v.poste_id }, 1) : LECTURE_VIDE,
+    v.num_affaire ? lireLignesStricte('commandes', 'id,num_affaire,client_nom,affaire_id', { colonne: 'num_affaire', valeur: v.num_affaire }, 1) : LECTURE_VIDE,
+  ])
+  const panne = [rm, rp, rc].find(r => r.error || !r.data)
+  if (panne) return c.json({ ok: false, error: 'Vérification de la demande impossible (lecture de la base), rien n’a été enregistré : ' + (panne.error || '') }, 503)
+  const ra = rattacherDaProd(v, { machine: rm.data![0] || null, poste: rp.data![0] || null, commande: rc.data![0] || null })
+  if (!ra.ok) return c.json({ ok: false, error: ra.error, champ: ra.champ }, 400)
+  const affaireId = ra.affaire_id || (v.num_affaire ? await resolveAffaireId(v.num_affaire) : null)
+  const annee = Number(today.slice(0, 4))
+  const ins = await insererNumeroteAvecRepli(
+    numero => payloadDaProd(v, { id: numero, today, salarie: sig.sal, machineId: ra.machine_id, posteId: ra.poste_id, affaireId }),
+    async () => {
+      // Lecture PAGINÉE : PostgREST plafonne chaque réponse (PGRST_DB_MAX_ROWS = 1000) sans le signaler.
+      const r = await lireToutesLignesStricte('demandes_achat', 'id', { colonne: 'id', valeur: 'DA-' + annee + '-%', op: 'like' })
+      return r.error || !r.data ? { numero: null, error: r.error || 'lecture des demandes d’achat impossible' } : { numero: nextSeqId('DA', r.data.map((d: any) => d.id), annee), error: null }
+    },
+    p => createDemandeAchat(p as any),
+    COLONNES_DA_OBLIGATOIRES,
+  )
+  if (ins.error) return c.json({ ok: false, error: (ins.status === 503 ? 'Numérotation impossible (lecture de la base), rien n’a été enregistré : ' : 'Demande d’achat non enregistrée : ') + ins.error }, ins.status === 503 ? 503 : 500)
+  return c.json({ ok: true, id: ins.numero, da: ins.data, avertissements: avertColonnes(ins.retirees) })
+})
+
+// PV de non-conformité émis depuis la Production → une ligne non_conformites, visible dans Qualité › NC.
+// Mêmes valeurs que le formulaire NC de la Qualité (type/gravité/statut « Ouvert »/listes qref), catégorie « prod »,
+// numéro NC-AAAA-NNN comme la Qualité, détecteur = le salarié authentifié (rappelé dans la description).
+// Affaire, lot et BDT relus en base et cohérents (400 sinon). Quarantaine seulement si la case est cochée,
+// avec le même effet que « Mettre en quarantaine » de la Qualité ; action immédiate « Rebut » → registre des déchets.
+app.post('/api/production/nc', async (c) => {
+  const b = await c.req.json().catch(() => ({} as any))
+  const sig = await signataireProduction(b, MSG_NC_RESERVE)
+  if (!sig.ok) return c.json(sig.body, sig.status)
+  const today = dateAtelier()   // jour de l'atelier (Europe/Paris) : un PV émis à 00:30 garde sa date du jour
+  const s = validerSaisieNcProd(b, today)
+  if (!s.ok) return c.json({ ok: false, error: s.error, champ: s.champ }, 400)
+  const v = s.valeurs
+  const SEL_CMD = 'id,num_affaire,client_nom,affaire_id'
+  const SEL_LOT = 'id,cmd_id,piece,client_nom,affaire_id'
+  const [rc, rl, rb] = await Promise.all([
+    v.num_affaire ? lireLignesStricte('commandes', SEL_CMD, { colonne: 'num_affaire', valeur: v.num_affaire }, 1) : LECTURE_VIDE,
+    v.lot_ref ? lireLignesStricte('lots', SEL_LOT, { colonne: 'id', valeur: v.lot_ref }, 1) : LECTURE_VIDE,
+    v.bdt_id ? lireLignesStricte('bons_de_travail', 'id,num_affaire,cmd_id,lot_id,lot_ref,piece,operation,client_nom,affaire_id', { colonne: 'id', valeur: v.bdt_id }, 1) : LECTURE_VIDE,
+  ])
+  const bdt = rb.data?.[0] || null
+  // Seul le BDT est saisi : son lot est RELU aussi, pour vérifier à quelle affaire il appartient (jamais recopié à l'aveugle).
+  const lotBdtId = !v.lot_ref ? lotDuBdt(bdt) : null
+  const rlb = lotBdtId ? await lireLignesStricte('lots', SEL_LOT, { colonne: 'id', valeur: lotBdtId }, 1) : LECTURE_VIDE
+  const lot = (v.lot_ref ? rl.data?.[0] : rlb.data?.[0]) || null
+  const cmdLotId = lot && lot.cmd_id != null ? String(lot.cmd_id).trim() : ''
+  const cmdBdtId = bdt && bdt.cmd_id != null ? String(bdt.cmd_id).trim() : ''
+  const [rcl, rcb] = await Promise.all([
+    cmdLotId ? lireLignesStricte('commandes', SEL_CMD, { colonne: 'id', valeur: cmdLotId }, 1) : LECTURE_VIDE,
+    cmdBdtId && cmdBdtId !== cmdLotId ? lireLignesStricte('commandes', SEL_CMD, { colonne: 'id', valeur: cmdBdtId }, 1) : LECTURE_VIDE,
+  ])
+  const panne = [rc, rl, rb, rlb, rcl, rcb].find(r => r.error || !r.data)
+  if (panne) return c.json({ ok: false, error: 'Vérification du rattachement impossible (lecture de la base), rien n’a été enregistré : ' + (panne.error || '') }, 503)
+  const commandeDuLot = rcl.data![0] || null
+  const ra = rattacherNcProd(v, {
+    commande: rc.data![0] || null, lot, commandeDuLot, bdt,
+    commandeDuBdt: cmdBdtId ? (cmdBdtId === cmdLotId ? commandeDuLot : (rcb.data![0] || null)) : null,
+  })
+  if (!ra.ok) return c.json({ ok: false, error: ra.error, champ: ra.champ }, 400)
+  if (ra.num_affaire && !ra.affaire_id) ra.affaire_id = await resolveAffaireId(ra.num_affaire)   // simple recherche (clé étrangère affaires)
+  const annee = Number(today.slice(0, 4))
+  const ins = await insererNumeroteAvecRepli(
+    numero => payloadNcProd(v, ra, { id: numero, salarie: sig.sal }),
+    async () => {
+      // Compteur continu toutes années : lecture PAGINÉE (PostgREST plafonne chaque réponse à PGRST_DB_MAX_ROWS sans le signaler).
+      const r = await lireToutesLignesStricte('non_conformites', 'id', { colonne: 'id', valeur: 'NC-____-%', op: 'like' })
+      return r.error || !r.data ? { numero: null, error: r.error || 'lecture des non-conformités impossible' } : { numero: prochainNumeroNc(r.data.map((n: any) => n.id), annee), error: null }
+    },
+    p => createNonConformiteRow(p),
+    COLONNES_NC_OBLIGATOIRES,
+  )
+  if (ins.error || !ins.numero) return c.json({ ok: false, error: (ins.status === 503 ? 'Numérotation impossible (lecture de la base), rien n’a été enregistré : ' : 'Non-conformité non enregistrée : ') + ins.error }, ins.status === 503 ? 503 : 500)
+  const ncId = ins.numero
+  const avertissements = avertColonnes(ins.retirees)
+  let quarantaineId: string | null = null
+  if (v.quarantaine) {
+    const rq: any = await createQuarantaine(quarantaineNcProd(ncId, v, ra, today) as any)
+    if (rq?.error) avertissements.push('Quarantaine NON créée (' + (rq.error.message || rq.error.code || 'erreur inconnue') + ') : mettez le lot en quarantaine depuis Qualité › Non-conformités (NC ' + ncId + ').')
+    else {
+      quarantaineId = rq?.data?.id != null ? String(rq.data.id) : null
+      const { error: eu } = await updateNonConformite(ncId, { statut: 'quarantaine' } as any)   // comme POST /api/qualite/nc/:id/quarantaine
+      if (eu) avertissements.push('Quarantaine créée, mais le statut de la NC ' + ncId + ' n’a pas été mis à jour : ' + eu.message)
+    }
   }
-  const das = await getDemandesAchat().catch(() => [] as any[])
-  const id = nextSeqId('DA', (das as any[]).map((d: any) => d.id))
-  const nomOp = (`${op.prenom || ''} ${op.nom || ''}`).trim() || String(op.matricule)
-  const typeLabel = categorie === 'machine' ? 'Machine' : (categorie === 'matiere' ? 'Matière' : 'Accessoire')
-  const { data, error } = await createDemandeAchat({
-    id, demandeur: nomOp, type_da: typeLabel, article, qte: String(qte),
-    priorite: ['normal', 'urgent', 'critique'].includes(String(b.priorite)) ? String(b.priorite) : 'normal',
-    statut: 'a_traiter', date_da: TODAY_ISO(), visible: true, genere_par_adt: false,
-    categorie, machine_id: machineId, poste_id: posteId, operateur_id: String(op.id),
-  } as any)
-  if (error) return c.json({ ok: false, error: error.message }, 400)
-  return c.json({ ok: true, da: data, id })
+  if (/rebut/i.test(String(v.action_corrective || ''))) {   // comme la création de NC de la Qualité (idempotent via source_ref)
+    // ensureHseDechet renvoie { error } (supabase-js ne lève pas) : un échec DOIT être signalé, sinon le rebut manque au registre en silence.
+    let errDechet: string | null = null
+    try {
+      const rd: any = await ensureHseDechet('nc_rebut', ncId, {
+        entite: v.entite, date_dechet: v.date_nc, designation: 'Rebut NC ' + ncId + (v.designation ? ' — ' + v.designation : ''),
+        dangereux: false, zone_producteur: v.lieu_detection || 'Production', statut: 'en_attente',
+      })
+      if (rd?.error) errDechet = String(rd.error.message || rd.error.code || 'erreur inconnue')
+    } catch (e: any) { errDechet = String(e?.message || e || 'erreur inconnue') }
+    if (errDechet) avertissements.push('Rebut non inscrit au registre des déchets (' + errDechet + ') : saisissez-le dans Sécurité › Déchets (NC ' + ncId + ').')
+  }
+  return c.json({ ok: true, id: ncId, data: ins.data, quarantaine_id: quarantaineId, avertissements })
 })
 
 // ─── Sauvegarde brouillon d'une DA en cours de traitement (sans soumettre) ───
@@ -6640,6 +6751,12 @@ app.post('/api/expeditions/bds/:id/retour', retourBdsHandler)
 app.post('/api/production/bds/:id/retour', retourBdsHandler)
 
 app.post('/api/production/non-conformites', async (c) => {
+  // Formulaire NC de la QUALITÉ : écriture Qualité exigée (plus self-service depuis le 15/09/2026, voir auth.ts).
+  // Revérifié ici (message clair, défense en profondeur) ; la Production passe par POST /api/production/nc.
+  const enforceNc = String((c.env as any)?.AUTH_ENFORCE ?? 'on').toLowerCase() !== 'off'
+  if (enforceNc && !peutEcrireService((c as any).get('user') || null, 'qualite')) {
+    return c.json({ ok: false, error: 'La création d’une non-conformité depuis la Qualité est réservée aux personnes ayant l’écriture Qualité. En Production, utilisez « PV de non-conformité » (matricule + PIN).' }, 403)
+  }
   const body = await c.req.json().catch(() => ({}))
   const year = new Date().getFullYear()
   const existing = await getNonConformites().catch(() => []) as any[]
@@ -7502,7 +7619,16 @@ const opFullName = (op: any) => [op.prenom, op.nom].filter(Boolean).join(' ') ||
 app.post('/api/production/bdt/:id/recu', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json().catch(() => ({}))
-  const op = await verifyOperateurPin(body.matricule, body.pin)
+  // Qui reçoit : un OPÉRATEUR (comme avant) ou une personne habilitée à ÉCRIRE en Production (chef d'atelier,
+  // direction). Sans cela (15/09/2026), un chef non opérateur ne pouvait ni recevoir ni donc solder un BDT
+  // qu'aucun opérateur n'avait reçu — alors que la règle du soldage l'y autorise.
+  let op: any = await verifyOperateurPin(body.matricule, body.pin)
+  if (!op) {
+    const r = await verifySalariePinStricte(String(body.matricule || ''), String(body.pin || ''))
+    if (r.error) return c.json({ ok: false, error: 'Vérification du matricule impossible (lecture des salariés), rien n’a été enregistré : ' + r.error }, 503)
+    if (r.data && ecritEnProduction(r.data, autorisationsUnion)) op = r.data
+    else if (r.data) return c.json({ ok: false, error: 'Seuls un opérateur ou une personne habilitée à écrire en Production peuvent recevoir un BDT.' }, 403)
+  }
   if (!op) return c.json({ ok: false, error: 'Matricule ou code PIN incorrect.' })
   // ── Porte OAS : un BDT « oas_avant » (juste après une étape OAS) n'est recevable
   //    qu'une fois le lot ENTIÈREMENT passé à l'OAS (qté traitée via balancelles ≥ qté lot). ──
@@ -7550,30 +7676,40 @@ app.post('/api/production/bdt/:id/recu', async (c) => {
   return c.json({ ok: true, data, operateur: nom, operateur_id: op.id })
 })
 
+// ─── Soldage d'un BDT (règle du 15/09/2026, règles pures : src/soldage_bdt.ts) ───
+//  Signataire = matricule + PIN d'un salarié ACTIF (plus seulement est_operateur). Il solde s'il a l'ÉCRITURE Production
+//  ou s'il est l'opérateur qui a REÇU le bon (sinon 403). BDT lu strictement (503 panne / 404 absent), « Reçu » exigé (409),
+//  transition recu → solde conditionnelle (409 si le bon a changé entre-temps). L'operateur_id du BDT (celui qui l'a reçu,
+//  base du coût réel) n'est jamais réécrit ; le soldeur est tracé dans l'historique, le PV d'autocontrôle et la NC.
+//  L'ancien contrôle « matrice de compétences » refusait tout le monde (clés = id de process, comparées au libellé du BDT) :
+//  il ne produit plus qu'un avertissement non bloquant. Plus de champ bypass_competence.
 app.post('/api/production/bdt/:id/solder', async (c) => {
   const id = c.req.param('id')
-  const body = await c.req.json().catch(() => ({}))
-  const op = await verifyOperateurPin(body.matricule, body.pin)
-  if (!op) return c.json({ ok: false, error: 'Matricule ou code PIN incorrect.' })
-  // ─── Garde-fou OAS : un opérateur OAS ne solde pas de BDT (autocontrôle + passage de lots uniquement) ───
-  const okSoldage = op.role !== 'oas' && (!Array.isArray(op.autorisations) || op.autorisations.includes('soldage') || op.autorisations.includes('all'))
-  if (!okSoldage) return c.json({ ok: false, error: `${opFullName(op)} est un opérateur OAS : il réalise l'autocontrôle et le passage de lots OAS, mais ne solde pas les BDT. Faites solder par un opérateur de production.` })
-  const fin = String(body.fin || '').slice(0, 5)
+  const body: any = await c.req.json().catch(() => ({}))
+  const matSig = String(body?.matricule ?? '').trim(), pinSig = String(body?.pin ?? '').trim()
+  if (!matSig || !pinSig) return c.json({ ok: false, error: 'Matricule et code PIN requis pour solder.' }, 400)
+  const fin = heureFinValide(body?.fin)
+  if (!fin) return c.json({ ok: false, error: 'Heure de fin réelle requise (HH:MM).' }, 400)
+  const op = await verifySalariePin(matSig, pinSig)
+  if (!op) return c.json({ ok: false, error: 'Matricule ou code PIN incorrect.' }, 401)
   const resultat = ['ok', 'reprise', 'nc'].includes(body.resultat) ? body.resultat : 'ok'
-  const all = await getBonsDeTravail().catch(() => []) as any[]
-  const cur = all.find((b: any) => String(b.id) === String(id))
-  // ─── Gate compétences : l'opérateur doit maîtriser le process (matrice, niveau ≥ 1) ───
-  //  Tolérant si la matrice n'est pas encore renseignée pour lui (aucune compétence saisie).
-  const opOperation = String(cur?.operation || '').toLowerCase().trim()
-  if (opOperation && body.bypass_competence !== true) {
-    const comps = await getCompetences().catch(() => [] as any[])
-    const mine = (comps as any[]).filter((cp: any) => String(cp.salarie_id ?? cp.employe_id) === String(op.id))
-    const norm = (s: string) => String(s || '').toLowerCase().trim()
-    const mastered = mine.some((cp: any) => norm(cp.operation) === opOperation && Number(cp.niveau || 0) >= 1)
-    if (mine.length > 0 && !mastered) {
-      return c.json({ ok: false, error: `${opFullName(op)} n'est pas habilité(e) à solder « ${cur?.operation} » (matrice de compétences). Mettez à jour la matrice (RH › Compétences) ou faites solder par un opérateur qualifié.` })
-    }
-  }
+  const lu = await getBDTStrict(id)
+  if (lu.error) return c.json({ ok: false, error: 'Lecture du BDT impossible : ' + lu.error }, 503)
+  const cur: any = lu.data
+  if (!cur) return c.json({ ok: false, error: 'BDT introuvable.' }, 404)
+  const statutLu = String(cur.statut || '')
+  if (statutLu === 'solde') return c.json({ ok: false, error: 'BDT déjà soldé.' }, 409)
+  if (statutLu !== 'recu') return c.json({ ok: false, error: 'Ce BDT n’est pas « Reçu » : il doit d’abord être reçu (double-clic sur le planning, matricule + PIN) avant d’être soldé.' }, 409)
+  const droit = droitSoldageBDT(op, cur, autorisationsUnion)
+  if (!droit.ok) return c.json({ ok: false, error: droit.error }, 403)
+  // Opérateur qui a reçu le bon (réalisateur) : nom relu seulement s'il n'est pas le signataire. Lecture non bloquante.
+  const recuParId = String(cur.operateur_id ?? '').trim()
+  const [recuParLu, comps] = await Promise.all([
+    (recuParId && recuParId !== String(op.id)) ? getSalarieCible(recuParId).catch(() => ({ data: null, error: null } as any)) : Promise.resolve({ data: op, error: null } as any),
+    recuParId ? getCompetences().catch(() => [] as any[]) : Promise.resolve([] as any[]),
+  ])
+  const recuParNom = recuParId ? (recuParLu?.data ? nomSalarie(recuParLu.data) : recuParId) : ''
+  const avertissement = recuParId ? avertissementCompetence(comps as any[], recuParId, recuParNom, cur) : null
   let tempsReel: number | null = null
   if (cur?.debut_reel && fin) {
     const dp = String(cur.debut_reel).slice(0, 5).split(':').map(Number)
@@ -7585,8 +7721,11 @@ app.post('/api/production/bdt/:id/solder', async (c) => {
   }
   const patch: Record<string, any> = { statut: 'solde', fin_reel: fin, resultat }
   if (tempsReel != null) patch.temps_reel = tempsReel
-  const { data, error } = await updateBDT(id, patch)
-  if (error) return c.json({ ok: false, error: error.message })
+  // Transition CONDITIONNELLE recu → solde : deux soldages simultanés ne passent pas tous les deux.
+  const maj = await majBDTConditionnelle(id, patch, { statut: 'recu' })
+  if (maj.error) return c.json({ ok: false, error: 'Soldage non enregistré : ' + maj.error }, 500)
+  if (!maj.data) return c.json({ ok: false, error: 'Ce BDT vient de changer (déjà soldé ou plus « Reçu ») : rechargez le planning.' }, 409)
+  const data: any = maj.data
   // Cascade : recalcule l'avancement (bdt_total/bdt_soldes + lots soldés) ET le coût/marge réel(le) de la commande.
   // En PARALLÈLE : colonnes écrites disjointes (avancement vs coût/marge) → aucun conflit, latence divisée par ~2 au solde.
   {
@@ -7640,12 +7779,14 @@ app.post('/api/production/bdt/:id/solder', async (c) => {
         `BDT ${id} — ${cur?.operation || ''}`,
         body.obs ? `Obs : ${body.obs}` : '',
         `Autocontrôle par ${nom}${tempsReel != null ? ` · temps réel ${tempsReel} h` : ''}`,
+        (recuParId && recuParId !== String(op.id)) ? `BDT reçu par ${recuParNom}, soldé par ${nom} (écriture Production)` : '',
       ].filter(Boolean).join(' — '),
       anomalie: resultat === 'nc',
       nc_ouverte: resultat === 'nc',
     } as any)
   } catch (_e) { /* PV non bloquant */ }
-  return c.json({ ok: true, data, operateur: nom })
+  return c.json({ ok: true, data, operateur: nom, operateur_id: op.id, voie: droit.voie,
+    recu_par: recuParId ? { id: recuParId, nom: recuParNom } : null, avertissement })
 })
 
 // ─── API : clôturer une balancelle OAS via formulaire d'autocontrôle ──
@@ -10082,6 +10223,13 @@ app.patch('/api/rh/salarie/:id', async (c) => {
       const actuel: any = await getSalarie(id).catch(() => null)
       base = (Array.isArray(actuel?.autorisations) ? actuel.autorisations : [])
         .filter((t: any) => !/^(lire|ecrire):/.test(String(t || '')))
+      // Base vide = la fiche vivait sur les autorisations de ses rôles (le login prend autorisationsUnion quand la
+      // liste est vide). Sans ce repli, cocher un accès enregistrait des jetons SEULS : au login, la liste n'étant
+      // plus vide, la personne perdait pointage / soldage… (ex. opérateur incapable de solder le BDT qu'il a reçu).
+      if (!base.length && actuel) {
+        const rolesActuels: string[] = Array.isArray(actuel.roles) && actuel.roles.length ? actuel.roles.map((r: any) => String(r)) : [String(actuel.role || 'operateur')]
+        base = autorisationsUnion(rolesActuels)
+      }
     }
     patch.autorisations = [...new Set([...base, ...jetonsAccesServices(b)])]
   }
@@ -11195,7 +11343,7 @@ app.get('/direction/service', async (c) => {
   const stocksCritiques = A(stock).filter((s: any) => num(s.stock_actuel) <= num(s.point_commande || s.stock_mini))
   const commandesPilotage = A(cmds).map((c2: any) => ({ id: c2.id, num: c2.num_affaire || c2.id, client: c2.client_nom, montant: num(c2.montant), marge: c2.marge_reelle != null ? num(c2.marge_reelle) : null, bdtTotal: num(c2.bdt_total), bdtSoldes: num(c2.bdt_soldes), dateLiv: c2.date_liv, statut: c2.statut, retard: !!(c2.date_liv && d10(c2.date_liv) < today && !cmdClos(c2.statut)), clos: cmdClos(c2.statut) }))
   const facturesImpayees = A(factures).filter((f: any) => !f.date_paiement && f.statut !== 'payee' && f.statut !== 'brouillon' && f.date_echeance && d10(f.date_echeance) < today)
-  const ncOuverte = (s: any) => !/clotur|cloturé|ferm|clos|résolu|resolu|traité|traite/i.test(String(s || ''))
+  const ncOuverte = (s: any) => !ncEstClose(s)   // même définition que la porte d'expédition (« Soldé » compris)
   const ncCritiques = A(ncs).filter((n: any) => ['Critique', 'Bloquante'].includes(n.gravite) && ncOuverte(n.statut))
   const soon = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
   const echeancesSecu = [
@@ -11258,7 +11406,7 @@ app.post('/api/direction/scan-alertes', async (c) => {
   const numx = (x: any) => Number(x) || 0
   const joursDe = (x: any) => Math.round((Date.parse(today) - Date.parse(d10x(x))) / 86400000)
   const cmdClos = (s: any) => /livr|clos|termin|sold|annul/i.test(String(s || ''))
-  const ncOuv = (s: any) => !/clotur|cloturé|ferm|clos|résolu|resolu|trait/i.test(String(s || ''))
+  const ncOuv = (s: any) => !ncEstClose(s)   // même définition que la porte d'expédition (« Soldé » compris)
   // Clé d'alerte = type|table|id (le TYPE distingue deux alertes sur le MÊME objet — p.ex. retard vs marge
   //   sur une commande — ce qui permet un ref_id RÉEL, consultable via /api/direction/source).
   // Dédup sur TOUS les statuts (pas seulement en_attente) : une alerte déjà traitée/validée/refusée ne

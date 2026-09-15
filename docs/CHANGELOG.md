@@ -2,6 +2,121 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-15 — Production : soldage des BDT débloqué · PV de non-conformité et demande d'achat signés à l'atelier
+
+*« Pour la production, les soldages de BDT ne fonctionnent pas. Seules les personnes habilitées à écrire dans la
+production ou l'opérateur ayant reçu le BDT peuvent le solder. Pour le moment ça bug, personne ne peut le faire, il
+annonce un problème dans la matrice des compétences. Il faut dans la production que les personnes habilitées à écrire
+puissent instruire des non-conformités librement en la rattachant à une affaire ou pas pour que ça aille ensuite dans
+la liste des NC en qualité. Ce qu'il y a à remplir est un PV de non-conformité classique. Je veux que l'ouverture d'un
+PV soit un bouton juste à côté de la demande d'achat ; pour la demande d'achat seules les personnes ayant
+l'autorisation d'écriture sur la production peuvent en faire une depuis ici. Le matricule et le mot de passe doivent
+être mis évidemment, mais il faut aussi afficher le formulaire de demande d'achat dès qu'on appuie sur le bouton, ce
+qui n'est pas le cas actuellement. »*
+
+**Pourquoi personne ne pouvait solder** (reproduit sur la base Docker, jeu `-TEST-` supprimé et relu)
+1. **Matrice de compétences** : RH › Compétences enregistre `competences_operateur.operation` = l'**identifiant du
+   process** (`proc-man-s1`, `PROC-2026-018`…), alors que le contrôle du soldage le comparait au **libellé** d'opération
+   du BDT (« Ebavurage / Finition SEEM »). L'égalité était impossible : tout opérateur ayant au moins une ligne dans la
+   matrice (20 opérateurs actifs sur 22) était refusé « … n'est pas habilité(e) à solder … (matrice de compétences) ».
+2. **Signataire** : cherché parmi les seules fiches `est_operateur` — un chef de production obtenait « Matricule ou code
+   PIN incorrect ».
+
+**Pourquoi le formulaire de demande d'achat ne s'affichait pas** (reproduit au navigateur) : la fenêtre ne montrait que
+« Matricule / PIN / Identifier » ; l'identification exigeait une affectation à un poste **le jour même** (table vide
+depuis le 10/07 → 403 pour tous) et une fiche opérateur (401 pour un chef) ; et la route n'était pas self-service (un
+compte d'atelier en lecture seule était refusé avant même le PIN).
+
+**Ce qui change**
+- **Soldage** : signent **l'opérateur qui a reçu le BDT** ou **toute personne qui écrit en Production** (droits de sa
+  fiche recalculés comme au login), par matricule + PIN ; tout autre matricule : « Seuls l'opérateur qui a reçu ce BDT ou
+  une personne habilitée à écrire en Production peuvent le solder. ». La matrice **ne bloque plus** : notification orange
+  « pensez à mettre la matrice à jour » si l'opérateur n'a pas de niveau pour ce process. Le serveur exige désormais un
+  bon « Reçu » (409) et passe de « Reçu » à « Soldé » **conditionnellement** (deux soldages simultanés : un seul passe).
+  Le réalisateur du bon (`operateur_id`, base du coût réel) n'est jamais réécrit ; le soldeur est tracé dans
+  l'historique, le PV d'autocontrôle (« BDT reçu par X, soldé par Y ») et la NC. Fenêtre : ligne « Reçu par », rappel de
+  qui peut solder, bouton grisé pendant l'envoi, PIN effacé sur refus, messages échappés.
+- **Réception d'un BDT** : un chef d'atelier (écriture Production) peut aussi recevoir un bon ; il en devient le
+  réalisateur (son coût chargé valorise le temps réel). Sans cela, un bon qu'aucun opérateur n'avait reçu restait
+  insoldable.
+- **Demande d'achat** (bandeau Production) : le **formulaire complet s'ouvre dès le clic** ; matricule + PIN vérifiés à
+  l'envoi, **écriture Production exigée**. Plus de restriction « poste de l'affectation du jour » ni de route
+  `operateur-contexte`. Nouveaux champs : référence, unité, affaire, poste, livraison souhaitée, fournisseur suggéré ;
+  « Machine (OPEX) » avec la machine concernée. ⚠ **Un opérateur sans écriture Production ne peut plus faire de DA.**
+- **PV de non-conformité** : bouton rouge **juste à côté** de « Demande d'achat », ouvrable depuis tout onglet ; PV
+  classique (constat, rattachement **facultatif** affaire / lot / BDT vérifié en base, défaut, cause, action immédiate,
+  traitement, case quarantaine) avec les listes du formulaire Qualité ; même droit que la DA. La NC arrive dans
+  **Qualité › Non-Conformités** (catégorie Production, statut Ouvert, `NC-AAAA-NNN` sur le compteur de la Qualité,
+  détecteur = émetteur) ; quarantaine et registre des déchets (« Rebut ») comme en Qualité.
+
+**Défauts corrigés en route** (revue du lot, 12 défauts réels sur 14 signalements, 10 corrigés ici)
+- `POST /api/production/non-conformites` (« Nouvelle NC » de la Qualité) était **self-service sans aucun contrôle** :
+  toute borne en lecture seule créait une NC, même Bloquante. Écriture Qualité exigée.
+- Statut NC **« Soldé »** non reconnu comme clos : une NC soldée bloquait encore l'expédition et remontait au cockpit
+  Direction (qui avait deux définitions divergentes, alignées sur `ncEstClose`).
+- « Aujourd'hui » calculé en UTC : entre 0 h et 2 h (créneau Soirée), un constat du jour passait pour une date future.
+  Dates de constat, de quarantaine, de DA et années des numéros au jour de l'atelier (Europe/Paris).
+- Rattachement d'une NC : un lot ou un BDT d'une autre affaire pouvait être recopié (et bloquer les BL d'une affaire
+  étrangère) → relus et refusés s'ils ne sont pas vérifiablement de l'affaire.
+- Numérotation plafonnée à 1 000 lignes lues (plafond PostgREST silencieux) → lecture paginée.
+- RH : cocher un accès sur une fiche sans autorisations lui faisait perdre `pointage` / `soldage` au login.
+- Double clic sur « Solder », avertissements insérés sans échappement, échec du registre des déchets passé sous silence.
+- `erp-docker.sh maj` annonçait « code servi = code du dépôt » alors que l'image embarquait des modifications non
+  commitées → suffixe **`-dirty`** (`/api/version`).
+
+**Décisions prises** (annoncées, modifiables)
+1. **Garde OAS** conservée sur la voie « opérateur qui a reçu le bon » : une fiche sans l'autorisation `soldage` (OAS
+   pur) ne solde pas ; une personne qui écrit en Production le fait.
+2. Le **compte de secours** ne peut signer ni réception, ni soldage, ni DA, ni PV (pas de fiche salarié).
+3. Le chef qui **reçoit** un bon en devient le réalisateur (`operateur_id` = lui) : pas de « réception pour le compte
+   d'un opérateur ».
+4. **Détecteur** de la NC = nom de l'émetteur, recopié aussi dans la description (la fenêtre d'édition de la Qualité
+   l'écrase au ré-enregistrement).
+5. **Aucune colonne ajoutée** à `demandes_achat` : la référence voyage dans `article` (« (réf. X) ») et l'unité dans
+   `qte` (« 12,5 kg »).
+
+**Vérifications** : règles pures 22 (soldage) + 99 (DA / NC) + 61 (correctifs) · API sur la base Docker
+(`AUTH_ENFORCE=on`) : 13 cas de soldage, 52 DA / NC, 33 correctifs (rattachement, rebut, quarantaine,
+`non-conformites`, OAS, PATCH RH), pagination 5, base injoignable 2/2 en 503, cockpit Direction 4 · Playwright 30 + 10
+(boutons côte à côte, formulaire visible dès le clic, erreurs 401 / 403 dans la fenêtre, un seul envoi sur trois clics,
+fenêtre contenue à 390 px, aucune balise injectée) · `tsc` 0 · harnais 60 PASS / 0 FAIL / 1 SKIP · jeux `-TEST-`
+supprimés et relus (compteurs revenus à l'état initial) · phase documentation : voir la fin de cette entrée.
+
+**Scripts à jouer** : **aucune migration**. Docker / VM : committer puis `~/erp/docker/scripts/erp-docker.sh maj`
+(`/api/version` ne doit plus finir par `-dirty`). Cloud : `npm run build` puis déploiement (`erp-deploy`).
+**Avant la mise en ligne** : vérifier que les chefs d'atelier ont l'écriture Production (rôle `production` ou case
+« Écrire » sur Production, **en gardant cochés** leurs autres services) ; prévenir les opérateurs que la DA passe par
+leur chef.
+
+**Limites connues** : `verifySalariePin` (soldage) n'est pas stricte (Supabase en panne ⇒ « PIN incorrect ») ; aucune
+limitation des essais de PIN sur réception / soldage / DA / PV ; `temps_reel` négatif si l'heure de fin précède le
+début (poste de nuit) ; `/recu` écrit sans transition conditionnelle et répond 200 `ok:false` sur mauvais PIN ; la
+fenêtre de réception s'intitule toujours « Identification opérateur » ; deux conventions de numérotation des NC
+cohabitent (compteur continu de la Qualité et du PV ; `nextSeqId('NC')` annuel pour d'autres créations) ; « Nouvelle
+NC » de la Qualité lit encore les NC sans pagination ; `ncEstClose` compte aussi « trait… » comme clos ; la réédition
+d'une NC en Qualité efface détecteur et statut « quarantaine » ; `PRODFORM_REF` embarque tous les BDT rattachés à une
+affaire ; sur Docker, `salaries.est_operateur` n'est pas alimentée pour un opérateur créé par l'API RH (à vérifier en
+cloud) ; données `-TEST-` d'anciennes sessions encore présentes sur Docker (documents 4, factures_fournisseur 1,
+hse_dechets 6, references_clients 1, bons_de_commande 1 — suppression à autoriser) ; élargissement de `/recu` au chef
+d'atelier : aucun test automatisé rapporté.
+
+- Fichiers : `src/soldage_bdt.ts`, `src/prod_da_nc.ts` (nouveaux), `src/index.tsx`, `src/prod.tsx`, `src/queries.ts`,
+  `src/auth.ts`, `docker/scripts/erp-docker.sh` · Migration DB : **non**.
+- Doc mise à jour : `technique/06-modules/{production,qualite,achats,rh,direction}.md`, `04-auth-rbac.md` (routes self-service,
+  section « Signature d'atelier »), `07-api-reference.md` (contrats « Production (15/09/2026) », référence régénérée),
+  `02-exploitation-runbook.md` (10 incidents), `12-docker-installation.md` (`-dirty`), `manuel/html/{production,qualite,
+  achats}.html` (+ `src/manuels_contenu.ts`), `manuel/{production,qualite,achats}.md`,
+  `manuel/formulaires/{production,qualite,00-index}.md` (formulaires DA et PV champ par champ),
+  `manuel/parcours/{04-production,06-qualite}.md`, `fiches-poste/{production,operateur,qualite}.md` (générateur
+  `gen_fiches_poste.mjs`), cerveau · Outillage : `capture_forms.mjs` (entrées `form-production-da`, `-pvnc`, `-soldage`,
+  remplissage d'illustration dans le navigateur, rien n'est envoyé) · Captures refaites sur la stack Docker :
+  `production-service` (deux boutons du bandeau), nouvelles `form-production-da`, `form-production-pvnc`,
+  `form-production-soldage`.
+- Vérifications de la phase documentation : `gen_api_ref.mjs` OK (381 routes, 50 familles ; `operateur-contexte` sortie,
+  `nc` entrée) · `gen_module_fiches.mjs --verifier` 0 écart · `npm run build` OK (`src/manuels_contenu.ts` régénéré,
+  4 images copiées) · `tsc --noEmit` 0 erreur (code final, `/recu` élargie comprise) · harnais 60 PASS / 0 FAIL / 1 SKIP
+  · `lint_docs` 128 images · 185 liens · 0 cassé.
+
 ## 2026-09-15 — Découpe d'un BDT : jauge et curseurs · commandes réceptionnées revenues « à réceptionner »
 
 *« Pour les temps de découpage, ce que je veux c'est une jauge qui montre tout le temps qu'il faut répartir et

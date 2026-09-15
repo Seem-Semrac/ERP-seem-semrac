@@ -43,6 +43,8 @@ Sur cet écran, vous renseignez :
 - **Description de la NC** — le problème avec vos mots (quoi, où, combien de pièces).
 - **Soumettre à la validation de la Direction** — à cocher si la Direction doit trancher.
 
+> Seules les personnes qui **écrivent en Qualité** créent une NC ici (depuis le 15/09/2026). À l'atelier, un chef d'atelier émet un **PV de non-conformité** depuis le bandeau de la Production (matricule + code PIN) : la NC arrive dans cette même liste, catégorie Production, statut Ouvert, à son nom (voir le [parcours Production](04-production.md), étape 7).
+
 **➡️ Ensuite :** la NC est créée et suivie. Si elle est **critique/bloquante**, elle **bloque les bons de livraison** du lot concerné (le lot ne peut plus partir tant que ce n'est pas levé). Depuis la liste, vous pouvez ouvrir un **rapport 8D** (résolution structurée), créer une **dérogation** liée (étape 5), et, si c'est une NC client, **traiter le retour** (étape 3).
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/qualite.md).

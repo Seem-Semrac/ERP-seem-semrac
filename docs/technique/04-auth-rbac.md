@@ -13,7 +13,7 @@ Tout est dans `src/auth.ts` (logique) + middleware dans `src/index.tsx` (~L114).
 Le middleware appelle `canAccess(user, path, method)` sur **chaque** requête (hors routes publiques). La décision suit :
 
 1. `perms` contient `all` (rôle **direction**) → **autorisé** (tout).
-2. Route **self-service** atelier (PIN dans le corps) → autorisé (`isSelfService`, liste `SELF_SERVICE_RE` : pointage, `bdt/:id/(recu|solder)`, clôture de balancelle OAS, cote contrôlée, NC production). ⚠ **Depuis le 14/09/2026 (lot D), la réception fournisseur et son PV n'en font plus partie** (`/api/expeditions/bc/:id/(receptionner|pv)`) : aucun appelant n'envoyait de PIN, ils étaient donc ouverts à **tout compte connecté**. Ils exigent maintenant l'écriture Expéditions (règle 7).
+2. Route **self-service** atelier (PIN dans le corps) → autorisé (`isSelfService`, liste `SELF_SERVICE_RE` : pointage, `bdt/:id/(recu|solder)`, clôture de balancelle OAS, cote contrôlée, et depuis le 15/09/2026 **demande d'achat** et **PV de non-conformité** de la Production — `/api/production/demande-achat-operateur`, `/api/production/nc`). ⚠ **Depuis le 14/09/2026 (lot D), la réception fournisseur et son PV n'en font plus partie** (`/api/expeditions/bc/:id/(receptionner|pv)`) : aucun appelant n'envoyait de PIN, ils étaient donc ouverts à **tout compte connecté**. Ils exigent maintenant l'écriture Expéditions (règle 7). ⚠ **Depuis le 15/09/2026, `/api/production/non-conformites` (formulaire NC de la Qualité) non plus** : PIN facultatif, aucun contrôle dans le handler — une borne en lecture seule créait une NC Bloquante. `serviceFor` le classe `qualite` (écriture Qualité) et le handler le revérifie. **Règle** : une route n'est self-service que si son handler juge lui-même le salarié du matricule + PIN (voir « Signature d'atelier » ci-dessous).
 3. `accesExplicites(perms)` est calculé **ici**, avant tout le reste : dès que la personne porte au moins un jeton `lire:`/`ecrire:`, ces jetons décident seuls — **y compris** pour `interlocuteurs`, `plans` et `habilitations`, qui les ignoraient jusqu'au 09/09/2026.
 4. `interlocuteurs` (contacts clients ET fournisseurs), **à défaut de jeton** → autorisé si écriture `rw` sur **commercial/achats/be** (cas multi-services).
 5. `serviceFor(path)` déduit le **service** de la route :
@@ -72,6 +72,41 @@ répond toujours `true`.
 Lui cocher `ecrire:expeditions` fait passer sa fiche en **mode jetons** : il faut alors cocher aussi `qualite`,
 `securite`… sinon ces services se ferment (règle 3 ci-dessous).
 
+## Signature d'atelier : matricule + PIN jugé par le handler (15/09/2026)
+
+Une route **self-service** (`SELF_SERVICE_RE`) est ouverte à **tout compte connecté** : c'est la borne partagée de
+l'atelier, souvent ouverte sur un compte en lecture seule. Le middleware ne protège donc rien ; **le handler doit juger
+lui-même le salarié du matricule + PIN** envoyé dans le corps — jamais la personne connectée, jamais un nom ou un
+identifiant fourni par le navigateur. **Règle** : une route sans ce contrôle n'a rien à faire dans `SELF_SERVICE_RE`
+(`/api/expeditions/bc/:id/(receptionner|pv)` le 14/09, `/api/production/non-conformites` le 15/09 en ont été retirées).
+
+| Route | Qui peut signer (vérifié dans le handler) |
+|---|---|
+| `POST /api/production/bdt/:id/recu` | un opérateur (`verifyOperateurPin`, fiche `est_operateur`) **ou** un salarié actif ayant l'écriture Production (`verifySalariePinStricte` + `ecritEnProduction`) ; il devient `operateur_id` du bon |
+| `POST /api/production/bdt/:id/solder` | tout salarié actif (`verifySalariePin`) ayant l'écriture Production, **ou** l'opérateur qui a reçu le bon si sa fiche porte l'autorisation fonctionnelle `soldage` (`droitSoldageBDT`, `src/soldage_bdt.ts`) |
+| `POST /api/production/demande-achat-operateur`, `POST /api/production/nc` | salarié actif ayant l'écriture Production (`signataireProduction` : `verifySalariePinStricte` puis `ecritEnProduction`, `src/prod_da_nc.ts`) ; 401 PIN, 403 droit, **puis seulement** validation de la saisie |
+| pointage (`/api/rh/pointage`, `/api/pointage/…`), clôture de balancelle OAS, `/api/controles/cote` | non revus dans ce lot — à contrôler selon la même règle |
+
+**« Écriture Production » d'un autre salarié** = la même fonction `sessionDeSalarie` que pour le contrôleur d'un PV de
+réception (`src/pv_reception.ts`) : rôles = `roles` sinon `[role]` ; droits = `autorisations` non vides sinon
+`autorisationsUnion(rôles)` ; puis `peutEcrireService(session, 'production')` (`all`, rôle `production`, jeton
+`ecrire:production`). Les droits sont lus **à chaque signature** (pas de cache) : un changement de fiche vaut
+immédiatement.
+
+⚠ **Autorisations fonctionnelles ≠ jetons d'accès.** `autorisations` mélange des autorisations fonctionnelles
+(`pointage`, `soldage`, `oas`…) et des jetons `lire:`/`ecrire:`. Pour le soldage, `autorisationsFonctionnelles` ignore les
+jetons ; une fiche qui n'a **que** des jetons vit sur les autorisations de ses rôles. Côté RH, `PATCH /api/rh/salarie/:id`
+part désormais de `autorisationsUnion(rôles)` quand la fiche n'avait aucune autorisation fonctionnelle : cocher un accès ne
+fait plus perdre `pointage` / `soldage`.
+
+⚠ **Lecture stricte.** `verifySalariePinStricte` renvoie `{ data, error }` : une panne répond **503**, jamais « PIN
+incorrect ». `verifySalariePin` (utilisée par `/solder`) et `verifyOperateurPin` ne sont pas strictes (panne ⇒ 401 ou
+« incorrect »). Aucune limitation des essais de PIN sur ces routes (le compteur `_loginBlocked` du login serait partagé
+par toute la borne, IP « local »).
+
+⚠ **Compte de secours (BOOTSTRAP)** : pas de fiche salarié ⇒ il ne peut **signer** ni réception, ni soldage, ni DA, ni PV
+de non-conformité (401). Il peut ouvrir les pages et les formulaires.
+
 ## Cas particuliers
 - **`plans` (Plan/Bâtiment)** : **sans jeton**, lecture ouverte à tout connecté et écriture BE/Production/Maintenance/Qualité/Direction. **Avec jetons**, `lire:plans` / `ecrire:plans` décident seuls.
 - **`habilitations`** : **sans jeton**, géré par RH **et** Qualité (jeton `habilitations`), sans donner accès au reste de la RH. **Avec jetons**, suit le niveau accordé sur `rh` ou `qualite` — sinon fermer la RH par les cases laissait les habilitations grandes ouvertes.
@@ -97,7 +132,7 @@ La fiche salarié (**RH › Employés**) porte un tableau des **15 services**, c
 **Règle appliquée par `canAccess()`** — dans cet ordre :
 
 1. `perms` contient `all` (Direction) → accès total, jamais restreint ;
-2. route self-service atelier → autorisée (la réception fournisseur et son PV n'en sont plus depuis le 14/09/2026) ;
+2. route self-service atelier → autorisée (la réception fournisseur et son PV n'en sont plus depuis le 14/09/2026, le formulaire NC de la Qualité `/api/production/non-conformites` depuis le 15/09/2026 ; le handler juge le signataire, voir « Signature d'atelier ») ;
 3. **au moins un jeton `lire:` ou `ecrire:` → ces listes font foi** et remplacent la matrice des rôles pour l'accès aux services : elles peuvent aussi bien **ouvrir** un service que **fermer** un service que le rôle accordait. Cela vaut pour **les 15 services sans exception**, `plans` et `habilitations` compris ;
 4. aucun jeton → la matrice `ROLE_MATRIX` s'applique, comme avant.
 

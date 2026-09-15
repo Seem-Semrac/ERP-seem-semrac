@@ -15,9 +15,10 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 
 ## Vos tâches courantes
 ### 1. Déclarer une non-conformité
-1. Qualité › **Non-Conformités**, « Nouvelle NC ».
+1. Qualité › **Non-Conformités**, « Nouvelle NC » (réservée à l'écriture Qualité depuis le 15/09/2026).
 2. Type, détecteur, gravité, lot/réf, catégorie, entité.
-3. Une NC bloquante bloque les BL du lot.
+3. Une NC bloquante bloque les BL du lot ; une NC « Soldé » est close.
+4. Les PV de non-conformité de l'atelier arrivent seuls dans la liste (catégorie Production, statut Ouvert, détecteur = émetteur). ⚠ Ré-enregistrer une telle NC remplace le détecteur et le statut « quarantaine » : le nom de l'émetteur reste dans la description.
 
 ![qualite-nc](../assets/qualite-nc.png)
 

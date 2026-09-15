@@ -22,7 +22,7 @@ Chaque formulaire se termine par 💡 une astuce et ⚠️ un point d'attention.
 | Commercial | [commercial.md](commercial.md) | 13 | 78 | Commercial |
 | Bureau d'Études | [be.md](be.md) | 12 | 73 | BE (bei) |
 | Achats | [achats.md](achats.md) | 12 | 76 | Achats |
-| Production | [production.md](production.md) | 13 | 72 | Production, Opérateur |
+| Production | [production.md](production.md) | 15 | 107 | Production, Opérateur |
 | OAS (traitement de surface) | [oas.md](oas.md) | 5 | 40 | OAS |
 | Qualité | [qualite.md](qualite.md) | 22 | 152 | Qualité, Opérateur |
 | Sécurité (HSE/RSE) | [securite.md](securite.md) | 17 | 173 | Qualité / HSE |
@@ -34,6 +34,6 @@ Chaque formulaire se termine par 💡 une astuce et ⚠️ un point d'attention.
 | Direction | [direction.md](direction.md) | 5 | 6 | Direction |
 | Plan / Bâtiment | [plans.md](plans.md) | 5 | 16 | BE / Maintenance / Prod / Qualité |
 
-**Total : 134 formulaires · 881 champs documentés.**
+**Total : 136 formulaires · 916 champs documentés.**
 
 > Guides générés depuis le code source (les champs réels des formulaires) puis relus. À régénérer si les formulaires changent — voir le skill `erp-doc-sync`.

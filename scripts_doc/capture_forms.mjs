@@ -120,6 +120,24 @@ const M = [
   //   Nouvelle machine, case « Créer aussi un nouveau process » cochée : champ « Taux horaire machine du nouveau process ».
   { file: 'form-production-machine',  path: '/production/service', tabClick: '#ptab-machines', wait: 700,
     fn: "(function(){openMachineModal();var c=document.getElementById('mc_proc_new');if(c&&!c.checked){c.checked=true;}if(typeof mcProcNewChange==='function') mcProcNewChange();})()" },
+  // Production — boutons « Demande d'achat » et « PV de non-conformité » du bandeau (15/09/2026, src/prod_da_nc.ts).
+  //   Fenêtres rangées HORS des panneaux (ouvrables depuis tout onglet), formulaire complet dès le clic.
+  //   Remplissage d'illustration DANS LE NAVIGATEUR seulement : ni matricule ni PIN, rien n'est envoyé.
+  //   DA : nature « Machine (OPEX) » pour montrer la liste des machines (le poste suit la machine).
+  { file: 'form-production-da',       path: '/production/service', wait: 700,
+    fn: "(function(){odaOpen();var r=document.querySelector('input[name=oda_categorie][value=machine]');if(r){r.checked=true;odaCategorie();}"
+      + "var s=document.getElementById('oda_machine_id');if(s&&s.options.length>1){s.selectedIndex=1;odaMachine();}"
+      + "var a=document.getElementById('oda_article');if(a) a.value='Plaquettes carbure';var q=document.getElementById('oda_qte');if(q) q.value='10';})()" },
+  //   PV de NC : entité, première affaire de la liste puis premier BDT (le lot et le code pièce se complètent seuls).
+  { file: 'form-production-pvnc',     path: '/production/service', wait: 700,
+    fn: "(function(){pvncOpen();var e=document.getElementById('pvnc_entite');if(e) e.value='Seem';"
+      + "var a=document.getElementById('pvnc_num_affaire');if(a&&a.options.length>1){a.selectedIndex=1;pvncAffaire();}"
+      + "var b=document.getElementById('pvnc_bdt_id');if(b&&b.options.length>1){b.selectedIndex=1;pvncBdt();}})()" },
+  //   Soldage : la fenêtre n'accepte qu'un BDT « Reçu ». Un BDT est passé « reçu » DANS LE NAVIGATEUR seulement (aucune
+  //   écriture), avec le 1er opérateur comme « Reçu par », pour montrer la ligne « Reçu par » et l'aide « qui peut solder ».
+  { file: 'form-production-soldage',  path: '/production/service', tabClick: '#ptab-gantt-bdt', wait: 700,
+    fn: "(function(){var b=BDTS.filter(function(x){return Number(x.duree||0)>0;})[0]||BDTS[0];if(!b) throw new Error('aucun BDT');"
+      + "b.statut='recu';if(!b.operateurId&&OPERATEURS[0]) b.operateurId=OPERATEURS[0].id;openSoldageModal(b.id);})()" },
   // OAS — clôture avec autocontrôle (≠ création de balancelle)
   { file: 'form-oas-cloture-balancelle', path: '/oas/service', fn: "openCloreBalModal('BAL-DEMO','OAS-2026-1042','LOT-2026-014','Bride alu 7075')", wait: 800 },
   // Expéditions (lot D, 14/09/2026 — tableaux globaux EXP_BC / EXP_PV / EXP_BLREC). Aucune écriture : on ouvre, on remplit

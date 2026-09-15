@@ -27,6 +27,11 @@ Maîtrise de la conformité : PV de contrôle, non-conformités, 8D, libération
 2. Renseigner **type** (interne/fournisseur/client/procédé), **détecteur**, **gravité**, **lot/référence**, **catégorie**, **entité**.
 3. Enregistrer. Une NC critique/bloquante **bloque les BL** du lot (porte qualité) et peut remonter en validation Direction.
 
+> Depuis le 15/09/2026, « Nouvelle NC » est **réservée à l'écriture Qualité** (le bouton reste visible, l'envoi est refusé pour les autres). Une NC au statut **« Soldé »** est close : elle ne bloque plus l'expédition.
+
+### Les NC émises depuis la Production
+Un chef d'atelier (écriture Production) émet un **PV de non-conformité** depuis le bandeau de la Production (matricule + code PIN), rattaché ou non à une affaire. La NC arrive dans **Non-Conformités** : catégorie **Production**, statut **Ouvert**, numéro NC-2026-… sur le compteur habituel, **détecteur** = nom de l'émetteur, description complétée de la cause présumée, du traitement proposé et de « PV de non-conformité émis en Production par X ». Case « quarantaine » cochée → NC en statut quarantaine et objet dans l'onglet **Quarantaine** ; action immédiate « Rebut » → registre des déchets. ⚠ Ré-enregistrer la NC depuis la fenêtre d'édition remplace le détecteur (liste Opérateur / Contrôleur…) et le statut « quarantaine » : le nom de l'émetteur reste dans la description.
+
 ### Traiter un retour client
 1. Sur une NC de **type client**, cliquer **« Retour »**.
 2. Renseigner **n° facture/affaire**, **lot**, **nb de pièces NC**.

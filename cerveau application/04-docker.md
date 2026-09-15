@@ -25,6 +25,10 @@ sauvegardes + N8N) reste à faire — voir « Étapes prévues » plus bas.
   `pg_dump` du cloud, voir [`docker/db/seed/README.md`](../docker/db/seed/README.md).
 - **Doc complète** : [`docs/technique/12-docker-installation.md`](../docs/technique/12-docker-installation.md).
 
+- **Commit gravé `-dirty`** (15/09/2026) : `erp-docker.sh maj` suffixe le commit de `-dirty` quand `src`, `public`,
+  `package*.json`, `tsconfig.json` ou `docker/app.Dockerfile` ont des modifications non commitées (l'image **copie** le
+  dossier de travail) ; `/api/version` le montre. Committer puis relancer `maj`.
+
 ## L'idée en une phrase
 Une **image Docker** emballe l'application **avec tout son environnement** (Node, dépendances, config) figés, pour qu'elle tourne **à l'identique** partout : ton PC, un serveur, un VPS. Fini le « ça marchait chez moi ».
 

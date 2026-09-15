@@ -20,7 +20,7 @@
 | Description de la NC | zone de texte | Non | Décrivez le problème avec vos mots : ce qui ne va pas, où, combien de pièces. | Bavures excessives sur 12 pièces du lot |
 | Soumettre à la validation de la Direction | case à cocher | Non | Cochez si la Direction doit valider cette NC. | coché |
 
-⚠️ **Attention :** « Catégorie » et « Entité » sont obligatoires — la NC ne se crée pas tant qu'elles ne sont pas choisies.
+⚠️ **Attention :** « Catégorie » et « Entité » sont obligatoires — la NC ne se crée pas tant qu'elles ne sont pas choisies. Depuis le 15/09/2026, la création est **réservée aux personnes qui écrivent en Qualité** : pour les autres, l'envoi répond « La création d'une non-conformité depuis la Qualité est réservée aux personnes ayant l'écriture Qualité. En Production, utilisez « PV de non-conformité » (matricule + PIN). ». Le formulaire de l'atelier est décrit dans le [guide des formulaires Production](production.md) (section « PV de non-conformité — Production »).
 💡 **Astuce :** Une fois la NC créée, vous pourrez ouvrir un rapport 8D dessus ou créer une dérogation liée, directement depuis la liste.
 
 ## Traiter le retour client

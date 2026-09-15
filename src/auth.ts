@@ -140,7 +140,14 @@ const SELF_SERVICE_RE: RegExp[] = [
   //   aucun appelant n'envoyait de PIN, ils étaient donc ouverts à TOUT compte connecté. Réception
   //   et PV de contrôle exigent désormais l'écriture sur les Expéditions (voir peutEcrireService).
   /^\/api\/controles\/cote$/,
-  /^\/api\/production\/non-conformites$/,
+  // ⚠ /api/production/non-conformites SORTI du self-service le 15/09/2026 : PIN facultatif et aucun contrôle de
+  //   droit dans le handler — tout compte connecté (borne en lecture seule) créait une NC, même Bloquante. Seul
+  //   appelant : le formulaire NC de la Qualité → écriture Qualité exigée (serviceFor ci-dessous). La Production
+  //   émet ses PV par POST /api/production/nc (matricule + PIN + écriture Production).
+  // Borne Production (15/09/2026) : demande d'achat et PV de non-conformité signés par matricule + PIN ;
+  // le handler exige que CE salarié ait l'écriture Production (src/prod_da_nc.ts, ecritEnProduction).
+  /^\/api\/production\/demande-achat-operateur$/,
+  /^\/api\/production\/nc$/,
 ]
 export function isSelfService(path: string): boolean {
   const p = path.split('?')[0]
@@ -214,6 +221,8 @@ export function serviceFor(path: string): string | null {
   // L'ANALYSE d'une DT (chiffrage/validation BE) est une action du BUREAU D'ÉTUDES, même si la DT est une ressource
   // commerciale (dt→commercial). Sans cette exception, un analyste `bei` (commercial:'r') ne pourrait pas valider l'analyse.
   if (/^\/api\/dt\/[^/]+\/analyse$/.test(clean)) return 'be'
+  // Création d'une NC depuis le formulaire de la QUALITÉ (URL historique sous /api/production/) : action Qualité.
+  if (clean === '/api/production/non-conformites') return 'qualite'
   // La famille /api/export est MULTI-DOMAINES : chaque export est gardé par le service
   // qui possède la donnée exportée, sinon un seul mapping ouvrirait les trois.
   if (clean === '/api/export/seirich.xlsx') return 'securite'        // risque chimique

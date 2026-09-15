@@ -53,7 +53,7 @@
     <h3>Ce que vous voyez</h3>
     <p>C'est désormais le <b>seul</b> planning de l'atelier : il n'y a plus de page « Affectation » séparée, tout se fait ici. De haut en bas :</p>
     <ul class="points">
-      <li><b>Barre d'outils</b> : sélecteur de date avec flèches ‹ › (jour précédent / suivant), filtres d'activité et de type de process (voir sous-onglets ci-dessous), légende des couleurs, champ de recherche « N° d'affaire… » et bouton orange <b>« Nouveau BDT »</b>. Un bouton <b>« Demande d'achat »</b> (borne opérateur au matricule + PIN) est disponible dans le bandeau du service.</li>
+      <li><b>Barre d'outils</b> : sélecteur de date avec flèches ‹ › (jour précédent / suivant), filtres d'activité et de type de process (voir sous-onglets ci-dessous), légende des couleurs, champ de recherche « N° d'affaire… » et bouton orange <b>« Nouveau BDT »</b>. En haut à droite du <b>bandeau du service</b>, deux boutons côte à côte, utilisables depuis n'importe quel onglet : <b>« Demande d'achat »</b> et <b>« PV de non-conformité »</b> (rouge) — réservés aux personnes qui ont l'écriture sur la Production, signés par matricule + code PIN (voir plus bas).</li>
       <li><b>7 tuiles de statistiques</b> : Programmés, Reçus, Soldés, Soldés NC, En attente, Sous-trait., Process.</li>
       <li><b>Goulotte « BDT à classer / en attente de programmation »</b> au-dessus du planning : les cartes y sont triées par échéance client, puis par lot et rang dans la gamme — c'est un simple <b>tri d'affichage</b> (le vrai chemin critique est contrôlé à la pose, voir plus bas). Chaque carte porte la couleur de son lot, la pièce, la durée, l'activité et l'échéance, et en plus :
         <ul>
@@ -87,14 +87,19 @@
       <li>L'ERP vérifie qu'un process du poste est compatible (même activité Seem/Semrac que le BDT) ; sinon le dépôt est refusé avec un message. Il applique ensuite le <b>chemin critique</b> (détail ci-dessous) : posé trop tôt le bon jour, le BDT est <b>calé</b> à l'heure au plus tôt et un message orange « Calé à 9h30 (chemin critique) » le dit ; posé un jour <b>antérieur</b> au jour au plus tôt, il est <b>refusé</b>. Si c'est bon, le BDT passe <span class="b b-info">programmé</span> à la date et l'heure retenues.</li>
       <li>Pour déplacer un BDT déjà programmé, glissez sa barre sur un autre poste ou un autre horaire. Si ce déplacement rend invalides les étapes suivantes déjà posées, un message les liste (« 1 étape suivante à revoir ») : elles ne sont <b>jamais décalées automatiquement</b> et apparaissent dans la carte « Enchaînements à revoir ». Pour remettre un BDT en attente : clic droit → <b>« Déprogrammer (retour en attente) »</b>, ou glissez la barre dans la goulotte. Un BDT déjà reçu ne se déplace et ne se déprogramme plus.</li>
     </ol>
-    <p><b>Réceptionner puis solder un BDT (traçabilité opérateur au PIN) :</b></p>
+    <p><b>Réceptionner puis solder un BDT (signature au matricule + PIN) :</b></p>
     <ol class="steps">
-      <li>Quand l'opérateur démarre l'opération : <b>double-cliquez sur la barre</b> du BDT programmé (ou clic droit → <b>« Réceptionner (Reçu) »</b>). La modale rappelle le BDT avec ses lignes <b>Réglage</b> et <b>Réalisation</b>, puis demande le <b>matricule</b> et le <b>code PIN</b> de l'opérateur ; l'heure de début réelle est enregistrée et la barre passe en jaune.</li>
+      <li>Quand l'opération démarre : <b>double-cliquez sur la barre</b> du BDT programmé (ou clic droit → <b>« Réceptionner (Reçu) »</b>). La modale rappelle le BDT avec ses lignes <b>Réglage</b> et <b>Réalisation</b>, puis demande un <b>matricule</b> et un <b>code PIN</b> ; l'heure de début réelle est enregistrée et la barre passe en jaune. Peuvent recevoir : un <b>opérateur</b>, ou une personne qui <b>écrit en Production</b> (chef d'atelier). La personne qui reçoit devient celle qui <b>réalise</b> le bon : elle apparaît en « Reçu par » au soldage et c'est son coût horaire qui compte.</li>
       <li>Une fois le BDT reçu, le <b>double-clic</b> sur sa barre ouvre la <b>déclaration de sortie matière</b>.</li>
-      <li>À la fin : clic droit → <b>« Solder le BDT »</b> (la fenêtre rappelle la durée allouée, le réglage et la réalisation). Saisissez l'heure de fin réelle, le résultat (✅ Conforme, ⚠️ Reprise partielle, ❌ Non-conformité), d'éventuelles observations, puis le matricule + PIN de l'opérateur.</li>
+      <li>À la fin : clic droit → <b>« Solder le BDT »</b>. La fenêtre rappelle la durée allouée, le réglage, la réalisation et <b>« Reçu par »</b>. Saisissez l'heure de fin réelle, le résultat (✅ Conforme, ⚠️ Reprise partielle, ❌ Non-conformité), d'éventuelles observations, puis le <b>matricule + code PIN</b> de la personne qui solde. <b>Qui peut solder</b> (rappelé dans la fenêtre) : <b>l'opérateur qui a reçu ce BDT</b>, ou <b>une personne habilitée à écrire en Production</b>, qui peut aussi solder le bon reçu par un autre. Tout autre matricule est refusé : « Seuls l'opérateur qui a reçu ce BDT ou une personne habilitée à écrire en Production peuvent le solder. ». Le bouton <b>« Solder »</b> se grise pendant l'envoi ; en cas de refus, le PIN est effacé et le message s'affiche en rouge.</li>
       <li>Si le résultat est « Non-conformité », un champ <b>Gravité</b> apparaît (Mineure / Majeure / Critique / Bloquante). La fiche NC part automatiquement à la Qualité ; une gravité <b>Critique</b> ou <b>Bloquante</b> bloque l'expédition de l'affaire jusqu'à traitement ou dérogation.</li>
       <li>Le temps réel est calculé et comparé au temps alloué — il alimente le journal des temps et les indicateurs (TRS, écarts).</li>
     </ol>
+    <div class="note"><b>La matrice de compétences ne bloque plus le soldage (15/09/2026).</b> Jusque-là, presque personne ne pouvait solder : le message « … n'est pas habilité(e) à solder … (matrice de compétences) » tombait pour tout opérateur ayant au moins une ligne dans la matrice, parce que la matrice RH enregistre l'identifiant du process alors que le contrôle le comparait au nom de l'opération ; un chef d'atelier obtenait, lui, « Matricule ou code PIN incorrect ». Désormais, si l'opérateur qui a reçu le bon n'a pas de niveau renseigné pour ce process, le soldage est <b>enregistré</b> et une notification orange invite à mettre la matrice à jour (<b>RH › Compétences</b>). Quand un chef solde le bon reçu par un opérateur, le PV d'autocontrôle porte « BDT reçu par X, soldé par Y ».</div>
+    <figure class="shot">
+      <img src="../../assets/form-production-soldage.png" alt="Fenêtre de soldage d'un BDT avec la ligne Reçu par et le rappel de qui peut solder" loading="lazy">
+      <figcaption><b>Soldage BDT</b> — le rappel du bon (dont <b>« Reçu par »</b>), l'heure de fin réelle et le résultat, puis le cadre <b>« Signature du soldage »</b> : qui peut solder, matricule et code PIN.</figcaption>
+    </figure>
     <p><b>Déclarer une sortie matière :</b> double-cliquez une barre BDT → la modale « Déclaration de sortie matière » s'ouvre. Choisissez le type (<b>Matière</b>, <b>Fourniture</b> ou <b>Consommable machine</b>), l'article du stock, la quantité, et pour un consommable la <b>machine</b> ou le <b>poste</b> concerné (traçage OPEX). La sortie décrémente le stock et se rattache au coût du lot.</p>
     <p><b>Affecter les opérateurs aux postes :</b> dans le bloc « Affectation des ressources », glissez une carte opérateur (ou cliquez-la pour la sélectionner) puis déposez-la dans une sous-case <b>Matin / Journée / Après-midi / Soirée</b> d'un poste du planning. L'affectation est enregistrée et tracée pour le jour ; la croix sur l'étiquette la retire. Un opérateur peut tenir plusieurs process et créneaux.</p>
     <ul class="points">
@@ -102,6 +107,52 @@
       <li>Un opérateur <b>absent</b> ou <b>non planifié</b> (présence non saisie) apparaît grisé dans la colonne « Absent » et n'est <b>pas déplaçable</b> : passez d'abord par l'onglet Présence pour le rendre affectable.</li>
       <li>Le contrôle de <b>compétence</b> reste porté par le process : un BDT ne peut être programmé que sur un poste dont un process couvre son opération et son activité (Seem/Semrac).</li>
     </ul>
+
+    <h3>Faire une demande d'achat depuis la Production</h3>
+    <p>Bouton <b>« Demande d'achat »</b> du bandeau. Réservé aux personnes qui ont l'<b>écriture sur la Production</b> ; la demande part aux <b>Achats</b> (onglet Demandes d'achat, statut « à traiter ») au nom de la personne qui signe, sous la forme « Prénom Nom (Production) ».</p>
+    <ol class="steps">
+      <li>Cliquez <b>« Demande d'achat »</b> : le <b>formulaire complet</b> s'ouvre aussitôt, curseur sur le matricule. Il n'y a plus d'étape « Identifier ».</li>
+      <li><b>Qui fait la demande ?</b> — matricule et code PIN (obligatoires). Ils sont vérifiés à l'envoi.</li>
+      <li><b>Nature de l'achat</b> — <b>Matière</b>, <b>Accessoire</b> ou <b>Machine (OPEX)</b>. Pour « Machine », choisissez la <b>machine concernée</b> (liste groupée par poste) : le prix ira sur l'OPEX de cette machine à la réception, et le poste se remplit tout seul.</li>
+      <li>Remplissez <b>Article / désignation</b> et <b>Quantité</b> (obligatoires, virgule acceptée), puis au besoin <b>Référence</b>, <b>Unité</b> (u, kg, m, l, lot, boîte…), <b>Affaire</b> (ou « Sans affaire »), <b>Poste concerné</b>, <b>Priorité</b> (Normale / Urgente / Critique), <b>Livraison souhaitée</b> (pas dans le passé) et <b>Fournisseur suggéré</b>.</li>
+      <li>Cliquez <b>« Envoyer aux Achats »</b> : la fenêtre se ferme et une notification donne le numéro (« Demande d'achat DA-2026-012 envoyée aux Achats. »).</li>
+    </ol>
+    <div class="tbl"><table>
+      <thead><tr><th>Message dans la fenêtre</th><th>Ce qu'il faut faire</th></tr></thead>
+      <tbody>
+        <tr><td>« Matricule ou PIN incorrect. » (le PIN est effacé)</td><td>Ressaisir le PIN ; vérifier le matricule.</td></tr>
+        <tr><td>« Seules les personnes habilitées à écrire en Production peuvent faire une demande d'achat depuis la Production. »</td><td>Faire saisir la demande par un chef d'atelier, ou demander à la RH l'écriture sur la Production.</td></tr>
+        <tr><td>Un champ en rouge (quantité, machine, livraison…)</td><td>Corriger le champ signalé puis renvoyer.</td></tr>
+        <tr><td>« Vérification du matricule impossible … rien n'a été enregistré »</td><td>Problème de base de données passager : réessayer dans un instant.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="warn"><b>Changement du 15/09/2026 :</b> l'ancien formulaire ne s'affichait qu'après une identification réussie, et l'identification exigeait d'être affecté à un poste <b>le jour même</b> — elle refusait donc tout le monde dès que le planning du jour n'était pas saisi. Cette limite est supprimée. En contrepartie, un <b>opérateur sans écriture Production</b> ne peut plus faire de demande d'achat depuis la Production.</div>
+    <figure class="shot">
+      <img src="../../assets/form-production-da.png" alt="Formulaire Demande d'achat — Production, nature Machine (OPEX)" loading="lazy">
+      <figcaption><b>Demande d'achat — Production</b> — « Qui fait la demande ? » (matricule + PIN), la nature de l'achat (ici Machine, avec la machine concernée), article, référence, quantité et unité, affaire, poste, priorité, livraison souhaitée et fournisseur suggéré.</figcaption>
+    </figure>
+
+    <h3>Émettre un PV de non-conformité depuis la Production</h3>
+    <p>Bouton rouge <b>« PV de non-conformité »</b>, juste à côté de « Demande d'achat ». Réservé aux personnes qui ont l'<b>écriture sur la Production</b>. La non-conformité arrive dans <b>Qualité › Non-Conformités</b> (catégorie « Production », statut « Ouvert », numéro NC-2026-…), au nom de la personne qui signe. Le rattachement à une affaire est <b>facultatif</b>.</p>
+    <ol class="steps">
+      <li>Cliquez <b>« PV de non-conformité »</b> : le formulaire s'ouvre, curseur sur le matricule.</li>
+      <li><b>Qui émet le PV ?</b> — matricule et code PIN (obligatoires).</li>
+      <li><b>Constat</b> — <b>date du constat</b> (aujourd'hui par défaut, jamais dans le futur), <b>type de NC</b> (Interne / Client / Fournisseur), <b>entité</b> (Seem / Semrac, obligatoire), <b>gravité</b> (Mineure / Majeure / Critique / Bloquante, Majeure par défaut).</li>
+      <li><b>Rattachement (facultatif)</b> — choisissez l'<b>affaire</b> : les listes <b>Lot</b> et <b>BDT</b> ne proposent alors que ceux de cette affaire ; choisir un BDT complète le lot et le <b>code article / pièce</b>. Complétez au besoin la désignation, la <b>quantité concernée</b> (nombre entier de pièces) et le <b>poste</b> où le défaut a été détecté.</li>
+      <li><b>Défaut</b> — nature de la NC, imputation (service responsable), <b>description du défaut</b> (obligatoire), nature de la cause, cause présumée, action immédiate, traitement proposé. Les listes sont les mêmes que dans le formulaire de la Qualité.</li>
+      <li>Au besoin, cochez <b>« Mettre en quarantaine »</b> pour isoler le lot ou les pièces en attendant la décision de la Qualité (il faut alors désigner un lot, un BDT, un code article ou une désignation).</li>
+      <li>Cliquez <b>« Émettre le PV »</b> : « PV de non-conformité NC-2026-… émis : il est dans la liste des NC de la Qualité » (et « lot mis en quarantaine » si la case était cochée).</li>
+    </ol>
+    <ul class="points">
+      <li>Une gravité <b>Critique</b> ou <b>Bloquante</b> rattachée à une affaire <b>bloque l'expédition</b> de cette affaire tant que la Qualité n'a pas clos la NC ; une <b>quarantaine</b> bloque l'expédition du lot, quelle que soit la gravité.</li>
+      <li>L'ERP vérifie que le lot et le BDT appartiennent bien à l'affaire choisie ; sinon il refuse et nomme le problème (« Le lot … appartient à l'affaire …, pas à l'affaire … »).</li>
+      <li>Action immédiate <b>« Rebut »</b> : le rebut est aussi inscrit au registre des déchets (Sécurité). Si cela échoue, une notification orange le dit : saisissez-le dans Sécurité › Déchets.</li>
+      <li>Le nom de l'émetteur, la cause présumée et le traitement proposé sont recopiés dans la description de la NC.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/form-production-pvnc.png" alt="Formulaire PV de non-conformité — Production, rattaché à une affaire, un lot et un BDT" loading="lazy">
+      <figcaption><b>PV de non-conformité — Production</b> — « Qui émet le PV ? », le constat (date, type, entité, gravité, avec le rappel du blocage d'expédition), le rattachement facultatif (affaire, puis lot et BDT de cette affaire, code pièce complété), puis le défaut. Plus bas : cause, action immédiate, traitement proposé et la case « Mettre en quarantaine ».</figcaption>
+    </figure>
 
     <h3>Filtres activité Seem/Semrac</h3>
     <p>Les boutons <b>Tous / Seem / Semrac</b> filtrent à la fois les postes du Gantt, les cartes de la goulotte et les tuiles de statistiques. Les postes « both » (Seem &amp; Semrac) restent visibles dans les deux cas.</p>
@@ -215,7 +266,7 @@
       <li>Pendant un glisser, tous les BDT du même lot sont surlignés en jaune — pratique pour repérer l'opération précédente.</li>
       <li>Clic droit sur une barre : le menu propose aussi <b>« Aller à la commande rattachée »</b> et <b>« Aller au lot rattaché »</b>. Double-clic sur une carte en attente : ouvre la commande mère.</li>
     </ul>
-    <div class="warn"><b>Attention :</b> réceptionner et solder exigent le matricule + code PIN de l'opérateur — c'est la signature de traçabilité (EN 9100). Un BDT soldé ne peut plus être déplacé ni découpé ; un BDT posé sur le planning ne se découpe pas (remettez-le d'abord dans la goulotte) ; une NC Critique/Bloquante bloque l'expédition de toute l'affaire.</div>
+    <div class="warn"><b>Attention :</b> réceptionner et solder exigent un matricule + code PIN — c'est la signature de traçabilité (EN 9100). Reçoit un opérateur ou une personne qui écrit en Production ; solde l'opérateur qui a reçu le bon ou une personne qui écrit en Production. Le compte de secours ne peut pas signer. Un BDT soldé ne peut plus être déplacé ni découpé ; un BDT posé sur le planning ne se découpe pas (remettez-le d'abord dans la goulotte) ; une NC Critique/Bloquante bloque l'expédition de toute l'affaire.</div>
     <div class="astuce"><b>Astuce :</b> le survol d'une barre affiche une infobulle complète (client, pièce, durée, <b>réglage</b> et <b>réalisation</b>, morceau « M2 · 2/3 », <b>au plus tôt</b> et, le cas échéant, l'enchaînement à revoir, process, statut). Rappel des gestes : <b>clic</b> = focus étape (3 lignes max) · <b>double-clic</b> = sortie matière · <b>clic droit</b> = statuts et navigation.</div>
   </section>
 

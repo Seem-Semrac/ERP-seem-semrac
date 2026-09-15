@@ -412,6 +412,208 @@ Corrections de la revue :
 comparaisons, écran en VM, routes Docker), `test_presences.mjs`, `test_reglage.ts`, `e2e_lotc.mts`
 (phases B, G, RV, A sans colonnes, PANNE), `verif_api_docker.mjs` (app Docker, AUTH_ENFORCE=on).
 
+## Soldage des BDT, demande d'achat et PV de non-conformité depuis la Production (15/09/2026)
+
+**Demande** : « les soldages de BDT ne fonctionnent pas. Seules les personnes habilitées à écrire dans la
+production ou l'opérateur ayant reçu le BDT peuvent le solder. […] il annonce un problème dans la matrice des
+compétences. Il faut dans la production que les personnes habilitées à écrire puissent instruire des
+non-conformités librement en la rattachant à une affaire ou pas pour que ça aille ensuite dans la liste des NC
+en qualité. […] l'ouverture d'un PV [est] un bouton juste à côté de la demande d'achat ; pour la demande d'achat
+seules les personnes ayant l'autorisation d'écriture sur la production peuvent en faire une depuis ici. […] il
+faut aussi afficher le formulaire de demande d'achat dès qu'on appuie sur le bouton ». Contrats des routes :
+`07-api-reference.md` (section « Production (15/09/2026) »). Aucune migration.
+
+| Fichier | Rôle |
+|---|---|
+| `src/soldage_bdt.ts` (nouveau) | règles **pures** du soldage : `droitSoldageBDT`, `autorisationsFonctionnelles`, `avertissementCompetence`, `heureFinValide`, `nomSalarie`, `MSG_SOLDAGE_RESERVE` |
+| `src/prod_da_nc.ts` (nouveau) | règles **pures** de la DA et du PV de NC (identification, droit, validation, rattachement, numérotation, charge utile, quarantaine, `dateAtelier`, `colonneAbsente`) **et** les deux formulaires (HTML + JS client) : `blocDaNcProduction`, `refFormulairesProd` |
+| `src/index.tsx` | route `/solder` réécrite ; `/recu` élargie à l'écriture Production ; `signataireProduction`, `insererNumeroteAvecRepli` ; `demande-achat-operateur` réécrite ; `POST /api/production/nc` ; `operateur-contexte` **supprimée** ; `non-conformites` revérifie l'écriture Qualité ; PATCH RH ; cockpit Direction ; `nextSeqId(prefix, ids, year?)` |
+| `src/queries.ts` | `verifySalariePinStricte`, `lireLignesStricte`, `lireToutesLignesStricte` (pagination) ; `ncEstClose` reconnaît « Soldé » |
+| `src/auth.ts` | `SELF_SERVICE_RE` : + `demande-achat-operateur`, + `nc`, − `non-conformites` ; `serviceFor('/api/production/non-conformites') = 'qualite'` |
+| `src/prod.tsx` | fenêtre de soldage (aide, « Reçu par », anti double clic) ; ancien bouton / fenêtre / JS de la DA remplacés par `blocDaNcProduction(...)` |
+
+### Soldage d'un BDT : pourquoi personne ne pouvait solder
+
+Reproduit sur la base Docker (jeu `-TEST-SOLD-`, supprimé et relu) :
+1. **Matrice de compétences** — RH › Compétences enregistre `competences_operateur.operation` = l'**identifiant du
+   process** (`proc-man-s1`, `PROC-2026-018`… ; `rh_service.tsx`, `buildOpsForMatrix` : `code = p.id`). L'ancien
+   contrôle de `/solder` comparait cette valeur au **libellé** d'opération du BDT (« Ebavurage / Finition SEEM ») :
+   égalité impossible. Le refus « n'est pas habilité(e) à solder … (matrice de compétences) » tombait dès qu'un
+   opérateur avait **au moins une ligne** dans la matrice — 20 opérateurs actifs sur 22.
+2. **Signataire** — cherché par `verifyOperateurPin`, qui filtre `est_operateur = true` : un chef de production
+   (fiche `production` ou `direction`, `est_operateur = false`) obtenait « Matricule ou code PIN incorrect ».
+
+### Règle de soldage (`droitSoldageBDT`, `POST /api/production/bdt/:id/solder`)
+
+- **Signataire** : matricule + PIN de **tout salarié actif** (`verifySalariePin`). La route reste self-service (borne
+  partagée) : la personne connectée n'intervient pas, c'est le salarié du PIN qui est jugé.
+- **Voie `ecriture_production`** : le signataire a l'**écriture Production**, calculée comme au login
+  (`sessionDeSalarie` : rôles = `roles` sinon `[role]` ; droits = `autorisations` non vides sinon
+  `autorisationsUnion(rôles)` ; puis `peutEcrireService(…, 'production')` — `all`, rôle `production`, jeton
+  `ecrire:production`). Il solde n'importe quel BDT reçu, y compris celui reçu par un autre.
+- **Voie `operateur_recu`** : le signataire est l'opérateur qui a **reçu** le bon (`bons_de_travail.operateur_id`,
+  posé par `/recu`) **et** sa fiche porte l'autorisation fonctionnelle `soldage` (ou `all`). `autorisationsFonctionnelles`
+  ignore les jetons `lire:`/`ecrire:` ; une fiche qui n'a qu'eux (ou rien) vit sur les autorisations de ses rôles.
+  **Garde OAS** conservée sur cette voie seulement : un opérateur OAS pur (sans `soldage`, `autorisationsPourRole`
+  « oas : PAS de soldage BDT ») reçoit un 403 qui cite l'OAS ; la voie écriture Production reste ouverte.
+- Sinon **403** `MSG_SOLDAGE_RESERVE` : « Seuls l'opérateur qui a reçu ce BDT ou une personne habilitée à écrire en
+  Production peuvent le solder. »
+- **La matrice ne bloque plus** : `avertissementCompetence` compare les lignes de l'opérateur **qui a reçu** le bon
+  au `process_id` **et** à l'ancien libellé ; niveau ≥ 1 requis ; aucune ligne pour lui = rien à signaler. Le résultat
+  part dans `avertissement` (notification orange), le soldage est enregistré. `bypass_competence` n'existe plus.
+- **Ordre des contrôles** : 400 matricule/PIN → 400 heure de fin `HH:MM` (`heureFinValide`) → 401 PIN → 503 lecture
+  stricte (`getBDTStrict`) → 404 → 409 déjà soldé → 409 pas « Reçu » (le serveur ne le vérifiait pas) → 403 droit →
+  500 écriture → **409** si le bon a changé entre la lecture et l'écriture (`majBDTConditionnelle(id, patch,
+  { statut: 'recu' })` : deux soldages simultanés ne passent pas tous les deux).
+- **Traçabilité** : `bons_de_travail.operateur_id` (celui qui a reçu, base du coût réel `coutReelBdt`) **n'est jamais
+  réécrit**. Le **soldeur** est porté par l'historique opérateur (et machine), le PV d'autocontrôle et la NC éventuelle
+  (`detecteur`). La table d'historique n'ayant pas de colonne « opérateur d'origine », quand soldeur ≠ réceptionnaire
+  le PV ajoute « BDT reçu par X, soldé par Y (écriture Production) » à ses observations.
+- **Réponse 200** enrichie : `operateur` (soldeur), `operateur_id`, `voie`, `recu_par {id, nom}`, `avertissement`.
+- **Écran** (`pageServiceProd`, `#soldageModal`) : aide `#s_qui` « qui peut solder », ligne « Reçu par », textes de la
+  base échappés (`ccEsc`), message du serveur affiché tel quel (réponse non JSON comprise), PIN effacé sur refus,
+  bouton `#s_solder_btn` **désactivé pendant l'envoi** (`aria-busy`, anti double clic), « (reçu par X) » dans la
+  notification de succès.
+- **Cause voisine corrigée côté RH** : `PATCH /api/rh/salarie/:id` avec `acces_services` sur une fiche aux
+  autorisations **vides** partait d'une base vide → la fiche ne gardait que des jetons et perdait `pointage`,
+  `soldage`… au login. La base est désormais `autorisationsUnion(rôles de la fiche)`.
+
+### Réception d'un BDT par une personne qui écrit en Production (`POST /api/production/bdt/:id/recu`)
+
+Conséquence directe de la règle de soldage, tranchée dans le même lot (option 1 de la revue) : `/solder` exige un bon
+« Reçu », or `/recu` ne reconnaissait que les fiches `est_operateur` — un chef d'atelier ne pouvait donc jamais solder un
+bon qu'**aucun opérateur** n'avait reçu.
+- **Signataire** : `verifyOperateurPin` d'abord (inchangé pour les opérateurs) ; à défaut `verifySalariePinStricte` et
+  `ecritEnProduction` — un salarié actif qui écrit en Production (chef d'atelier, direction) reçoit aussi le bon. PIN juste
+  mais ni opérateur ni écriture Production → **403** « Seuls un opérateur ou une personne habilitée à écrire en Production
+  peuvent recevoir un BDT. » ; lecture des salariés en échec → **503** (seulement sur cette 2ᵉ voie).
+- **`operateur_id` = le signataire**, comme pour un opérateur : le chef qui reçoit **devient le réalisateur** du bon.
+  Conséquences : le temps réel est valorisé à **son** coût chargé RH (`coutReelBdt`), la ligne « Reçu par » de la fenêtre
+  de soldage le nomme, et l'avertissement de la matrice porte sur lui (aucune ligne de matrice ⇒ aucun avertissement). Il
+  n'existe pas de « recevoir pour le compte d'un opérateur » : pour tracer l'opérateur, c'est l'opérateur qui reçoit.
+- Inchangé : mauvais PIN → **200** `{ok:false}` (sans code d'erreur HTTP, historique), 409 hors planning / déjà reçu /
+  déjà soldé, porte OAS, heure de Paris. ⚠ L'écran n'a pas changé : la fenêtre de réception s'intitule toujours
+  « Identification opérateur ».
+
+### Demande d'achat depuis la Production
+
+**Pourquoi le formulaire ne s'affichait pas** (reproduit au navigateur sur Docker) — trois verrous en série :
+1. la fenêtre ne montrait que « Matricule / PIN / Identifier » ; le formulaire (`#oda-context`) restait masqué jusqu'à
+   une identification réussie ;
+2. l'identification (`POST /api/production/operateur-contexte`, **supprimée**) exigeait une affectation à un poste
+   **le jour même** (`affectation_poste`, vide depuis le 10/07) → 403 « Vous n'êtes affecté à aucun poste
+   aujourd'hui » pour tous, et passait par `verifyOperateurPin` → 401 pour un chef d'atelier non opérateur ;
+3. ces routes n'étaient pas self-service : un compte d'atelier en lecture seule sur la Production était refusé par le
+   middleware avant la vérification du PIN.
+
+**Maintenant** : `#oda-hdr-btn` → `odaOpen()` ouvre **le formulaire complet**, focus sur le matricule ; l'identification
+est vérifiée **à l'envoi**. `POST /api/production/demande-achat-operateur` (même URL, contrat changé) :
+- `signataireProduction(b, MSG_DA_RESERVE)` (commun avec la NC) : `lireIdentification` (400 `champ`) →
+  `verifySalariePinStricte` (salarié actif ; **panne = 503**, jamais « PIN incorrect » ; joker `%` `_` refusé) → 401 →
+  `ecritEnProduction` (403 « Seules les personnes habilitées à écrire en Production peuvent faire une demande d'achat
+  depuis la Production. »). Un non-habilité n'apprend donc rien du formulaire.
+- `validerSaisieDaProd` (400 `champ`) : nature `matiere|accessoire|machine`, article ≤ 200, référence ≤ 80, quantité
+  > 0 (virgule acceptée), unité de la liste `UNITES_DA`, machine obligatoire pour « Machine », priorité, livraison
+  souhaitée pas dans le passé (**jour de l'atelier**, `dateAtelier()` = Europe/Paris), fournisseur ≤ 120.
+- Machine, poste et affaire **relus en base** (`lireLignesStricte`, 503 si panne ; 400 si inconnus). Le poste d'une
+  machine prime sur le poste choisi.
+- Ligne `demandes_achat` (`payloadDaProd`) : `demandeur` « Prénom Nom (Production) », `type_da` Matière | Accessoire |
+  Machine, `article` « désignation (réf. X) », `qte` « 12,5 kg », `statut a_traiter`, `visible`, `genere_par_adt false`,
+  `type_bc fournisseur`, `livraison`, `fournisseur`, `categorie`, `machine_id` (seulement pour « Machine » : c'est lui
+  qui envoie le prix sur l'OPEX à la réception), `poste_id`, `operateur_id` = salarié authentifié, `num_affaire`,
+  `affaire_id` (commande, sinon `resolveAffaireId`). `demandes_achat` n'a **ni colonne référence ni unité** : elles
+  voyagent dans `article` et `qte` (aucune colonne inventée).
+- Numéro `DA-AAAA-NNN` : `nextSeqId('DA', ids, annee)` (nouveau paramètre `year`, année de l'atelier) sur une lecture
+  **paginée** (`lireToutesLignesStricte`) — PostgREST plafonne chaque réponse à `PGRST_DB_MAX_ROWS` (1000) sans le dire.
+
+### PV de non-conformité depuis la Production
+
+- **Bouton** `#pvnc-hdr-btn` (rouge, triangle) **juste à côté** de « Demande d'achat », dans `#prod-hdr-actions`
+  déplacé dans `#svc-hdr-bar`. Fenêtres `#odaModal` / `#pvncModal` rangées **hors des panneaux** : ouvrables depuis
+  n'importe quel onglet ; Échap et Annuler ferment et effacent le PIN ; champ fautif surligné et focalisé à partir du
+  `champ` renvoyé (`pfErreur`, ids `<prefixe>_<champ>`) ; envoi unique (`pfEnvoyer` désactive le bouton) ; toutes les
+  notifications passent par `pfEsc`.
+- **Données injectées** : `PRODFORM_REF = refFormulairesProd({commandes, lots, bdts, machines, postes})` en `sjX` —
+  affaires = commandes non annulées ayant un `num_affaire` ; lots rattachés à une de ces commandes ; BDT non annulés
+  rattachés à une affaire ; machines groupées par poste ; postes non inactifs. Les listes Lot et BDT se filtrent par
+  affaire ; choisir un BDT complète le lot et le code pièce.
+- **Champs** (`validerSaisieNcProd`) : entité* (Seem | Semrac), description* (≤ 4 000), date du constat (≤ aujourd'hui
+  **atelier**, défaut aujourd'hui), type (Interne | Client | Fournisseur, défaut Interne), gravité (défaut Majeure),
+  affaire / lot / BDT (facultatifs), code article ≤ 80, désignation ≤ 200, pièces (entier > 0), lieu de détection,
+  imputation, nature, nature de la cause, action immédiate — **mêmes listes que le formulaire Qualité** (`qref.ts`),
+  sans casse, ramenées à la valeur canonique, jamais de valeur nouvelle —, cause présumée et traitement proposé
+  (≤ 1 000), case quarantaine (exige lot, BDT, code article ou désignation).
+- **Rattachement vérifié** (`rattacherNcProd`, revue du 15/09/2026) : affaire, lot et BDT relus ; si seul le BDT est
+  saisi, **son lot est relu** ; la commande du lot et celle du BDT (`cmd_id`) aussi. Dès qu'une affaire est établie
+  (saisie, ou déduite du lot / du BDT), chaque lot et BDT doit lui appartenir **de façon vérifiable** — par le
+  `num_affaire` de sa commande, sinon par l'`affaire_id` de la commande. Invérifiable ou étranger → **400** (« Le lot X
+  appartient à l'affaire A, pas à l'affaire B. », « Impossible de vérifier que le BDT Y appartient à l'affaire A (BDT
+  sans affaire ni commande connues). »…). Raison : une NC Critique/Bloquante bloque les BL de son affaire et, par la
+  sous-chaîne de `lot_ref`, ceux de l'affaire du lot — on ne recopie jamais un lot étranger. `affaire_id` ne vient que
+  des commandes (sinon `resolveAffaireId`).
+- **Ligne `non_conformites`** (`payloadNcProd`) : `statut 'Ouvert'` (1ʳᵉ valeur de `NC_STATUTS_LISTE`, comme la
+  Qualité), `categorie 'prod'`, `entite`, `date_nc`, `type_nc`, `gravite`, `lot_ref`, `num_affaire`, `affaire_id`,
+  `bdt_id`, `operation`, `client_nom`, `ref_article` (sinon pièce du BDT / du lot), `designation`, `nb_pieces`, les
+  cinq listes, `description` = défaut + « Cause présumée : » + « Traitement proposé : » + « PV de non-conformité émis
+  en Production par X (constat du JJ/MM/AAAA). », **`detecteur` = nom du salarié authentifié**.
+- **Numéro** `NC-AAAA-NNN`, **compteur continu toutes années** (`prochainNumeroNc`, même règle que le formulaire
+  Qualité) sur lecture paginée ; renuméroté **une fois** sur 23505. `insererNumeroteAvecRepli` retire une à une les
+  colonnes **facultatives** absentes de la base (PGRST204 / 42703, avertissement « migration à jouer »), jamais les
+  obligatoires (`COLONNES_NC_OBLIGATOIRES`, `COLONNES_DA_OBLIGATOIRES`).
+- **Case quarantaine** : `createQuarantaine({nc_id, lot_id, piece, client_nom, date_mise_quarantaine, motif, statut:
+  'en_cours'})` puis NC `statut 'quarantaine'` — même effet que `POST /api/qualite/nc/:id/quarantaine`. Échec →
+  avertissement (« mettez le lot en quarantaine depuis Qualité › Non-conformités »), la NC reste créée.
+- **Action immédiate « Rebut »** : `ensureHseDechet('nc_rebut', …)` (idempotent via `source_ref`), comme la création
+  Qualité ; son erreur est **lue** (supabase-js ne lève pas) → avertissement « Rebut non inscrit au registre des déchets ».
+- Réponse `{ ok, id, data, quarantaine_id, avertissements[] }` ; la NC apparaît dans **Qualité › Non-Conformités**
+  (filtre Catégorie « Production »).
+
+### Changements voisins
+- **`POST /api/production/non-conformites`** (formulaire « Nouvelle NC » de la **Qualité**, URL historique) : **sorti du
+  self-service** — PIN facultatif et aucun contrôle de droit, tout compte connecté (borne en lecture seule) créait une NC,
+  même Bloquante. `serviceFor` la classe `qualite` et le handler revérifie `peutEcrireService(user, 'qualite')` (403
+  explicite renvoyant au « PV de non-conformité » de la Production).
+- **`ncEstClose`** reconnaît « Soldé » (`sold[ée](?!r)`, pas « à solder ») : c'est le statut de clôture de la liste
+  Qualité, présent en base. Le cockpit Direction (`/direction/service`, `POST /api/direction/scan-alertes`) utilise
+  désormais `ncEstClose` au lieu de deux regex divergentes : une NC Critique « Soldé » n'y est plus listée.
+- **`dateAtelier()`** : « aujourd'hui » dans le fuseau de l'atelier (Europe/Paris, repli UTC) pour la date de constat, la
+  date de quarantaine, `date_da`, la borne de livraison et l'année des numéros — le serveur est en UTC et le créneau
+  Soirée passe minuit (entre 0 h et 2 h l'été, la date UTC est encore la veille).
+- **`erp-docker.sh maj`** suffixe le commit gravé de `-dirty` quand `src`, `public`, `package*.json`, `tsconfig.json` ou
+  `docker/app.Dockerfile` ont des modifications non commitées (l'image copie le dossier de travail) ; `/api/version`
+  garde `-dirty` dans `commit_court`.
+
+### Points ouverts
+- **Tranché (réception par le chef)** : `/recu` accepte une personne qui écrit en Production, `operateur_id` = elle
+  (voir ci-dessus). Variante écartée : passer directement `programme` → `solde` sur la voie écriture Production.
+  ⚠ `/recu` écrit encore sans transition conditionnelle (`updateBDT` après une lecture de tous les BDT) : deux réceptions
+  simultanées passent toutes les deux, la dernière fixe `operateur_id` et `debut_reel`.
+- **À confirmer** : garde OAS (un OAS pur qui a reçu un BDT ne le solde pas) ; compte de secours BOOTSTRAP refusé (401)
+  comme signataire du soldage, faute de fiche salarié.
+- `verifySalariePin` (partagée, utilisée par `/solder`) n'est pas stricte : Supabase en panne ⇒ 401 au lieu de 503.
+- `temps_reel` négatif si l'heure de fin précède `debut_reel` (poste de nuit, saisie erronée) : fausse le coût réel.
+- Numérotation des NC : le formulaire Qualité (`/api/production/non-conformites`) lit encore `getNonConformites()`
+  (plafonné à 1 000 lignes) ; d'autres créations (NC de soldage, de relevé…) utilisent `nextSeqId('NC')`, qui repart à 1
+  chaque année — deux conventions cohabitent.
+- `ncEstClose` compte aussi `trait` comme clos (« à traiter », « en traitement » passeraient pour clos ; absents
+  aujourd'hui de `NC_STATUTS_LISTE`).
+- Réédition d'une NC en Qualité : le select « Détecteur » (Opérateur, Contrôleur…) efface le nom de l'émetteur et le
+  statut « quarantaine » — c'est pourquoi l'émetteur est aussi écrit dans la description.
+- Pas de limitation des essais de PIN sur `/solder`, `/recu`, la DA et la NC (réutiliser `_loginBlocked` partagerait le
+  compteur du login d'une borne en IP « local »).
+- `PRODFORM_REF` embarque tous les BDT non annulés rattachés à une affaire : à surveiller si la table grossit.
+- Docker : `salaries.est_operateur` n'est ni générée ni alimentée par un trigger ; un opérateur créé par l'API RH a
+  `est_operateur = NULL` et ne peut pas recevoir de BDT. À vérifier en cloud.
+- Anciennes fenêtres de soldage locales (`pageGanttBDT` de `prod.tsx`, `affectation.tsx`, pages redirigées) non touchées ;
+  la matrice garde des lignes de niveau 0 (cellule remise à « — ») qui déclenchent l'avertissement.
+
+**Tests** (scratchpads des agents, hors dépôt) : règles pures 22 (soldage) + 99 (DA/NC) + 61 (correctifs) ; API sur
+la base Docker `AUTH_ENFORCE=on` 13 cas de soldage, 52 DA/NC, 33 correctifs (rattachement, rebut, quarantaine,
+`non-conformites`, OAS, PATCH RH), 5 de pagination, base injoignable 2/2 en 503, cockpit Direction 4 ; Playwright 30 + 10
+(boutons côte à côte, formulaire visible dès le clic, erreurs 401/403 dans la fenêtre, un seul envoi sur trois clics,
+fenêtre contenue à 390 px, aucune balise injectée) ; `tsc` 0 ; harnais 60 PASS / 0 FAIL / 1 SKIP. Jeux `-TEST-`
+supprimés et relus (compteurs revenus à l'état initial).
+
 ## Mission
 <!-- auto:mission -->
 Planning Gantt BDT/BST, présence opérateurs, commandes & lots, process ateliers.
@@ -441,6 +643,7 @@ Planning Gantt BDT/BST, présence opérateurs, commandes & lots, process atelier
 - ⚠ `bstLotKey()` accepte maintenant `lot_id` (avant `lot_ref` seul) pour rejoindre la clé BDT `lotId = lot_id ?? lot_ref`.
 - BDT/BDS prioritaires (id BDTP/BDSP) encadrés rouge.
 - **Découpe d'un BDT** (revue 13/09/2026) : **uniquement** depuis les ciseaux d'une carte de la goulotte → modale `splitModal` (rangée dans `#ppanel-gantt-bdt`, 2 à 12 morceaux, temps **libre** par morceau) → `POST /api/production/bdt/:id/separer` ; le BDT d'origine garde le 1ᵉʳ morceau, les suivants sont créés en `-M2`/`-M3`… dans la goulotte. Plus de clic droit sur le planning, plus de prorata ; un BDT posé sur le planning est refusé (409). ⚠ **Revu le 14/09/2026 (lot C)** : seul le temps de réalisation se découpe, le réglage reste sur le morceau 1, et une découpe s'annule (voir la section Lot C). ⚠ **Interface revue le 15/09/2026** : **jauge** du temps de réalisation V à répartir (un segment coloré par morceau, gris = reste à répartir, rayures orange = dépassement, réglage à part en bloc hachuré fixe) + **un curseur par morceau** (`input range` 0…V, pas 0,01 arrondi au quart d'heure par le JS avec aimant sur la valeur qui complète V ; champ en heures synchronisé ; clavier flèches ±0,25 h, Page ±1 h) ; aides « Répartir également » (centièmes entiers, le dernier prend le reste) et « Mettre le reste sur le dernier morceau » ; une somme ≠ V demande une **confirmation** (`appConfirm`) avant l'envoi. Contrat serveur inchangé (`{ realisation, reglage? }`). Fonctions : `splitJauge`, `splitRender`, `splitAimant`, `splitRepartirEgal`, `splitResteDernier`, `splitPretAEnvoyer`, `splitEnvoyer`.
+- **Bandeau du service** (15/09/2026) : « Demande d'achat » et « PV de non-conformité » côte à côte (`#prod-hdr-actions`, `src/prod_da_nc.ts`), réservés à l'**écriture Production** du salarié qui signe par matricule + PIN. **Soldage** : l'opérateur qui a reçu le BDT **ou** une personne qui écrit en Production ; la matrice de compétences n'avertit plus que. **Réception** : un opérateur ou une personne qui écrit en Production (elle devient alors le réalisateur, `operateur_id`). Voir la section du 15/09/2026.
 - ℹ Cette fiche est **fusionnée, pas écrasée** par `scripts_doc/gen_module_fiches.mjs` : seuls les blocs `<!-- auto:… -->` sont régénérés depuis le manifeste ; ces points d'attention, écrits à la main, sont conservés.
 
 ---

@@ -33,10 +33,10 @@
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
-| Matricule | texte | Oui | Le matricule de l'opérateur qui prend le travail, pour prouver qui a démarré. | OP-001 |
-| Code PIN | texte (masqué) | Oui | Le code secret à 4 chiffres de l'opérateur, qui confirme son identité. | •••• |
+| Matricule | texte | Oui | Le matricule de la personne qui prend le travail : un **opérateur**, ou une personne qui **écrit en Production** (chef d'atelier). | OP-001 |
+| Code PIN | texte (masqué) | Oui | Le code secret de cette personne, qui confirme son identité. | •••• |
 
-⚠️ **Attention :** Les deux cases sont obligatoires. C'est une signature : elle trace qui a démarré l'opération et à quelle heure.
+⚠️ **Attention :** Les deux cases sont obligatoires. C'est une signature : elle trace qui a démarré l'opération et à quelle heure. La personne qui reçoit devient celle qui **réalise** le bon (« Reçu par » au soldage) : c'est son coût horaire qui compte, et c'est elle (ou une personne qui écrit en Production) qui pourra le solder. Un matricule qui n'est ni opérateur ni en écriture Production est refusé : « Seuls un opérateur ou une personne habilitée à écrire en Production peuvent recevoir un BDT. ».
 
 ## Soldage BDT (clôture d'opération)
 **Quand l'utiliser :** Quand l'opération est terminée. On clôture le BDT, ce qui calcule automatiquement le temps réellement passé.
@@ -48,11 +48,72 @@
 | Résultat | liste déroulante (Conforme – pièces OK, Reprise partielle nécessaire, Non-conformité – à déclarer) | Non | L'état des pièces produites. « Non-conformité » crée automatiquement une fiche NC pour la Qualité. | Conforme – pièces OK |
 | Quantité produite | nombre | Non | Le nombre de pièces réellement fabriquées (présent sur le planning). | 100 |
 | Observations / incidents | zone de texte | Non | Notes libres : anomalies, casses d'outils, écarts constatés. | Léger défaut d'aspect sur 2 pièces |
-| Matricule / N° opérateur | texte | Oui | Le matricule de l'opérateur qui solde, pour signer la clôture. | OP-042 |
-| Code PIN / Mot de passe | texte (masqué) | Oui | Le code secret de l'opérateur, qui confirme son identité. | •••• |
+| Gravité de la non-conformité | liste déroulante (Mineure — non bloquant, Majeure — non bloquant, Critique — BLOQUE l'expédition, Bloquante — BLOQUE l'expédition) | Oui si Résultat = Non-conformité | Visible seulement pour une non-conformité. Critique ou Bloquante bloque l'expédition de l'affaire. | Majeure |
+| Matricule | texte | Oui | Le matricule de la personne qui solde : **l'opérateur qui a reçu ce BDT** (nommé en « Reçu par » en haut de la fenêtre) ou **une personne habilitée à écrire en Production**. | OP-042 |
+| Code PIN | texte (masqué) | Oui | Le code secret de cette personne, qui confirme son identité. | •••• |
 
-💡 **Astuce :** Vous n'avez pas besoin de calculer le temps passé : il est déduit tout seul de l'heure de début (à la réception) et de l'heure de fin.
-⚠️ **Attention :** Sans heure de fin ni identification (matricule + PIN), le BDT ne peut pas être soldé. Si vous choisissez « Non-conformité », une fiche est envoyée automatiquement à la Qualité.
+💡 **Astuce :** Vous n'avez pas besoin de calculer le temps passé : il est déduit tout seul de l'heure de début (à la réception) et de l'heure de fin. Un chef d'atelier peut solder le bon reçu par un opérateur : le PV d'autocontrôle note « BDT reçu par X, soldé par Y ».
+⚠️ **Attention :** Sans heure de fin ni identification (matricule + PIN), le BDT ne peut pas être soldé. Tout autre matricule est refusé : « Seuls l'opérateur qui a reçu ce BDT ou une personne habilitée à écrire en Production peuvent le solder. » (le PIN est alors effacé). La matrice de compétences ne bloque plus : si l'opérateur n'a pas de niveau pour ce process, le soldage passe et une notification orange invite à la mettre à jour (RH › Compétences). Si vous choisissez « Non-conformité », une fiche est envoyée automatiquement à la Qualité.
+
+![Fenêtre de soldage d'un BDT](../../assets/form-production-soldage.png)
+
+## Demande d'achat — Production
+**Quand l'utiliser :** Pour demander aux Achats une matière, un accessoire ou une fourniture pour une machine, directement depuis l'atelier. Réservé aux personnes qui ont l'**écriture sur la Production**.
+**Où le trouver :** Page Production, bandeau du service en haut à droite → bouton **« Demande d'achat »** (depuis n'importe quel onglet). Le formulaire complet s'ouvre dès le clic.
+
+| Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
+|---|---|---|---|---|
+| Matricule | texte | Oui | Le matricule de la personne qui fait la demande (vérifié à l'envoi : elle doit écrire en Production). | CHEF-01 |
+| Code PIN | texte (masqué) | Oui | Son code secret. Effacé si l'envoi est refusé pour PIN incorrect. | •••• |
+| Nature de l'achat | boutons (Matière, Accessoire, Machine (OPEX)) | Oui | Ce qui est acheté. « Machine (OPEX) » affiche le choix de la machine. | Accessoire |
+| Machine concernée | liste déroulante (machines groupées par poste) | Oui si Machine | Le prix ira sur l'OPEX de cette machine à la réception. Choisir la machine remplit le poste. | Brown & Sharp |
+| Article / désignation | texte (200 caractères max) | Oui | Ce qu'il faut acheter, en clair. | Plaquettes carbure |
+| Référence | texte (80 max) | Non | Référence fabricant ou interne ; ajoutée à l'article « (réf. …) ». | CNMG 120408 |
+| Quantité | nombre (virgule acceptée) | Oui | Supérieur à 0. | 10 |
+| Unité | liste déroulante (u, kg, g, t, m, mm, m², m³, l, lot, boîte, rouleau, paire, jeu) | Non | Unité de la quantité (u par défaut). | boîte |
+| Affaire | liste déroulante (Sans affaire, affaires en cours) | Non | L'affaire pour laquelle on achète, s'il y en a une. | 0001 — PROMISTEL |
+| Poste concerné | liste déroulante | Non | Le poste de l'atelier concerné (celui de la machine l'emporte). | Cisaille |
+| Priorité | liste déroulante (Normale, Urgente, Critique) | Non | L'urgence pour les Achats. | Urgente |
+| Livraison souhaitée | date | Non | Pas dans le passé. | 2026-09-22 |
+| Fournisseur suggéré | texte (120 max) | Non | Un fournisseur connu, à titre indicatif. | Sandvik |
+
+💡 **Astuce :** La demande arrive dans Achats › Demandes d'achat au nom « Prénom Nom (Production) », statut « à traiter » ; l'acheteur la transforme en bon de commande comme toute demande.
+⚠️ **Attention :** Un matricule sans écriture Production est refusé : « Seules les personnes habilitées à écrire en Production peuvent faire une demande d'achat depuis la Production. ». Depuis le 15/09/2026, un opérateur sans ce droit fait saisir sa demande par son chef.
+
+![Formulaire Demande d'achat — Production](../../assets/form-production-da.png)
+
+## PV de non-conformité — Production
+**Quand l'utiliser :** Pour déclarer une non-conformité constatée à l'atelier, rattachée ou non à une affaire. Elle part dans la liste des NC de la Qualité. Réservé aux personnes qui ont l'**écriture sur la Production**.
+**Où le trouver :** Page Production, bandeau du service → bouton rouge **« PV de non-conformité »**, juste à côté de « Demande d'achat ».
+
+| Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
+|---|---|---|---|---|
+| Matricule | texte | Oui | Le matricule de la personne qui émet le PV (elle doit écrire en Production) ; son nom devient le détecteur de la NC. | CHEF-01 |
+| Code PIN | texte (masqué) | Oui | Son code secret. | •••• |
+| Date du constat | date | Oui | Aujourd'hui par défaut ; jamais dans le futur. | 2026-09-15 |
+| Type de NC | liste déroulante (Interne, Client, Fournisseur) | Non | Origine de la non-conformité (Interne par défaut). | Interne |
+| Entité | liste déroulante (Seem, Semrac) | Oui | Le site concerné. | Seem |
+| Gravité | liste déroulante (Mineure, Majeure, Critique, Bloquante) | Non | Majeure par défaut. Critique ou Bloquante rattachée à une affaire bloque son expédition tant que la Qualité n'a pas clos la NC. | Majeure |
+| Affaire | liste déroulante (Sans affaire, affaires en cours) | Non | L'affaire concernée ; filtre les listes Lot et BDT. | 0001 — PROMISTEL |
+| Lot | liste déroulante (lots de l'affaire) | Non | Grisé tant qu'aucune affaire n'est choisie. | LOT-2026-0001-01 |
+| BDT | liste déroulante (BDT de l'affaire, et du lot s'il est choisi) | Non | Choisir un BDT complète le lot et le code pièce. | BDT-2026-0001-01-01 |
+| Code article / pièce | texte (80 max) | Non | Référence de la pièce. | 7365635125 |
+| Désignation | texte (200 max) | Non | Nom de la pièce ou de l'objet. | Capot alu |
+| Quantité concernée (pièces) | nombre entier | Non | Nombre de pièces touchées. | 12 |
+| Poste (lieu de détection) | liste déroulante (postes de la liste Qualité) | Non | Où le défaut a été vu. | Plieuse Amada |
+| Nature de la NC | liste déroulante (liste Qualité : Aspect - Rayures, Aspect - Chocs, Géométrie - Côtes hors tolérances…) | Non | Type de défaut. | Aspect - Rayures |
+| Imputation (service responsable) | liste déroulante (liste Qualité : Achat (ACH), Qualité (QUAL), Oxydation (OXY)…) | Non | Service à l'origine du défaut. | Oxydation (OXY) |
+| Description du défaut | zone de texte (4 000 max) | Oui | Ce qui a été constaté, précisément. | Rayures sur la face vue |
+| Nature de la cause | liste déroulante (Main d'œuvre / manipulation, Machine / réglage, Méthode / gamme, Matière, Milieu / FOD, Sous-traitance, Programmation) | Non | Famille de cause (5M). | Machine / réglage |
+| Cause présumée | texte (1 000 max) | Non | Recopiée dans la description. | Outil usé |
+| Action immédiate | liste déroulante (Retouche interne, Rebut, Demande de dérogation, Retour fournisseur, Livraison en l'état) | Non | Ce qui a été fait tout de suite. « Rebut » inscrit aussi le rebut au registre des déchets. | Retouche interne |
+| Traitement proposé | texte (1 000 max) | Non | Recopié dans la description. | Retouche et contrôle 100 % |
+| Mettre en quarantaine | case à cocher | Non | Isole le lot ou les pièces jusqu'à la décision de la Qualité ; exige un lot, un BDT, un code article ou une désignation. | cochée |
+
+💡 **Astuce :** La NC apparaît dans Qualité › Non-Conformités (filtre « Production »), statut « Ouvert », avec le nom de l'émetteur, la cause présumée et le traitement proposé recopiés dans la description.
+⚠️ **Attention :** L'ERP vérifie que le lot et le BDT appartiennent bien à l'affaire choisie ; sinon l'envoi est refusé avec le motif. Une quarantaine bloque l'expédition du lot quelle que soit la gravité.
+
+![Formulaire PV de non-conformité — Production](../../assets/form-production-pvnc.png)
 
 ## Découper le BDT en morceaux
 **Quand l'utiliser :** Pour réaliser une opération en plusieurs fois (plusieurs créneaux, jours ou postes).

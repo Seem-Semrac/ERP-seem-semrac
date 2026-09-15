@@ -103,7 +103,7 @@
   <!-- ══════════════ 2. NON-CONFORMITÉS ══════════════ -->
   <section class="tab" id="tab-nc">
     <div class="tab-head"><span class="tab-num">2</span><h2>Non-Conformités</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> C'est le registre central des non-conformités (NC). Les NC peuvent être créées <b>automatiquement</b> par l'ERP (fin de balancelle OAS non conforme, soldage de BDT, réception fournisseur) ou <b>manuellement</b> ici. De chaque NC partent les suites : rapport 8D, dérogation, mise en quarantaine, et — pour une NC client — le traitement du retour (avoir ou commande prioritaire).</p>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le registre central des non-conformités (NC). Les NC peuvent être créées <b>automatiquement</b> par l'ERP (fin de balancelle OAS non conforme, soldage de BDT, réception fournisseur), <b>depuis l'atelier</b> par le bouton rouge <b>« PV de non-conformité »</b> de la Production (depuis le 15/09/2026), ou <b>manuellement</b> ici. De chaque NC partent les suites : rapport 8D, dérogation, mise en quarantaine, et — pour une NC client — le traitement du retour (avoir ou commande prioritaire).</p>
 
     <h3>Ce que vous voyez</h3>
     <p>Sous le bandeau d'information, deux rangées de filtres : <b>Catégorie</b> (Toutes · Administratif · Production) et <b>Entité</b> (Toutes · Seem · Semrac), plus un champ de recherche et le bouton <b>« Nouvelle NC »</b>. Le tableau est très complet : N°&nbsp;NC, Entrée, Fin traitement, Type NC, Catégorie, Entité, Lot, Article, Fournisseur, Client, Détection, Imputation, FRC, Gravité, Statut, Actions.</p>
@@ -126,6 +126,18 @@
       <li>Cochez si besoin <b>« Soumettre à la validation de la Direction »</b> : la NC apparaîtra dans Direction › À valider (automatique en priorité « urgent » pour une gravité Critique ou Bloquante).</li>
       <li>Cliquez sur <b>« Créer NC »</b> : la NC est numérotée et rejoint la liste.</li>
     </ol>
+    <div class="note"><b>Qui peut créer une NC ici ?</b> Depuis le 15/09/2026, <b>« Nouvelle NC »</b> est réservée aux personnes qui ont l'<b>écriture sur la Qualité</b>. Le bouton reste visible pour les autres, mais l'envoi est refusé : « La création d'une non-conformité depuis la Qualité est réservée aux personnes ayant l'écriture Qualité. En Production, utilisez « PV de non-conformité » (matricule + PIN). ». Auparavant, n'importe quel compte connecté — une borne d'atelier en lecture seule comprise — pouvait créer une NC, même Bloquante.</div>
+
+    <h3>Les NC émises depuis la Production (« PV de non-conformité »)</h3>
+    <p>Un chef d'atelier (toute personne qui écrit en Production) peut émettre un <b>PV de non-conformité</b> depuis le bandeau de la Production, signé par son matricule et son code PIN, rattaché ou non à une affaire. La NC arrive directement dans cette liste :</p>
+    <ul class="points">
+      <li>catégorie <b>Production</b> (filtre « Production »), statut <b>Ouvert</b>, numéro <b>NC-2026-…</b> sur le même compteur que les NC créées ici ;</li>
+      <li>mêmes listes que le formulaire de la Qualité : type, gravité, poste de détection, imputation, nature de la NC, nature de la cause, action immédiate ;</li>
+      <li><b>détecteur</b> = nom de l'émetteur ; sa <b>description</b> reprend le défaut, puis « Cause présumée : … », « Traitement proposé : … » et « PV de non-conformité émis en Production par X (constat du JJ/MM/AAAA). » ;</li>
+      <li>affaire, lot, BDT, code article, désignation et nombre de pièces si l'atelier les a donnés — l'ERP a vérifié que le lot et le BDT appartiennent à l'affaire ;</li>
+      <li>si l'atelier a coché « Mettre en quarantaine » : la NC est en statut <b>quarantaine</b> et l'objet apparaît dans l'onglet <b>Quarantaine</b> (même effet que l'icône caisse) ; action immédiate « Rebut » : le rebut est inscrit au registre des déchets.</li>
+    </ul>
+    <div class="warn"><b>Attention au ré-enregistrement :</b> la fenêtre d'édition d'une NC ne propose que Opérateur / Contrôleur / Client / Auditeur / Réception comme détecteur, et ne connaît pas le statut « quarantaine » : ré-enregistrer une NC venue de la Production remplace le nom de l'émetteur et ce statut. Le nom de l'émetteur reste lisible dans la description.</div>
 
     <h3>Pas à pas — traiter un retour client</h3>
     <ol class="steps">
@@ -170,6 +182,7 @@
     <ul class="points">
       <li>Une NC <b>critique ou bloquante</b> sur un lot bloque ses bons de livraison (porte qualité) : l'expédition refusera le BL tant que la NC n'est pas traitée.</li>
       <li>La colonne « Fin traitement » se remplit seule quand le statut devient clôturé/traité ; avant cela elle affiche « en cours ».</li>
+      <li>Une NC au statut <b>« Soldé »</b> est close : depuis le 15/09/2026 elle ne bloque plus l'expédition et ne remonte plus dans le cockpit Direction (« Soldé » n'était pas reconnu comme statut de clôture).</li>
     </ul>
     <div class="warn"><b>Attention :</b> le traitement d'un retour client est <b>définitif</b> : une fois l'avoir ou la commande P créés, le bouton « Retour » est remplacé par le badge de la décision — impossible de le rejouer.</div>
     <div class="astuce"><b>Astuce :</b> remplissez soigneusement Nature, Cause, Poste et Imputation : ce sont les axes du Pareto du Dashboard Qualité, qui oriente les actions de fond.</div>
