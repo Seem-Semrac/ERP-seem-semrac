@@ -2,6 +2,59 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-16 — Planning : calage après le réglage du BDT précédent corrigé · Stock : Gestion en 2ᵉ onglet
+
+### Planning (Production)
+
+*« j'ai un souci dans le planning, les BDT qui doivent se placer après le temps de réglage du précédent BDT bug, ça se
+met bien après, c'est bizarre, fixe ça. »*
+
+**Cause** — le calcul du chemin critique était juste : moteur `src/gamme.ts` côté serveur et sa copie dans
+`src/prod.tsx`, vérifiés sur un jeu `-TEST-` (E1 à 8 h avec 1 h de réglage → E2 demandé à 8h30 calé à 9 h ; report au
+lendemain, morceaux, réglage non renseigné et début réel conformes ; même heure au plus tôt côté client, serveur et
+après rechargement). Le décalage venait du **glisser-déposer d'une carte de la goulotte** : `onPendDragStart` mettait
+`_grabDX = 0`, donc `snapTime` (`t = 5 + (clientX − rect.left − _grabDX) / 50`, arrondi au quart d'heure) prenait l'heure
+**du pointeur**. Or le navigateur fait glisser l'image de la carte en gardant le point de saisie, et l'œil aligne le
+**bord gauche** de la carte. Une carte mesure 327 à 350 px de large pour 50 px par heure : saisie en son milieu, elle
+tombait **3 h 20 à 3 h 30 trop tard**. Reproduit au navigateur : bord gauche aligné sur 9 h (fin de la zone « au plus
+tôt ») → requête `debut: 12.5`, barre posée à 12h30, sans calage puisque 12h30 est après 9 h ; saisie à 10 px du bord →
+9h15. Déplacer une barre déjà posée n'avait pas ce défaut (`_grabDX` = point de saisie dans la barre). Défaut présent
+depuis le 27/08, pas une régression : il ne se voyait pas tant qu'on ne visait pas l'heure au quart près, ce que
+l'enchaînement après le réglage impose.
+
+**Correctif** (`src/prod.tsx` seulement ; règle et moteur `src/gamme.ts` inchangés, calage serveur identique)
+- **Carte glissée depuis la goulotte** : l'image glissée est une **mini-barre à l'échelle du planning** (réglage hachuré
+  compris) dont le **bord gauche est sous le pointeur**, là où s'affichent le trait orange et son heure
+  (`pendImageGlisser`, `setDragImage(…, 0, 15)`) ; navigateur sans `setDragImage` : décalage = distance pointeur ↔ bord
+  gauche de la carte. Une barre déjà posée garde son point de saisie.
+- **Heure unique** : `heureSurLane` (arrondi au quart d'heure, borne de fin de journée au quart d'heure) partagée par le
+  glisser et la **pose au clic**, qui pose désormais le BDT **à l'heure cliquée** (avant : l'endroit cliqué était ignoré
+  et le BDT reprenait son ancienne heure, par ex. 14 h) ; au survol d'une ligne, trait orange et zone rouge « au plus
+  tôt » s'affichent aussi en mode clic.
+- **En-tête des heures** : chaque libellé est centré sur son heure avec un trait de repère (« 8h » était centré sur
+  8h30). Largeur minimale du Gantt 1200 px (les heures après 21h24 étaient coupées à 1366 px).
+- Revue adverse : une carte sélectionnée puis glissée n'est plus sélectionnée une fois posée (un clic perdu la re-posait
+  à l'heure cliquée) ; la zone rouge est recalculée à chaque reconstruction du planning.
+
+**Vérifié** : `test_chemin.ts` 210/210 (dont les cas du diagnostic joués par les vrais gestionnaires de la page, comparés
+à `controleEnchainement` ; contre-épreuve : l'ancien code échoue), fuzz de revue 995/995 sur 700 lots aléatoires
+(morceaux, réglages null/0/0,08/2,5 h, OAS, BST, reçus, soldés, 3 jours ; glisser avec/sans `setDragImage`, clic, barre
+posée) ; typecheck 0, harnais 60/0 ; rejeu Docker au navigateur.
+
+**Limites connues** : largeur mini 30 px des barres (un BDT de 0,08 h paraît plus long ; le suivant, calé juste, peut
+sembler chevaucher) ; calage au centième (8h29) et non au quart ; précédent **reçu** → calage sur son début réel alors que
+sa barre reste à l'heure prévue ; rendu de l'image de glisser non vérifié sous Firefox/Safari (le trait orange donne
+toujours l'heure exacte).
+
+### Stock
+
+- L'onglet **« Gestion du stock »** passe en **2ᵉ position**, juste après « Rangement / Mise en stock » et avant « Stock en
+  temps réel » (`TABS` serveur et `STK_TABS` client de `src/stock_service.tsx`, dans le même ordre). Onglet ouvert par
+  défaut (`mes`), hashes, identifiants `stk-tab-*` / `stk-panel-*`, routes et droits inchangés ; aucune migration.
+- Documentation : `docs/manuel/html/stock.html` (sommaire et sections renumérotés : 2 Gestion du stock, 3 Stock en temps
+  réel), `docs/manuel/html/index.html`, `docs/manuel/stock.md`, `docs/technique/06-modules/stock.md` (section « Ordre des
+  onglets ») et manifeste `scripts_doc/gen_module_fiches.mjs` ; `src/manuels_contenu.ts` régénéré.
+
 ## 2026-09-15 — Lot F : PV de réception quantitatif / qualitatif, reliquat, Stock › Rangement / Mise en stock
 
 *« Dans le PV de contrôle de réception d'expédition je veux pouvoir avoir à côté de la case observations la quantité

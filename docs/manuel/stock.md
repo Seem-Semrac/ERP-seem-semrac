@@ -8,8 +8,8 @@ Le magasin : **rangement** de ce qui arrive, niveaux en temps réel, sorties et 
 
 ## Les onglets
 - **Rangement / Mise en stock** (onglet ouvert par défaut) — la liste **« À ranger »** : lignes conformes des PV de réception, part acceptée par la Qualité, excédents validés par la Direction, entrées manuelles. Sous-onglets **Ajustement de stock** (inventaire) et **Types & zones**.
+- **Gestion du stock** (2ᵉ onglet) — **Entrée stock** (entrée manuelle → liste à ranger), **Sortie stock** (sortie réelle), **Niveaux d'approvisionnement** (seuils, réappro auto, type d'objet et emplacement fixe de chaque référence).
 - **Stock en temps réel** — niveaux, emplacement, statut ; case **« Masquer les produits vides »** (cochée par défaut, mémorisée sur le poste).
-- **Gestion du stock** — **Entrée stock** (entrée manuelle → liste à ranger), **Sortie stock** (sortie réelle), **Niveaux d'approvisionnement** (seuils, réappro auto, type d'objet et emplacement fixe de chaque référence).
 - **Mouvements** — journal : Mise en stock, ajustement d'inventaire, BDT, réceptions…
 - **Alertes et Réappro.** — articles sous le seuil, création de DA.
 - **Dashboard** — indicateurs stock.

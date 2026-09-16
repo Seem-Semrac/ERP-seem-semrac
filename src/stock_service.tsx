@@ -985,8 +985,8 @@ export const pageServiceStock = (
 
   const TABS = [
     ['mes',      'Rangement / Mise en stock',  'fa-dolly'],
+    ['gestion',  'Gestion du stock',            'fa-sliders-h'],   // 2ᵉ onglet (demande du 16/09/2026)
     ['rt',       'Stock en temps reel',        'fa-warehouse'],
-    ['gestion',  'Gestion du stock',            'fa-sliders-h'],
     ['mvts',     'Mouvements',                  'fa-clock-rotate-left'],
     ['alertes',  'Alertes et Reappro.',         'fa-bell'],
     ['dashboard','Dashboard',                   'fa-tachometer-alt'],
@@ -1027,7 +1027,7 @@ export const pageServiceStock = (
   </div>
 
   <script>
-  var STK_TABS=['mes','rt','gestion','mvts','alertes','dashboard'];
+  var STK_TABS=['mes','gestion','rt','mvts','alertes','dashboard'];
   var STK_ARTS=${sjX(ARTS.map((a: any) => ({ id:a.id, nom:a.nom, reference:a.reference||'', qte:(a.qte_commande ?? Math.round(((a.seuil_maxi||0)-(a.quantite||0))*0.8)) || '', unite:a.unite||'', fournisseur:a.fournisseur||'', quantite:Number(a.quantite)||0, emplacement:a.emplacement||'', type_objet:a.type_objet||'' })))};
   // Lot F : référentiels et file « À ranger » (projection complète de ce que lit le JS ci-dessous)
   var STK_TYPES=${sjX(MES.types.map((t: any) => ({ code: str(t.code), libelle: str(t.libelle), actif: t.actif !== false })))};

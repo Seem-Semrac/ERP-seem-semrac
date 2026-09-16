@@ -31,15 +31,15 @@
     <div class="toc-t">Sommaire</div>
     <ol>
       <li><a href="#tab-mes">Rangement / Mise en stock</a></li>
-      <li><a href="#tab-rt">Stock en temps réel</a></li>
       <li><a href="#tab-gestion">Gestion du stock</a></li>
+      <li><a href="#tab-rt">Stock en temps réel</a></li>
       <li><a href="#tab-mvts">Mouvements</a></li>
       <li><a href="#tab-alertes">Alertes et Réappro.</a></li>
       <li><a href="#tab-dashboard">Dashboard</a></li>
     </ol>
   </nav>
 
-  <div class="note"><b>Règle d'or du service :</b> <b>rien n'entre en stock sans être rangé.</b> Une livraison contrôlée au PV de réception, une part acceptée par la Qualité, un excédent validé par la Direction ou une entrée manuelle arrivent d'abord dans la liste <b>« À ranger »</b> ; le stock n'est crédité — et la matière n'est disponible pour les bons de travail — qu'une fois l'entrée <b>acceptée</b>, avec son type d'objet et sa zone. Chaque référence a un <b>emplacement fixe</b>, qui ne change plus qu'à la main, dans Niveaux d'approvisionnement.<br><br>Le statut d'une référence n'est <b>jamais saisi à la main</b> — l'ERP le calcule en comparant la quantité en stock aux seuils de l'article : <span class="b b-crit">CRITIQUE</span> (au niveau du seuil mini ou en dessous), <span class="b b-warn">BAS</span> (au niveau du point de commande ou en dessous), <span class="b b-info">MOYEN</span> (sous 75 % du seuil maxi) et <span class="b b-ok">HAUT</span> (75 % du maxi ou plus). À l'ouverture, la page s'affiche sur l'onglet <b>Rangement / Mise en stock</b> ; l'onglet ouvert est gardé quand la page se recharge.</div>
+  <div class="note"><b>Règle d'or du service :</b> <b>rien n'entre en stock sans être rangé.</b> Une livraison contrôlée au PV de réception, une part acceptée par la Qualité, un excédent validé par la Direction ou une entrée manuelle arrivent d'abord dans la liste <b>« À ranger »</b> ; le stock n'est crédité — et la matière n'est disponible pour les bons de travail — qu'une fois l'entrée <b>acceptée</b>, avec son type d'objet et sa zone. Chaque référence a un <b>emplacement fixe</b>, qui ne change plus qu'à la main, dans Niveaux d'approvisionnement.<br><br>Le statut d'une référence n'est <b>jamais saisi à la main</b> — l'ERP le calcule en comparant la quantité en stock aux seuils de l'article : <span class="b b-crit">CRITIQUE</span> (au niveau du seuil mini ou en dessous), <span class="b b-warn">BAS</span> (au niveau du point de commande ou en dessous), <span class="b b-info">MOYEN</span> (sous 75 % du seuil maxi) et <span class="b b-ok">HAUT</span> (75 % du maxi ou plus). À l'ouverture, la page s'affiche sur l'onglet <b>Rangement / Mise en stock</b> ; l'onglet ouvert est gardé quand la page se recharge. Juste à côté, en <b>2ᵉ onglet</b>, <b>Gestion du stock</b> regroupe les saisies du quotidien (entrée manuelle, sortie, niveaux d'approvisionnement) ; <b>Stock en temps réel</b> vient ensuite.</div>
 
   <!-- ════════════════════════ 1. RANGEMENT / MISE EN STOCK ════════════════════════ -->
   <section class="tab" id="tab-mes">
@@ -139,41 +139,9 @@
     <div class="astuce"><b>Astuce :</b> si un message rouge « File illisible » ou une pastille « ? » apparaît, la liste n'est <b>pas</b> vide : la base n'a pas répondu. Rechargez la page dans un instant.</div>
   </section>
 
-  <!-- ════════════════════════ 2. STOCK EN TEMPS RÉEL ════════════════════════ -->
-  <section class="tab" id="tab-rt">
-    <div class="tab-head"><span class="tab-num">2</span><h2>Stock en temps réel</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> C'est la photographie instantanée du magasin : chaque référence avec sa jauge de niveau, son emplacement, son statut, sa couverture en jours et son fournisseur. Un coup d'œil aux compteurs de statut suffit pour savoir si la journée commence par des réapprovisionnements urgents.</p>
-
-    <h3>Ce que vous voyez</h3>
-    <p>En haut, le titre avec le nombre de références et le bouton vert <b>« Ajouter article »</b> — il ouvre <b>Gestion du stock → Entrée stock</b> : une nouvelle référence entre par la liste « À ranger ». Dessous, cinq compteurs cliquables qui filtrent le tableau par statut : <span class="b b-crit">CRITIQUE</span>, <span class="b b-warn">BAS</span>, <span class="b b-info">MOYEN</span>, <span class="b b-ok">HAUT</span> et <b>TOUT</b>. La barre de filtres propose l'<b>activité</b> (Tout / Seem / Semrac / Les deux), la <b>catégorie</b> (seules les catégories présentes s'affichent), la case <b>« Masquer les produits vides »</b> et le champ <b>« Rechercher article, ref… »</b>. Une légende rappelle le code couleur des jauges.</p>
-    <p>Le tableau liste chaque article avec les colonnes <b>Article / Réf</b> (et, dessous, l'<b>emplacement</b> 📍 quand il est connu), <b>Activité</b>, <b>Catégorie</b>, <b>Niveau de stock</b> (jauge avec la quantité, le seuil mini et le point de commande), <b>Couverture</b> (jours de stock restant — rouge sous 7 jours, orange sous 14 ; « N/A » sans consommation mensuelle), <b>Rotation</b> (sorties annualisées ÷ stock moyen), <b>Fournisseur</b>, <b>Statut</b> et <b>Actions</b>. Les lignes critiques sont teintées de rouge pâle.</p>
-    <p>Dans <b>Actions</b> : la flèche verte ouvre le formulaire <b>Entrée stock</b> pré-rempli avec la référence, la flèche rouge le formulaire <b>Sortie stock</b> avec l'article choisi ; sur les références <span class="b b-crit">CRITIQUE</span> ou <span class="b b-warn">BAS</span>, le bouton panier <b>« Créer DA »</b> crée une demande d'achat.</p>
-    <figure class="shot">
-      <img src="../../assets/stock-rt.png" alt="Capture de l'onglet Stock en temps réel" loading="lazy">
-      <figcaption><b>Stock en temps réel</b> — « Masquer les produits vides » cochée : seule la référence qui a du stock reste affichée, avec son emplacement ; le compteur « 402 référence(s) vide(s) masquée(s) » explique le reste.</figcaption>
-    </figure>
-
-    <h3>Pas à pas — retrouver et filtrer une référence</h3>
-    <ol class="steps">
-      <li>Tapez un mot du nom ou de la référence dans <b>« Rechercher article, ref… »</b> : le tableau se filtre au fil de la frappe.</li>
-      <li>Combinez avec les filtres <b>activité</b> et <b>catégorie</b>, ou cliquez sur un <b>compteur de statut</b>. Les filtres se cumulent ; <b>TOUT</b> réaffiche tout.</li>
-      <li>Vous cherchez une référence à zéro ? <b>Décochez « Masquer les produits vides »</b>.</li>
-      <li>Sur la ligne trouvée, lisez la jauge et l'emplacement sous la référence.</li>
-    </ol>
-
-    <h3>Règles &amp; points d'attention</h3>
-    <ul class="points">
-      <li><b>« Masquer les produits vides »</b> est cochée par défaut et <b>mémorisée sur ce poste</b> ; elle vaut aussi pour Niveaux d'approvisionnement. Un tableau presque vide n'est donc pas une panne : lisez le compteur « N référence(s) vide(s) masquée(s) ».</li>
-      <li>Un article « Les deux » reste visible que l'on filtre sur Seem ou sur Semrac.</li>
-      <li>La <b>couverture</b> = stock ÷ consommation mensuelle × 30 jours ; la <b>rotation</b> se calcule depuis les mouvements (tiret = pas assez de sorties).</li>
-      <li>Le stock affiché est le stock <b>rangé</b> : ce qui attend dans « À ranger » n'y figure pas encore.</li>
-    </ul>
-    <div class="astuce"><b>Astuce :</b> commencez chaque prise de poste par l'onglet <b>Rangement</b> (liste « À ranger ») puis par un clic sur le compteur <b>CRITIQUE</b>.</div>
-  </section>
-
-  <!-- ════════════════════════ 3. GESTION DU STOCK ════════════════════════ -->
+  <!-- ════════════════════════ 2. GESTION DU STOCK ════════════════════════ -->
   <section class="tab" id="tab-gestion">
-    <div class="tab-head"><span class="tab-num">3</span><h2>Gestion du stock</h2></div>
+    <div class="tab-head"><span class="tab-num">2</span><h2>Gestion du stock</h2></div>
     <p class="tab-but"><b>À quoi ça sert.</b> Les saisies du magasin hors réception fournisseur — une <b>entrée manuelle</b> (retour atelier, régularisation, livraison sans bon de commande), une <b>sortie</b> réelle — et le <b>paramétrage</b> de chaque référence : seuils, réappro automatique, type d'objet et emplacement fixe. Chaque écriture est tracée dans les Mouvements.</p>
 
     <h3>Ce que vous voyez</h3>
@@ -235,6 +203,38 @@
     </ul>
     <div class="warn"><b>Attention :</b> on ne « supprime » pas un mouvement. Une erreur de quantité se corrige par un <b>ajustement d'inventaire</b> (Rangement → Ajustement de stock, motif <i>Correction d'erreur de saisie</i>) : l'écart reste tracé, ce qui est exigé pour la traçabilité aéronautique.</div>
     <div class="astuce"><b>Astuce :</b> l'entrée manuelle n'est pas faite pour les livraisons fournisseurs : elles passent par la réception et le PV (Expéditions), qui remplissent la liste « À ranger » tout seuls.</div>
+  </section>
+
+  <!-- ════════════════════════ 3. STOCK EN TEMPS RÉEL ════════════════════════ -->
+  <section class="tab" id="tab-rt">
+    <div class="tab-head"><span class="tab-num">3</span><h2>Stock en temps réel</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est la photographie instantanée du magasin : chaque référence avec sa jauge de niveau, son emplacement, son statut, sa couverture en jours et son fournisseur. Un coup d'œil aux compteurs de statut suffit pour savoir si la journée commence par des réapprovisionnements urgents.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>En haut, le titre avec le nombre de références et le bouton vert <b>« Ajouter article »</b> — il ouvre <b>Gestion du stock → Entrée stock</b> : une nouvelle référence entre par la liste « À ranger ». Dessous, cinq compteurs cliquables qui filtrent le tableau par statut : <span class="b b-crit">CRITIQUE</span>, <span class="b b-warn">BAS</span>, <span class="b b-info">MOYEN</span>, <span class="b b-ok">HAUT</span> et <b>TOUT</b>. La barre de filtres propose l'<b>activité</b> (Tout / Seem / Semrac / Les deux), la <b>catégorie</b> (seules les catégories présentes s'affichent), la case <b>« Masquer les produits vides »</b> et le champ <b>« Rechercher article, ref… »</b>. Une légende rappelle le code couleur des jauges.</p>
+    <p>Le tableau liste chaque article avec les colonnes <b>Article / Réf</b> (et, dessous, l'<b>emplacement</b> 📍 quand il est connu), <b>Activité</b>, <b>Catégorie</b>, <b>Niveau de stock</b> (jauge avec la quantité, le seuil mini et le point de commande), <b>Couverture</b> (jours de stock restant — rouge sous 7 jours, orange sous 14 ; « N/A » sans consommation mensuelle), <b>Rotation</b> (sorties annualisées ÷ stock moyen), <b>Fournisseur</b>, <b>Statut</b> et <b>Actions</b>. Les lignes critiques sont teintées de rouge pâle.</p>
+    <p>Dans <b>Actions</b> : la flèche verte ouvre le formulaire <b>Entrée stock</b> pré-rempli avec la référence, la flèche rouge le formulaire <b>Sortie stock</b> avec l'article choisi ; sur les références <span class="b b-crit">CRITIQUE</span> ou <span class="b b-warn">BAS</span>, le bouton panier <b>« Créer DA »</b> crée une demande d'achat.</p>
+    <figure class="shot">
+      <img src="../../assets/stock-rt.png" alt="Capture de l'onglet Stock en temps réel" loading="lazy">
+      <figcaption><b>Stock en temps réel</b> — « Masquer les produits vides » cochée : seule la référence qui a du stock reste affichée, avec son emplacement ; le compteur « 402 référence(s) vide(s) masquée(s) » explique le reste.</figcaption>
+    </figure>
+
+    <h3>Pas à pas — retrouver et filtrer une référence</h3>
+    <ol class="steps">
+      <li>Tapez un mot du nom ou de la référence dans <b>« Rechercher article, ref… »</b> : le tableau se filtre au fil de la frappe.</li>
+      <li>Combinez avec les filtres <b>activité</b> et <b>catégorie</b>, ou cliquez sur un <b>compteur de statut</b>. Les filtres se cumulent ; <b>TOUT</b> réaffiche tout.</li>
+      <li>Vous cherchez une référence à zéro ? <b>Décochez « Masquer les produits vides »</b>.</li>
+      <li>Sur la ligne trouvée, lisez la jauge et l'emplacement sous la référence.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li><b>« Masquer les produits vides »</b> est cochée par défaut et <b>mémorisée sur ce poste</b> ; elle vaut aussi pour Niveaux d'approvisionnement. Un tableau presque vide n'est donc pas une panne : lisez le compteur « N référence(s) vide(s) masquée(s) ».</li>
+      <li>Un article « Les deux » reste visible que l'on filtre sur Seem ou sur Semrac.</li>
+      <li>La <b>couverture</b> = stock ÷ consommation mensuelle × 30 jours ; la <b>rotation</b> se calcule depuis les mouvements (tiret = pas assez de sorties).</li>
+      <li>Le stock affiché est le stock <b>rangé</b> : ce qui attend dans « À ranger » n'y figure pas encore.</li>
+    </ul>
+    <div class="astuce"><b>Astuce :</b> commencez chaque prise de poste par l'onglet <b>Rangement</b> (liste « À ranger ») puis par un clic sur le compteur <b>CRITIQUE</b>.</div>
   </section>
 
   <!-- ════════════════════════ 4. MOUVEMENTS ════════════════════════ -->

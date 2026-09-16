@@ -58,7 +58,7 @@ const M = [
     notes:'BL partiels → factures_client + écriture VTE. BL bloqué si porte qualité active.' },
   { svc:'stock', label:'Stocks', route:'/stock/service', file:'src/stock_service.tsx', rw:'stock (achats, logistique)', r:'—',
     mission:'Stock temps réel, gestion, mouvements, alertes & réapprovisionnement.',
-    tabs:[['mes','Rangement / Mise en stock'],['rt','Stock en temps réel'],['gestion','Gestion du stock'],['mvts','Mouvements'],['alertes','Alertes et Réappro.'],['dashboard','Dashboard']],
+    tabs:[['mes','Rangement / Mise en stock'],['gestion','Gestion du stock'],['rt','Stock en temps réel'],['mvts','Mouvements'],['alertes','Alertes et Réappro.'],['dashboard','Dashboard']],
     api:['stock(s)','mouvement(s)','article(s)'], tables:['stock','mouvements_stock','mises_en_stock','stock_types_objet','stock_zones','stock_emplacements_historique'],
     notes:'⚠ table `stock` (singulier). Sortie matière consomme le stock et alimente l\'OPEX machine. Lot F (15/09/2026) : le stock n\'est crédité qu\'au RANGEMENT (1er onglet « Rangement / Mise en stock », file `mises_en_stock`) — PV de réception, décision Qualité, excédent validé et entrée manuelle y ajoutent des lignes à ranger ; emplacement FIXE par référence (changement historisé dans Niveaux d\'approvisionnement), types d\'objet et zones modifiables, jamais supprimés ; toutes les écritures /api/stock/… exigent l\'écriture Stock, revérifiée dans le handler ; base sans 013 / cloud-11 : l\'onglet le dit et le PV entre le stock directement (avertissement).' },
   { svc:'maintenance', label:'Maintenance', route:'/maintenance/service', file:'src/maintenance_service.tsx', rw:'maintenance', r:'achats, production, oas, sécurité, stock',

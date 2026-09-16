@@ -1744,7 +1744,8 @@ ${serviceHeader({
       <button onclick="clearFocusLot()" style="margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:.74rem;font-weight:700;color:#374151;background:white;border:1px solid #e2e8f0;border-radius:8px;padding:5px 12px;cursor:pointer;"><i class="fas fa-eye"></i> Tout afficher</button>
     </div>
     <div style="margin-bottom:16px;overflow-x:auto;">
-      <div class="card" style="overflow:hidden;min-width:1120px;">
+      <!-- min-width = colonne Postes (300 px) + journée ENTIÈRE (18 h × 50 px) : à 1120 px, les heures après 21h24 étaient coupées (impossible d'y déposer) -->
+      <div class="card" style="overflow:hidden;min-width:${300 + (PLAN_FIN_JOUR - PLAN_DEBUT_JOUR) * 50}px;">
         <div class="gantt-header-row">
           <div style="padding:8px 10px;border-right:1px solid rgba(255,255,255,.1);font-size:.72rem;font-weight:700;color:#94a3b8;display:flex;align-items:center;gap:6px;"><i class="fas fa-cubes-stacked" style="color:#64748b;"></i> Postes</div>
           <div id="hoursHdr" style="position:relative;min-height:34px;overflow:hidden;"></div>
@@ -3098,10 +3099,11 @@ function ccVoir(id){
 // Glisser-déposer : zone hachurée rouge avant l au plus tôt du jour affiché (calculé une fois par BDT et par jour).
 var _ccDrag=null;
 function ccAptDrag(){
-  if(!dragId) return null;
-  if(_ccDrag&&_ccDrag.id===dragId&&_ccDrag.date===currentDate) return _ccDrag.apt;
-  var b=BDTS.find(function(z){ return z.id===dragId; }); if(!b) return null;
-  _ccDrag={id:dragId,date:currentDate,apt:ccAptBdt(b)};
+  var id=dragId||selBdtId;   // BDT glissé, ou sélectionné au clic (guide au survol d une ligne)
+  if(!id) return null;
+  if(_ccDrag&&_ccDrag.id===id&&_ccDrag.date===currentDate) return _ccDrag.apt;
+  var b=BDTS.find(function(z){ return z.id===id; }); if(!b) return null;
+  _ccDrag={id:id,date:currentDate,apt:ccAptBdt(b)};
   return _ccDrag.apt;
 }
 function ccCacherZone(){ var z=document.getElementById('dropZoneCC'); if(z) z.style.display='none'; var l=document.getElementById('dropZoneCCLbl'); if(l) l.style.display='none'; }
@@ -3187,7 +3189,7 @@ function selectPendBdt(bdtId){
   // Focaliser le planning sur la route du lot du BDT sélectionné (ou tout réafficher au désélect)
   focusLot = selBdtId ? bdtId : null;   // focus = le BDT lui-meme (son poste + etape avant/apres)
   updateFocusBanner(); buildGantt();
-  if(selBdtId) pushNotif('info','fa-mouse-pointer','BDT <strong>'+bdtId+'</strong> sélectionné — seuls les postes de son lot sont affichés. Cliquez un poste pour le placer.');
+  if(selBdtId) pushNotif('info','fa-mouse-pointer','BDT <strong>'+bdtId+'</strong> sélectionné — seuls les postes de son lot sont affichés. Cliquez sur la ligne d’un poste, à l’heure voulue, pour le placer.');
   buildPending();
 }
 function laneClickPlace(procId){ if(selBdtId){ affectBDT(selBdtId, procId, null); selBdtId=null; } }
@@ -3361,10 +3363,31 @@ function focusBdtLot(bdtId){ var b=BDTS.find(function(x){return x.id===bdtId;});
 // ou on le selectionne dans la goulotte s'il n'est pas encore programme.
 window.addEventListener('load',function(){ try{ var fb=new URLSearchParams(location.search).get('focusBdt'); if(!fb) return; var b=BDTS.find(function(x){return String(x.id)===String(fb);}); if(!b) return; if(enGoulotte(b)){ selectPendBdt(b.id); return; } if(b.datePrevue&&b.datePrevue!==currentDate){ currentDate=b.datePrevue; var pd=document.getElementById('planDate'); if(pd) pd.value=currentDate; buildAll(); } focusBdtLot(b.id); }catch(e){} });
 function clearFocusLot(){ focusLot=null; updateFocusBanner(); buildGantt(); }
-// Guide visuel de dépôt (ligne + heure cible) pendant le glisser
-function showDropGuide(lane,e){ var rect=lane.getBoundingClientRect(); var t=snapTime(lane,e); var g=document.getElementById('dropGuide'); if(!g){ g=document.createElement('div'); g.id='dropGuide'; g.style.cssText='position:fixed;width:2px;background:#f59e0b;z-index:60;pointer-events:none;box-shadow:0 0 8px #f59e0b;'; document.body.appendChild(g); } var px=rect.left+(t-DAY_START)*PX_H; g.style.left=px+'px'; g.style.top=rect.top+'px'; g.style.height=rect.height+'px'; g.style.display='block'; var lbl=document.getElementById('dropGuideLbl'); if(!lbl){ lbl=document.createElement('div'); lbl.id='dropGuideLbl'; lbl.style.cssText='position:fixed;background:#f59e0b;color:white;font-size:.62rem;font-weight:800;padding:1px 6px;border-radius:4px;z-index:61;pointer-events:none;white-space:nowrap;'; document.body.appendChild(lbl); } lbl.textContent=fmtHour(t); lbl.style.left=(px+4)+'px'; lbl.style.top=(rect.top-16)+'px'; lbl.style.display='block'; if(dragId) ccMontrerZone(lane); }
+// Guide visuel de dépôt (ligne + heure cible) pendant le glisser — et, BDT sélectionné au clic, au survol d une ligne
+function showDropGuide(lane,e){ var rect=lane.getBoundingClientRect(); var t=snapTime(lane,e); var g=document.getElementById('dropGuide'); if(!g){ g=document.createElement('div'); g.id='dropGuide'; g.style.cssText='position:fixed;width:2px;background:#f59e0b;z-index:60;pointer-events:none;box-shadow:0 0 8px #f59e0b;'; document.body.appendChild(g); } var px=rect.left+(t-DAY_START)*PX_H; g.style.left=px+'px'; g.style.top=rect.top+'px'; g.style.height=rect.height+'px'; g.style.display='block'; var lbl=document.getElementById('dropGuideLbl'); if(!lbl){ lbl=document.createElement('div'); lbl.id='dropGuideLbl'; lbl.style.cssText='position:fixed;background:#f59e0b;color:white;font-size:.62rem;font-weight:800;padding:1px 6px;border-radius:4px;z-index:61;pointer-events:none;white-space:nowrap;'; document.body.appendChild(lbl); } lbl.textContent=fmtHour(t); lbl.style.left=(px+4)+'px'; lbl.style.top=(rect.top-16)+'px'; lbl.style.display='block'; if(dragId||selBdtId) ccMontrerZone(lane); }
 function hideDropGuide(){ var g=document.getElementById('dropGuide'); if(g) g.style.display='none'; var l=document.getElementById('dropGuideLbl'); if(l) l.style.display='none'; ccCacherZone(); _ccDrag=null; }
-function snapTime(lane,e){ var rect=lane.getBoundingClientRect(); var x=e.clientX-rect.left-_grabDX; var t=DAY_START+x/PX_H; t=Math.round(t/SNAP)*SNAP; var b=dragId?BDTS.find(function(z){return z.id===dragId;}):null; var dur=(b&&b.duree)||1; if(t<DAY_START) t=DAY_START; if(t>DAY_END-dur) t=DAY_END-dur; return t; }
+// Heure de DÉBUT visée sur une ligne du planning = position du BORD GAUCHE de ce qui est déplacé (pointeur − decal),
+// arrondie au quart d heure et bornée pour que le BDT tienne dans la journée (la borne est elle aussi au quart d heure :
+// avant, un BDT de 11,93 h butait à « 11h04 »).
+//   · barre déjà posée : decal = endroit où la barre a été saisie (l image glissée est la barre elle-même, à l échelle) ;
+//   · carte de la goulotte : l image glissée est une mini-barre dont le bord gauche est SOUS le pointeur → decal 0.
+//     ⚠ Avant le 16/09/2026, l image était la carte entière (≈ 330 px = 6,6 h) : saisie en son milieu, le BDT tombait
+//     3 h 30 APRÈS le bord gauche que l utilisateur alignait (« calé bien après le réglage du précédent ») ;
+//   · pose au clic (BDT sélectionné puis clic sur une ligne) : l heure cliquée (avant : l endroit cliqué était ignoré).
+function heureSurLane(lane,clientX,decal,bdtId){ var rect=lane.getBoundingClientRect(); var t=DAY_START+(Number(clientX)-rect.left-(Number(decal)||0))/PX_H; t=Math.round(t/SNAP)*SNAP; var b=bdtId?BDTS.find(function(z){return z.id===bdtId;}):null; var dur=Number(b&&b.duree); if(!isFinite(dur)||dur<=0) dur=1; var tMax=DAY_START+Math.max(0,Math.floor((TOTAL_H-dur)/SNAP+1e-9))*SNAP; if(t>tMax) t=tMax; if(t<DAY_START) t=DAY_START; return t; }
+function snapTime(lane,e){ return dragId?heureSurLane(lane,e.clientX,_grabDX,dragId):heureSurLane(lane,e.clientX,0,selBdtId); }
+// Image glissée d une carte de la goulotte : mini-barre À L ÉCHELLE du planning (réglage hachuré en tête), bord gauche
+// sous le pointeur — là où le trait orange affiche l heure visée. Hors écran, elle ne sert qu à setDragImage.
+function pendImageGlisser(b){
+  var g=document.getElementById('pendDragImg');
+  if(!g){ g=document.createElement('div'); g.id='pendDragImg'; document.body.appendChild(g); }
+  var tps=ccTemps(b), dur=Number(b&&b.duree); if(!isFinite(dur)||dur<=0) dur=1;
+  var w=Math.max(30,Math.round(dur*PX_H)), rgl=(tps.R!=null&&tps.R>0)?Math.max(2,Math.min(w,Math.round(tps.R*PX_H))):0;
+  g.style.cssText='position:fixed;left:-10000px;top:0;width:'+w+'px;height:30px;border-radius:6px;overflow:hidden;background:'+bdtColor(b)+';color:white;font-size:11px;font-weight:800;line-height:30px;white-space:nowrap;pointer-events:none;box-shadow:inset 3px 0 0 #0f172a;';
+  g.innerHTML=(rgl?'<div style="position:absolute;left:0;top:0;bottom:0;width:'+rgl+'px;box-sizing:border-box;background:repeating-linear-gradient(135deg,rgba(15,23,42,.35) 0,rgba(15,23,42,.35) 3px,transparent 3px,transparent 6px);border-right:2px solid rgba(15,23,42,.85);"></div>':'')
+    +'<span style="position:relative;padding-left:6px;text-shadow:0 0 2px rgba(0,0,0,.6);">'+ccEsc(b&&b.id)+'</span>';
+  return g;
+}
 var PRIO_COLORS={normal:'#22c55e',urgent:'#f59e0b',critique:'#ef4444',st:'#6366f1'};
 var STATUT_COLORS={a_programmer:'#94a3b8',affecte:'#3b82f6',programme:'#3b82f6',recu:'#f59e0b',solde:'#22c55e',st:'#6366f1'};
 // Couleur d'un BDT selon son statut : bleu=programmé, jaune=reçu, vert=soldé, rouge=soldé avec NC
@@ -3396,10 +3419,15 @@ function isAbsent(opId,date){ return !!(ABSENCES_MAP[opId]&&ABSENCES_MAP[opId].d
 function buildHoursHdr(){
   var hdr=document.getElementById('hoursHdr'); if(!hdr) return;
   hdr.innerHTML=''; hdr.style.cssText='width:'+LANE_W+'px;position:relative;height:34px;';
+  // Chaque libellé est CENTRÉ SUR SON HEURE (petit trait en bas = trait de la grille) : avant le 16/09/2026, la case
+  // « 8h » couvrait 8h → 9h et son texte tombait sur 8h30 — viser le libellé posait le BDT 30 min trop tard.
   for(var h=DAY_START;h<=DAY_END;h++){
-    var el=document.createElement('div');
-    el.style.cssText='position:absolute;left:'+((h-DAY_START)*PX_H)+'px;width:'+PX_H+'px;text-align:center;padding:7px 0;font-size:.6rem;'+(h%2===0?'font-weight:700;color:#94a3b8;':'color:#64748b;');
+    var x=(h-DAY_START)*PX_H, gauche=x-PX_H/2, aligne='center';
+    if(h===DAY_START){ gauche=x; aligne='left'; } else if(h===DAY_END){ gauche=x-PX_H; aligne='right'; }
+    var el=document.createElement('div'); el.className='hours-lbl'; el.dataset.h=h;
+    el.style.cssText='position:absolute;left:'+gauche+'px;width:'+PX_H+'px;text-align:'+aligne+';padding:7px 3px;box-sizing:border-box;font-size:.6rem;'+(h%2===0?'font-weight:700;color:#94a3b8;':'color:#64748b;');
     el.textContent=h+'h'; hdr.appendChild(el);
+    var tk=document.createElement('div'); tk.style.cssText='position:absolute;left:'+x+'px;bottom:0;height:6px;border-left:1px solid '+(h%2===0?'#94a3b8':'#475569')+';pointer-events:none;'; hdr.appendChild(tk);
   }
 }
 // Un process de TRAITEMENT DE SURFACE / OXYDATION (OAS, Surtec, désox, anodisation…) ne s'affiche JAMAIS au
@@ -3436,11 +3464,16 @@ function resolveProcForPoste(bdt,posteId){
 }
 function dropBdtOnPoste(bdtId,posteId,debut){
   var bd=BDTS.find(function(b){return b.id===bdtId;}); if(!bd) return;
+  // Poser le BDT sélectionné au clic (par clic OU en glissant sa carte) met fin à la sélection. Sans cela, une carte
+  // sélectionnée puis glissée restait « sélectionnée » une fois posée : le trait orange suivait la souris sur les lignes
+  // et un clic perdu re-posait le BDT à l heure cliquée.
+  if(selBdtId!=null&&String(selBdtId)===String(bdtId)) selBdtId=null;
   var pid=resolveProcForPoste(bd,posteId);
   if(!pid){ pushNotif('err','fa-ban','Aucun process compatible dans ce poste pour ce BDT ('+bd.activite+').'); return; }
   affectBDT(bdtId,pid,debut);
 }
 function buildGantt(){
+  _ccDrag=null;   // au plus tôt du BDT glissé / sélectionné : recalculé après toute reconstruction (une pose a pu le changer)
   var body=document.getElementById('ganttBody'); if(!body) return; body.innerHTML='';
   var _focusSet=focusLot?etapePostesSet(focusLot):null;
   var postes=(typeof POSTES_JS!=='undefined'?POSTES_JS:[]).filter(function(po){ return po.statut!=='inactif' && !isOasPoste(po) && (filtAct==='all'||po.activite===filtAct||po.activite==='both') && (!_focusSet||_focusSet[String(po.id)]); }).slice().sort(function(a,b){ return (Number(a.ordre)||100)-(Number(b.ordre)||100); });
@@ -3460,7 +3493,10 @@ function buildGantt(){
     lane.addEventListener('dragover',function(e){ e.preventDefault(); lane.classList.add('drag-over'); showDropGuide(lane,e); });
     lane.addEventListener('dragleave',function(){ lane.classList.remove('drag-over'); hideDropGuide(); });
     lane.addEventListener('drop',function(e){ e.preventDefault(); lane.classList.remove('drag-over'); hideDropGuide(); if(dragId){ var t=snapTime(lane,e); dropBdtOnPoste(dragId,poste.id,t); } dragId=null; _grabDX=0; clearHighlight(); });
-    lane.addEventListener('click',function(){ if(selBdtId){ dropBdtOnPoste(selBdtId,poste.id,null); selBdtId=null; } });
+    // Pose au clic : le BDT sélectionné est posé à l heure CLIQUÉE (trait orange et zone rouge montrés au survol).
+    lane.addEventListener('mousemove',function(e){ if(selBdtId&&!dragId) showDropGuide(lane,e); });
+    lane.addEventListener('mouseleave',function(){ if(selBdtId&&!dragId) hideDropGuide(); });
+    lane.addEventListener('click',function(e){ if(selBdtId){ var t=heureSurLane(lane,e.clientX,0,selBdtId); hideDropGuide(); dropBdtOnPoste(selBdtId,poste.id,t); selBdtId=null; } });
     if(bdtsP.length===0){ var em=document.createElement('div'); em.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.68rem;color:#d1d5db;pointer-events:none;'; em.innerHTML='<i class="fas fa-inbox" style="margin-right:4px;"></i>Aucun BDT — glissez un BDT ici'; lane.appendChild(em); }
     row.appendChild(info); row.appendChild(lane); body.appendChild(row);
   });
@@ -3626,7 +3662,19 @@ function deprogramBDT(bdtId){
 function onPendingOver(e){ e.preventDefault(); if(e.dataTransfer) e.dataTransfer.dropEffect='move'; var z=document.getElementById('pendingDropZone'); if(z) z.style.outline='2px dashed #f97316'; hideDropGuide(); }
 function onPendingLeave(e){ var z=document.getElementById('pendingDropZone'); if(z) z.style.outline=''; }
 function onPendingDrop(e){ e.preventDefault(); var z=document.getElementById('pendingDropZone'); if(z) z.style.outline=''; if(dragId){ var b=BDTS.find(function(x){return x.id===dragId;}); if(b&&!enGoulotte(b)) deprogramBDT(dragId); } dragId=null; _grabDX=0; clearHighlight(); }
-function onPendDragStart(e,el){ dragId=el.dataset.bdtid; _grabDX=0; if(e.dataTransfer){ e.dataTransfer.setData('text/plain',dragId); e.dataTransfer.effectAllowed='move'; } var b=BDTS.find(function(x){return x.id===dragId;}); if(b) highlightLot(lotKey(b)); }
+// Carte de la goulotte : l image glissée est la mini-barre de pendImageGlisser, bord gauche sous le pointeur (decal 0).
+// Navigateur sans setDragImage : il glisse la carte telle qu elle a été saisie → decal = pointeur − bord gauche de la carte.
+function onPendDragStart(e,el){
+  dragId=el.dataset.bdtid; _grabDX=0; hideDropGuide();
+  var b=BDTS.find(function(x){return x.id===dragId;});
+  if(e.dataTransfer){
+    e.dataTransfer.setData('text/plain',dragId); e.dataTransfer.effectAllowed='move';
+    var pose=false;
+    if(b&&typeof e.dataTransfer.setDragImage==='function'){ try{ e.dataTransfer.setDragImage(pendImageGlisser(b),0,15); pose=true; }catch(x){ pose=false; } }
+    if(!pose){ var r=el.getBoundingClientRect(); _grabDX=Math.max(0,Number(e.clientX)-r.left)||0; }
+  }
+  if(b) highlightLot(lotKey(b));
+}
 function onPendDragEnd(){ clearHighlight(); hideDropGuide(); dragId=null; _grabDX=0; }
 function buildStats(){
   var procs=PROCESS.filter(function(p){ return procMatchesAct(p)&&procMatchesType(p); });

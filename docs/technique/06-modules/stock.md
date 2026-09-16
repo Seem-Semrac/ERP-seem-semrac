@@ -12,8 +12,8 @@ Stock temps réel, gestion, mouvements, alertes & réapprovisionnement.
 ## Onglets
 <!-- auto:onglets -->
 - `mes` — Rangement / Mise en stock
-- `rt` — Stock en temps réel
 - `gestion` — Gestion du stock
+- `rt` — Stock en temps réel
 - `mvts` — Mouvements
 - `alertes` — Alertes et Réappro.
 - `dashboard` — Dashboard
@@ -30,6 +30,18 @@ Stock temps réel, gestion, mouvements, alertes & réapprovisionnement.
 <!-- auto:notes -->
 ⚠ table `stock` (singulier). Sortie matière consomme le stock et alimente l'OPEX machine. Lot F (15/09/2026) : le stock n'est crédité qu'au RANGEMENT (1er onglet « Rangement / Mise en stock », file `mises_en_stock`) — PV de réception, décision Qualité, excédent validé et entrée manuelle y ajoutent des lignes à ranger ; emplacement FIXE par référence (changement historisé dans Niveaux d'approvisionnement), types d'objet et zones modifiables, jamais supprimés ; toutes les écritures /api/stock/… exigent l'écriture Stock, revérifiée dans le handler ; base sans 013 / cloud-11 : l'onglet le dit et le PV entre le stock directement (avertissement).
 <!-- /auto -->
+## Ordre des onglets — Gestion du stock en 2ᵉ (16/09/2026)
+
+Demande de l'utilisateur : « Gestion du stock » passe juste après « Rangement / Mise en stock », avant « Stock en temps
+réel ». Ordre de la page : `mes` · `gestion` · `rt` · `mvts` · `alertes` · `dashboard`.
+
+- Deux listes à garder **dans le même ordre** dans `src/stock_service.tsx` (`pageServiceStock`) : le tableau serveur
+  `TABS` (boutons de la barre d'onglets) et la variable client `STK_TABS` (affichage des panneaux, restauration du hash).
+- Rien d'autre ne bouge : l'onglet ouvert par défaut reste `mes` (hash absent ou inconnu), les hashes (`#gestion-entree`,
+  `#gestion-sortie`, `#gestion-catalogue`, `#rt`…), les identifiants `stk-tab-*` / `stk-panel-*` utilisés par
+  `scripts_doc/capture_screens.mjs`, les badges et les routes. Aucune migration.
+- Le manifeste `scripts_doc/gen_module_fiches.mjs` suit le même ordre (bloc `auto:onglets` ci-dessus).
+
 ## Lot F — Rangement / Mise en stock, emplacement fixe, types et zones (15/09/2026)
 
 > « Il va falloir créer un nouvel onglet qui sera la mise en stock, qui sera le premier onglet du stock, dans lequel
@@ -72,7 +84,8 @@ obligatoire selon l'origine) ; une ligne déjà présente pour la même clé rev
 
 ### Onglet « Rangement / Mise en stock » (premier onglet, ouvert par défaut)
 
-- Onglets de la page : `mes` Rangement / Mise en stock · `rt` · `gestion` · `mvts` · `alertes` · `dashboard`. Badge
+- Onglets de la page : `mes` Rangement / Mise en stock · `gestion` · `rt` · `mvts` · `alertes` · `dashboard` (ordre
+  du 16/09/2026 : Gestion du stock en 2ᵉ). Badge
   `mes` = nombre de lignes à ranger (« ? » si la file est illisible). Onglet et sous-onglet sont écrits dans le hash
   (`history.replaceState`) et restaurés au chargement : `#mes`, `#mes-ajustement`, `#mes-types`, `#rt`,
   `#gestion-entree`, `#gestion-sortie`, `#gestion-catalogue`, `#mvts`…
