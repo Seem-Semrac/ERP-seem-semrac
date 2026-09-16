@@ -24,16 +24,16 @@ Chaque formulaire se termine par 💡 une astuce et ⚠️ un point d'attention.
 | Achats | [achats.md](achats.md) | 12 | 76 | Achats |
 | Production | [production.md](production.md) | 15 | 107 | Production, Opérateur |
 | OAS (traitement de surface) | [oas.md](oas.md) | 5 | 40 | OAS |
-| Qualité | [qualite.md](qualite.md) | 22 | 152 | Qualité, Opérateur |
+| Qualité | [qualite.md](qualite.md) | 22 | 153 | Qualité, Opérateur |
 | Sécurité (HSE/RSE) | [securite.md](securite.md) | 17 | 173 | Qualité / HSE |
-| Expéditions | [expeditions.md](expeditions.md) | 6 | 34 | Logistique |
-| Stock | [stock.md](stock.md) | 6 | 37 | Logistique, Magasin |
+| Expéditions | [expeditions.md](expeditions.md) | 6 | 36 | Logistique |
+| Stock | [stock.md](stock.md) | 8 | 40 | Logistique, Magasin |
 | Maintenance | [maintenance.md](maintenance.md) | 3 | 27 | Maintenance |
 | RH | [rh.md](rh.md) | 9 | 54 | RH |
 | Comptabilité | [compta.md](compta.md) | 6 | 43 | Comptable |
-| Direction | [direction.md](direction.md) | 5 | 6 | Direction |
+| Direction | [direction.md](direction.md) | 6 | 8 | Direction |
 | Plan / Bâtiment | [plans.md](plans.md) | 5 | 16 | BE / Maintenance / Prod / Qualité |
 
-**Total : 136 formulaires · 916 champs documentés.**
+**Total : 139 formulaires · 924 champs documentés.**
 
 > Guides générés depuis le code source (les champs réels des formulaires) puis relus. À régénérer si les formulaires changent — voir le skill `erp-doc-sync`.

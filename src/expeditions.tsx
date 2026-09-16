@@ -237,6 +237,8 @@ function collecterMouvements(bcs: any[], bds: any[], blsClient: any[], blsRetour
   // ── ARRIVÉES ──
   for (const b of bcs || []) {
     if (String(b.statut) === 'annule') continue
+    // Lot F : un BC de reliquat dont la date d'arrivée attend la validation des Achats n'est pas encore une arrivée.
+    if (b.date_a_valider === true && !b.bl_id && !b.date_reception_reelle) continue
     const prevue = _d10(b.date_livraison_prevue), reelle = _d10(b.date_reception_reelle)
     out.push({
       sens: 'in', kind: 'bc', id: String(b.id), ref: b.num_bc || b.id,
@@ -345,18 +347,20 @@ function panelReceptions(bcs: any[], _bcsAttendus: any[], receptions: any[], bds
   const etatPV = (b: any): string => {
     if (!b.bc_id) return '<span style="color:#cbd5e1;font-size:.7rem;">—</span>'
     const pv = pvParBl[String(b.id)]
-    if (!pv) return boutonPV(b.bc_id, b.id, 'PV à faire', 'fa-hourglass-half', 'background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:7px;padding:5px 10px;font-size:.68rem;font-weight:700;', 'Faire le PV de contrôle : le contenu n’entre en stock qu’au PV conforme')
-    if (String(pv.decision || '') === 'libere') return `<span title="PV conforme : le contenu est entré en stock" style="background:#dcfce7;color:#15803d;border-radius:999px;padding:2px 10px;font-size:.66rem;font-weight:700;white-space:nowrap;"><i class="fas fa-check" style="margin-right:4px;"></i>Conforme · ${escX(pv.num_pv || '')}</span>`
+    if (!pv) return boutonPV(b.bc_id, b.id, 'PV à faire', 'fa-hourglass-half', 'background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:7px;padding:5px 10px;font-size:.68rem;font-weight:700;', 'Faire le PV de contrôle : quantité reçue ligne par ligne, puis les quantités conformes partent en Mise en stock')
+    if (String(pv.decision || '') === 'libere') return `<span title="PV conforme : les quantités reçues sont parties dans Stock › Mise en stock" style="background:#dcfce7;color:#15803d;border-radius:999px;padding:2px 10px;font-size:.66rem;font-weight:700;white-space:nowrap;"><i class="fas fa-check" style="margin-right:4px;"></i>Conforme · ${escX(pv.num_pv || '')}</span>`
     // Non conforme : dire ce que la Qualité en a fait, sinon la ligne reste « bloquée » pour
-    // toujours à l'écran alors que le lot est renvoyé, dérogé ou partiellement entré en stock.
-    const q: any = quarParBl[String(b.id)]
+    // toujours à l'écran alors que le lot est renvoyé, dérogé ou partiellement accepté.
+    // Lot F : un PV peut porter PLUSIEURS quarantaines (une par ligne qualitative) — ou aucune (écarts quantitatifs seuls).
+    const qs: any[] = Array.isArray(quarParBl[String(b.id)]) ? quarParBl[String(b.id)] : []
     const nb = (v: any) => String(Math.round((Number(v) || 0) * 1000) / 1000).replace('.', ',')
-    const suite = !q ? ''
-      : String(q.issue || '') === 'retour_fournisseur' ? ('renvoyé au fournisseur' + (q.retour_expedie_le ? ' · expédié' : ' · à expédier'))
-      : String(q.issue || '') === 'derogation_fournisseur' ? 'dérogation fournisseur · entré en stock'
+    const suiteDe = (q: any): string => String(q.issue || '') === 'retour_fournisseur' ? ('renvoyé au fournisseur' + (q.retour_expedie_le ? ' · expédié' : ' · à expédier'))
+      : String(q.issue || '') === 'derogation_fournisseur' ? 'dérogation fournisseur · accepté'
       : String(q.issue || '') === 'entree_partielle' ? ('entrée partielle ' + nb(q.qte_acceptee) + '/' + nb(q.qte))
       : (String(q.statut || '') === 'en_cours' ? 'en quarantaine — décision Qualité attendue' : '')
-    return `<span title="PV non conforme : rien n’est entré en stock au contrôle" style="background:#fee2e2;color:#b91c1c;border-radius:999px;padding:2px 10px;font-size:.66rem;font-weight:700;white-space:nowrap;"><i class="fas fa-ban" style="margin-right:4px;"></i>Non conforme · ${escX(pv.num_pv || '')}</span>${suite ? `<div style="font-size:.62rem;color:#64748b;margin-top:3px;">→ ${escX(suite)}</div>` : ''}`
+    const suites = Array.from(new Set(qs.map(suiteDe).filter(Boolean)))
+    const suite = qs.length > 1 ? (qs.length + ' quarantaines : ' + suites.join(' · ')) : suites.join(' · ')
+    return `<span title="PV non conforme : lignes en écart en non-conformité (et en quarantaine si qualitatives) ; les quantités conformes sont parties en Mise en stock" style="background:#fee2e2;color:#b91c1c;border-radius:999px;padding:2px 10px;font-size:.66rem;font-weight:700;white-space:nowrap;"><i class="fas fa-ban" style="margin-right:4px;"></i>Non conforme · ${escX(pv.num_pv || '')}</span>${suite ? `<div style="font-size:.62rem;color:#64748b;margin-top:3px;">→ ${escX(suite)}</div>` : ''}`
   }
 
   // Informations saisies à la réception (Lot D) : N° de BL / de commande fournisseur et, hors France, poids,
@@ -409,7 +413,7 @@ function panelReceptions(bcs: any[], _bcsAttendus: any[], receptions: any[], bds
   return `
   <div id="exp-panel-receptions" style="display:none;">
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 16px;margin-bottom:18px;font-size:.8rem;color:#1d4ed8;">
-      <i class="fas fa-clipboard-check" style="margin-right:7px;"></i><strong>Ce qui est arrivé</strong> — une ligne entre ici au moment de la réception, et c'est d'ici qu'on remplit le <strong>PV de contrôle</strong>. Le contenu n'entre en stock qu'au <strong>PV conforme</strong>. Ce qui reste attendu est dans l'onglet <strong>Calendrier</strong>.
+      <i class="fas fa-clipboard-check" style="margin-right:7px;"></i><strong>Ce qui est arrivé</strong> — une ligne entre ici au moment de la réception, et c'est d'ici qu'on remplit le <strong>PV de contrôle</strong> (quantité reçue ligne par ligne). Les quantités conformes partent dans <strong>Stock › Mise en stock</strong> ; le stock est crédité au rangement. Ce qui reste attendu est dans l'onglet <strong>Calendrier</strong>.
     </div>
 
     ${card('Fournisseur', 'fa-truck-ramp-box', '#0ea5e9', recFourn.length, 'matière et fournitures réceptionnées',
@@ -866,14 +870,15 @@ export const pageServiceExpeditions = (
   const PEUT_ECRIRE_EXP = extra.peutEcrireExpeditions !== false
   const PV_JSON = JSON.stringify({ controleurs: CONTROLEURS, indisponibles: extra.controleursIndisponibles === true,
     utilisateur: typeof extra.utilisateurId === 'string' ? extra.utilisateurId : null, peutEcrire: PEUT_ECRIRE_EXP, pdfBc: extra.pdfBcAutorise !== false }).replace(/</g, '\\u003c')
-  // État du PV de CHAQUE réception (clé : n° de BL). Le stock n'entre qu'au PV conforme :
-  // l'écran doit dire, ligne par ligne, où en est le contrôle.
+  // État du PV de CHAQUE réception (clé : n° de BL) : l'écran doit dire, ligne par ligne, où en est le contrôle
+  // (Lot F : les quantités conformes partent en Mise en stock au PV, le stock est crédité au rangement).
   const PV_PAR_BL: Record<string, any> = {}
   ;(extra.pvs ?? []).forEach((p: any) => { if (p && p.bl_id && String(p.type_controle || '') === 'reception') PV_PAR_BL[String(p.bl_id)] = p })
   // Quarantaines de RÉCEPTION par n° de BL : l'écran doit dire ce que la Qualité a décidé du lot
   // refusé (renvoyé, dérogé, partiellement accepté) — et lister ce qui reste à faire PARTIR.
-  const QUAR_PAR_BL: Record<string, any> = {}
-  ;(dbQuar ?? []).forEach((q: any) => { if (!q || (!q.bc_id && !q.pv_id)) return; const k = String(q.bl_id || q.lot_id || ''); if (k) QUAR_PAR_BL[k] = q })
+  // Lot F (15/09/2026) : une LISTE par BL — un PV crée une quarantaine par ligne qualitative (avant : la dernière gagnait).
+  const QUAR_PAR_BL: Record<string, any[]> = {}
+  ;(dbQuar ?? []).forEach((q: any) => { if (!q || (!q.bc_id && !q.pv_id)) return; const k = String(q.bl_id || q.lot_id || ''); if (k) (QUAR_PAR_BL[k] = QUAR_PAR_BL[k] || []).push(q) })
   const RETOURS_FOURN = (dbQuar ?? []).filter((q: any) => q && q.issue && Number(q.qte_retour) > 0 && !q.retour_expedie_le)
   const VD_MAP = buildValDirMap(dbValidations || [])   // décisions Direction par (ref_table, ref_id)
   // Un BL annulé n'est ni une arrivée ni un départ : écarté des 3 onglets et du calendrier.
@@ -1015,11 +1020,10 @@ export const pageServiceExpeditions = (
           <div><label for="rec_numblf" style="${FLBL}">N° de BL fournisseur <span style="color:#dc2626;">*</span></label><input id="rec_numblf" type="text" maxlength="100" autocomplete="off" placeholder="N° du bon de livraison du fournisseur" style="${FINP}"/></div>
         </div>
         <div id="rec_qte_info" style="margin-top:12px;border-radius:10px;padding:9px 12px;font-size:.76rem;white-space:pre-line;"></div>
-        <!-- Quantité : pas de champ dans le cas normal (reste à recevoir). Deux exceptions : livraison partielle déclarée,
-             quantité commandée du BC inconnue (vérification du lot D, 14/09/2026). -->
-        <div id="rec_partiel_box" style="display:none;margin-top:10px;">
-          <label style="display:flex;align-items:center;gap:8px;font-size:.8rem;font-weight:700;color:#374151;cursor:pointer;"><input type="checkbox" id="rec_partiel" onchange="expRecPartiel()"/> Livraison partielle : le fournisseur annonce un reliquat</label>
-        </div>
+        <!-- Quantité : pas de champ dans le cas normal (reste à recevoir). Une exception : quantité commandée du BC inconnue
+             (vérification du lot D, 14/09/2026). Lot F (15/09/2026) : la case « Livraison partielle » est retirée — la quantité
+             reçue et le reliquat annoncé se déclarent au PV de contrôle, ligne par ligne. -->
+
         <div id="rec_qte_box" style="display:none;margin-top:10px;max-width:280px;">
           <label for="rec_qte_livree" id="rec_qte_lbl" style="${FLBL}">Quantité livrée <span style="color:#dc2626;">*</span></label>
           <input id="rec_qte_livree" type="text" inputmode="decimal" autocomplete="off" placeholder="lue sur le BL fournisseur" style="${FINP}"/>
@@ -1077,25 +1081,32 @@ export const pageServiceExpeditions = (
           <label style="display:flex;align-items:center;gap:8px;font-size:.84rem;font-weight:700;color:#5b21b6;cursor:pointer;"><input type="checkbox" id="pv_cert"/> Certificat matière reçu et conforme</label>
           <div style="font-size:.7rem;color:#6d28d9;margin-top:4px;">Exigé par le bon de commande. Sans cette case cochée, le PV ne peut pas être conforme : il passe en non conforme (« certificat matière absent ou non conforme »).</div>
         </div>
-        <div id="pv_nc_box" style="display:none;margin-top:16px;">
+        <!-- Lot F (15/09/2026) : en-tête du BC en non conforme ; tableau des lignes (quantité reçue à côté de la prévue) TOUJOURS visible -->
+        <div id="pv_bc_box" style="display:none;margin-top:16px;">
           <div style="${FLBL}">Bon de commande</div>
           <div id="pv_bc_head" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;font-size:.78rem;"></div>
-          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:14px;flex-wrap:wrap;">
-            <div style="${FLBL}margin-bottom:6px;">Lignes du bon de commande · « Oui » = pas de problème · « Non » = observation obligatoire</div>
-            <button type="button" onclick="expPvToutOui()" style="margin-bottom:6px;padding:4px 10px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:7px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-check-double" style="margin-right:4px;"></i>Tout à Oui</button>
+        </div>
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:14px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:260px;">
+            <div style="${FLBL}margin-bottom:2px;">Lignes du bon de commande · quantité reçue à côté de la quantité prévue</div>
+            <div style="font-size:.68rem;color:#64748b;margin-bottom:6px;">Une ligne est <strong>non conforme</strong> si la quantité reçue diffère de la prévue sans reliquat annoncé par le fournisseur (quantitatif) ou si une observation est écrite (qualitatif). Un reliquat annoncé n’est pas un écart : il devient un bon de commande de reliquat aux Achats.</div>
           </div>
-          <div style="overflow-x:auto;border:1px solid #e2e8f0;border-radius:10px;">
-            <table style="width:100%;border-collapse:collapse;font-size:.76rem;">
-              <thead><tr style="background:#fafafa;">${['N°', 'Référence', 'Désignation', 'Qté commandée', 'Conforme ?', 'Observation'].map(t => THW(t)).join('')}<th id="pv_th_pu" style="${THW_STYLE}">PU HT</th>${['Affaire', 'DA · Lot · Opération'].map(t => THW(t)).join('')}</tr></thead>
-              <tbody id="pv_lignes"></tbody>
-            </table>
-          </div>
-          <div id="pv_lignes_note" style="display:none;font-size:.68rem;color:#64748b;margin-top:4px;">* Ligne reconstituée : le bon de commande ne détaille pas ses lignes (articles et quantité commandée).</div>
+          <button type="button" onclick="expPvToutRecu()" style="margin-bottom:6px;padding:4px 10px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:7px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-check-double" style="margin-right:4px;"></i>Tout reçu comme prévu</button>
+        </div>
+        <div style="overflow-x:auto;border:1px solid #e2e8f0;border-radius:10px;">
+          <table style="width:100%;border-collapse:collapse;font-size:.76rem;">
+            <thead><tr style="background:#fafafa;">${['N°', 'Référence', 'Désignation', 'Qté prévue', 'Qté reçue', 'Reliquat annoncé', 'Conforme ?', 'Observation'].map(t => THW(t)).join('')}<th id="pv_th_pu" style="${THW_STYLE}">PU HT</th>${['Affaire', 'DA · Lot · Opération'].map(t => THW(t)).join('')}</tr></thead>
+            <tbody id="pv_lignes"></tbody>
+          </table>
+        </div>
+        <div id="pv_lignes_note" style="display:none;font-size:.68rem;color:#64748b;margin-top:4px;">* Ligne reconstituée : le bon de commande ne détaille pas ses lignes (articles et quantité commandée).</div>
+        <div id="pv_ok_note" style="display:none;font-size:.72rem;color:#15803d;margin-top:10px;"><i class="fas fa-dolly" style="margin-right:5px;"></i>Conforme : les quantités reçues partent dans <strong>Stock › Mise en stock</strong> (rangement) ; un reliquat annoncé génère un bon de commande de reliquat aux Achats, date d’arrivée à valider.</div>
+        <div id="pv_nc_box" style="display:none;margin-top:16px;">
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:14px;">
             <div style="grid-column:1/-1;"><label for="pv_obs_gen" style="${FLBL}">Observation générale <span style="font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:0;">· facultative</span></label><textarea id="pv_obs_gen" rows="3" maxlength="${OBS_GENERALE_MAX}" placeholder="Constat d’ensemble sur la réception…" style="${FINP}resize:vertical;"></textarea></div>
             <div><label for="pv_gravite" style="${FLBL}">Gravité de la non-conformité</label><select id="pv_gravite" style="${FINP}">${GRAVITES_NC.map(g => `<option value="${escX(g)}"${g === GRAVITE_DEFAUT ? ' selected' : ''}>${escX(g)}</option>`).join('')}</select></div>
           </div>
-          <div style="font-size:.72rem;color:#b91c1c;margin-top:10px;"><i class="fas fa-exclamation-triangle" style="margin-right:5px;"></i>Une fiche de non-conformité est créée et envoyée au service Qualité, avec le détail des lignes en « Non ». La réception part <strong>toujours</strong> en quarantaine : la Qualité y décide du renvoi au fournisseur, d’une dérogation ou d’une entrée partielle en stock.</div>
+          <div style="font-size:.72rem;color:#b91c1c;margin-top:10px;"><i class="fas fa-exclamation-triangle" style="margin-right:5px;"></i>Une fiche de non-conformité fournisseur est créée <strong>pour chaque ligne en écart</strong> (quantitative, qualitative ou les deux) et envoyée au service Qualité. Une ligne qualitative part <strong>en quarantaine</strong> (la Qualité y décide du renvoi, d’une dérogation ou d’une entrée partielle) ; les quantités conformes partent dans Stock › Mise en stock ; un excédent est soumis à la Direction ; un reliquat annoncé génère un bon de commande de reliquat aux Achats. Certificat matière absent : toute la réception reste bloquée en quarantaine.</div>
         </div>
       </div>
       <div style="padding:14px 22px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:8px;flex-shrink:0;">
@@ -1148,8 +1159,8 @@ export const pageServiceExpeditions = (
   // ── Réception : lier le BC à un BL ──
   // Lot D (14/09/2026) : plus de transporteur ni de quantité saisis. La quantité reçue est le RESTE À
   // RECEVOIR du BC (calculé par le serveur, affiché pour information) ; un écart se signale au PV.
-  // Vérification (14/09/2026) : la quantité livrée se saisit dans deux cas seulement — livraison partielle
-  // déclarée (case), quantité commandée du BC inconnue — et la même fenêtre corrige les informations
+  // Vérification (14/09/2026) : la quantité livrée ne se saisit que si la quantité commandée du BC est inconnue (Lot F :
+  // la case « Livraison partielle » est retirée, le reliquat se déclare au PV) — et la même fenêtre corrige les informations
   // de réception d’un BL déjà enregistré (mode « correction », route /api/expeditions/bl/:id/reception-infos).
   var REC_CHAMPS={num_bl:'rec_numbl',num_commande_fournisseur:'rec_numcmdf',num_bl_fournisseur:'rec_numblf',poids_matiere_kg:'rec_poids',num_nomenclature:'rec_nomenc',code_ewx:'rec_ewx',mode_arrivee:'rec_mode',qte_livree:'rec_qte_livree'};
   var _recEnCours=false;   // un double-clic sur « Valider la réception » ne doit rien envoyer deux fois
@@ -1162,10 +1173,8 @@ export const pageServiceExpeditions = (
   function expRecMarque(champ){
     Object.keys(REC_CHAMPS).forEach(function(k){ var el=document.getElementById(REC_CHAMPS[k]); if(el) el.style.borderColor='#e2e8f0'; });
     var g=document.getElementById('rec_hf_group'); if(g) g.style.boxShadow='';
-    var pb=document.getElementById('rec_partiel_box'); if(pb) pb.style.boxShadow='';
     if(!champ) return;
     if(champ==='hors_france'){ if(g) g.style.boxShadow='0 0 0 2px #fca5a5'; return; }
-    if(champ==='livraison_partielle'){ if(pb){ pb.style.display='block'; pb.style.boxShadow='0 0 0 2px #fca5a5'; } return; }
     if(champ==='qte_livree'){ var qb=document.getElementById('rec_qte_box'); if(qb) qb.style.display='block'; }
     var el=document.getElementById(REC_CHAMPS[champ]);
     if(el){ el.style.borderColor='#ef4444'; try{ el.focus(); }catch(e){} }
@@ -1179,21 +1188,19 @@ export const pageServiceExpeditions = (
     var b=document.getElementById('rec_btn'); if(!b) return;
     b.disabled=!!occupe; b.style.opacity=occupe?'.6':''; b.style.cursor=occupe?'wait':'pointer';
   }
-  // Quantité à saisir ? 'reste' : non (reste à recevoir) · 'partielle' : oui, obligatoire · 'inconnue' : oui, obligatoire
-  // (le BC ne porte pas de quantité exploitable) · 'inconnue_multi' : facultative (BC à plusieurs articles).
+  // Quantité à saisir ? 'reste' : non (reste à recevoir) · 'inconnue' : oui, obligatoire (le BC ne porte pas de quantité
+  // exploitable) · 'inconnue_multi' : facultative (BC à plusieurs articles). Lot F : plus de livraison partielle ici (PV).
   function expRecQteMode(){
-    var bc=_recBc||{}, cb=document.getElementById('rec_partiel'), partiel=!!(cb&&cb.checked);
-    if(bc.qte_commandee==null) return bc.multi_articles?'inconnue_multi':(partiel?'partielle':'inconnue');
-    return partiel?'partielle':'reste';
+    var bc=_recBc||{};
+    if(bc.qte_commandee==null) return bc.multi_articles?'inconnue_multi':'inconnue';
+    return 'reste';
   }
   function expRecPartiel(){
-    var bc=_recBc||{}, mode=expRecQteMode();
+    var mode=expRecQteMode();
     var box=document.getElementById('rec_qte_box'), note=document.getElementById('rec_qte_note'), lbl=document.getElementById('rec_qte_lbl');
     box.style.display=(mode==='reste')?'none':'block';
     lbl.textContent=(mode==='inconnue_multi')?'Quantité livrée (facultative)':'Quantité livrée *';
-    note.textContent=(mode==='partielle')
-      ? ((bc.reste!=null?'Moins que le reste à recevoir ('+expRecFmt(bc.reste)+'). ':'')+'Le reliquat restera à réceptionner quand il arrivera.')
-      : (mode==='inconnue') ? 'Le bon de commande ne porte pas de quantité exploitable : lisez-la sur le BL fournisseur.'
+    note.textContent=(mode==='inconnue') ? 'Le bon de commande ne porte pas de quantité exploitable : lisez-la sur le BL fournisseur.'
       : (mode==='inconnue_multi') ? 'Total de pièces, repris sur la non-conformité éventuelle ; il ne sert pas à l’entrée en stock.'
       : '';
     expRecMarque(null);
@@ -1205,7 +1212,7 @@ export const pageServiceExpeditions = (
     document.getElementById('rec_numbl_box').style.display=corr?'none':'';
     document.getElementById('rec_affaire_box').style.display=corr?'none':'';
     document.getElementById('rec_qte_info').style.display=corr?'none':'';
-    if(corr){ document.getElementById('rec_partiel_box').style.display='none'; document.getElementById('rec_qte_box').style.display='none'; }
+    if(corr){ document.getElementById('rec_qte_box').style.display='none'; }
     document.getElementById('rec_btn_lbl').textContent=corr?'Enregistrer la correction':'Valider la réception';
   }
   function expOpenReception(id){
@@ -1239,16 +1246,13 @@ export const pageServiceExpeditions = (
     ['rec_numcmdf','rec_numblf','rec_poids','rec_nomenc','rec_ewx','rec_mode','rec_qte_livree'].forEach(function(k){ var el=document.getElementById(k); if(el) el.value=''; });
     document.getElementById('rec_hf_oui').checked=false;
     document.getElementById('rec_hf_non').checked=false;
-    document.getElementById('rec_partiel').checked=false;
     expRecHF();
     // Quantité : information (même calcul que la route, src/reception.ts), saisie seulement dans les cas d’exception.
     var qi=document.getElementById('rec_qte_info');
     var peint=function(fond,bord,coul,texte){ qi.style.background=fond; qi.style.border='1px solid '+bord; qi.style.color=coul; qi.textContent=texte; };
     var multi=!!bc.multi_articles;
     var detail=(multi&&Array.isArray(bc.lignes)&&bc.lignes.length) ? bc.lignes.map(function(l){ return (l.qte_commandee!=null?expRecFmt(l.qte_commandee):(l.qte_texte||'?'))+(l.unite?' '+l.unite:'')+' × '+(l.reference||l.designation||'—'); }).join(' · ') : '';
-    var noteStock=!multi?'':(bc.stock_multi_ok
-      ? '\\nBon de commande à plusieurs articles : au PV conforme, chaque ligne entre en stock sur son propre article.'
-      : '\\nBon de commande à plusieurs articles : cette réception ne couvre pas la commande ligne par ligne — au PV conforme, rien n’entrera en stock automatiquement.');
+    var noteStock=!multi?'':'\\nBon de commande à plusieurs articles : au PV, la quantité reçue se saisit ligne par ligne et chaque ligne conforme part en Mise en stock.';
     if(bc.qte_commandee==null){
       if(multi) peint('#fffbeb','#fde68a','#92400e','Bon de commande à plusieurs articles sans quantité exploitable'+(detail?' ('+detail+')':'')+'. Quantité livrée facultative.'+noteStock);
       else peint('#fffbeb','#fde68a','#92400e','Le bon de commande ne porte pas de quantité commandée exploitable : indiquez la quantité livrée, lue sur le BL fournisseur.');
@@ -1257,10 +1261,8 @@ export const pageServiceExpeditions = (
     } else if(multi){
       peint('#f0fdf4','#bbf7d0','#166534','Réception de tout le reste du bon de commande'+(detail?' : '+detail:'')+' — '+expRecFmt(bc.reste)+' pièce(s) au total'+(bc.qte_recue>0?', dont '+expRecFmt(bc.qte_recue)+' déjà reçue(s)':'')+'. Un écart se signale au PV de contrôle, sur la ligne concernée.'+noteStock);
     } else {
-      peint('#f0fdf4','#bbf7d0','#166534','Quantité réceptionnée : '+expRecFmt(bc.reste)+' — reste à recevoir sur '+expRecFmt(bc.qte_commandee)+' commandé(s)'+(bc.qte_recue>0?', dont '+expRecFmt(bc.qte_recue)+' déjà reçu(s)':'')+'. Un écart se signale au PV de contrôle, sur la ligne concernée ; un reliquat annoncé par le fournisseur, par « Livraison partielle ».');
+      peint('#f0fdf4','#bbf7d0','#166534','Quantité réceptionnée : '+expRecFmt(bc.reste)+' — reste à recevoir sur '+expRecFmt(bc.qte_commandee)+' commandé(s)'+(bc.qte_recue>0?', dont '+expRecFmt(bc.qte_recue)+' déjà reçu(s)':'')+'. La quantité réellement reçue, un écart ou un reliquat annoncé par le fournisseur se déclarent au PV de contrôle, ligne par ligne.');
     }
-    // Livraison partielle : pas pour un BC à plusieurs articles (non géré ligne par ligne), ni quand rien ne reste à recevoir.
-    document.getElementById('rec_partiel_box').style.display=(!multi&&(bc.qte_commandee==null||bc.reste>0))?'block':'none';
     expRecPartiel();
     _recEnCours=false; expRecBouton(false);
     document.getElementById('exp-recep-overlay').style.display='flex';
@@ -1308,13 +1310,11 @@ export const pageServiceExpeditions = (
     if(!payload.num_bl_fournisseur) return refus('num_bl_fournisseur','Indiquez le N° de BL fournisseur.');
     if(payload.hors_france===null) return refus('hors_france','Indiquez si la réception vient de hors France (Oui / Non).');
     if(!corr){
-      var mode=expRecQteMode(), bcq=_recBc||{};
-      payload.livraison_partielle=(mode==='partielle');
+      var mode=expRecQteMode();
       if(mode!=='reste'){
         var qs=val('rec_qte_livree'), q=qs?expRecNombre(qs):null;
         if(qs&&(q===null||!(q>0))) return refus('qte_livree','Quantité livrée : nombre supérieur à 0.');
-        if(q===null&&mode!=='inconnue_multi') return refus('qte_livree',mode==='partielle'?'Livraison partielle : indiquez la quantité livrée (lue sur le BL fournisseur).':'Indiquez la quantité livrée, lue sur le BL fournisseur : le bon de commande ne porte pas de quantité exploitable.');
-        if(q!==null&&mode==='partielle'&&bcq.reste!=null&&!(q<bcq.reste)) return refus('qte_livree','Quantité livrée égale ou supérieure au reste à recevoir ('+expRecFmt(bcq.reste)+') : ce n’est pas une livraison partielle — décochez « Livraison partielle ».');
+        if(q===null&&mode!=='inconnue_multi') return refus('qte_livree','Indiquez la quantité livrée, lue sur le BL fournisseur : le bon de commande ne porte pas de quantité exploitable.');
         if(q!==null) payload.qte_livree=q;
       }
     }
@@ -1346,8 +1346,7 @@ export const pageServiceExpeditions = (
         if(corr){
           pushNotif('ok','fa-pen','Informations de réception du BL <strong>'+expRecEsc(j.bl_id)+'</strong> corrigées.',6000);
         } else {
-          var reliquat=j.livraison_partielle?(', reliquat attendu'+(j.reste_apres!=null?' : '+expRecEsc(expRecFmt(j.reste_apres)):'')):'';
-          pushNotif('ok','fa-truck-loading','Colis reçu · BL <strong>'+expRecEsc(j.bl_id)+'</strong> créé'+(j.qte!=null?' ('+expRecEsc(expRecFmt(j.qte))+' reçu(s)'+reliquat+')':'')+'. Faites maintenant le PV de contrôle (onglet Réceptions) : le contenu n’entre en stock qu’au PV conforme.',9000);
+          pushNotif('ok','fa-truck-loading','Colis reçu · BL <strong>'+expRecEsc(j.bl_id)+'</strong> créé'+(j.qte!=null?' ('+expRecEsc(expRecFmt(j.qte))+' attendu(s))':'')+'. Faites maintenant le PV de contrôle (onglet Réceptions) : quantité reçue ligne par ligne, puis les quantités conformes partent en Mise en stock.',9000);
         }
         (Array.isArray(j.avertissements)?j.avertissements:[]).forEach(function(a){ pushNotif('warn','fa-exclamation-triangle',expRecEsc(a),12000); });
         setTimeout(function(){location.hash='receptions';softReload();},900);
@@ -1359,10 +1358,10 @@ export const pageServiceExpeditions = (
     if(b&&!b.disabled) expOpenCorrectionReception(b.getAttribute('data-bl')||'');
   });
 
-  // ── PV de contrôle réception — Lot D · D2 (14/09/2026) ──
-  // Conforme : le résultat et le contrôleur, plus la case certificat matière quand le BC l’exige (pas de conforme sans elle).
-  // Non conforme : en-tête du BC, une réponse Oui / Non par ligne (observation obligatoire sur Non), observation générale,
-  // gravité. Tout est construit en DOM TEXTE (fournisseur, lignes, notes viennent de la base) et les boutons passent par
+  // ── PV de contrôle réception — Lot D · D2 (14/09/2026), Lot F (15/09/2026) ──
+  // Conforme comme Non conforme : le tableau des lignes (quantité reçue à côté de la prévue, reliquat annoncé, observation),
+  // le contrôleur, la case certificat matière quand le BC l’exige (pas de conforme sans elle).
+  // Non conforme : en plus, en-tête du BC, observation générale, gravité. Tout est construit en DOM TEXTE (fournisseur, lignes, notes viennent de la base) et les boutons passent par
   // délégation d’événements (classe exp-pv-open + data-bc / data-bl). Le serveur relit les lignes du BC et revérifie tout
   // (400 + champ + idx), dont le contrôleur (403 s’il n’a pas l’écriture sur les Expéditions).
   var _pvBc=null;
@@ -1372,10 +1371,12 @@ export const pageServiceExpeditions = (
   function expPvDate(d){ var s=String(d||''); return /^\\d{4}-\\d{2}-\\d{2}/.test(s)?(s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4)):(s||'—'); }
   function expPvMontant(n){ var v=Number(n); return (isFinite(v)&&v>0)?(v.toFixed(2).replace('.',',')+' € HT'):'—'; }
   function expPvResultat(){ var s=document.querySelector('input[name=pv_res]:checked'); return s?String(s.value):''; }
-  function expPvReponse(idx){ var o=document.querySelector('input[name="pv_l_'+idx+'"]:checked'); return o?(o.value==='oui'):null; }
+  function expPvArr(n){ return Math.round(Number(n)*1000)/1000; }
+  var _pvPrevues={};   // idx → quantité prévue affichée (null = inconnue), renvoyée au serveur (qte_prevue_affichee)
   function expPvBouton(occupe){ var b=document.getElementById('pv_btn'); if(!b) return; b.disabled=!!occupe; b.style.opacity=occupe?'.6':''; b.style.cursor=occupe?'wait':'pointer'; }
   // Encadre en rouge ce qui est fautif (champ, choix, ligne) ; null = tout effacer.
-  function expPvMarque(champ,idx){
+  // sous : 'obs' quand la faute porte sur l'observation de la ligne (le curseur va dans l'observation, pas dans la quantité).
+  function expPvMarque(champ,idx,sous){
     var g=document.getElementById('pv_res_group'); if(g) g.style.boxShadow='';
     var s=document.getElementById('pv_ctrl'); if(s) s.style.borderColor='#e2e8f0';
     var cb=document.getElementById('pv_cert_box'); if(cb) cb.style.boxShadow='';
@@ -1391,7 +1392,7 @@ export const pageServiceExpeditions = (
     else if(champ==='lignes'&&idx!=null){
       var tr=document.querySelector('#pv_lignes tr[data-idx="'+Number(idx)+'"]');
       if(tr){ tr.style.background='#fef2f2'; try{ tr.scrollIntoView({block:'center'}); }catch(e){} }
-      var ta=document.getElementById('pv_lobs_'+Number(idx)); if(ta&&!ta.disabled){ try{ ta.focus(); }catch(e){} }
+      var qi=document.getElementById((sous==='obs'?'pv_lobs_':'pv_lqte_')+Number(idx)); if(qi){ try{ qi.focus(); }catch(e){} }
     }
   }
   function expPvControleurs(){
@@ -1428,57 +1429,118 @@ export const pageServiceExpeditions = (
       dp.appendChild(a); h.appendChild(dp);
     }
   }
-  // Tableau des lignes du BC : une réponse Oui / Non par ligne, observation activée sur Non.
-  // « Conforme ? » et « Observation » suivent la quantité (jamais rejetées hors écran par une référence longue) ;
-  // les textes venus de la base se coupent (overflow-wrap) au lieu d’élargir le tableau.
-  function expPvLignes(bc){
+  // Quantité PRÉVUE de chaque ligne sur cette réception — même calcul que le serveur (qtesPrevuesPV, src/pv_reception.ts) :
+  // BC à plusieurs articles ou réception sans quantité → quantité commandée de la ligne ; une seule ligne → quantité du BL ;
+  // un article sur plusieurs lignes → quantité du BL répartie dans l’ordre. Le serveur recompare (qte_prevue_affichee).
+  function expPvPrevues(bc, qteBl){
+    var lg=Array.isArray(bc.lignes)?bc.lignes:[];
+    if(!lg.length) return [];
+    var parLigne=function(){ return lg.map(function(l){ return l.qte_commandee!=null?expPvArr(l.qte_commandee):null; }); };
+    var q=(qteBl!=null&&isFinite(Number(qteBl))&&Number(qteBl)>0)?expPvArr(qteBl):null;
+    if(bc.multi_articles||q===null) return parLigne();
+    if(lg.length===1) return [q];
+    if(lg.some(function(l){ return l.qte_commandee==null; })) return parLigne();
+    var somme=expPvArr(lg.reduce(function(s,l){ return s+Number(l.qte_commandee); },0));
+    if(somme===q) return parLigne();
+    var reste=q;
+    return lg.map(function(l,i){ var v=(i===lg.length-1)?reste:Math.min(reste,Number(l.qte_commandee)); reste=expPvArr(reste-v); return expPvArr(Math.max(0,v)); });
+  }
+  // Tableau des lignes du BC (Conforme comme Non conforme) : Qté prévue · Qté reçue (pré-remplie = prévue) · Reliquat annoncé
+  // (case, seulement si reçue < prévue) · Conforme ? (déduit) · Observation (facultative, rend la ligne qualitative).
+  // Tout en DOM texte ; les champs passent par délégation (classes pv-l-qte, pv-l-rel, pv-l-obs + data-idx).
+  function expPvLignes(bc, qteBl){
     var tb=document.getElementById('pv_lignes'); tb.textContent='';
+    _pvPrevues={};
     var lignes=Array.isArray(bc.lignes)?bc.lignes:[];
+    var prev=expPvPrevues(bc,qteBl);
     var avecPu=lignes.some(function(l){ return l&&l.prix_unitaire!=null; });
     var th=document.getElementById('pv_th_pu'); if(th) th.style.display=avecPu?'':'none';
     var TDS='padding:7px 10px;border-top:1px solid #f1f5f9;vertical-align:top;color:#374151;';
-    var TXT=TDS+'overflow-wrap:anywhere;word-break:break-word;max-width:260px;';
+    var TXT=TDS+'overflow-wrap:anywhere;word-break:break-word;max-width:240px;';
     document.getElementById('pv_lignes_note').style.display=lignes.some(function(l){ return l&&l.reconstituee; })?'block':'none';
-    if(!lignes.length){ var tr0=expPvEl('tr',''); var td0=expPvEl('td',TDS+'text-align:center;color:#9ca3af;','Aucune ligne sur ce bon de commande.'); td0.setAttribute('colspan','9'); tr0.appendChild(td0); tb.appendChild(tr0); return; }
-    lignes.forEach(function(l){
-      var idx=Number(l.idx);
+    if(!lignes.length){ var tr0=expPvEl('tr',''); var td0=expPvEl('td',TDS+'text-align:center;color:#9ca3af;','Aucune ligne sur ce bon de commande.'); td0.setAttribute('colspan','11'); tr0.appendChild(td0); tb.appendChild(tr0); return; }
+    lignes.forEach(function(l,i){
+      var idx=Number(l.idx), p=(prev[i]==null?null:prev[i]);
+      _pvPrevues[idx]=p;
+      var u=l.unite?' '+l.unite:'';
       var tr=expPvEl('tr',''); tr.setAttribute('data-idx',String(idx));
-      var qte=(l.qte_commandee!=null?expPvNb(l.qte_commandee):(l.qte_texte||'—'))+(l.unite?' '+l.unite:'');
       var suivi=[l.da_id?'DA '+l.da_id:'',l.lot?'Lot '+l.lot:'',l.operation||''].filter(Boolean).join(' · ')||'—';
       tr.appendChild(expPvEl('td',TDS+'font-weight:700;white-space:nowrap;',String(idx+1)+(l.reconstituee?' *':'')));
       tr.appendChild(expPvEl('td',TXT,l.reference||'—'));
       tr.appendChild(expPvEl('td',TXT,l.designation||'—'));
-      tr.appendChild(expPvEl('td',TDS+'white-space:nowrap;',qte));
-      var tdC=expPvEl('td',TDS+'white-space:nowrap;');
-      ['oui','non'].forEach(function(val){
-        var lab=expPvEl('label','display:inline-flex;align-items:center;gap:4px;margin-right:10px;cursor:pointer;font-weight:700;color:'+(val==='oui'?'#15803d':'#b91c1c')+';');
-        var r=document.createElement('input'); r.type='radio'; r.name='pv_l_'+idx; r.value=val; r.className='pv-l-rep'; r.setAttribute('data-idx',String(idx));
-        lab.appendChild(r); lab.appendChild(document.createTextNode(val==='oui'?'Oui':'Non')); tdC.appendChild(lab);
-      });
-      tr.appendChild(tdC);
-      var tdO=expPvEl('td',TDS+'min-width:220px;');
-      var ta=document.createElement('textarea'); ta.id='pv_lobs_'+idx; ta.rows=2; ta.maxLength=1000; ta.disabled=true; ta.placeholder='Obligatoire si Non';
-      ta.setAttribute('style','width:100%;border:1.5px solid #e2e8f0;border-radius:7px;padding:5px 7px;font-size:.76rem;box-sizing:border-box;resize:vertical;background:#f1f5f9;');
+      tr.appendChild(expPvEl('td',TDS+'white-space:nowrap;font-weight:700;',p!==null?(expPvNb(p)+u):((l.qte_texte?l.qte_texte:'inconnue')+u)));
+      var tdR=expPvEl('td',TDS+'white-space:nowrap;');
+      var inp=document.createElement('input'); inp.type='text'; inp.id='pv_lqte_'+idx; inp.className='pv-l-qte'; inp.setAttribute('data-idx',String(idx));
+      inp.setAttribute('inputmode','decimal'); inp.setAttribute('autocomplete','off'); inp.value=(p!==null?expPvNb(p):''); inp.placeholder=(p!==null?'':'à saisir');
+      inp.setAttribute('style','width:84px;border:1.5px solid #e2e8f0;border-radius:7px;padding:5px 7px;font-size:.78rem;box-sizing:border-box;');
+      tdR.appendChild(inp); if(l.unite) tdR.appendChild(document.createTextNode(' '+l.unite));
+      tr.appendChild(tdR);
+      var tdL=expPvEl('td',TDS+'white-space:nowrap;');
+      var lab=expPvEl('label','display:none;align-items:center;gap:5px;cursor:pointer;font-size:.72rem;font-weight:700;color:#1d4ed8;'); lab.id='pv_lrel_box_'+idx;
+      var cb=document.createElement('input'); cb.type='checkbox'; cb.id='pv_lrel_'+idx; cb.className='pv-l-rel'; cb.setAttribute('data-idx',String(idx));
+      lab.appendChild(cb); lab.appendChild(document.createTextNode('Reliquat'));
+      var na=expPvEl('span','color:#cbd5e1;font-size:.7rem;','—'); na.id='pv_lrel_na_'+idx;
+      tdL.appendChild(lab); tdL.appendChild(na); tr.appendChild(tdL);
+      var tdC=expPvEl('td',TDS+'white-space:nowrap;'); tdC.id='pv_lconf_'+idx; tr.appendChild(tdC);
+      var tdO=expPvEl('td',TDS+'min-width:200px;');
+      var ta=document.createElement('textarea'); ta.id='pv_lobs_'+idx; ta.className='pv-l-obs'; ta.setAttribute('data-idx',String(idx)); ta.rows=2; ta.maxLength=1000;
+      ta.placeholder='Facultative : une observation rend la ligne non conforme (qualitatif)';
+      ta.setAttribute('style','width:100%;border:1.5px solid #e2e8f0;border-radius:7px;padding:5px 7px;font-size:.76rem;box-sizing:border-box;resize:vertical;background:#fff;');
       tdO.appendChild(ta); tr.appendChild(tdO);
       var tdPu=expPvEl('td',TDS+'white-space:nowrap;',l.prix_unitaire!=null?expPvNb(l.prix_unitaire)+' €':'—'); tdPu.style.display=avecPu?'':'none'; tr.appendChild(tdPu);
       tr.appendChild(expPvEl('td',TXT,l.num_affaire||'—'));
       tr.appendChild(expPvEl('td',TXT,suivi));
       tb.appendChild(tr);
+      expPvLigneMaj(idx);
     });
   }
-  function expPvLigneMaj(idx){
-    var ta=document.getElementById('pv_lobs_'+idx); if(!ta) return;
-    var non=expPvReponse(idx)===false;
-    ta.disabled=!non; ta.style.background=non?'#fff':'#f1f5f9'; ta.style.borderColor=non?'#fca5a5':'#e2e8f0';
-    var tr=document.querySelector('#pv_lignes tr[data-idx="'+Number(idx)+'"]'); if(tr) tr.style.background='';
-    if(non){ try{ ta.focus(); }catch(e){} }
+  // État d’une ligne, mêmes règles que le serveur (validerSaisiePV) : manque sans reliquat ou excédent = quantitatif ; observation = qualitatif.
+  function expPvEtat(idx){
+    var inp=document.getElementById('pv_lqte_'+idx); if(!inp) return null;
+    var s=String(inp.value||'').trim(), r=(s===''?null:expRecNombre(s));
+    var p=Object.prototype.hasOwnProperty.call(_pvPrevues,idx)?_pvPrevues[idx]:null;
+    var ta=document.getElementById('pv_lobs_'+idx), obs=ta?String(ta.value||'').trim():'';
+    var cb=document.getElementById('pv_lrel_'+idx);
+    if(r===null) return { lisible:false, recue:null, prevue:p, obs:obs, reliquat:false, manque:0, excedent:0, quanti:false, quali:!!obs };
+    r=expPvArr(r);
+    var manque=(p!==null&&r<p)?expPvArr(p-r):0, excedent=(p!==null&&r>p)?expPvArr(r-p):0;
+    var rel=manque>0&&!!(cb&&cb.checked);
+    return { lisible:true, recue:r, prevue:p, obs:obs, reliquat:rel, manque:manque, excedent:excedent, quanti:(manque>0&&!rel)||excedent>0, quali:!!obs };
   }
-  function expPvToutOui(){
+  function expPvLigneMaj(idx){
+    var e=expPvEtat(idx); if(!e) return;
+    var peutRel=e.lisible&&e.manque>0;
+    var box=document.getElementById('pv_lrel_box_'+idx), na=document.getElementById('pv_lrel_na_'+idx), cb=document.getElementById('pv_lrel_'+idx);
+    if(box) box.style.display=peutRel?'inline-flex':'none';
+    if(na) na.style.display=peutRel?'none':'';
+    if(cb&&!peutRel&&cb.checked){ cb.checked=false; e=expPvEtat(idx); }
+    var inp=document.getElementById('pv_lqte_'+idx); if(inp) inp.style.borderColor=!e.lisible?'#ef4444':(e.quanti?'#fca5a5':'#e2e8f0');
+    var ta=document.getElementById('pv_lobs_'+idx); if(ta) ta.style.borderColor=e.quali?'#fca5a5':'#e2e8f0';
+    var tr=document.querySelector('#pv_lignes tr[data-idx="'+Number(idx)+'"]'); if(tr) tr.style.background='';
+    var td=document.getElementById('pv_lconf_'+idx); if(!td) return;
+    td.textContent='';
+    var badge=function(txt,bg,col){ td.appendChild(expPvEl('span','background:'+bg+';color:'+col+';border-radius:999px;padding:2px 9px;font-size:.66rem;font-weight:800;',txt)); };
+    if(!e.lisible) badge('Qté à saisir','#fef2f2','#b91c1c');
+    else if(e.quanti&&e.quali) badge('Non · quantitatif et qualitatif','#fee2e2','#b91c1c');
+    else if(e.quanti) badge('Non · quantitatif','#fee2e2','#b91c1c');
+    else if(e.quali) badge('Non · qualitatif','#fee2e2','#b91c1c');
+    else badge('Oui','#dcfce7','#15803d');
+    var det=[];
+    if(e.lisible&&e.manque>0) det.push((e.reliquat?'reliquat ':'manque ')+expPvNb(e.manque));
+    if(e.lisible&&e.excedent>0) det.push('excédent +'+expPvNb(e.excedent)+(e.quali?'':' · validation Direction'));
+    if(e.lisible&&e.prevue===null) det.push('prévu inconnu : écart non calculé');
+    if(e.quali&&e.lisible&&e.recue>0) det.push('quarantaine');
+    if(det.length) td.appendChild(expPvEl('div','font-size:.62rem;color:#64748b;margin-top:3px;white-space:normal;max-width:180px;',det.join(' · ')));
+  }
+  // « Tout reçu comme prévu » : quantité reçue = quantité prévue et reliquat décoché (les observations restent).
+  function expPvToutRecu(){
     var bc=_pvBc; if(!bc||!Array.isArray(bc.lignes)) return;
     bc.lignes.forEach(function(l){
-      var idx=Number(l.idx);
-      if(expPvReponse(idx)!==null) return;   // ne pas écraser une réponse déjà donnée
-      var o=document.querySelector('input[name="pv_l_'+idx+'"][value=oui]'); if(o){ o.checked=true; expPvLigneMaj(idx); }
+      var idx=Number(l.idx), p=Object.prototype.hasOwnProperty.call(_pvPrevues,idx)?_pvPrevues[idx]:null;
+      var inp=document.getElementById('pv_lqte_'+idx), cb=document.getElementById('pv_lrel_'+idx);
+      if(inp&&p!==null) inp.value=expPvNb(p);
+      if(cb) cb.checked=false;
+      expPvLigneMaj(idx);
     });
   }
   function expOpenPV(id, blId){
@@ -1492,25 +1554,24 @@ export const pageServiceExpeditions = (
     var info=document.getElementById('pv_info'); info.textContent='';
     var fort=document.createElement('strong'); fort.textContent=bc.num_bc||id; info.appendChild(fort);
     info.appendChild(document.createTextNode(' · '+(bc.fournisseur||'')+' · '+(bc.articles||'')+(bl?' · BL '+bl:'')));
-    // La réception contrôlée : quantité qui entrera en stock au PV conforme + informations saisies à la réception.
+    // La réception contrôlée : quantité attendue sur ce BL (base de la quantité prévue) + informations saisies à la réception.
     var rec=(bl&&EXP_BLREC)?EXP_BLREC[bl]:null;
     if(rec){
-      var qteTxt=(rec.qte!=null)?('Quantité reçue : '+expPvNb(rec.qte)+(bc.multi_articles?' pièce(s) au total':'')):'Quantité reçue : inconnue (rien n’entrera en stock automatiquement)';
+      var qteTxt=(rec.qte!=null)?('Quantité attendue sur la réception : '+expPvNb(rec.qte)+(bc.multi_articles?' pièce(s) au total':'')):'Quantité attendue sur la réception : inconnue (saisissez la quantité reçue de chaque ligne)';
       var refs=[rec.num_bl_fournisseur?'BL fournisseur '+rec.num_bl_fournisseur:'',rec.num_commande_fournisseur?'commande fournisseur '+rec.num_commande_fournisseur:''].filter(Boolean).join(' · ');
       info.appendChild(expPvEl('div','margin-top:4px;font-size:.74rem;color:#7f1d1d;font-weight:700;',qteTxt+(refs?' · '+refs:'')));
       if(rec.hors_france===true){
         info.appendChild(expPvEl('div','margin-top:2px;font-size:.72rem;color:#7f1d1d;','Hors France · '+[rec.poids_matiere_kg!=null?expPvNb(rec.poids_matiere_kg)+' kg':'',rec.num_nomenclature?'nomenclature '+rec.num_nomenclature:'',rec.code_ewx!=null?'EWX '+rec.code_ewx:'',rec.mode_arrivee||''].filter(Boolean).join(' · ')));
       }
     }
-    var noteStock=bc.multi_articles?' Bon de commande à plusieurs articles : chaque ligne entre en stock sur son article, si la réception couvre toute la commande.':'';
-    info.appendChild(expPvEl('div','margin-top:4px;font-size:.72rem;color:#92400e;','Le contenu n’entre en stock qu’au PV conforme.'+noteStock+(bc.certificat_matiere_requis?' Ce bon de commande exige un certificat matière.':'')));
+    info.appendChild(expPvEl('div','margin-top:4px;font-size:.72rem;color:#92400e;','Saisissez la quantité reçue de chaque ligne : les quantités conformes partent dans Stock › Mise en stock, le stock est crédité au rangement.'+(bc.certificat_matiere_requis?' Ce bon de commande exige un certificat matière.':'')));
     var rOk=document.getElementById('pv_res_ok'), rNc=document.getElementById('pv_res_nc');
     if(rOk) rOk.checked=false; if(rNc) rNc.checked=false;   // aucun résultat par défaut : il se choisit
     document.getElementById('pv_cert').checked=false;
     document.getElementById('pv_cert_box').style.display=bc.certificat_matiere_requis?'block':'none';
     expPvControleurs();
     expPvEnTete(bc);
-    expPvLignes(bc);
+    expPvLignes(bc, rec?rec.qte:null);
     document.getElementById('pv_obs_gen').value='';
     document.getElementById('pv_gravite').value='Majeure';
     expPVToggle();
@@ -1520,8 +1581,10 @@ export const pageServiceExpeditions = (
   }
   function expClosePV(){ document.getElementById('exp-pv-overlay').style.display='none'; }
   function expPVToggle(){
-    var nc=expPvResultat()==='non_conforme';
+    var res=expPvResultat(), nc=(res==='non_conforme');
     document.getElementById('pv_nc_box').style.display=nc?'block':'none';
+    document.getElementById('pv_bc_box').style.display=nc?'block':'none';
+    document.getElementById('pv_ok_note').style.display=(res==='conforme')?'block':'none';
     var g=document.getElementById('pv_res_group'); if(g) g.style.boxShadow='';
   }
   function expSubmitPV(){
@@ -1529,7 +1592,7 @@ export const pageServiceExpeditions = (
     var id=document.getElementById('pv_bc_id').value;
     var bc=(_pvBc&&_pvBc.id===id)?_pvBc:EXP_BC.find(function(b){return b.id===id;});
     if(!bc) return;
-    var refus=function(champ,msg,idx){ expPvMarque(champ,idx); pushNotif('err','fa-exclamation-circle',msg,7000); };
+    var refus=function(champ,msg,idx,sous){ expPvMarque(champ,idx,sous); pushNotif('err','fa-exclamation-circle',msg,7000); };
     var resultat=expPvResultat();
     var ctrl=String(document.getElementById('pv_ctrl').value||'');
     var requis=!!bc.certificat_matiere_requis;
@@ -1540,31 +1603,30 @@ export const pageServiceExpeditions = (
     // certificat_requis_affiche : ce que la page a montré. Si les Achats ont changé l’exigence entre-temps, le serveur refuse (409 « rechargez »).
     var payload={ resultat:resultat, controleur_id:ctrl, bl_id:document.getElementById('pv_bl_id').value||null, certificat_requis_affiche:requis };
     if(requis) payload.certificat_confirme=certOk;
-    if(resultat==='conforme'){
-      if(requis&&!certOk){
-        // Pas de conforme sans certificat matière confirmé : le PV bascule en non conforme, à vérifier puis valider.
-        var rNc=document.getElementById('pv_res_nc'); if(rNc) rNc.checked=true;
-        expPVToggle(); expPvMarque('certificat_confirme');
-        pushNotif('warn','fa-certificate','Certificat matière non confirmé : le PV ne peut pas être conforme. Il passe en non conforme (« certificat matière absent ou non conforme ») : répondez pour chaque ligne puis validez.',10000);
-        return;
+    if(resultat==='conforme'&&requis&&!certOk){
+      // Pas de conforme sans certificat matière confirmé : le PV bascule en non conforme, à vérifier puis valider.
+      var rNc=document.getElementById('pv_res_nc'); if(rNc) rNc.checked=true;
+      expPVToggle(); expPvMarque('certificat_confirme');
+      pushNotif('warn','fa-certificate','Certificat matière non confirmé : le PV ne peut pas être conforme. Il passe en non conforme (« certificat matière absent ou non conforme ») : vérifiez les lignes puis validez.',10000);
+      return;
+    }
+    // Lignes (Lot F) : quantité reçue obligatoire, reliquat annoncé, observation — dans les deux cas.
+    var lignes=[], nbEcart=0, faute=null;
+    (Array.isArray(bc.lignes)?bc.lignes:[]).forEach(function(l){
+      if(faute) return;
+      var idx=Number(l.idx), e=expPvEtat(idx);
+      if(!e||!e.lisible){ faute=['lignes','Ligne '+(idx+1)+' : indiquez la quantité reçue — un nombre, 0 si rien n’est arrivé.',idx]; return; }
+      if(e.obs.length>1000){ faute=['lignes','Ligne '+(idx+1)+' : observation trop longue (1000 caractères maximum).',idx,'obs']; return; }
+      if(e.quanti||e.quali){
+        nbEcart++;
+        if(resultat==='conforme'){ faute=['lignes','Ligne '+(idx+1)+' : '+(e.quali?'observation écrite':(e.excedent>0?'excédent de '+expPvNb(e.excedent):'manque de '+expPvNb(e.manque)+' sans reliquat annoncé'))+' — le PV ne peut pas être conforme : passez en « Non conforme ».',idx,(e.quali&&!e.quanti)?'obs':'']; return; }
       }
-    } else {
-      var lignes=[], nbNon=0, faute=null;
-      (Array.isArray(bc.lignes)?bc.lignes:[]).forEach(function(l){
-        if(faute) return;
-        var idx=Number(l.idx), rep=expPvReponse(idx);
-        if(rep===null){ faute=['lignes','Ligne '+(idx+1)+' : répondez Oui (pas de problème) ou Non.',idx]; return; }
-        var obs=null;
-        if(!rep){
-          var ta=document.getElementById('pv_lobs_'+idx); obs=ta?String(ta.value||'').trim():'';
-          if(!obs){ faute=['lignes','Ligne '+(idx+1)+' en « Non » : l’observation est obligatoire.',idx]; return; }
-          nbNon++;
-        }
-        lignes.push({ idx:idx, conforme:rep, observation:rep?null:obs });
-      });
-      if(faute) return refus(faute[0],faute[1],faute[2]);
-      if(!nbNon&&!(requis&&!certOk)) return refus('lignes','Non conforme : indiquez au moins une ligne en « Non »'+(requis?' (ou laissez « Certificat matière reçu et conforme » décoché s’il est absent)':'')+'. Sans écart, le PV est conforme.');
-      payload.lignes=lignes;
+      lignes.push({ idx:idx, qte_recue:e.recue, reliquat:e.reliquat, observation:e.obs||null, qte_prevue_affichee:e.prevue });
+    });
+    if(faute) return refus(faute[0],faute[1],faute[2],faute[3]);
+    payload.lignes=lignes;
+    if(resultat!=='conforme'){
+      if(!nbEcart&&!(requis&&!certOk)) return refus('lignes','Non conforme : aucune ligne en écart. Une ligne est non conforme si la quantité reçue diffère de la prévue sans reliquat annoncé, ou si une observation est écrite'+(requis?' (ou laissez « Certificat matière reçu et conforme » décoché s’il est absent)':'')+'. Sans écart, le PV est conforme.');
       payload.observation_generale=String(document.getElementById('pv_obs_gen').value||'').trim()||null;
       payload.gravite=document.getElementById('pv_gravite').value||'Majeure';
     }
@@ -1578,16 +1640,25 @@ export const pageServiceExpeditions = (
         }, function(){ return {ok:false,error:'Réponse illisible du serveur (HTTP '+r.status+').'}; }); })
       .then(function(j){
         _pvEnCours=false; expPvBouton(false);
-        if(!j||!j.ok){ if(j&&j.champ) expPvMarque(j.champ,j.idx); pushNotif('err','fa-ban',expRecEsc((j&&j.error)||'PV échoué.'),9000); return; }
-        expClosePV();
-        if(j.anomalie){
-          pushNotif('warn','fa-exclamation-triangle','PV <strong>'+expRecEsc(j.pv_id)+'</strong> non conforme'+(j.nc_id?' → NC <strong>'+expRecEsc(j.nc_id)+'</strong>':'')+(j.quarantaine_id?' + quarantaine':'')+' en Qualité.',8000);
-        } else {
-          var st=j.stock||null;
-          var enStock=!st?'':(st.entre?' · <strong>'+expRecEsc(st.qte)+'</strong> entré(s) en stock ('+expRecEsc(st.article||'')+')':' · stock NON crédité : '+expRecEsc(st.raison||'raison inconnue'));
-          pushNotif(st&&(!st.entre||st.raison)?'warn':'ok','fa-clipboard-check','PV <strong>'+expRecEsc(j.pv_id)+'</strong> conforme'+enStock+'.',9000);
+        if(!j||!j.ok){
+          // Faute du serveur sur une ligne : l'observation si le message ne parle que d'elle.
+          var errTxt=String((j&&j.error)||'');
+          var sousSrv=(j&&j.champ==='lignes'&&/observation/i.test(errTxt)&&!/(manque|exc[ée]dent|quantit)/i.test(errTxt))?'obs':'';
+          if(j&&j.champ) expPvMarque(j.champ,j.idx,sousSrv);
+          pushNotif('err','fa-ban',expRecEsc(errTxt||'PV échoué.'),9000); return;
         }
-        (Array.isArray(j.avertissements)?j.avertissements:[]).forEach(function(a){ pushNotif('warn','fa-exclamation-triangle',expRecEsc(a),12000); });
+        expClosePV();
+        // Résumé des effets (Lot F) : file Mise en stock (ou entrée directe de repli), NC par ligne, quarantaines, excédents, reliquat.
+        var parts=[], st=j.stock||null, liste=function(a){ return Array.isArray(a)?a:[]; };
+        if(j.mise_en_stock&&j.mise_en_stock.lignes) parts.push(expRecEsc(j.mise_en_stock.lignes)+' ligne(s) en Mise en stock (Stock)');
+        else if(st) parts.push(st.entre?('<strong>'+expRecEsc(expPvNb(st.qte))+'</strong> entré(s) directement en stock'):('stock NON crédité : '+expRecEsc(st.raison||'raison inconnue')));
+        if(liste(j.nc_ids).length) parts.push(liste(j.nc_ids).length+' NC fournisseur ('+liste(j.nc_ids).map(function(x){ return expRecEsc(x); }).join(', ')+')');
+        if(liste(j.quarantaine_ids).length) parts.push(liste(j.quarantaine_ids).length+' quarantaine(s) en Qualité');
+        if(liste(j.validation_ids).length) parts.push(liste(j.validation_ids).length+' excédent(s) soumis à la Direction');
+        if(j.bc_reliquat_id) parts.push('BC de reliquat <strong>'+expRecEsc(j.bc_reliquat_id)+'</strong> aux Achats (date à valider)');
+        pushNotif(j.anomalie?'warn':'ok',j.anomalie?'fa-exclamation-triangle':'fa-clipboard-check','PV <strong>'+expRecEsc(j.pv_id)+'</strong> '+(j.anomalie?'non conforme':'conforme')+(parts.length?' · '+parts.join(' · '):'')+'.',10000);
+        // Avertissements DURABLES : réaffichés après le rechargement (parfois la seule trace d'un effet à reprendre à la main).
+        (Array.isArray(j.avertissements)?j.avertissements:[]).forEach(function(a){ notifDurable('warn','fa-exclamation-triangle',expRecEsc(a),60000); });
         setTimeout(function(){location.hash='receptions';softReload();},1100);
       }).catch(function(){ _pvEnCours=false; expPvBouton(false); pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
   }
@@ -1598,8 +1669,13 @@ export const pageServiceExpeditions = (
   });
   document.addEventListener('change',function(e){
     var t=e.target;
-    if(t&&t.classList&&t.classList.contains('pv-l-rep')) expPvLigneMaj(Number(t.getAttribute('data-idx')));
+    if(t&&t.classList&&(t.classList.contains('pv-l-rel')||t.classList.contains('pv-l-qte'))) expPvLigneMaj(Number(t.getAttribute('data-idx')));
     else if(t&&t.id==='pv_cert') expPvMarque(null);
+  });
+  // Saisie au fil de la frappe : quantité reçue et observation recalculent « Conforme ? » et la case reliquat.
+  document.addEventListener('input',function(e){
+    var t=e.target;
+    if(t&&t.classList&&(t.classList.contains('pv-l-qte')||t.classList.contains('pv-l-obs'))) expPvLigneMaj(Number(t.getAttribute('data-idx')));
   });
 
   // Le lot refusé part physiquement chez le fournisseur : on note la date, qui l’envoie, et la

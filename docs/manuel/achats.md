@@ -9,7 +9,7 @@ Consultations fournisseurs (RFQ), demandes d'achat, bons de commande, évaluatio
 ## Les onglets
 - **Demandes de prix** — RFQ : source de vérité des prix → alimente le catalogue.
 - **Demandes d'achat** — DA à transformer en BC. Celles de l'atelier (bouton « Demande d'achat » de la Production, réservé à l'écriture Production) arrivent au nom « Prénom Nom (Production) », avec la référence dans l'article (« (réf. …) ») et l'unité dans la quantité (« 12,5 kg ») ; une DA « Machine » envoie son prix sur l'OPEX de la machine à la réception.
-- **Bons de commande** — Tous les BC émis, la date d'arrivée annoncée par le fournisseur et l'exigence de **certificat matière** (colonne « Certificat matière »).
+- **Bons de commande** — Tous les BC émis, la date d'arrivée annoncée par le fournisseur et l'exigence de **certificat matière** (colonne « Certificat matière ») ; les **BC de reliquat** nés d'un PV de réception portent la pastille « Reliquat de BC-… · date à valider ».
 - **Avoirs fournisseurs** — Registre de ce que nos **fournisseurs et sous-traitants nous doivent**. À ne pas confondre avec les avoirs **clients**, qui restent au service Commercial.
 - **Fournisseurs / ST** — Référentiel fournisseurs et sous-traitants.
 - **Scorecard** — Évaluation (qualité, délai) fournisseur/ST.
@@ -30,6 +30,15 @@ Consultations fournisseurs (RFQ), demandes d'achat, bons de commande, évaluatio
 > La **quantité** du BC direct est un **nombre** : c'est elle qui donne le reste à recevoir à la réception.
 
 ![Créer un BC — case « Certificat matière requis »](../assets/form-achats-bc.png)
+
+### Valider la date d'un bon de commande de reliquat
+1. Au **PV de réception** (Expéditions), une ligne reçue en moins avec **« Reliquat »** coché crée un BC **`<n° du BC>-R1`** : même fournisseur, affaire, DA, certificat matière ; lignes restantes avec leur prix unitaire ; **montant 0 €** (porté par le BC d'origine) ; **sans date d'arrivée**.
+2. Onglet **Bons de commande** : repérer la pastille ambre **« Reliquat de BC-… · date à valider »** (il compte aussi dans « sans date d'arrivée »).
+3. Bouton **« Date d'arrivée »** : saisir la date annoncée par le fournisseur. Notification « Reliquat : date validée, il rejoint le calendrier des Expéditions » ; la pastille devient bleue « Reliquat de BC-… ».
+
+> Tant que la date n'est pas validée, le reliquat **n'apparaît pas au Calendrier** des Expéditions. Une validation fournisseur cochée avant ne fige pas sa date. Le taux de service fournisseur ne compte pas deux fois le manque.
+
+![Bons de commande — BC de reliquat en tête](../assets/achats-bc.png)
 
 ### Suivre un avoir fournisseur
 1. Onglet **Avoirs fournisseurs**. Trois compteurs en haut : **À recevoir**, **Disponible**, **Déjà imputé**. Puis le tableau **« Ce que chacun nous doit »** par fournisseur, puis la liste des avoirs (recherche par n° d’avoir, fournisseur, statut, origine).

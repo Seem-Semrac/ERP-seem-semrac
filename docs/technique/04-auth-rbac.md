@@ -107,6 +107,25 @@ par toute la borne, IP « local »).
 ⚠ **Compte de secours (BOOTSTRAP)** : pas de fiche salarié ⇒ il ne peut **signer** ni réception, ni soldage, ni DA, ni PV
 de non-conformité (401). Il peut ouvrir les pages et les formulaires.
 
+## Stock › Mise en stock : écriture Stock revérifiée, alimentation sans droit Stock (lot F, 15/09/2026)
+
+- **Aucune nouvelle famille d'API** : toutes les routes du lot sont sous `/api/stock/…` (famille `stock` déjà mappée sur le
+  service Stock dans `API_FAM_SERVICE`). Écriture : direction (`all`), rôles `achats` et `logistique`, jeton
+  `ecrire:stock` ; lecture : commercial, bei, production, oas, qualité, maintenance, comptable.
+- **Revérification dans le handler** (`droitEcritureStock(c)` = `peutEcrireService(user, 'stock')`, contrôle actif sauf
+  `AUTH_ENFORCE=off`) → 403 « Réservé aux personnes qui ont l'écriture sur le Stock. » sur : accepter / annuler une ligne
+  à ranger, entrée manuelle, sortie, ajustement, création et modification des types d'objet et des zones, changement de
+  type ou d'emplacement d'une référence. Les lectures (`GET /api/stock/mise-en-stock`, `/types-objet`, `/zones`,
+  `/:id/emplacement/historique`) suivent le middleware (lecture Stock).
+- La page `/stock/service` reçoit `peutEcrire` : boutons d'écriture grisés pour un lecteur.
+- **Alimenter la file n'exige pas le droit Stock** : le PV de réception (écriture Expéditions), la décision fournisseur
+  (écriture Qualité) et l'acceptation d'un excédent (décision Direction) ajoutent leurs lignes **côté serveur**
+  (`ajouterAMettreEnStock`). Seul le **rangement** exige l'écriture Stock.
+- **Validations** : la soumission reste ouverte au connecté, **sauf** le type `excedent_reception` (403 : il ne naît que du
+  PV) ; sa décision reste réservée à la Direction.
+- ⚠ Rôle `qualite` : lecture seule sur le Stock — il décide du lot, il ne range pas. Rôle `production` : pas de sortie par
+  Stock › Gestion (la sortie matière de l'atelier reste `POST /api/production/sortie-matiere`).
+
 ## Cas particuliers
 - **`plans` (Plan/Bâtiment)** : **sans jeton**, lecture ouverte à tout connecté et écriture BE/Production/Maintenance/Qualité/Direction. **Avec jetons**, `lire:plans` / `ecrire:plans` décident seuls.
 - **`habilitations`** : **sans jeton**, géré par RH **et** Qualité (jeton `habilitations`), sans donner accès au reste de la RH. **Avec jetons**, suit le niveau accordé sur `rh` ou `qualite` — sinon fermer la RH par les cases laissait les habilitations grandes ouvertes.

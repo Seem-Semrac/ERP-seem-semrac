@@ -36,7 +36,14 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 
 ![achats-da](../assets/achats-da.png)
 
-### 4. Exiger un certificat matière sur un BC
+### 4. Dater un bon de commande de reliquat
+1. Achats › **Bons de commande** : un BC **`…-R1`** avec la pastille « Reliquat de BC-… · date à valider » est né d'un PV de réception (le fournisseur a annoncé un reliquat) — montant 0 € (porté par le BC d'origine), sans date d'arrivée.
+2. Demander la date au fournisseur, puis **Date d'arrivée** : le reliquat est validé et rejoint le calendrier des Expéditions.
+3. Tant qu'il n'est pas daté, personne ne l'attend (absent du calendrier).
+
+![achats-bc](../assets/achats-bc.png)
+
+### 5. Exiger un certificat matière sur un BC
 1. Achats › **Bons de commande**, colonne **Certificat matière** : **Exiger** ou **Retirer**, puis confirmer.
 2. BC déjà envoyé : rééditer son PDF (la mention y est imprimée) et le renvoyer au fournisseur.
 3. À la réception, le contrôleur confirme le certificat : sans lui, pas de PV conforme. Verrouillé (cadenas « PV conforme ») dès qu'un PV de réception conforme est signé.

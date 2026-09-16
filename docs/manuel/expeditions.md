@@ -20,7 +20,7 @@ Porte d'entrée et de sortie des marchandises, organisée par **sens du flux** :
 
 1. Onglet **Calendrier**, bloc « à réceptionner aujourd'hui » : cliquer **« Traiter »** sur la ligne du bon de commande. N° BL interne et N° d'affaire sont repris du BC.
 2. Saisir le **N° de commande fournisseur** et le **N° de BL fournisseur** (obligatoires).
-3. Lire le bandeau : la quantité enregistrée est le **reste à recevoir** du BC — **aucune quantité à saisir**. Exceptions : case **« Livraison partielle »** (le fournisseur annonce un reliquat : saisir la quantité livrée, le BC reste ouvert) et BC **sans quantité exploitable** (saisir la quantité lue sur le BL fournisseur).
+3. Lire le bandeau : la quantité **attendue** est le **reste à recevoir** du BC — **aucune quantité à saisir**. Seule exception : BC **sans quantité exploitable** (saisir la quantité lue sur le BL fournisseur). ⚠ Depuis le 15/09/2026, **plus de case « Livraison partielle »** : la quantité réellement reçue et un reliquat annoncé par le fournisseur se déclarent au **PV de contrôle**, ligne par ligne.
 4. Répondre à **« Réception hors France ? »** (obligatoire). Si **Oui** : **poids matière (kg)**, **N° de nomenclature (douane)**, **code EWX** (1 ou 2), **mode d'arrivée** (Routier, Maritime, Aérien, Ferroviaire, Messagerie / express).
 5. **« Valider la réception »** : un BL de réception est créé et rattaché au BC, la date d'arrivée réelle est posée ; la réception apparaît dans l'onglet **Réceptions** avec « PV à faire ». Une faute de frappe se rectifie ensuite par le lien **« Corriger »** (ni la quantité ni le stock ne changent).
 
@@ -30,12 +30,16 @@ Porte d'entrée et de sortie des marchandises, organisée par **sens du flux** :
 1. Onglet **Réceptions**, bouton **« PV à faire »** sur la réception (grisé avec un cadenas sans écriture Expéditions).
 2. Choisir **Conforme** ou **Non conforme** (rien n'est coché d'avance) et le **contrôleur** dans la liste (salariés actifs ayant l'écriture sur les Expéditions).
 3. Si le BC exige un **certificat matière** : cocher « Certificat matière reçu et conforme » s'il est là. **Sans cette case, pas de PV conforme** : le PV bascule en non conforme.
-4. **Conforme** : valider — le contenu entre en stock (ligne par ligne sur son article pour un BC à plusieurs articles, si la réception couvre toute la commande).
-5. **Non conforme** : la fenêtre affiche l'en-tête du BC et **toutes ses lignes** ; répondre **Oui / Non** sur chaque ligne (« Tout à Oui » pour les lignes sans écart), **observation obligatoire** sur chaque Non, **observation générale** facultative, gravité. Valider : une **NC « réception fournisseur »** part en Qualité avec une ligne par écart, et le lot part **toujours en quarantaine** — rien n'entre en stock, la Qualité décide de la suite.
+4. Remplir le **tableau des lignes** (affiché en Conforme **comme** en Non conforme) : **Qté prévue** (lecture), **Qté reçue** (pré-remplie avec la prévue, à corriger ; 0 si rien n'est arrivé), case **« Reliquat »** (visible si reçu < prévu : le fournisseur annonce le reste), **Observation** facultative. La colonne **Conforme ?** se calcule : « Non · quantitatif » (manque sans reliquat, ou excédent), « Non · qualitatif » (observation écrite), ou les deux. Bouton **« Tout reçu comme prévu »**.
+5. **Conforme** (toutes les lignes à « Oui » — un reliquat n'est pas un écart) : valider. Les quantités reçues partent dans **Stock › Rangement / Mise en stock** ; un reliquat crée un **BC de reliquat** aux Achats (date à valider).
+6. **Non conforme** : la fenêtre affiche en plus l'en-tête du BC, l'**observation générale** et la **gravité**. Il faut au moins une ligne en écart (ou le certificat absent). À la validation, **par ligne** : ligne conforme → Mise en stock ; manque sans reliquat → **NC quantitative** (le reçu part quand même en Mise en stock) ; **excédent** → le prévu en Mise en stock, **l'excédent soumis à la Direction** + NC quantitative ; **observation** → **NC qualitative** et la ligne part **en quarantaine** (la Qualité décide) ; certificat absent → NC « Certificats » et la réception reste bloquée en quarantaine. Une NC fournisseur **par ligne à problème**.
 
-![PV non conforme, lignes du bon de commande](../assets/form-expeditions-pv-non-conforme.png)
+![PV conforme, tableau des quantités avec un reliquat annoncé](../assets/form-expeditions-pv.png)
 
-> Sous un PV non conforme, la ligne dit ce que la Qualité en a fait : **« renvoyé au fournisseur · à expédier / expédié »**, **« dérogation fournisseur · entré en stock »**, **« entrée partielle 6/10 »** — ou **« en quarantaine — décision Qualité attendue »** tant que rien n'est décidé.
+![PV non conforme, observation et excédent](../assets/form-expeditions-pv-non-conforme.png)
+
+> Sous un PV non conforme, la ligne dit ce que la Qualité en a fait : **« renvoyé au fournisseur · à expédier / expédié »**, **« dérogation fournisseur · accepté »**, **« entrée partielle 6/10 »** — ou **« en quarantaine — décision Qualité attendue »** ; « N quarantaines : … » quand le PV en a créé plusieurs.
+> La notification de fin résume les effets (lignes en Mise en stock, NC, quarantaines, excédents, BC de reliquat) ; les messages orange restent affichés après le rechargement.
 
 > **OTD figé** — la date d'arrivée prévue est modifiable, mais l'ERP **gèle la première date promise** : c'est elle qui sert au calcul de l'OTD fournisseur. Un décalage de date ne rachète pas la ponctualité.
 
@@ -53,7 +57,7 @@ Porte d'entrée et de sortie des marchandises, organisée par **sens du flux** :
 > **Porte qualité** — le BL est **refusé** si le lot porte une NC ouverte ou est en quarantaine. Faire lever le blocage par la Qualité.
 
 ### Expédier un retour fournisseur
-1. Onglet **Envois**, carte **« Retours fournisseurs »** : y figurent les lots que la Qualité a décidé de **renvoyer** — BL / lot, fournisseur, pièce, **quantité à renvoyer**, avoir ou remplacement attendu, date de décision.
+1. Onglet **Envois**, carte **« Retours fournisseurs »** : y figurent les lots que la Qualité a décidé de **renvoyer** et les **excédents de réception refusés par la Direction** — BL / lot, fournisseur, pièce, **quantité à renvoyer**, avoir ou remplacement attendu, date de décision.
 2. Préparer le colis, puis cliquer **« Expédié »**.
 3. Renseigner, si vous l'avez, la **référence du bon de retour** ou le **n° de suivi** (facultatif), puis valider.
 4. La ligne quitte la liste ; la date et la personne sont enregistrées. Un second clic est refusé.

@@ -62,7 +62,7 @@ Sur cet écran, vous renseignez :
 - **N° BL interne** et **N° d'affaire** — repris du bon de commande, rien à ressaisir.
 - **N° de commande fournisseur** — le numéro de votre commande chez le fournisseur. **Obligatoire.**
 - **N° de BL fournisseur** — le numéro du bon de livraison joint au colis. **Obligatoire.**
-- **Aucune quantité à saisir** : le bandeau vert annonce la quantité enregistrée, c'est le **reste à recevoir** du bon de commande. Deux exceptions : la case **« Livraison partielle »** (le fournisseur livre en plusieurs fois : saisissez la quantité livrée) et un bon de commande **sans quantité exploitable** (bandeau jaune : saisissez la quantité lue sur le BL fournisseur).
+- **Aucune quantité à saisir** : le bandeau vert annonce la quantité **attendue**, c'est le **reste à recevoir** du bon de commande. Une seule exception : un bon de commande **sans quantité exploitable** (bandeau jaune : saisissez la quantité lue sur le BL fournisseur). La quantité réellement reçue et un **reliquat** annoncé par le fournisseur se déclarent au PV (étape 4) — il n'y a plus de case « Livraison partielle ».
 - **Réception hors France ?** — Oui ou Non, **obligatoire**. Si **Oui** : **poids matière (kg)**, **N° de nomenclature (douane)** (code douanier du produit), **code EWX** (1 ou 2) et **mode d'arrivée** (Routier, Maritime, Aérien, Ferroviaire, Messagerie / express), tous obligatoires.
 
 **➡️ Ensuite :** un bon de livraison de réception est créé et rattaché au BC, la date d'arrivée réelle est posée, et la réception apparaît dans l'onglet **Réceptions** avec « PV à faire », ses références fournisseur et, le cas échéant, la pastille « Hors France ». Une faute de frappe se rectifie par le lien **« Corriger »** (sans toucher à la quantité ni au stock). **Rien n'entre encore en stock** : enchaînez avec le **PV de contrôle**.
@@ -70,20 +70,21 @@ Sur cet écran, vous renseignez :
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/expeditions.md).
 
 ## Étape 4 — Contrôler à réception (PV de contrôle)
-**⬅️ Avant :** La commande vient d'être **réceptionnée**. Avant que les pièces entrent en stock, il faut **attester du contrôle**.
-**📝 Ici, vous :** onglet **Réceptions**, bouton **« PV à faire »** — vous déclarez si la réception est conforme ou non, et qui l'a contrôlée.
+**⬅️ Avant :** La commande vient d'être **réceptionnée**. Avant que les pièces partent vers le magasin, il faut **attester du contrôle**, ligne par ligne.
+**📝 Ici, vous :** onglet **Réceptions**, bouton **« PV à faire »** — vous saisissez la quantité reçue de chaque ligne, vous déclarez si la réception est conforme ou non, et qui l'a contrôlée.
 
-![PV de contrôle conforme : résultat, contrôleur choisi dans la liste, certificat matière confirmé](../../assets/form-expeditions-pv.png)
+![PV de contrôle conforme : résultat, contrôleur, certificat matière, tableau des quantités avec un reliquat annoncé](../../assets/form-expeditions-pv.png)
 
 Sur cet écran, vous renseignez :
 - **Résultat du contrôle** — **Conforme** ou **Non conforme** (rien n'est coché d'avance).
 - **Contrôleur** — choisi dans la liste des salariés actifs qui ont l'écriture sur les Expéditions ; vous êtes pré-sélectionné si vous en faites partie.
 - **Certificat matière reçu et conforme** — seulement si le bon de commande l'exige. **Sans cette case, pas de PV conforme** : le PV bascule en non conforme.
-- **Conforme** : rien d'autre. **Non conforme** : la fenêtre affiche tout le bon de commande — en-tête (fournisseur, dates, affaire, montant, conditions, notes, PDF) et **chaque ligne** avec **Oui / Non** ; une **observation est obligatoire** sur chaque ligne en Non. En bas, une **observation générale** (facultative) et la **gravité**.
+- **Tableau des lignes** (en Conforme comme en Non conforme) — pour chaque ligne : **Qté reçue** (pré-remplie avec la **Qté prévue**, à corriger), case **Reliquat** (si reçu < prévu et que le fournisseur annonce le reste), **Observation** facultative (un défaut constaté). La colonne **Conforme ?** se calcule : un écart de quantité sans reliquat ou un excédent = **quantitatif**, une observation = **qualitatif**.
+- **Conforme** : toutes les lignes à « Oui » (un reliquat n'est pas un écart). **Non conforme** : au moins une ligne en écart (ou le certificat absent) ; la fenêtre ajoute l'en-tête du bon de commande, une **observation générale** (facultative) et la **gravité**.
 
-![PV de contrôle non conforme : en-tête du bon de commande, lignes Oui / Non avec observation, observation générale, gravité](../../assets/form-expeditions-pv-non-conforme.png)
+![PV de contrôle non conforme : ligne avec observation, ligne en excédent, observation générale, gravité](../../assets/form-expeditions-pv-non-conforme.png)
 
-**➡️ Ensuite :** si **Conforme**, le contenu **entre en stock** (ligne par ligne sur son article pour un bon de commande à plusieurs articles) et la porte matière de l'affaire peut s'ouvrir. Si **Non conforme**, une **non-conformité** « réception fournisseur » part au service **Qualité** avec le détail des lignes en écart (détecteur « Réception »), et le lot part **toujours en quarantaine** : rien n'entre en stock, la Qualité décide (renvoi, dérogation, entrée partielle). Cette quarantaine **bloque un futur BL** tant qu'elle n'est pas traitée (voir la porte qualité de l'étape 1).
+**➡️ Ensuite :** les **quantités conformes** partent dans **Stock › Rangement / Mise en stock** : le magasin les range, et c'est au rangement que le stock est crédité et que la porte matière de l'affaire peut s'ouvrir. Chaque **ligne à problème** crée une **non-conformité fournisseur** en **Qualité** (quantitative, qualitative ou les deux, détecteur « Réception ») ; une ligne **avec observation** part **en quarantaine** (la Qualité décide : renvoi, dérogation, entrée partielle) ; un **excédent** est soumis à la **Direction** ; un **reliquat** annoncé crée un **bon de commande de reliquat** aux Achats, date à valider ; un certificat absent bloque toute la réception en quarantaine. Une quarantaine **bloque un futur BL** tant qu'elle n'est pas traitée (porte qualité de l'étape 1).
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/expeditions.md).
 

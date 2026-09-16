@@ -1115,9 +1115,22 @@ function confirmSend(msg){
 // (l'onglet actif est déjà préservé par le hash d'URL que reload() conserve). Plus de saut en haut de page / perte de contexte.
 function softReload(){
   try{ sessionStorage.setItem('__erpScroll', JSON.stringify({ p: location.pathname, h: location.hash||'', y: (window.scrollY||document.documentElement.scrollTop||0), t: Date.now() })); }catch(e){}
+  try{ if(__erpNotifsDurables.length) sessionStorage.setItem('__erpNotifs', JSON.stringify({ p: location.pathname, t: Date.now(), l: __erpNotifsDurables.slice(-12) })); }catch(e){}
   location.reload();
 }
 if(typeof window!=='undefined') window.softReload=softReload;
+// Notifications DURABLES (lot F, 16/09/2026) : un avertissement affiché juste avant un rechargement (PV, rangement, décision)
+// disparaissait en moins d'une seconde — alors qu'il est parfois la seule trace d'un effet raté (« à saisir à la main »).
+// notifDurable l'affiche longtemps et softReload le réaffiche sur la page rechargée (même page, 30 s au plus).
+// Le message est inséré tel quel (innerHTML, comme pushNotif) : l'appelant l'échappe.
+var __erpNotifsDurables=[];
+function notifDurable(type,icon,msg,dur){ var d0=dur||45000; pushNotif(type,icon,msg,d0); __erpNotifsDurables.push({ ty: type, ic: icon, m: String(msg), d: d0 }); }
+(function(){ try{
+  var raw=sessionStorage.getItem('__erpNotifs'); if(!raw) return; sessionStorage.removeItem('__erpNotifs');
+  var st=JSON.parse(raw); if(!st||st.p!==location.pathname||(Date.now()-(st.t||0))>30000) return;
+  (st.l||[]).forEach(function(n){ if(n&&n.m) notifDurable(n.ty||'warn', n.ic||'fa-triangle-exclamation', n.m, n.d||45000); });
+  __erpNotifsDurables=[];
+}catch(e){} })();
 (function(){ try{
   var raw=sessionStorage.getItem('__erpScroll'); if(!raw) return; sessionStorage.removeItem('__erpScroll');
   var st=JSON.parse(raw); if(!st||st.p!==location.pathname||(Date.now()-(st.t||0))>15000) return;

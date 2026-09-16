@@ -64,6 +64,11 @@ const M = [
   { file: 'form-qualite-perissable',  path: '/qualite/service', tabClick: '#qual-tab-perissables',   fn: "perOpen('')" },
   { file: 'form-qualite-capabilite',  path: '/qualite/service', tabClick: '#qual-tab-capabilite',    fn: "ccOpenModal()" },
   { file: 'form-qualite-plan-controle', path: '/qualite/service', tabClick: '#qual-tab-plan-controle', fn: "pcOpen('')" },
+  //   Lot F : décision sur un lot reçu qui couvre PLUSIEURS lignes du BC (certificat matière absent) — « Dérogation » cochée
+  //   dans le navigateur pour montrer le bloc « Part acceptée par ligne ». Nécessite une telle quarantaine en cours. Rien n'est envoyé.
+  { file: 'form-qualite-decision-fournisseur', path: '/qualite/service', tabClick: '#qual-tab-quarantaine', wait: 900,
+    fn: "(function(){var q=(window.QUAR_DATA||[]).filter(function(x){return x.statut==='en_cours'&&x.reception&&(x.reception.lignes||[]).length>1;})[0];if(!q) throw new Error('aucune quarantaine de réception sur plusieurs lignes');"
+      + "qfOpen(q.id);var r=document.querySelector('input[name=qf_dec][value=derogation]');if(r){r.checked=true;qfMaj();}})()" },
   // Sécurité (secOpen par entité)
   { file: 'form-securite-risque',     path: '/securite/service', tabClick: '#sec-tab-duer', fn: "secOpen('risques')", wait: 900 },
   { file: 'form-securite-incident',   path: '/securite/service', fn: "secOpen('incidents')" },
@@ -77,7 +82,8 @@ const M = [
   { file: 'form-expeditions-bl',      path: '/expeditions/service', fn: "expOpenModal('bl')" },
   { file: 'form-expeditions-bst',     path: '/expeditions/service', fn: "expOpenModal('bst')" },
   // Stock
-  { file: 'form-stock-article',       path: '/stock/service', fn: "stkOpenModal('article')" },
+  // Lot F : la fenêtre « Ajouter article » n'existe plus — une référence naît au rangement (Rangement / Mise en stock).
+  { file: 'form-stock-rangement',     path: '/stock/service', fn: "(function(){ if(!STK_FILE.length) throw new Error('aucune ligne à ranger'); stkOuvrirRangement(STK_FILE[0].id); })()", wait: 700 },
   { file: 'form-stock-da',            path: '/stock/service', fn: "stkOpenModal('da')" },
   // Maintenance : voir plus bas (mntOpenOM) — il n'existe PAS de bouton « Nouvel OM ».
   // RH
@@ -152,20 +158,24 @@ const M = [
   { file: 'form-expeditions-reception-correction', path: '/expeditions/service', tabClick: '#exp-tab-receptions', wait: 800,
     fn: "(function(){var bs=Array.prototype.slice.call(document.querySelectorAll('.exp-rec-edit'));var hf=function(el){var r=(typeof EXP_BLREC!=='undefined'&&EXP_BLREC)?EXP_BLREC[el.getAttribute('data-bl')]:null;return r&&r.hors_france===true;};"
       + "var btn=bs.filter(hf)[0]||bs[0];if(!btn) throw new Error('aucun bouton « Corriger »');expOpenCorrectionReception(btn.getAttribute('data-bl'));})()" },
-  //   PV conforme : une réception « PV à faire » ; BC qui exige le certificat de préférence. La case certificat n'est
-  //   cochée que si le BC l'exige vraiment (plus de case forcée à l'écran : la capture montrerait une exigence inexistante).
-  { file: 'form-expeditions-pv', path: '/expeditions/service', tabClick: '#exp-tab-receptions', wait: 800,
-    fn: "(function(){var bs=Array.prototype.slice.call(document.querySelectorAll('.exp-pv-open'));var cert=function(el){var b=EXP_BC.find(function(x){return x.id===el.getAttribute('data-bc');});return b&&b.certificat_matiere_requis;};"
-      + "var btn=bs.filter(cert)[0]||bs[0];if(!btn) throw new Error('aucune réception « PV à faire »');expOpenPV(btn.getAttribute('data-bc'),btn.getAttribute('data-bl'));"
-      + "document.getElementById('pv_res_ok').checked=true;expPVToggle();if(cert(btn)) document.getElementById('pv_cert').checked=true;})()" },
-  //   PV non conforme : réception du BC qui a le PLUS de lignes (tableau parlant), 1re ligne en « Non » avec son observation,
-  //   les autres à « Oui », observation générale ; la fenêtre défile jusqu'à la case certificat (sinon au bloc « Bon de commande ») : en-tête, lignes, observation.
+  //   PV conforme (lot F, 15/09/2026) : réception du BC qui a le PLUS de lignes ; tableau des quantités (prévue / reçue) visible
+  //   en Conforme ; « Tout reçu comme prévu », puis la DERNIÈRE ligne reçue à moitié avec « Reliquat » coché (un reliquat
+  //   annoncé n'est pas un écart). La case certificat n'est cochée que si le BC l'exige vraiment. Rien n'est envoyé.
+  { file: 'form-expeditions-pv', path: '/expeditions/service', tabClick: '#exp-tab-receptions', wait: 900,
+    fn: "(function(){var bs=Array.prototype.slice.call(document.querySelectorAll('.exp-pv-open'));var bcDe=function(el){return EXP_BC.find(function(x){return x.id===el.getAttribute('data-bc');});};var nb=function(el){var b=bcDe(el);return b&&Array.isArray(b.lignes)?b.lignes.length:0;};"
+      + "bs.sort(function(a,b){return nb(b)-nb(a);});var btn=bs[0];if(!btn) throw new Error('aucune réception « PV à faire »');var bc=bcDe(btn);expOpenPV(btn.getAttribute('data-bc'),btn.getAttribute('data-bl'));"
+      + "document.getElementById('pv_res_ok').checked=true;expPVToggle();if(bc&&bc.certificat_matiere_requis) document.getElementById('pv_cert').checked=true;expPvToutRecu();"
+      + "var lg=(bc&&bc.lignes)||[];if(lg.length>1){var k=Number(lg[lg.length-1].idx);var p=_pvPrevues[k];var i=document.getElementById('pv_lqte_'+k);if(i&&p!=null&&p>1){i.value=String(Math.floor(p/2));expPvLigneMaj(k);var c=document.getElementById('pv_lrel_'+k);if(c){c.checked=true;expPvLigneMaj(k);}}}"
+      + "var t=document.getElementById('pv_lignes');if(t&&t.scrollIntoView) t.scrollIntoView({block:'center'});})()" },
+  //   PV non conforme : réception du BC qui a le PLUS de lignes (tableau parlant) : 1re ligne avec une observation (qualitatif),
+  //   2e ligne reçue avec 2 pièces de plus que prévu (excédent, quantitatif), observation générale ; la fenêtre défile jusqu'au tableau des lignes.
   { file: 'form-expeditions-pv-non-conforme', path: '/expeditions/service', tabClick: '#exp-tab-receptions', wait: 900,
     fn: "(function(){var bs=Array.prototype.slice.call(document.querySelectorAll('.exp-pv-open'));var nb=function(el){var b=EXP_BC.find(function(x){return x.id===el.getAttribute('data-bc');});return b&&Array.isArray(b.lignes)?b.lignes.length:0;};"
       + "bs.sort(function(a,b){return nb(b)-nb(a);});var btn=bs[0];if(!btn) throw new Error('aucune réception « PV à faire »');expOpenPV(btn.getAttribute('data-bc'),btn.getAttribute('data-bl'));"
-      + "document.getElementById('pv_res_nc').checked=true;expPVToggle();expPvToutOui();var r=document.querySelector('input[name=pv_l_0][value=non]');if(r){r.checked=true;expPvLigneMaj(0);"
-      + "document.getElementById('pv_lobs_0').value='Rayures sur 2 tubes';}document.getElementById('pv_obs_gen').value='Emballage abîmé à l’arrivée';"
-      + "var t=document.getElementById('pv_cert_box');if(!t||t.style.display==='none') t=document.getElementById('pv_nc_box');if(t&&t.scrollIntoView) t.scrollIntoView({block:'start'});})()" },
+      + "document.getElementById('pv_res_nc').checked=true;expPVToggle();expPvToutRecu();var o0=document.getElementById('pv_lobs_0');if(o0){o0.value='Rayures sur 2 pièces';expPvLigneMaj(0);}"
+      + "var q1=document.getElementById('pv_lqte_1');if(q1&&_pvPrevues[1]!=null){q1.value=String(Number(_pvPrevues[1])+2);expPvLigneMaj(1);}"
+      + "document.getElementById('pv_obs_gen').value='Emballage abîmé à l’arrivée';"
+      + "var t=document.getElementById('pv_lignes');if(t&&t.scrollIntoView) t.scrollIntoView({block:'start'});})()" },
   // Environnement — ⚠ les noms d'ENTITÉ diffèrent des ids d'onglet
   { file: 'form-environnement-dechets', path: '/environnement/service', tabClick: '#sec-tab-dechets', fn: "secOpen('dechets')" },
   { file: 'form-environnement-mesures', path: '/environnement/service', tabClick: '#sec-tab-rejets',  fn: "secOpen('mesures-env')" },
@@ -179,6 +189,8 @@ const M = [
   { file: 'form-rh-correction',       path: '/rh/temps',    fn: "rhOuvrirModif('P-DEMO','Dupont Jean','08:00','17:00')" },
   // Direction
   { file: 'form-direction-refus',     path: '/direction/service', fn: "decideValidation('demo','refuse')" },
+  //   Lot F : refus d'un EXCÉDENT de réception — fenêtre sans « annulation / révision », note « retour au fournisseur ». Rien n'est envoyé.
+  { file: 'form-direction-refus-excedent', path: '/direction/service', fn: "decideValidation('demo','refuse',1)" },
   { file: 'form-direction-jalon-traite', path: '/direction/service', tabClick: '#dir-tab-2', fn: "document.querySelector('.jt-btn').click()", wait: 800 },
   { file: 'form-direction-source',    path: '/direction/service', fn: "document.querySelector('.src-eye').click()", wait: 1600, noFields: true },  // fenêtre de consultation : aucun champ de saisie
 ]

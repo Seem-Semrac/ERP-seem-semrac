@@ -49,6 +49,10 @@ Sur cet écran, vous renseignez :
 
 **➡️ Ensuite :** la décision repart aussitôt vers le **service d'origine** : la demande validée est débloquée et suit son cours, la demande refusée revient au service avec votre motif. La ligne quitte la file.
 
+**Cas de l'excédent de réception** (domaine Expéditions, type « Excédent de réception ») : le PV d'une livraison a compté plus de pièces que prévu. Boutons **« Accepter »** (l'excédent part dans Stock › Rangement / Mise en stock) et **« Refuser »** (motif obligatoire, sans annulation / révision : rien n'entre en stock et un **retour à expédier** est créé aux Expéditions). Si la ligne est aussi en quarantaine, l'acceptation attend la décision de la Qualité.
+
+![Refuser un excédent de réception](../../assets/form-direction-refus-excedent.png)
+
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/direction.md).
 
 ## Étape 4 — Autoriser un paiement de facture

@@ -95,7 +95,7 @@
       <li>La plupart des PV arrivent <b>automatiquement</b> depuis les autres services (OAS, Production, Expéditions) : la création manuelle sert surtout aux cas hors flux.</li>
       <li>Utilisez le filtre d'origine avant de chercher : un PV de réception se trouve sous « BL Fournisseur », pas sous « BDT » (et un retour de sous-traitance sous « BL Sous-traitant »).</li>
       <li><b>Les PV de réception fournisseur se font aux Expéditions</b> (onglet Réceptions → « PV à faire »), par une personne qui a l'<b>écriture sur les Expéditions</b>, choisie comme contrôleur dans une liste. ⚠ Depuis le 14/09/2026, un compte Qualité <b>ne peut plus signer un PV de réception</b> : si c'est votre rôle dans l'entreprise, faites cocher « Écrire » sur les Expéditions dans votre fiche salarié (RH → Employés) — <b>en gardant cochés vos autres services</b>, Qualité compris, sinon vous les perdriez.</li>
-      <li>Le PV de réception garde en base le détail du contrôle : les lignes du bon de commande avec la réponse Oui / Non et l'observation, l'observation générale, le certificat matière (non requis, confirmé ou absent) et le contrôleur. Ce détail n'est pas repris dans le tableau de cet onglet : pour le lire, ouvrez la non-conformité liée ou la quarantaine du lot, qui en reprennent les écarts.</li>
+      <li>Le PV de réception garde en base le détail du contrôle : les lignes du bon de commande avec la quantité prévue, la quantité reçue, le reliquat annoncé, la nature de l'écart et l'observation, l'observation générale, le certificat matière (non requis, confirmé ou absent) et le contrôleur. Ce détail n'est pas repris dans le tableau de cet onglet : pour le lire, ouvrez la non-conformité liée ou la quarantaine du lot, qui en reprennent les écarts.</li>
     </ul>
     <div class="astuce"><b>Astuce :</b> le bouton « Libérer lot » d'une ligne de PV est le raccourci le plus court vers l'onglet Libération Lots quand le contrôle final vient d'être passé.</div>
   </section>
@@ -324,7 +324,7 @@
   <!-- ══════════════ 6. QUARANTAINE ══════════════ -->
   <section class="tab" id="tab-quarantaine">
     <div class="tab-head"><span class="tab-num">6</span><h2>Quarantaine</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> La quarantaine isole tout objet douteux — lot bloqué au contrôle final, palette, outillage, réception fournisseur — en attendant une décision. C'est un flux <b>séparé</b> de la libération : ce qui entre ici (depuis une NC, un blocage de libération, ou un PV de réception non conforme) doit en sortir par une décision tracée. Pour un lot <b>reçu d'un fournisseur</b>, cette décision a ses propres branches — renvoi, dérogation fournisseur, entrée partielle — parce qu'elle engage aussi le stock, un avoir et une expédition de retour.</p>
+    <p class="tab-but"><b>À quoi ça sert.</b> La quarantaine isole tout objet douteux — lot bloqué au contrôle final, palette, outillage, réception fournisseur — en attendant une décision. C'est un flux <b>séparé</b> de la libération : ce qui entre ici (depuis une NC, un blocage de libération, ou un PV de réception non conforme) doit en sortir par une décision tracée. Pour un lot <b>reçu d'un fournisseur</b>, cette décision a ses propres branches — renvoi, dérogation fournisseur, entrée partielle — parce qu'elle engage aussi le stock, un avoir et une expédition de retour. Depuis le 15/09/2026, ce que vous acceptez ne crédite plus le stock directement : il part dans <b>Stock › Rangement / Mise en stock</b>, où le magasin le range.</p>
 
     <h3>Ce que vous voyez</h3>
     <p>Trois tuiles KPI : <b>Lots en quarantaine</b> (en attente de décision), <b>Durée max (jours)</b> (lot le plus ancien), <b>Libérés (total)</b>. Puis le tableau : N°&nbsp;Quarantaine, Lot / Réf., Pièce, Client, Motif, Mise en Q., Durée (j), Statut, Actions. La durée passe en orange au-delà de 2 jours et en rouge au-delà de 5.</p>
@@ -338,28 +338,38 @@
       <img src="../../assets/qualite-quarantaine.png" alt="Capture de l'onglet Quarantaine" loading="lazy">
       <figcaption><b>Quarantaine</b> — surveillez la colonne Durée : rouge = plus de 5 jours sans décision.</figcaption>
     </figure>
-    <p>⚠ capture à rafraîchir — le bouton rouge « Décider » et la fenêtre de décision sur un lot reçu d'un fournisseur ne figurent pas encore sur la capture ci-dessus.</p>
+    <p>⚠ capture à rafraîchir — le bouton rouge « Décider » ne figure pas encore sur la capture ci-dessus ; la fenêtre de décision est illustrée plus bas.</p>
 
     <h3>Pas à pas — décider d'un lot reçu d'un fournisseur (bouton « Décider »)</h3>
-    <p>Un <b>PV de contrôle de réception non conforme</b> (Expéditions → Réceptions) envoie <b>toujours</b> le lot en quarantaine, avec une non-conformité « réception fournisseur ». Rien n'est entré en stock : c'est ici qu'on tranche.</p>
-    <p>Le <b>motif de mise en quarantaine</b> et la <b>description de la NC</b> reprennent le détail du contrôle, une ligne par écart : l'observation générale, puis « Ligne n · référence · désignation : observation » pour chaque ligne du bon de commande jugée non conforme, puis « Certificat matière absent ou non conforme » si le bon de commande l'exigeait et qu'il manquait, et le nom du contrôleur. Quand une seule ligne est en écart, la NC porte aussi sa référence et sa désignation ; le nombre de pièces est la quantité reçue.</p>
+    <p>Au <b>PV de contrôle de réception</b> (Expéditions → Réceptions), le contrôleur saisit la quantité reçue de chaque ligne du bon de commande. Ce qui arrive ici :</p>
+    <ul class="points">
+      <li><b>Une non-conformité fournisseur par ligne à problème</b> (type « Fournisseur », détecteur « Réception ») : <b>quantitative</b> pour un écart de quantité (nature « Logistique - Quantité », nombre de pièces = le manque ou l'excédent), <b>qualitative</b> quand une observation est écrite (nature « À requalifier » : à vous de préciser), ou les deux ; plus une NC « Logistique - Certificats » si le certificat matière exigé manque. La description reprend le PV, la ligne, l'écart chiffré, l'observation et le contrôleur.</li>
+      <li><b>Une quarantaine par ligne qualitative</b> (motif « Ligne n · référence · désignation — écart », quantité = ce qui était prévu et a été reçu), et <b>une quarantaine pour le certificat absent</b> qui bloque toute la réception (hors lignes déjà en quarantaine). Un PV peut donc en créer plusieurs — ou <b>aucune</b> si les écarts sont seulement des quantités : les lignes conformes sont déjà parties en Mise en stock.</li>
+      <li>Les <b>pièces reçues en trop</b> ne sont jamais en quarantaine : elles attendent la décision de la <b>Direction</b> ; quand leur ligne est en quarantaine, la Direction ne peut les accepter qu'<b>après votre décision</b>.</li>
+    </ul>
     <ol class="steps">
       <li>Sur la ligne du lot, cliquez le bouton rouge <b>« Décider »</b>. La fenêtre rappelle le <b>fournisseur</b>, le <b>n° de bon de commande</b>, le <b>n° de BL</b>, la <b>NC</b> et le <b>motif de mise en quarantaine</b>, affiché ligne par ligne (dans la liste, le motif complet s'affiche au survol).</li>
       <li>Vérifiez la <b>quantité du lot</b> : elle est reprise du bon de livraison. Ne la corrigez que si elle est <b>inconnue</b>.</li>
       <li>Choisissez ce qu'on fait du lot :
         <ul class="points">
           <li><b>Renvoyer au fournisseur</b> — tout le lot repart, <b>rien n'entre en stock</b>.</li>
-          <li><b>Dérogation avec le fournisseur</b> — le lot est <b>accepté en l'état</b> et <b>entre en stock</b>. Vous pouvez noter la <b>réf. de la dérogation</b> et la <b>réfaction obtenue (€ HT)</b> : une réfaction crée un avoir fournisseur.</li>
-          <li><b>Entrée partielle en stock</b> — saisissez la <b>quantité acceptée</b> (c'est elle qui entre en stock ; le reste s'affiche à côté), puis dites si le reste <b>repart chez le fournisseur</b> ou <b>part au rebut chez nous</b>.</li>
+          <li><b>Dérogation avec le fournisseur</b> — le lot est <b>accepté en l'état</b> et part dans <b>Stock › Mise en stock</b> (le stock est crédité au rangement). Vous pouvez noter la <b>réf. de la dérogation</b> et la <b>réfaction obtenue (€ HT)</b> : une réfaction crée un avoir fournisseur.</li>
+          <li><b>Entrée partielle en stock</b> — saisissez la <b>quantité acceptée</b> (celle qui part dans Stock › Mise en stock ; le reste s'affiche à côté), puis dites si le reste <b>repart chez le fournisseur</b> ou <b>part au rebut chez nous</b>.</li>
         </ul>
       </li>
+      <li>Si le lot couvre <b>plusieurs articles</b> du bon de commande (typiquement : certificat matière absent), un bloc bleu <b>« Part acceptée par ligne du bon de commande »</b> apparaît : une case par ligne, avec la quantité en quarantaine. En <b>dérogation</b>, il est pré-rempli (tout est accepté) ; en <b>entrée partielle</b>, saisissez ce qui est accepté sur <b>chaque</b> ligne (0 sur une ligne dont rien n'est gardé) — la quantité acceptée devient la somme des lignes. Chaque ligne part en Mise en stock sous sa propre référence.</li>
       <li>Pour un <b>renvoi</b> ou une <b>entrée partielle</b>, choisissez la <b>compensation du fournisseur</b> : <b>Avoir</b> (inscrit aux Achats, montant pré-rempli au <b>prix unitaire du bon de commande</b> et modifiable) ou <b>Remplacement</b> (le fournisseur relivre : son bon de commande <b>rouvre sa réception</b> de la quantité non acceptée).</li>
       <li>Saisissez le <b>motif de la décision</b> — obligatoire, <b>3 caractères minimum</b> : ce qui a été constaté et ce qui a été convenu avec le fournisseur.</li>
-      <li>Cliquez <b>« Enregistrer la décision »</b>. L'ERP résume ce qu'il a fait (entrée en stock, quantité à renvoyer, avoir inscrit, remplacement attendu) et signale tout ce qui n'a pas pu se faire tout seul.</li>
+      <li>Cliquez <b>« Enregistrer la décision »</b>. L'ERP résume ce qu'il a fait (« N accepté(s), inscrit(s) dans Stock › Mise en stock (à ranger) », quantité à renvoyer, avoir inscrit, remplacement attendu) et signale tout ce qui n'a pas pu se faire tout seul ; ces messages restent affichés après le rechargement. La colonne de suite du lot indique « Part acceptée → Stock › Mise en stock ».</li>
     </ol>
+    <figure class="shot">
+      <img src="../../assets/form-qualite-decision-fournisseur.png" alt="Fenêtre de décision sur un lot reçu non conforme, part acceptée par ligne" loading="lazy">
+      <figcaption><b>Décider d'un lot reçu</b> — réception bloquée faute de certificat matière sur un bon de commande à deux articles : « Dérogation » choisie, le bloc « Part acceptée par ligne du bon de commande » est pré-rempli (8 et 6), puis réfaction et motif.</figcaption>
+    </figure>
     <ul class="points">
       <li>Le <b>rebut</b> décidé ici est inscrit au <b>registre des déchets</b> du service Environnement.</li>
-      <li><b>Bon de commande à plusieurs articles</b> : l'entrée en stock se fait ligne par ligne, sur l'article de chaque ligne, <b>seulement si tout le lot est accepté</b> (dérogation sur tout le lot). Une entrée partielle ne dit pas quelles lignes entrent : rien n'est crédité automatiquement et l'ERP le signale (« Stock non crédité » ou « Entrée en stock incomplète »).</li>
+      <li><b>Bon de commande à plusieurs articles</b> : une entrée partielle <b>exige</b> la part acceptée de chaque ligne — l'ERP n'invente jamais quelle référence entre en stock. Sans elle, ou si la somme ne fait pas la quantité acceptée, la décision est refusée <b>sans être consommée</b> : corrigez et renvoyez.</li>
+      <li>La <b>matière</b> redevient disponible pour la Production quand la part acceptée est <b>rangée</b> dans le Stock (pas au moment de votre décision).</li>
       <li>L'<b>avoir</b> part dans <b>Achats → Avoirs fournisseurs</b>, au statut « À recevoir » : c'est l'acheteur qui le réclame et le suit ensuite.</li>
       <li>Le <b>retour</b> à expédier apparaît dans <b>Expéditions → Envois</b>, carte « Retours fournisseurs ».</li>
     </ul>
@@ -380,7 +390,8 @@
     <ul class="points">
       <li>Un objet en quarantaine bloque les BL qui le concernent (porte qualité côté Expéditions).</li>
       <li>L'entrée en quarantaine se fait depuis une NC (onglet Non-Conformités), par le blocage d'un lot à la libération, ou par un <b>PV de contrôle de réception non conforme</b> — pas directement ici.</li>
-      <li><b>Un PV de réception non conforme met toujours le lot en quarantaine</b>, quelle que soit la suite envisagée : c'est ce qui garantit qu'aucune marchandise refusée n'entre en stock sans décision tracée.</li>
+      <li><b>Une ligne avec observation, ou une réception sans certificat exigé, part toujours en quarantaine</b> : c'est ce qui garantit qu'aucune marchandise douteuse n'entre en stock sans décision tracée. Un simple écart de quantité ne crée qu'une non-conformité.</li>
+      <li>Les <b>retours d'excédent</b> refusés par la Direction apparaissent aussi dans la liste (lot « QEXC-… », déjà décidé, renvoi au fournisseur) : il n'y a rien à décider.</li>
     </ul>
     <div class="astuce"><b>Astuce :</b> réservez la branche « Validation managériale » aux cas à enjeu (client sensible, coût élevé) : la Direction est notifiée et sa décision s'applique sans autre manipulation.</div>
   </section>

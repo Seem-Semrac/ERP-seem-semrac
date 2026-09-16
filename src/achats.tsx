@@ -571,7 +571,9 @@ export const pageServiceAchats = (
       const recu = !!b.reception || !!b.bl_id || _RECU.includes(String(b.statut || ''))
       // La date se fige des que le fournisseur a valide : c'est son engagement.
       // La reception fige aussi, mais elle arrive plus tard dans le circuit.
-      return { ...b, recu, dateFigee: !!b.accuse || recu, motifGel: b.accuse ? 'valid\u00e9e par le fournisseur' : 'r\u00e9ceptionn\u00e9e' }
+      // Lot F : un BC de reliquat \u00ab date \u00e0 valider \u00bb sans date n'est pas fig\u00e9 par la validation fournisseur (m\u00eame r\u00e8gle que le serveur).
+      const reliquatSansDate = b.date_a_valider === true && !b.prevue
+      return { ...b, recu, dateFigee: (!!b.accuse && !reliquatSansDate) || recu, motifGel: b.accuse ? 'valid\u00e9e par le fournisseur' : 'r\u00e9ceptionn\u00e9e' }
     })
   const BC_A_DATER = BCS.filter((b: any) => !b.prevue && !b.recu).length
   // Certificat matière (Lot D) : exigence portée par le BC. `certificat_col === false` sur TOUTES les
@@ -586,10 +588,21 @@ export const pageServiceAchats = (
     return `${badge}<div style="margin-top:4px;"><button type="button" class="ach-bc-cert" data-id="${escX(b.id)}" title="${b.certificat_requis ? 'Ne plus exiger de certificat matière pour ce bon de commande' : 'Exiger un certificat matière pour ce bon de commande'}" style="padding:3px 9px;background:${b.certificat_requis ? '#f1f5f9' : '#ede9fe'};color:${b.certificat_requis ? '#475569' : '#5b21b6'};border:none;border-radius:7px;font-size:.64rem;font-weight:700;cursor:pointer;white-space:nowrap;">${b.certificat_requis ? '<i class="fas fa-xmark" style="margin-right:4px;"></i>Retirer' : '<i class="fas fa-certificate" style="margin-right:4px;"></i>Exiger'}</button></div>`
   }
 
+  // Lot F (15/09/2026) — BC de RELIQUAT généré par un PV de réception : « Reliquat de BC-… · date à valider » tant que
+  // la date d'arrivée n'est pas fixée (bouton « Date d'arrivée » ci-contre), puis « Reliquat de BC-… ».
+  const badgeReliquat = (b: any): string => {
+    if (!b.reliquat_de && !b.date_a_valider) return ''
+    const txt = (b.reliquat_de ? 'Reliquat de ' + b.reliquat_de : 'Reliquat') + (b.date_a_valider ? ' · date à valider' : '')
+    const titre = b.date_a_valider
+      ? 'Reliquat annoncé par le fournisseur au PV de réception : fixez la date d’arrivée pour qu’il rejoigne le calendrier des Expéditions'
+      : 'Reliquat annoncé par le fournisseur au PV de réception'
+    return `<div style="margin-top:4px;"><span title="${escX(titre)}" style="display:inline-flex;align-items:center;gap:4px;background:${b.date_a_valider ? '#fef3c7' : '#e0f2fe'};color:${b.date_a_valider ? '#92400e' : '#0369a1'};border-radius:999px;padding:2px 9px;font-size:.62rem;font-weight:800;white-space:nowrap;"><i class="fas fa-boxes-stacked"></i>${escX(txt)}</span></div>`
+  }
+
   const rowBC = (b: any) => `
     <tr data-num="${escX(b.num_bc)}" data-fournisseur="${escX(b.fournisseur)}" data-articles="${escX(b.articles)}" data-affaire="${escX(b.num_affaire)}" data-statut="${escX(b.statut)}"
         style="border-bottom:1px solid #f9fafb;" onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">
-      <td style="${TD}"><div style="font-weight:700;color:#0369a1;">${escX(b.num_bc)}</div><div style="font-size:.63rem;color:#94a3b8;">${b.type === 'st' ? 'Sous-traitant' : 'Fournisseur'}${b.da_id ? ' \u00b7 ' + escX(b.da_id) : ''}</div></td>
+      <td style="${TD}"><div style="font-weight:700;color:#0369a1;">${escX(b.num_bc)}</div><div style="font-size:.63rem;color:#94a3b8;">${b.type === 'st' ? 'Sous-traitant' : 'Fournisseur'}${b.da_id ? ' \u00b7 ' + escX(b.da_id) : ''}</div>${badgeReliquat(b)}</td>
       <td style="${TD}font-weight:600;color:#374151;">${escX(b.fournisseur)}</td>
       <td style="${TD}color:#6b7280;font-size:.75rem;max-width:230px;">${escX(b.articles)}</td>
       <td style="${TD}text-align:center;font-size:.73rem;color:#6366f1;font-weight:700;">${escX(b.num_affaire) || '\u2014'}</td>
@@ -1390,7 +1403,7 @@ export const pageServiceAchats = (
         if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Echec de l enregistrement.',7000); return; }
         var num=_achBcCur.num_bc;
         achFermerBcDate();
-        pushNotif('ok','fa-calendar-check','Arrivee du '+num+' fixee au '+d+'.'+(j.date_livraison_initiale?' 1re date gardee pour l OTD.':''),5000);
+        pushNotif('ok','fa-calendar-check','Arrivee du '+num+' fixee au '+d+'.'+(j.date_livraison_initiale?' 1re date gardee pour l OTD.':'')+(j.date_validee?' Reliquat : date validee, il rejoint le calendrier des Expeditions.':''),5000);
         // On reste sur CET onglet apres rechargement (l IIFE de fin de script relit le hash).
         location.hash='bc';
         setTimeout(function(){softReload();},800);

@@ -3,103 +3,111 @@
 > Comment ça marche **étape par étape** : ce qui arrive **avant**, ce que **vous remplissez ici** (et pourquoi), et **où ça part ensuite**. Écrit pour un nouvel utilisateur.
 
 ## En bref — le rôle du service dans la chaîne
-Le service Stock est le **magasin** de l'ERP : c'est lui qui sait, à tout instant, combien de matière et de consommables sont disponibles. En entrée, il reçoit les livraisons des fournisseurs (à la suite des commandes passées par les Achats) et les besoins de la production. En sortie, il diminue à chaque consommation en atelier, surveille les niveaux, et **déclenche les réapprovisionnements** : dès qu'un article passe sous son point de commande, le Stock émet une demande d'achat qui part vers les Achats. Le service produit donc deux choses : une **image fiable du stock en temps réel** (pour tout le monde) et des **demandes d'achat** (pour relancer les fournisseurs).
+Le service Stock est le **magasin** de l'ERP : c'est lui qui sait, à tout instant, combien de matière et de consommables sont disponibles, et **où** ils sont rangés. En entrée, il reçoit ce que les Expéditions ont **contrôlé conforme** au PV de réception (livraisons des fournisseurs commandées par les Achats), la part d'un lot non conforme que la Qualité a **acceptée**, les pièces en trop que la Direction a **validées**, et les entrées manuelles. Tout cela arrive dans la liste **« À ranger »** : **rien n'est crédité avant le rangement**, et la matière d'une affaire n'est disponible pour les bons de travail qu'une fois rangée. En sortie, le stock diminue à chaque consommation, se corrige par inventaire, et **déclenche les réapprovisionnements** : dès qu'un article passe sous son point de commande, le Stock émet une demande d'achat vers les Achats.
 
-## Étape 1 — Ajouter un article au catalogue
-**⬅️ Avant :** Un nouveau besoin apparaît — une matière, un consommable, un produit chimique — que l'ERP ne connaît pas encore. Avant de pouvoir suivre son stock, il faut le créer.
-**📝 Ici, vous :** créez la fiche de l'article et fixez ses seuils d'alerte.
+## Étape 1 — Ranger ce qui arrive (Accepter l'entrée en stock)
+**⬅️ Avant :** Une livraison fournisseur a été réceptionnée et son **PV de contrôle** fait aux Expéditions : les quantités conformes ont été inscrites, référence par référence, dans **Rangement / Mise en stock › À ranger**. (Autres arrivées possibles : part acceptée par la Qualité, excédent validé par la Direction, entrée manuelle — étape 3.)
+**📝 Ici, vous :** rangez physiquement la marchandise et acceptez la ligne : type d'objet et zone de rangement.
 
-![Formulaire d'ajout d'un article au catalogue](../../assets/form-stock-article.png)
+![Liste À ranger](../../assets/stock-mes.png)
+
+![Fenêtre Accepter l'entrée en stock](../../assets/form-stock-rangement.png)
 
 Sur cet écran, vous renseignez :
-- **Designation (nom complet)** — le nom clair qui s'affichera partout dans les listes ; écrivez-le en entier.
-- **Reference** — le code court (interne ou fournisseur), pratique pour retrouver l'article à la recherche.
-- **Categorie** — la famille (matière première, consommable, chimique, emballage…) : elle sert à filtrer et regrouper le stock.
-- **Unite** — comment on compte l'article (kg, L, pièce, bobine…) ; toutes les quantités suivront cette unité.
-- **Seuil mini (stock securite)** — la réserve de sécurité : en dessous, l'article passe en critique (rouge).
-- **Point de commande** — le niveau qui déclenche l'alerte « il faut recommander » (toujours au-dessus du seuil mini).
-- **Seuil maxi** — le plafond à ne pas dépasser, repère haut des jauges.
-- **Quantite a commander (EOQ)** — la quantité qu'on recommande d'un coup ; elle pré-remplit les futures demandes d'achat.
+- **Type d'objet** — la famille (Matière première, Accessoire, Consommable, Outillage, Produit chimique, EPI…) ; l'ERP en **propose** un, vérifiez-le. C'est lui qui donne la liste des zones.
+- **Zone de rangement** — seulement pour une **nouvelle référence** (ou une référence sans emplacement) : choisissez-la dans la liste du type, elle devient son **emplacement fixe**. Une référence connue garde son emplacement, affiché verrouillé.
+- **Nouvelle zone pour ce type** — si la zone n'existe pas encore (obligatoire quand le type n'a aucune zone) : elle rejoint la liste du type.
 
-**➡️ Ensuite :** l'article rejoint le **catalogue** et apparaît dans l'onglet « Stock en temps réel ». Ce sont surtout les trois seuils (mini, point de commande, maxi) qui comptent : sans eux, aucune alerte de réapprovisionnement ne se déclenchera. L'article devient sélectionnable dans tous les mouvements (entrée, sortie, ajustement).
+**➡️ Ensuite :** le stock de la référence est **crédité** (mouvement « Mise en stock » dans l'onglet Mouvements), la ligne passe dans « Derniers rangements ». Quand toute la matière des bons de commande d'une affaire est contrôlée et rangée, les **bons de travail de l'affaire passent « matière OK »** : la Production peut lancer. Une ligne erronée s'**annule** avec un motif (rien n'est crédité).
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/stock.md).
 
-## Étape 2 — Saisir une entrée (réception de stock)
-**⬅️ Avant :** Une livraison arrive au magasin. Le fournisseur a expédié la marchandise commandée par les Achats, avec son bon de livraison.
-**📝 Ici, vous :** enregistrez la marchandise reçue pour l'ajouter au stock.
+## Étape 2 — Tenir les types d'objet et les zones
+**⬅️ Avant :** Le magasin a ses zones (racks, armoires, allées…) et l'ERP doit les connaître pour proposer où ranger chaque type d'objet. Au départ, **aucune zone n'existe**.
+**📝 Ici, vous :** onglet **Rangement / Mise en stock › Types & zones** — vous créez les zones de chaque type, et au besoin de nouveaux types.
 
-![Écran Stock en temps réel et gestion des mouvements](../../assets/stock-rt.png)
+![Types et zones](../../assets/stock-mes-types.png)
 
-Sur cet écran (sous-onglet « Entrée stock »), vous renseignez :
-- **Article** — l'article livré ; sa quantité actuelle est rappelée à côté de chaque nom.
-- **Quantite recue** — ce que vous avez réellement reçu, qui vient s'ajouter au stock.
-- **Date reception** — le jour de la livraison (pré-rempli à aujourd'hui, à corriger si besoin).
-- **BL fournisseur** — le numéro du bon de livraison : c'est votre preuve de traçabilité.
-- **DA liee** — le numéro de la demande d'achat d'origine : il relie l'entrée à la commande qui l'a déclenchée.
+Sur cet écran, vous renseignez :
+- **Nouvelle zone pour « type »** — le nom d'une zone, dans la carte du type ; **Ajouter**.
+- **Nouveau type** — le libellé d'un type d'objet (et son ordre) ; **Ajouter le type**.
+- **Nom / ordre / actif** — pour renommer, réordonner ou désactiver (disquette de la ligne).
 
-**➡️ Ensuite :** le stock de l'article augmente immédiatement, l'entrée est journalisée dans l'onglet « Mouvements », et si l'article était en alerte, il peut repasser au vert. Le lien BL + DA permet aux contrôles ultérieurs (qualité, Achats) de retrouver l'origine.
+**➡️ Ensuite :** la fenêtre de rangement propose ces zones pour les références du type. Rien ne se supprime : on **désactive**. Une zone qui est déjà l'emplacement de références ne se renomme pas (créer, déplacer, désactiver).
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/stock.md).
 
-## Étape 3 — Saisir une sortie (consommation de stock)
-**⬅️ Avant :** La production a besoin de matière ou d'un consommable, ou un article part au rebut / en retour. Le magasin délivre la marchandise.
-**📝 Ici, vous :** enregistrez ce qui quitte le stock pour le diminuer.
+## Étape 3 — Entrée manuelle (hors réception fournisseur)
+**⬅️ Avant :** De la marchandise arrive **sans passer par une réception fournisseur** : retour de l'atelier, régularisation, livraison sans bon de commande.
+**📝 Ici, vous :** **Gestion du stock › Entrée stock** — vous ajoutez une ligne à la liste « À ranger ».
 
-Sur cet écran (sous-onglet « Sortie stock »), vous renseignez :
-- **Article** — l'article qui sort ; sa quantité disponible est affichée à côté.
-- **Quantite sortie** — ce qui quitte réellement le magasin, retiré du stock.
-- **Reference BDT / LOT / CMD** — le document qui justifie la sortie (bon de travail, lot ou commande) : c'est lui qui rattache la consommation à une affaire.
-- **Motif** — la raison : consommation production, rebut/casse, retour fournisseur, transfert inter-atelier.
+![Gestion du stock, entrée manuelle](../../assets/stock-gestion.png)
 
-**➡️ Ensuite :** le stock diminue aussitôt et la sortie est journalisée dans « Mouvements ». Reliée à un BDT ou une commande, elle alimente le **coût réel de l'affaire** côté production. Si le niveau passe sous le point de commande, une alerte de réapprovisionnement apparaît (étape 6).
+Sur cet écran, vous renseignez :
+- **Référence** — existante ou nouvelle (la liste propose les références connues ; désignation, unité et type se remplissent pour une référence connue).
+- **Quantité / Unité** — ce qui entre.
+- **Type d'objet** — facultatif, sinon à choisir au rangement.
+- **Affaire** — facultative.
+- **Motif** — obligatoire : l'origine de l'entrée.
+
+**➡️ Ensuite :** la ligne rejoint **Rangement › À ranger** ; le stock n'est crédité qu'au rangement (étape 1).
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/stock.md).
 
-## Étape 4 — Ajustement / Inventaire physique
-**⬅️ Avant :** Vous avez compté physiquement un article dans le magasin et le nombre réel ne colle pas avec ce qu'affiche l'ERP (inventaire périodique, perte, erreur de saisie).
-**📝 Ici, vous :** réalignez le stock ERP sur la quantité réellement comptée.
+## Étape 4 — Sortir du stock
+**⬅️ Avant :** La production a besoin de matière ou d'un consommable, ou un article part au rebut / en retour.
+**📝 Ici, vous :** **Gestion du stock › Sortie stock** — vous enregistrez ce qui quitte le magasin.
 
-Sur cet écran (sous-onglet « Ajustement / Inventaire »), vous renseignez :
+Sur cet écran, vous renseignez :
+- **Article** — l'article qui sort ; sa quantité disponible est affichée (les articles à zéro sont grisés).
+- **Quantité sortie** — refusée au-delà du stock disponible.
+- **Motif** (et sa précision pour « Autre »).
+- **BDT / Affaire** — facultatifs ; le **BDT** est vérifié et impute la sortie à son lot et à son affaire.
+
+**➡️ Ensuite :** après confirmation, le stock diminue et la sortie est journalisée. Reliée à un BDT, elle alimente le **coût matière réel** du lot et de l'affaire. Sous le point de commande, une alerte de réapprovisionnement apparaît (étape 7).
+
+> 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/stock.md).
+
+## Étape 5 — Ajustement / inventaire physique
+**⬅️ Avant :** Vous avez compté physiquement un article et le nombre réel ne colle pas avec l'ERP.
+**📝 Ici, vous :** **Rangement / Mise en stock › Ajustement de stock** — vous réalignez le stock sur la quantité comptée.
+
+![Ajustement de stock](../../assets/stock-mes-ajustement.png)
+
+Sur cet écran, vous renseignez :
 - **Article** — celui dont vous corrigez le stock.
-- **Stock reel constate** — la quantité **totale** réellement comptée (pas l'écart) : l'ERP calcule tout seul la différence.
-- **Date inventaire** — le jour du comptage (pré-rempli à aujourd'hui).
-- **Motif** — inventaire périodique, écart constaté, perte/détérioration, correction d'erreur de saisie.
-- **Responsable inventaire** — qui a fait le comptage, pour la traçabilité.
+- **Quantité constatée** — la quantité **totale** réellement comptée (pas l'écart).
+- **Motif** — inventaire périodique, écart constaté, perte, correction d'erreur de saisie, autre (précision obligatoire).
 
-**➡️ Ensuite :** le stock est corrigé à la valeur constatée et l'écart est tracé dans le journal des mouvements. Ce formulaire est à préférer quand la cause de l'écart n'est pas une entrée ou une sortie claire.
+**➡️ Ensuite :** après confirmation (« de … à …, écart … »), un mouvement d'**ajustement** portant l'écart signé est enregistré ; il apparaît dans « Derniers ajustements » et dans les Mouvements.
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/stock.md).
 
-## Étape 5 — Régler les seuils (Catalogue & seuils)
-**⬅️ Avant :** L'expérience montre qu'un article se déclenche trop tôt, trop tard, ou devrait se recommander tout seul. Vous voulez ajuster son pilotage sans repasser par la fiche complète.
-**📝 Ici, vous :** modifiez les seuils directement dans le tableau et activez, ou non, le réapprovisionnement automatique.
+## Étape 6 — Régler les niveaux d'approvisionnement et l'emplacement
+**⬅️ Avant :** Un article se déclenche trop tôt ou trop tard, devrait se recommander tout seul, ou doit changer de place dans le magasin.
+**📝 Ici, vous :** **Gestion du stock › Niveaux d'approvisionnement** — vous modifiez la ligne de la référence.
 
-Sur cet écran (sous-onglet « Catalogue & seuils »), chaque ligne d'article laisse modifier :
-- **Seuil mini** — le niveau « critique » de l'article.
-- **Pt commande** — le niveau qui déclenche l'alerte de réappro (au-dessus du seuil mini).
-- **Qté cmd** — la quantité à commander à chaque réappro.
-- **Réappro auto** — si cochée, une demande d'achat est **créée automatiquement** dès que le stock passe sous le point de commande.
+![Niveaux d'approvisionnement](../../assets/stock-niveaux.png)
 
-**➡️ Ensuite :** cliquez sur « Enregistrer » (icône disquette) au bout de la ligne. Les nouveaux seuils repeignent aussitôt les jauges et pilotent les alertes. Sur les articles en « Réappro auto », le Stock générera désormais les demandes d'achat sans intervention.
+Sur cet écran, chaque ligne laisse modifier :
+- **Type d'objet** et **Emplacement** — le changement d'emplacement demande confirmation (motif facultatif) et est **historisé** (bouton 🕘).
+- **Seuil mini / Pt commande / Qté cmd** — le pilotage du réapprovisionnement.
+- **Réappro auto** — si cochée, une demande d'achat est créée automatiquement sous le point de commande (en comptant ce qui attend dans « À ranger »).
+
+**➡️ Ensuite :** les seuils s'enregistrent avec la disquette ; type et emplacement dès le choix. Les jauges et alertes se recalculent ; le nouvel emplacement est celui que la fenêtre de rangement affichera.
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/stock.md).
 
-## Étape 6 — Émettre une demande d'achat (réappro)
-**⬅️ Avant :** Un article est passé sous son point de commande (alerte visible dans « Alertes et Réappro. » et « Stock en temps réel »), ou vous avez un besoin ponctuel hors alerte.
+## Étape 7 — Émettre une demande d'achat (réappro)
+**⬅️ Avant :** Un article est passé sous son point de commande (alerte visible dans « Alertes et Réappro. » et « Stock en temps réel »), ou vous avez un besoin ponctuel.
 **📝 Ici, vous :** demandez l'achat d'un article ; la demande partira vers les Achats.
 
 ![Formulaire de nouvelle demande d'achat](../../assets/form-stock-da.png)
 
 Sur cet écran, vous renseignez :
-- **Article / Désignation** — ce que vous voulez commander, décrit clairement : c'est le **seul champ obligatoire**.
-- **Type** — la nature de l'achat (matière, outillage, consommable, chimique, sous-traitance) : aide les Achats à classer la demande.
-- **Quantité** — combien, avec l'unité si utile.
-- **Fournisseur** — le fournisseur souhaité, si vous en avez un en tête.
-- **Priorité** — normal, urgent ou critique.
-- **Livraison souhaitée** — la date à laquelle vous aimeriez être livré.
-- **N° affaire (option)** — l'affaire liée, pour imputer l'achat au bon dossier.
+- **Article / Désignation** — ce que vous voulez commander : **seul champ obligatoire**.
+- **Type**, **Quantité**, **Fournisseur**, **Priorité**, **Livraison souhaitée**, **N° affaire**.
 
-**➡️ Ensuite :** une fois validée, la **demande d'achat (DA)** part immédiatement vers les **Achats** avec le statut « à traiter ». Astuce : depuis une alerte, le bouton « Créer DA » sur la ligne d'un article reprend automatiquement l'article, la quantité et le fournisseur — la DA part sans ressaisie. Côté Achats, la DA deviendra un bon de commande, puis une livraison qui reviendra au magasin en **entrée de stock** (étape 2) : la boucle est bouclée.
+**➡️ Ensuite :** la **demande d'achat (DA)** part vers les **Achats** (« à traiter »). Depuis une alerte, « Créer DA » reprend article, quantité et fournisseur sans ressaisie. La DA deviendra un bon de commande, puis une livraison réceptionnée et contrôlée aux Expéditions, qui reviendra au magasin dans **« À ranger »** (étape 1) : la boucle est bouclée.
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/stock.md).

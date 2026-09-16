@@ -5,6 +5,134 @@
 - **Accès (RBAC)** : écriture — expéditions, stock (logistique) · lecture — commercial, achats, production
 <!-- /auto -->
 
+## Lot F — PV quantitatif / qualitatif, reliquat, Mise en stock (15/09/2026)
+
+> « Dans le PV de contrôle de réception d'expédition je veux pouvoir avoir à côté de la case observations la quantité
+> reçue à côté de la quantité prévue […] s'il y a un reliquat annoncé par le fournisseur, il faut recréer […] ce qu'il
+> nous reste à recevoir. […] Quand on aura fini le PV de réception, ce qui a été validé conforme va directement,
+> référence par référence, dans la liste des choses à rentrer dans le stock. »
+
+Réponses de l'utilisateur appliquées : écart de **quantité** = NC **quantitative**, **observation** = **qualitative**,
+les deux possibles, **une NC fournisseur par ligne** à problème ; excédent : le prévu va au stock, **l'excédent est soumis
+à validation hiérarchique** ; PV mixte : les lignes conformes partent en Mise en stock tout de suite ; reliquat annoncé :
+un **BC du restant** naît aux Achats, **date à valider** ; Conforme / Non conforme reste un **choix manuel** ; la porte
+matière s'ouvre **une fois rangée**. Règles pures `src/pv_reception.ts` (`validerSaisiePV` v2, `qtesPrevuesPV`,
+`motifEcart`, `ncsReceptionPV`, `validationExcedentPV`, `entreeExcedentValide`, `numeroBcReliquat`,
+`construireBcReliquat`, `sansColonnesReliquat`, `construireDetailPV` v2, `completerDetailPV`) ; Mise en stock :
+[Stock](stock.md), section « Lot F ».
+
+### Réception : plus de « Livraison partielle »
+
+La case « Livraison partielle » et sa quantité livrée sont **retirées** du formulaire (Calendrier › « Traiter ») :
+la quantité reçue et le reliquat annoncé se déclarent **au PV, ligne par ligne**. `validerSaisieReception` ignore
+`livraison_partielle` (un ancien client qui l'enverrait n'a plus d'effet) : la réception prend toujours le **reste à
+recevoir**. Reste une exception : quantité commandée du BC **inconnue** (quantité livrée saisie, obligatoire sauf BC à
+plusieurs articles). La réception n'écrit plus `bons_de_livraison.partiel` ; `attend_reliquat` ne dépend donc plus que
+d'un **remplacement** décidé par la Qualité (et des anciens BL `partiel`). Message de fin : « BL … créé (N attendu(s)).
+Faites maintenant le PV de contrôle : quantité reçue ligne par ligne, puis les quantités conformes partent en Mise en
+stock. »
+
+### PV : le tableau des lignes est toujours là
+
+Fenêtre « PV de contrôle à réception » (`expOpenPV`) : résultat, contrôleur, case certificat (si exigée), puis le
+**tableau des lignes du BC en Conforme comme en Non conforme** — N°, Référence, Désignation, **Qté prévue**, **Qté
+reçue** (champ, pré-rempli avec la prévue), **Reliquat annoncé** (case visible seulement si reçue < prévue), **Conforme ?**
+(déduit et recalculé à la frappe : « Oui », « Non · quantitatif », « Non · qualitatif », « Non · quantitatif et
+qualitatif », « Qté à saisir » ; détail « manque n », « reliquat n », « excédent +n · validation Direction »,
+« quarantaine », « prévu inconnu »), **Observation** (facultative : une observation rend la ligne qualitative), PU HT,
+Affaire, DA · Lot · Opération. Bouton **« Tout reçu comme prévu »** (reçue = prévue, reliquats décochés, observations
+gardées). En Non conforme s'ajoutent l'en-tête du BC, l'observation générale et la gravité.
+
+- **Qté prévue** (`expPvPrevues`, copie exacte de `qtesPrevuesPV`) : BC à plusieurs articles, ou réception sans quantité
+  → quantité commandée de la ligne ; une seule ligne → quantité du BL (reste attendu) ; un article sur plusieurs lignes →
+  quantité du BL répartie dans l'ordre. Quantité non numérique → pas de comparaison (avertissement). Chaque ligne renvoie
+  `qte_prevue_affichee` : si le serveur calcule une autre valeur, **400 « rechargez »**, rien n'est enregistré.
+- Corps envoyé : `lignes: [{idx, qte_recue, reliquat, observation, qte_prevue_affichee}]` dans les deux cas. Faute sur une
+  ligne : ligne en rouge, curseur dans la quantité — ou dans l'observation quand la faute ne porte que sur elle.
+- Succès : notification résumant les effets (« n ligne(s) en Mise en stock », NC, quarantaines, excédents soumis, BC de
+  reliquat) puis avertissements **durables** (`notifDurable`, réaffichés après le rechargement).
+
+### Règles de saisie (`validerSaisiePV` v2)
+
+| Cas d'une ligne | Nature | Effet |
+|---|---|---|
+| reçue = prévue, sans observation | conforme | `qte_a_ranger` = reçue → file Mise en stock |
+| reçue < prévue, **reliquat coché** | conforme (le reliquat n'est pas un écart) | reçue → file ; manque → **BC de reliquat** |
+| reçue < prévue, sans reliquat | quantitative | reçue → file ; NC « Logistique - Quantité » (`nb_pieces` = manque) |
+| reçue > prévue | quantitative | prévue → file ; **excédent** → validation Direction ; NC quantitative |
+| observation écrite | qualitative | part **prévue** reçue (min(reçue, prévue)) → **quarantaine** de la ligne ; rien en stock ; excédent éventuel → validation « sous réserve Qualité » |
+| manque ou excédent + observation | quantitative et qualitative | comme qualitative, NC « À requalifier » |
+
+- **Conforme** : refuse toute ligne en écart (400 « passez en Non conforme ») ; conforme impossible sans le certificat
+  exigé (inchangé). ⚠ **À trancher** : un PV Conforme **accepte** une ligne avec reliquat annoncé (le reçu est bon, le
+  reste est recommandé) ; la spécification disait « Conforme ⇒ aucun reliquat » — appliquée à la lettre, un PV dont le
+  seul écart est un reliquat était impossible (Non conforme exige une ligne en écart).
+- **Non conforme** : au moins une ligne en écart **ou** le certificat exigé absent.
+- **Certificat absent** (Non conforme) : toutes les lignes sans observation mettent leur part prévue reçue en quarantaine
+  avec une NC « Logistique - Certificats » (réception bloquée) ; `quarantaines_attendues` compte les lignes qualitatives
+  reçues + le certificat.
+
+### Déroulé serveur (`POST /api/expeditions/bc/:id/pv`) — effets du lot F
+
+Contrôles d'entrée inchangés (écriture Expéditions, BC / BL / PV stricts, 409 PV existant, certificat changé, contrôleur
+éligible). Le PV est écrit (détail v2), puis chaque effet est tenté ; tout échec est **dit** dans `avertissements` sans
+défaire le PV.
+
+1. **NC fournisseur par ligne en écart** (`ncsReceptionPV` → `creerNcReceptionPV`) : `id` NC-AAAA-NNN (renumérotée sur
+   23505, 3 essais), `type_nc` **« Fournisseur »**, `categorie` `quantitative` / `qualitative` / `quantitative et
+   qualitative`, `type_defaut` « Logistique - Quantité » (quantitatif pur) ou « À requalifier » (dès qu'il y a une
+   observation), `ref_article`, `designation`, `nb_pieces` (manque / excédent, ou reçue pour le qualitatif), `description`
+   (PV · BC · BL, ligne, nature, écart chiffré, observation, reliquat, excédent soumis, quantité en quarantaine,
+   observation générale, contrôleur), `detecteur` « Réception », `gravite` du PV, `statut 'ouverte'`, `lot_ref` = BL,
+   `operation` « Contrôle réception », `fournisseur_nom` si la colonne existe. + une NC certificat. Replis : colonnes
+   absentes → NC sans description ni nature ; `nb_pieces` entier (22P02 / 22003) → sans ce nombre.
+2. **Quarantaine** par ligne qualitative (et une pour le certificat) : `qte` = part prévue reçue, motif « Ligne n · réf ·
+   désignation — écart », `pv_id`, `nc_id`, `statut en_cours`, `bc_id` / `bl_id` / `fournisseur_nom` (008) et **`ligne_idx`**
+   (013, `null` pour le certificat) ; replis sans 013 puis sans 008.
+3. **Excédent** (hors achat machine et sous-traitance) : une demande `validations` par ligne (`validationExcedentPV` :
+   domaine `expeditions`, type `excedent_reception`, objet « Excédent de réception BC · ligne · +N (reçu … pour …
+   prévu) », montant = PU × excédent, `ref_table bons_de_commande`, payload complet, `qualite_requise` et
+   `quarantaine_id` quand la ligne est qualitative ou le certificat absent). Décision : [Direction](direction.md).
+4. **Reliquat** (`creerBcReliquatPV`) : un BC `<num_bc>-R<n>` pour les lignes à reliquat (voir [Achats](achats.md),
+   « BC de reliquat ») ; **idempotent par réception** (un reliquat déjà né de ce BL est repris) ; lecture des BC en panne
+   → non créé, dit ; base sans 013 → créé sans `bc_parent_id` / `date_a_valider` (avertissement).
+5. **`bons_de_livraison.qte` réécrite** avec la somme des quantités reçues (la quantité attendue reste dans le détail).
+6. **Mise en stock** : `ajouterAMettreEnStock` (origine `pv`, une entrée par ligne `qte_a_ranger > 0`) ; lignes refusées
+   listées « à saisir en entrée manuelle ». Base sans la file → `crediterLignesRepli` (entrée directe ligne par ligne) +
+   avertissement cloud-11.
+7. **Détail v2 complété** (`completerDetailPV` : `nc_id`, `quarantaine_id`, `validation_id`, `bc_reliquat_id`,
+   `mise_en_stock`).
+8. **`recalculerStatutBc`** : une réception est tranchée si son PV est libéré, ou si **toutes** ses quarantaines sont
+   décidées et qu'il y en a au moins `quarantaines_attendues` (0 = écarts purement quantitatifs → BC `controle` ; base sans
+   `detail` : repère `[Quarantaines attendues : n]` des observations ; PV d'avant le lot F : sa quarantaine décidée).
+   **Plus de porte matière au PV** (sauf repli sans la file, crédit complet).
+
+Réponse : champs historiques (`pv_id`, `resultat`, `anomalie`, `certificat_matiere`, `controleur`, `nc_id`,
+`quarantaine_id`, `stock`, `bc_statut`, `bdt_debloques`, `manque_matiere`, `avertissements`) + `nc_ids`,
+`quarantaine_ids`, `validation_ids`, `bc_reliquat_id`, `mise_en_stock {lignes, qte, ids, deja}`, `lignes[]` (quantités par
+ligne). `stock`, `bdt_debloques` et `manque_matiere` ne sont renseignés qu'en repli sans la file.
+
+### Écrans Expéditions : autres changements
+
+- **Réceptions** : bandeau « les quantités conformes partent dans Stock › Mise en stock » ; état d'un PV non conforme :
+  toutes les quarantaines du BL (`QUAR_PAR_BL` est une **liste** par BL — avant, la dernière gagnait), « dérogation
+  fournisseur · accepté ».
+- **Calendrier** (`collecterMouvements`) : un BC de reliquat `date_a_valider` sans réception n'est pas une arrivée.
+- **Retours fournisseurs** (Envois) : liste aussi le retour d'un **excédent refusé** (`QEXC-<id validation>`).
+- `bcsView` gagne `bc_parent_id` et `date_a_valider` ; `stock_multi_ok` n'est plus lu par l'écran.
+
+### Limites connues (lot F)
+
+- BC à plusieurs articles re-réceptionné après un remplacement Qualité : la quantité prévue d'une ligne reste sa quantité
+  commandée (aucune quantité reçue par ligne n'est stockée sur le BC).
+- `non_conformites.categorie` porte déjà « administratif / production » côté Qualité : la NC de réception y écrit
+  « quantitative / qualitative » — à la ré-édition, la catégorie est redemandée (la nature est aussi en tête de la
+  description).
+- Un manque purement quantitatif sans reliquat n'est pas compté comme matière manquante (la porte peut s'ouvrir au
+  rangement du reçu).
+- Contraintes CHECK du cloud sur `type_nc` « Fournisseur », `categorie` et le statut `envoye` du BC de reliquat non
+  vérifiées en ligne (essais sur Docker seulement).
+
 ## Lot D — réception fournisseur et PV de contrôle détaillé (14/09/2026)
 
 > « Dans le formulaire de réception […] le numéro de commande de chez eux et le num de BL de chez eux,
@@ -47,7 +175,7 @@ jamais « introuvable » ni « aucun PV ». Base : migration **012** / `cloud-10
 | si Oui : **N° de nomenclature (douane)** (`rec_nomenc`) | code de nomenclature douanière, texte ≤ 100 |
 | si Oui : **Code EWX** (`rec_ewx`) | 1 ou 2 |
 | si Oui : **Mode d'arrivée** (`rec_mode`) | `MODES_ARRIVEE` : Routier, Maritime, Aérien, Ferroviaire, Messagerie / express |
-| Livraison partielle (`rec_partiel`) + Quantité livrée (`rec_qte_livree`) | exceptions à la règle de quantité, ci-dessous |
+| ~~Livraison partielle (`rec_partiel`)~~ + Quantité livrée (`rec_qte_livree`) | exceptions à la règle de quantité, ci-dessous — ⚠ **la case « Livraison partielle » est retirée au lot F** (le reliquat se déclare au PV) |
 
 **Retirés** : Transporteur, N° réf. livraison transporteur, Quantité reçue. Si « Non », les quatre champs
 d'import sont forcés à `null` même s'ils sont envoyés. Pas de contrainte « hors France ⇒ 4 champs » en
@@ -59,7 +187,7 @@ quantité commandée est `qte_commandee` si numérique, sinon la somme des `lign
 lignes en portent une numérique, sinon **inconnue**. Un bandeau (`rec_qte_info`) affiche ce que la
 réception va écrire. Jamais `qte = 0`. Deux exceptions, ajoutées à la vérification du lot :
 
-- **Livraison partielle** (le fournisseur annonce un reliquat) : la quantité livrée est saisie, strictement
+- ~~**Livraison partielle**~~ (retirée au lot F, 15/09/2026) (le fournisseur annonce un reliquat) : la quantité livrée est saisie, strictement
   inférieure au reste ; BL = cette quantité, BC `recu_partiel`, le reliquat reste à « Traiter ». Refusée (400)
   sur un BC à plusieurs articles.
 - **Quantité commandée inconnue** : la quantité livrée (lue sur le BL fournisseur) est **obligatoire** pour
@@ -110,6 +238,11 @@ transporteur, « BL fourn. … » ; commande fournisseur et bloc hors France des
 
 ### PV de contrôle (Réceptions › « PV à faire »)
 
+> ⚠ **Saisie des lignes, NC, quarantaine et entrée en stock remplacées le 15/09/2026** (section « Lot F » ci-dessus) : tableau
+> des quantités en Conforme comme en Non conforme, une NC par ligne, excédent, reliquat, file Mise en stock. Le contrôleur,
+> le certificat et l'écriture `pv_controle` décrits ci-dessous restent valables.
+
+
 **Conforme** : le résultat, le contrôleur et — si le BC l'exige — la case « Certificat matière reçu et
 conforme ». Rien d'autre (plus d'observation, plus de champ texte « Contrôleur », plus de case quarantaine).
 **Conforme impossible sans la case** : l'écran bascule le PV en non conforme et le serveur répond 400
@@ -158,7 +291,7 @@ colonne entière) → NC sans ce nombre, quantité exacte sur la quarantaine. **
 (motif = description, `qte` = quantité du BL). Tout échec partiel est rendu dans `avertissements`.
 ⚠ Non transactionnel : le PV est écrit avant la NC et la quarantaine.
 
-**Conforme → stock** (`entrerStockReception`, inchangé sur le principe) :
+**Conforme → stock** (`entrerStockReception`) — ⚠ **remplacé au lot F** : les quantités conformes partent dans la file Stock › Mise en stock ; `entrerStockReception` n'est plus appelée (repli sans la file : `crediterLignesRepli`, ligne par ligne) :
 
 - BL **sans quantité** → rien n'est crédité, raison `MSG_QTE_INCONNUE` (« quantité reçue inconnue sur le BL :
   entrée en stock non faite ») ; le BC peut tout de même passer `controle`. Corriger le BC ensuite ne
@@ -188,9 +321,9 @@ colonne entière) → NC sans ce nombre, quantité exacte sur la quarantaine. **
 
 ### Limites connues (lot D)
 
-- Livraison partielle, reliquat et entrée partielle d'un **BC à plusieurs articles** : rien n'entre en stock
-  automatiquement, et l'ERP n'a pas d'entrée de stock manuelle (Stock › Entrée n'enregistre rien). Lever la
-  limite demande des quantités par ligne sur le BL.
+- ~~Livraison partielle, reliquat et entrée partielle d'un **BC à plusieurs articles** : rien n'entre en stock
+  automatiquement, et l'ERP n'a pas d'entrée de stock manuelle.~~ **Levée au lot F** : quantités reçues par ligne au
+  PV, répartition par ligne de la part acceptée, entrée manuelle dans le Stock.
 - Quantité = reste à recevoir : le KPI « taux de service fournisseur » (Σ reçu / Σ commandé) tend vers 100 % ;
   un écart ne se voit plus qu'au PV.
 - Retour de sous-traitance **sans BL** : toujours pas d'anti-doublon de PV.
@@ -334,10 +467,10 @@ Bons de commande, bons de livraison, commandes en cours, OTD.
 - **OTD figé** : changer la date via `POST /api/expeditions/bc/:id/date-arrivee` **gèle la 1ʳᵉ date** dans `date_livraison_initiale` (au 1ᵉʳ changement) ; l'OTD se calcule toujours sur cette 1ʳᵉ promesse (jamais la date repoussée). Marqueur « ⟲ » + date fantôme quand la date a glissé.
 
 ## API (familles de routes)
-`bl` · `bst` · `expeditions` (dont `POST /api/expeditions/bc/:id/date-arrivee` — change la date prévue en gardant l'initiale ; `POST /api/expeditions/bc/:id/receptionner`, `POST /api/expeditions/bl/:id/reception-infos` et `POST /api/expeditions/bc/:id/pv`, réservés à l'écriture Expéditions depuis le lot D)
+`bl` · `bst` · `expeditions` (lot F : `POST /api/expeditions/bc/:id/pv` alimente la file `/api/stock/mise-en-stock`, les validations d'excédent et le BC de reliquat ; dont `POST /api/expeditions/bc/:id/date-arrivee` — change la date prévue en gardant l'initiale ; `POST /api/expeditions/bc/:id/receptionner`, `POST /api/expeditions/bl/:id/reception-infos` et `POST /api/expeditions/bc/:id/pv`, réservés à l'écriture Expéditions depuis le lot D)
 
 ## Tables principales
-`bons_de_commande` (`+ date_livraison_initiale`, `+ date_reception_reelle`, `+ certificat_matiere_requis` — 012) · `bons_de_livraison` (`+ num_commande_fournisseur`, `num_bl_fournisseur`, `hors_france`, `poids_matiere_kg`, `num_nomenclature`, `code_ewx`, `mode_arrivee` — 012) · `pv_controle` (`+ detail`, `controleur_id`, `controleur_nom`, `saisi_par`, `certificat_matiere` — 012) · `factures_client`
+`bons_de_commande` (`+ date_livraison_initiale`, `+ date_reception_reelle`, `+ certificat_matiere_requis` — 012, `+ bc_parent_id`, `+ date_a_valider` — 013) · `quarantaines` (`+ ligne_idx` — 013) · `mises_en_stock` (alimentée par le PV — 013) · `validations` (type `excedent_reception`) · `bons_de_livraison` (`+ num_commande_fournisseur`, `num_bl_fournisseur`, `hors_france`, `poids_matiere_kg`, `num_nomenclature`, `code_ewx`, `mode_arrivee` — 012) · `pv_controle` (`+ detail`, `controleur_id`, `controleur_nom`, `saisi_par`, `certificat_matiere` — 012) · `factures_client`
 
 ## Points d'attention
 - BL partiels → factures_client + écriture VTE. BL bloqué si porte qualité active.

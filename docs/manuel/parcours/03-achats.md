@@ -65,7 +65,7 @@ Sur cet écran, vous renseignez :
 
 Le bouton **« Enregistrer (brouillon) »** met la DA de côté sans créer le BC : vous la reprendrez plus tard.
 
-**➡️ Ensuite :** « Soumettre → créer BC » crée le bon de commande, qui **part côté Expéditions** pour être reçu à la livraison. La DA est ainsi soldée.
+**➡️ Ensuite :** « Soumettre → créer BC » crée le bon de commande, qui **part côté Expéditions** pour être reçu à la livraison. La DA est ainsi soldée. Si, au PV de réception, le fournisseur annonce un **reliquat**, un **bon de commande de reliquat** (`…-R1`, badge « Reliquat de BC-… · date à valider », montant porté par le BC d'origine) apparaît dans l'onglet **Bons de commande** : fixez sa **date d'arrivée** (bouton « Date d'arrivée ») pour qu'il rejoigne le calendrier des Expéditions.
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/achats.md).
 

@@ -30,10 +30,11 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 ![qualite-nc](../assets/qualite-nc.png)
 
 ### 3. Décider d'un lot reçu non conforme
-1. Qualité › **Quarantaine** : un lot refusé au contrôle réception porte le bouton rouge **Décider** (les lots de production gardent « Statuer »). Le motif et la NC (détecteur « Réception ») reprennent le PV ligne par ligne : une ligne par écart, certificat matière absent, contrôleur.
-2. Trois choix : **renvoyer** tout le lot au fournisseur · **dérogation** (il entre en stock en l'état, réfaction possible) · **entrée partielle** (la part acceptée entre, le reste repart ou part au rebut).
-3. Renvoi et entrée partielle : choisir **avoir** (il part aux Achats) ou **remplacement** (le fournisseur relivre).
-4. Le **motif est obligatoire** et la décision ne se prend qu'une fois. Matière renvoyée sans remplacement = il faut repasser commande.
+1. Qualité › **Quarantaine** : une ligne de réception avec observation (ou toute la réception si le certificat matière manque) porte le bouton rouge **Décider** (les lots de production gardent « Statuer »). Le PV crée **une NC fournisseur par ligne à problème** (quantitative, qualitative ou les deux, détecteur « Réception ») ; un simple écart de quantité n'a pas de quarantaine.
+2. Trois choix : **renvoyer** tout le lot au fournisseur · **dérogation** (accepté en l'état, réfaction possible) · **entrée partielle** (la part acceptée est gardée, le reste repart ou part au rebut). Ce qui est accepté part dans **Stock › Rangement / Mise en stock** : le stock est crédité au rangement.
+3. Lot sur **plusieurs articles** : remplir « Part acceptée par ligne du bon de commande » (pré-rempli en dérogation, obligatoire en entrée partielle).
+4. Renvoi et entrée partielle : choisir **avoir** (il part aux Achats) ou **remplacement** (le fournisseur relivre).
+5. Le **motif est obligatoire** et la décision ne se prend qu'une fois. Matière renvoyée sans remplacement = il faut repasser commande.
 
 ![qualite-quarantaine](../assets/qualite-quarantaine.png)
 

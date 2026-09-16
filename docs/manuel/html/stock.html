@@ -19,17 +19,18 @@
       <div class="kind">docs/manuel/html</div>
     </div>
     <h1>Service <span class="hi">Stocks</span></h1>
-    <p class="lede">Le service Stocks est le magasin de l'entreprise, en vue unifiée Seem + Semrac : niveaux en temps réel de la matière, des consommables et des produits chimiques, saisie des entrées et sorties, journal complet des mouvements, alertes de réapprovisionnement reliées aux Achats. Vous apprendrez ici à lire les jauges de stock, enregistrer un mouvement, régler les seuils et déclencher une demande d'achat quand une référence descend trop bas.</p>
+    <p class="lede">Le service Stocks est le magasin de l'entreprise, en vue unifiée Seem + Semrac : <b>rangement</b> de ce qui arrive (ce que le PV de réception a déclaré conforme, ce que la Qualité a accepté, les excédents validés, les entrées manuelles), niveaux en temps réel, sorties et inventaires, emplacement fixe de chaque référence, journal complet des mouvements, alertes de réapprovisionnement reliées aux Achats. Vous apprendrez ici à accepter une entrée en stock et choisir sa zone, corriger un stock par inventaire, gérer les types d'objet et leurs zones, régler les seuils et déclencher une demande d'achat quand une référence descend trop bas.</p>
     <div class="metachips">
-      <span class="chip">👤 Pour qui : <b>Magasinier(ère)</b> (écriture : Stocks, Achats, Logistique)</span>
+      <span class="chip">👤 Pour qui : <b>Magasinier(ère)</b> (écriture : Stocks — Direction, Achats, Logistique)</span>
       <span class="chip">🧭 Dans l'ERP : <b>Sidebar → Stocks</b></span>
-      <span class="chip">🗂 <b>5 onglets</b></span>
+      <span class="chip">🗂 <b>6 onglets</b></span>
     </div>
   </header>
 
   <nav class="toc">
     <div class="toc-t">Sommaire</div>
     <ol>
+      <li><a href="#tab-mes">Rangement / Mise en stock</a></li>
       <li><a href="#tab-rt">Stock en temps réel</a></li>
       <li><a href="#tab-gestion">Gestion du stock</a></li>
       <li><a href="#tab-mvts">Mouvements</a></li>
@@ -38,161 +39,240 @@
     </ol>
   </nav>
 
-  <div class="note"><b>Règle d'or du service :</b> le statut d'une référence n'est <b>jamais saisi à la main</b> — l'ERP le calcule en comparant la quantité en stock aux trois seuils de l'article (seuil mini, point de commande, seuil maxi). Quatre statuts existent : <span class="b b-crit">CRITIQUE</span> (quantité au niveau du seuil mini ou en dessous), <span class="b b-warn">BAS</span> (au niveau du point de commande ou en dessous), <span class="b b-info">MOYEN</span> (sous 75 % du seuil maxi) et <span class="b b-ok">HAUT</span> (75 % du maxi ou plus). Bien régler ses seuils, c'est donc bien régler toutes les alertes. À l'ouverture, la page s'affiche sur l'onglet <b>Stock en temps réel</b> ; les boutons d'onglets en haut de page portent des compteurs (nombre de références, nombre de mouvements, nombre d'articles critiques).</div>
+  <div class="note"><b>Règle d'or du service :</b> <b>rien n'entre en stock sans être rangé.</b> Une livraison contrôlée au PV de réception, une part acceptée par la Qualité, un excédent validé par la Direction ou une entrée manuelle arrivent d'abord dans la liste <b>« À ranger »</b> ; le stock n'est crédité — et la matière n'est disponible pour les bons de travail — qu'une fois l'entrée <b>acceptée</b>, avec son type d'objet et sa zone. Chaque référence a un <b>emplacement fixe</b>, qui ne change plus qu'à la main, dans Niveaux d'approvisionnement.<br><br>Le statut d'une référence n'est <b>jamais saisi à la main</b> — l'ERP le calcule en comparant la quantité en stock aux seuils de l'article : <span class="b b-crit">CRITIQUE</span> (au niveau du seuil mini ou en dessous), <span class="b b-warn">BAS</span> (au niveau du point de commande ou en dessous), <span class="b b-info">MOYEN</span> (sous 75 % du seuil maxi) et <span class="b b-ok">HAUT</span> (75 % du maxi ou plus). À l'ouverture, la page s'affiche sur l'onglet <b>Rangement / Mise en stock</b> ; l'onglet ouvert est gardé quand la page se recharge.</div>
 
-  <!-- ════════════════════════ 1. STOCK EN TEMPS RÉEL ════════════════════════ -->
-  <section class="tab" id="tab-rt">
-    <div class="tab-head"><span class="tab-num">1</span><h2>Stock en temps réel</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> C'est la photographie instantanée du magasin : chaque référence avec sa jauge de niveau, son statut, sa couverture en jours et son fournisseur. C'est l'écran de départ du magasinier : un coup d'œil aux compteurs de statut suffit pour savoir si la journée commence par des réapprovisionnements urgents. C'est aussi ici que l'on ajoute une nouvelle référence au catalogue.</p>
+  <!-- ════════════════════════ 1. RANGEMENT / MISE EN STOCK ════════════════════════ -->
+  <section class="tab" id="tab-mes">
+    <div class="tab-head"><span class="tab-num">1</span><h2>Rangement / Mise en stock</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est la porte d'entrée du magasin. Tout ce qui a été reçu et contrôlé attend ici, <b>référence par référence</b>, que le magasin le range : vous confirmez le <b>type d'objet</b>, vous choisissez la <b>zone</b> de rangement (ou vous la retrouvez verrouillée si la référence en a déjà une), et le stock est crédité. Deux sous-onglets complètent : l'<b>ajustement de stock</b> (inventaire) et les <b>types d'objet et leurs zones</b>.</p>
 
     <h3>Ce que vous voyez</h3>
-    <p>En haut, le titre avec le nombre de références et le bouton vert <b>« Ajouter article »</b>. Dessous, cinq compteurs cliquables qui filtrent le tableau par statut : <span class="b b-crit">CRITIQUE</span>, <span class="b b-warn">BAS</span>, <span class="b b-info">MOYEN</span>, <span class="b b-ok">HAUT</span> et <b>TOUT</b> (retour à la liste complète). Une barre de filtres complète le tri : par <b>activité</b> (Tout / Seem / Semrac / Les deux), par <b>catégorie</b> (Matière première, Consommable, Chimique OAS, Emballage, Sécurité/EPI, Outillage, Pièce rechange — seules les catégories réellement présentes en stock s'affichent) et un champ <b>« Rechercher article, ref… »</b> qui filtre en direct. Une légende rappelle le code couleur des jauges.</p>
-    <p>Le tableau liste chaque article avec les colonnes <b>Article / Réf</b>, <b>Activité</b> (badge <span class="b b-info">SEEM</span>, <span class="b b-info">SEMRAC</span> ou <span class="b b-mut">LES DEUX</span>), <b>Catégorie</b>, <b>Niveau de stock</b> (jauge colorée avec la quantité et l'unité, plus deux traits repères : le seuil mini et le point de commande), <b>Couverture</b> (nombre de jours de stock restant — rouge sous 7 jours, orange sous 14 ; « N/A » si la consommation mensuelle n'est pas renseignée), <b>Rotation</b> (coefficient de rotation annuel : sorties annualisées divisées par le stock moyen, calculé depuis les mouvements, avec l'équivalent en jours de stock), <b>Fournisseur</b>, <b>Statut</b> et <b>Actions</b>. Les lignes en statut critique sont teintées de rouge pâle pour sauter aux yeux.</p>
-    <p>Dans la colonne <b>Actions</b>, chaque ligne propose deux boutons flèches : <b>Entrée stock</b> (flèche verte vers le bas) et <b>Sortie stock</b> (flèche rouge vers le haut) pour enregistrer un mouvement rapide — l'ERP confirme aussitôt « stock mis à jour ». Sur les seules références <span class="b b-crit">CRITIQUE</span> ou <span class="b b-warn">BAS</span>, un troisième bouton panier <b>« Créer DA »</b> apparaît : il déclenche une demande d'achat vers les Achats (voir l'onglet Alertes et Réappro.).</p>
+    <p>Le titre porte une pastille orange <b>« N à ranger »</b> (le même nombre figure sur le bouton de l'onglet). Dessous, trois sous-onglets : <b>À ranger</b> (ouvert par défaut), <b>Ajustement de stock</b> et <b>Types &amp; zones</b>.</p>
+    <p>Le tableau <b>À ranger</b> liste une ligne par entrée, de la plus ancienne à la plus récente :</p>
+    <ul class="points">
+      <li><b>Arrivée</b> — date et heure où la ligne est entrée dans la liste ;</li>
+      <li><b>Origine</b> — une pastille : <b>PV-… · BC … · BL … · ligne n</b> (réception contrôlée conforme), <b>Décision Qualité</b> (part acceptée d'un lot en quarantaine), <b>Excédent validé</b> (pièces reçues en trop, acceptées par la Direction) ou <b>Entrée manuelle</b> (avec son motif) ; en petit, qui l'a créée ;</li>
+      <li><b>Référence</b>, <b>Désignation</b>, <b>Quantité</b> et unité (avec, dessous, ce qu'il y a déjà en stock pour cette référence), <b>Affaire</b>, <b>Fournisseur</b> ;</li>
+      <li><b>Type d'objet</b> — celui que l'ERP <b>propose</b> (« proposé d'après le bon de commande », « d'après la catégorie en stock », « registre chimique »…), ou <span class="b b-warn">à choisir</span> ;</li>
+      <li><b>Emplacement</b> — l'<b>emplacement fixe</b> de la référence avec un cadenas 🔒, ou <span class="b b-warn">à choisir</span> (« nouvelle référence » ou « référence sans emplacement ») ;</li>
+      <li><b>Action</b> — le bouton vert <b>« Accepter l'entrée en stock »</b> et un petit bouton gris ⃠ pour <b>annuler</b> une ligne erronée.</li>
+    </ul>
+    <p>Sous le tableau, un volet repliable <b>« Derniers rangements et annulations »</b> rappelle les 40 dernières lignes traitées : <span class="b b-ok">RANGÉE</span> (avec la zone et qui l'a rangée) ou <span class="b b-mut">ANNULÉE</span> (avec le motif).</p>
     <figure class="shot">
-      <img src="../../assets/stock-rt.png" alt="Capture de l'onglet Stock en temps réel" loading="lazy">
-      <figcaption><b>Stock en temps réel</b> — les compteurs de statut cliquables, la barre de filtres et les jauges de niveau avec leurs repères seuil mini / point de commande.</figcaption>
+      <img src="../../assets/stock-mes.png" alt="Capture de l'onglet Rangement / Mise en stock, liste À ranger" loading="lazy">
+      <figcaption><b>À ranger</b> — deux lignes issues d'un PV de réception (types proposés d'après le bon de commande) et une entrée manuelle ; aucune de ces références n'a encore d'emplacement : la zone est à choisir.</figcaption>
     </figure>
 
-    <h3>Pas à pas — ajouter un article au catalogue</h3>
+    <h3>Pas à pas — accepter l'entrée en stock</h3>
     <ol class="steps">
-      <li>Cliquez sur <b>« Ajouter article »</b> en haut de l'onglet (le même formulaire s'ouvre aussi depuis <b>Gestion du stock → Catalogue &amp; seuils</b> avec le bouton « Nouvel article »).</li>
-      <li>Saisissez la <b>désignation</b>, la <b>référence</b>, l'<b>activité</b> concernée (Seem, Semrac ou les deux), la <b>catégorie</b> et l'<b>unité</b> de comptage.</li>
-      <li>Renseignez les <b>trois seuils</b> (mini, point de commande, maxi) et la <b>quantité à commander</b> : ce sont eux qui piloteront le statut, les jauges et les alertes de réapprovisionnement.</li>
-      <li>Complétez le <b>fournisseur préféré</b>, le <b>prix unitaire HT</b>, le <b>délai fournisseur</b> et l'<b>emplacement magasin</b>, puis cliquez <b>« Ajouter article »</b>. L'ERP confirme : « Article ajouté au catalogue. Seuils enregistrés. »</li>
+      <li>Sur la ligne, cliquez <b>« Accepter l'entrée en stock »</b>. La fenêtre rappelle l'origine, le fournisseur et l'affaire.</li>
+      <li>Vérifiez la <b>référence</b> et la <b>quantité à ranger</b> (lecture seule : la quantité est celle du contrôle). Si la ligne n'a pas de référence, saisissez celle sous laquelle ranger (la liste propose les références connues).</li>
+      <li>Choisissez ou confirmez le <b>type d'objet</b> (obligatoire) : Matière première, Accessoire, Consommable, Outillage, Produit chimique, EPI… C'est lui qui détermine la liste des zones proposées.</li>
+      <li>L'<b>emplacement</b> dépend de la référence :
+        <ul class="points">
+          <li><b>la référence a déjà son emplacement</b> : il s'affiche verrouillé (cadenas) — rien à choisir, il ne change pas au rangement ;</li>
+          <li><b>nouvelle référence, ou référence sans emplacement</b> : choisissez la <b>zone de rangement</b> dans la liste des zones du type ; elle deviendra l'<b>emplacement fixe</b> de la référence. La zone qu'il vous faut n'existe pas ? Cliquez <b>« Nouvelle zone pour ce type »</b> et saisissez son nom (la liste se grise ; « Revenir à la liste » pour annuler) ;</li>
+          <li><b>le type n'a encore aucune zone</b> : un bandeau orange le dit et le champ <b>« Nouvelle zone pour ce type »</b> est obligatoire — la zone saisie rejoint la liste du type.</li>
+        </ul>
+      </li>
+      <li>Cliquez <b>« Ranger en stock »</b>. La notification verte confirme : référence, quantité, zone et nouveau stock ; si c'était la dernière matière attendue pour une affaire, elle ajoute « matière disponible : N BDT débloqué(s) ». La ligne passe dans « Derniers rangements ».</li>
     </ol>
     <figure class="shot">
-      <img src="../../assets/form-stock-article.png" alt="Formulaire d'ajout d'un article au catalogue" loading="lazy">
-      <figcaption><b>Ajouter un article</b> — identité de la référence en haut, seuils et paramètres d'approvisionnement en bas.</figcaption>
+      <img src="../../assets/form-stock-rangement.png" alt="Fenêtre Accepter l'entrée en stock" loading="lazy">
+      <figcaption><b>Accepter l'entrée en stock</b> — nouvelle référence : type d'objet proposé (Matière première), zone de rangement à choisir dans la liste du type, lien « Nouvelle zone pour ce type ».</figcaption>
     </figure>
-
     <div class="tbl">
       <table>
         <thead><tr><th>Champ</th><th>Saisie</th><th>Obligatoire</th><th>Explication</th></tr></thead>
         <tbody>
-          <tr><td>Désignation (nom complet)</td><td>Texte (ex : Barres alu 2024-T3 Ø30)</td><td>Non</td><td>Nom de l'article tel qu'il apparaîtra partout dans le service.</td></tr>
-          <tr><td>Référence</td><td>Texte (REF-XXX)</td><td>Non</td><td>Référence interne ; elle fait aussi le lien avec le catalogue fournisseurs (voir onglet Gestion).</td></tr>
-          <tr><td>Activité</td><td>Liste : Seem / Semrac / both (les deux)</td><td>Non</td><td>Site(s) qui consomment l'article ; alimente le badge et le filtre d'activité.</td></tr>
-          <tr><td>Catégorie</td><td>Liste : matière première, consommable, chimique, emballage, sécurité, outillage, pièce rechange</td><td>Non</td><td>Famille de l'article ; alimente les filtres et la répartition de valeur du Dashboard.</td></tr>
-          <tr><td>Unité</td><td>Liste : kg, L, pcs, m, bobine, bouteille, rouleau, paire, palette</td><td>Non</td><td>Unité de comptage utilisée par toutes les jauges et saisies.</td></tr>
-          <tr><td>Fournisseur préféré</td><td>Texte</td><td>Non</td><td>Fournisseur proposé par défaut lors des demandes d'achat.</td></tr>
-          <tr><td>Seuil mini (stock sécurité)</td><td>Nombre</td><td>Non (fortement recommandé)</td><td>En dessous, l'article passe <b>CRITIQUE</b> : commander immédiatement.</td></tr>
-          <tr><td>Point de commande</td><td>Nombre</td><td>Non (fortement recommandé)</td><td>En dessous, l'article passe <b>BAS</b> : planifier l'approvisionnement.</td></tr>
-          <tr><td>Seuil maxi</td><td>Nombre</td><td>Non (fortement recommandé)</td><td>Capacité cible de stockage ; sert de référence à la jauge (100 %).</td></tr>
-          <tr><td>Quantité à commander (EOQ)</td><td>Nombre</td><td>Non</td><td>Quantité économique proposée par défaut quand on crée une DA depuis une alerte.</td></tr>
-          <tr><td>Prix unitaire HT (EUR)</td><td>Nombre</td><td>Non</td><td>Sert à valoriser le stock (Dashboard) et à estimer le montant des commandes.</td></tr>
-          <tr><td>Délai fournisseur (jours)</td><td>Nombre (7 par défaut)</td><td>Non</td><td>Délai de livraison habituel ; alimente l'alerte « Livraison urgente ».</td></tr>
-          <tr><td>Emplacement magasin</td><td>Texte (ex : Rack A1 / Armoire C2)</td><td>Non</td><td>Où trouver physiquement l'article dans le magasin.</td></tr>
+          <tr><td>Référence</td><td>Lecture (saisie si la ligne n'en a pas)</td><td>Oui</td><td>La référence de stock qui sera créditée ; une référence inconnue est créée au rangement.</td></tr>
+          <tr><td>Quantité à ranger</td><td>Lecture</td><td>—</td><td>La quantité contrôlée. Pas de conversion d'unité : une ligne fausse s'annule et se ressaisit en entrée manuelle.</td></tr>
+          <tr><td>Désignation</td><td>Lecture</td><td>—</td><td>Reprise de la ligne (bon de commande ou entrée manuelle).</td></tr>
+          <tr><td>Type d'objet</td><td>Liste des types actifs (pré-remplie)</td><td><b>Oui</b></td><td>Famille de l'objet ; fixe la liste des zones. Une référence qui a déjà un autre type le garde (il se change dans Niveaux d'approvisionnement).</td></tr>
+          <tr><td>Zone de rangement</td><td>Liste des zones du type</td><td><b>Oui</b> pour une référence sans emplacement</td><td>Devient l'emplacement fixe de la référence. Verrouillée quand la référence en a déjà un.</td></tr>
+          <tr><td>Nouvelle zone pour ce type</td><td>Texte (80 caractères)</td><td><b>Oui</b> si le type n'a aucune zone</td><td>Ajoute la zone à la liste du type, puis range dedans.</td></tr>
         </tbody>
       </table>
     </div>
 
+    <h3>Pas à pas — annuler une ligne erronée</h3>
+    <ol class="steps">
+      <li>Cliquez le petit bouton gris ⃠ au bout de la ligne.</li>
+      <li>Indiquez le <b>motif</b> (obligatoire, 3 caractères au moins) et confirmez « Annuler la ligne ».</li>
+      <li>Rien n'est crédité ; la ligne apparaît « ANNULÉE » avec son motif. Pour la bonne quantité, faites une <b>entrée manuelle</b> (Gestion du stock → Entrée stock).</li>
+    </ol>
+
+    <h3>Sous-onglet « Ajustement de stock »</h3>
+    <p>Pour recaler le stock sur la réalité (inventaire, perte, erreur). Le formulaire <b>« Ajustement / inventaire physique »</b> demande l'<b>article</b>, la <b>quantité constatée</b> (le comptage réel, pas l'écart), le <b>motif</b> (<i>Inventaire physique périodique</i>, <i>Écart constaté</i>, <i>Perte / détérioration</i>, <i>Correction d'erreur de saisie</i>, <i>Autre</i>) et une <b>précision</b> (obligatoire pour « Autre »). À droite, <b>« Derniers ajustements »</b> : date, article, écart (rouge si négatif), avant → après, auteur.</p>
+    <figure class="shot">
+      <img src="../../assets/stock-mes-ajustement.png" alt="Capture du sous-onglet Ajustement de stock" loading="lazy">
+      <figcaption><b>Ajustement de stock</b> — formulaire à gauche ; à droite, un ajustement d'inventaire de 20 à 19 (écart −1).</figcaption>
+    </figure>
+    <ol class="steps">
+      <li>Choisissez l'<b>article</b> (le stock actuel est rappelé entre parenthèses) et saisissez la <b>quantité constatée</b>.</li>
+      <li>Choisissez le <b>motif</b> et, si besoin, précisez-le.</li>
+      <li>Cliquez <b>« Valider l'ajustement »</b> : l'ERP demande confirmation en rappelant l'écart (« de 20 à 19, écart −1 ») puis enregistre un mouvement d'<b>ajustement</b> qui porte l'écart signé.</li>
+    </ol>
+
+    <h3>Sous-onglet « Types &amp; zones »</h3>
+    <p>À gauche, la liste des <b>types d'objet</b> (libellé modifiable, code technique dessous, ordre d'affichage, case Actif, nombre de références de ce type, disquette) et le champ <b>« Nouveau type »</b>. À droite, une carte par type avec ses <b>zones de stockage</b> (nom, ordre, case « active », nombre de références rangées dans la zone, disquette) et le champ <b>« Nouvelle zone pour … »</b>. Un type sans zone l'annonce : « la première mise en stock d'une référence de ce type demandera d'en créer une ».</p>
+    <figure class="shot">
+      <img src="../../assets/stock-mes-types.png" alt="Capture du sous-onglet Types et zones" loading="lazy">
+      <figcaption><b>Types &amp; zones</b> — les six types de départ ; Matière première a deux zones (dont une où une référence est rangée), Consommable une, les autres aucune.</figcaption>
+    </figure>
+    <ol class="steps">
+      <li><b>Ajouter une zone</b> : dans la carte du type, saisissez le nom dans « Nouvelle zone pour … » puis <b>Ajouter</b>. Une zone qui existe déjà pour ce type n'est pas recréée.</li>
+      <li><b>Ajouter un type</b> : saisissez son libellé (et un ordre, facultatif) puis <b>« Ajouter le type »</b>.</li>
+      <li><b>Modifier</b> un libellé, un ordre ou la case Actif / active, puis la <b>disquette</b> de la ligne.</li>
+    </ol>
+
+    <h3>Règles &amp; points d'attention</h3>
+    <ul class="points">
+      <li><b>Qui range</b> : les personnes qui ont l'<b>écriture sur le Stock</b> (Direction, Achats, Logistique, ou case « Écrire » cochée sur la fiche). Pour les autres, les boutons sont grisés. Le contrôleur du PV, la Qualité et la Direction <b>alimentent</b> la liste sans avoir ce droit.</li>
+      <li><b>Matière disponible pour la Production</b> : les bons de travail d'une affaire ne passent « matière OK » que lorsque toute la matière de ses bons de commande est <b>contrôlée et rangée</b> (et qu'aucune quantité n'est repartie sans remplacement). Ranger au fil de l'eau évite de bloquer l'atelier.</li>
+      <li><b>Rien ne se supprime</b> : une ligne à ranger s'annule avec un motif ; un type ou une zone se <b>désactive</b> (il n'est plus proposé, les références qui le portent le gardent).</li>
+      <li>Une zone qui est déjà l'emplacement de références <b>ne se renomme pas</b> : créez la nouvelle zone, déplacez les références (Niveaux d'approvisionnement), puis désactivez l'ancienne.</li>
+      <li>Le <b>type proposé</b> n'est qu'une suggestion (type de la référence, catégorie en stock, catégorie du bon de commande, catalogue fournisseur, registre chimique, catalogue EPI, nomenclature) : vérifiez-le avant de ranger.</li>
+      <li>Une même ligne ne se range qu'<b>une fois</b> : deux personnes qui cliquent en même temps — une seule passe, l'autre est invitée à recharger.</li>
+    </ul>
+    <div class="warn"><b>Attention :</b> l'emplacement choisi pour une <b>nouvelle référence</b> devient son <b>emplacement fixe</b> — il ne se change plus au rangement, seulement dans <b>Gestion du stock → Niveaux d'approvisionnement</b>, où le changement est tracé. Choisissez la zone avec soin.</div>
+    <div class="astuce"><b>Astuce :</b> si un message rouge « File illisible » ou une pastille « ? » apparaît, la liste n'est <b>pas</b> vide : la base n'a pas répondu. Rechargez la page dans un instant.</div>
+  </section>
+
+  <!-- ════════════════════════ 2. STOCK EN TEMPS RÉEL ════════════════════════ -->
+  <section class="tab" id="tab-rt">
+    <div class="tab-head"><span class="tab-num">2</span><h2>Stock en temps réel</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est la photographie instantanée du magasin : chaque référence avec sa jauge de niveau, son emplacement, son statut, sa couverture en jours et son fournisseur. Un coup d'œil aux compteurs de statut suffit pour savoir si la journée commence par des réapprovisionnements urgents.</p>
+
+    <h3>Ce que vous voyez</h3>
+    <p>En haut, le titre avec le nombre de références et le bouton vert <b>« Ajouter article »</b> — il ouvre <b>Gestion du stock → Entrée stock</b> : une nouvelle référence entre par la liste « À ranger ». Dessous, cinq compteurs cliquables qui filtrent le tableau par statut : <span class="b b-crit">CRITIQUE</span>, <span class="b b-warn">BAS</span>, <span class="b b-info">MOYEN</span>, <span class="b b-ok">HAUT</span> et <b>TOUT</b>. La barre de filtres propose l'<b>activité</b> (Tout / Seem / Semrac / Les deux), la <b>catégorie</b> (seules les catégories présentes s'affichent), la case <b>« Masquer les produits vides »</b> et le champ <b>« Rechercher article, ref… »</b>. Une légende rappelle le code couleur des jauges.</p>
+    <p>Le tableau liste chaque article avec les colonnes <b>Article / Réf</b> (et, dessous, l'<b>emplacement</b> 📍 quand il est connu), <b>Activité</b>, <b>Catégorie</b>, <b>Niveau de stock</b> (jauge avec la quantité, le seuil mini et le point de commande), <b>Couverture</b> (jours de stock restant — rouge sous 7 jours, orange sous 14 ; « N/A » sans consommation mensuelle), <b>Rotation</b> (sorties annualisées ÷ stock moyen), <b>Fournisseur</b>, <b>Statut</b> et <b>Actions</b>. Les lignes critiques sont teintées de rouge pâle.</p>
+    <p>Dans <b>Actions</b> : la flèche verte ouvre le formulaire <b>Entrée stock</b> pré-rempli avec la référence, la flèche rouge le formulaire <b>Sortie stock</b> avec l'article choisi ; sur les références <span class="b b-crit">CRITIQUE</span> ou <span class="b b-warn">BAS</span>, le bouton panier <b>« Créer DA »</b> crée une demande d'achat.</p>
+    <figure class="shot">
+      <img src="../../assets/stock-rt.png" alt="Capture de l'onglet Stock en temps réel" loading="lazy">
+      <figcaption><b>Stock en temps réel</b> — « Masquer les produits vides » cochée : seule la référence qui a du stock reste affichée, avec son emplacement ; le compteur « 402 référence(s) vide(s) masquée(s) » explique le reste.</figcaption>
+    </figure>
+
     <h3>Pas à pas — retrouver et filtrer une référence</h3>
     <ol class="steps">
       <li>Tapez un mot du nom ou de la référence dans <b>« Rechercher article, ref… »</b> : le tableau se filtre au fil de la frappe.</li>
-      <li>Combinez avec les filtres <b>activité</b> et <b>catégorie</b>, ou cliquez sur un <b>compteur de statut</b> pour ne voir que les articles critiques, bas, moyens ou hauts. Les filtres se cumulent ; le compteur <b>TOUT</b> réaffiche tout.</li>
-      <li>Sur la ligne trouvée, lisez la jauge : la barre colorée indique le niveau, les deux traits verticaux marquent le seuil mini et le point de commande, et les valeurs mini/max sont rappelées sous la barre.</li>
+      <li>Combinez avec les filtres <b>activité</b> et <b>catégorie</b>, ou cliquez sur un <b>compteur de statut</b>. Les filtres se cumulent ; <b>TOUT</b> réaffiche tout.</li>
+      <li>Vous cherchez une référence à zéro ? <b>Décochez « Masquer les produits vides »</b>.</li>
+      <li>Sur la ligne trouvée, lisez la jauge et l'emplacement sous la référence.</li>
     </ol>
 
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
-      <li>Un article configuré « Les deux » reste visible que l'on filtre sur Seem ou sur Semrac : il appartient aux deux activités.</li>
-      <li>La <b>couverture</b> se calcule à partir de la consommation mensuelle de l'article : stock ÷ consommation × 30 jours. Sans consommation renseignée, elle affiche « N/A ».</li>
-      <li>La <b>rotation</b> est calculée automatiquement depuis l'historique des mouvements ; un tiret signifie qu'il n'y a pas encore assez de sorties pour la mesurer.</li>
-      <li>Le bouton <b>« Créer DA »</b> n'apparaît que sur les lignes critiques ou basses : pour commander un article encore « haut », passez par le bouton <b>« Nouvelle DA »</b> de l'onglet Alertes et Réappro.</li>
+      <li><b>« Masquer les produits vides »</b> est cochée par défaut et <b>mémorisée sur ce poste</b> ; elle vaut aussi pour Niveaux d'approvisionnement. Un tableau presque vide n'est donc pas une panne : lisez le compteur « N référence(s) vide(s) masquée(s) ».</li>
+      <li>Un article « Les deux » reste visible que l'on filtre sur Seem ou sur Semrac.</li>
+      <li>La <b>couverture</b> = stock ÷ consommation mensuelle × 30 jours ; la <b>rotation</b> se calcule depuis les mouvements (tiret = pas assez de sorties).</li>
+      <li>Le stock affiché est le stock <b>rangé</b> : ce qui attend dans « À ranger » n'y figure pas encore.</li>
     </ul>
-    <div class="warn"><b>Attention :</b> le formulaire d'ajout d'article ne bloque aucun champ, mais un article créé <b>sans seuils</b> ne déclenchera jamais d'alerte de réapprovisionnement et sa jauge n'aura pas de sens. Renseignez toujours seuil mini, point de commande et seuil maxi, dans cet ordre croissant.</div>
-    <div class="astuce"><b>Astuce :</b> commencez chaque prise de poste par un clic sur le compteur <b>CRITIQUE</b> : s'il n'est pas à zéro, traitez ces références en premier (bouton panier ou onglet Alertes et Réappro.).</div>
+    <div class="astuce"><b>Astuce :</b> commencez chaque prise de poste par l'onglet <b>Rangement</b> (liste « À ranger ») puis par un clic sur le compteur <b>CRITIQUE</b>.</div>
   </section>
 
-  <!-- ════════════════════════ 2. GESTION DU STOCK ════════════════════════ -->
+  <!-- ════════════════════════ 3. GESTION DU STOCK ════════════════════════ -->
   <section class="tab" id="tab-gestion">
-    <div class="tab-head"><span class="tab-num">2</span><h2>Gestion du stock</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> C'est l'atelier de saisie du magasin : on y enregistre les flux physiques — entrées à la réception, sorties vers la production, régularisations d'inventaire — et on y règle le paramétrage du catalogue (seuils, réappro automatique). Chaque mouvement saisi ici est traçable : opérateur, référence de commande ou de lot, date. Les seuils réglés ici pilotent les alertes et les suggestions de réapprovisionnement de tout le service.</p>
+    <div class="tab-head"><span class="tab-num">3</span><h2>Gestion du stock</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> Les saisies du magasin hors réception fournisseur — une <b>entrée manuelle</b> (retour atelier, régularisation, livraison sans bon de commande), une <b>sortie</b> réelle — et le <b>paramétrage</b> de chaque référence : seuils, réappro automatique, type d'objet et emplacement fixe. Chaque écriture est tracée dans les Mouvements.</p>
 
     <h3>Ce que vous voyez</h3>
-    <p>Un bandeau vert rappelle la règle de traçabilité, puis quatre boutons à icône colorée servent de sous-onglets : <b>Entrée stock</b>, <b>Sortie stock</b>, <b>Ajustement / Inventaire</b> et <b>Catalogue &amp; seuils</b>. Les trois premiers présentent le même agencement : le formulaire de saisie à gauche, un rappel des derniers mouvements du même type à droite.</p>
+    <p>Un bandeau vert rappelle la règle de traçabilité, puis trois sous-onglets : <b>Entrée stock</b>, <b>Sortie stock</b> et <b>Niveaux d'approvisionnement</b>. L'ajustement d'inventaire est dans l'onglet <a href="#tab-mes">Rangement / Mise en stock</a>.</p>
     <figure class="shot">
-      <img src="../../assets/stock-gestion.png" alt="Capture de l'onglet Gestion du stock" loading="lazy">
-      <figcaption><b>Gestion du stock</b> — les quatre sous-onglets en haut ; formulaire de saisie à gauche, derniers mouvements à droite.</figcaption>
+      <img src="../../assets/stock-gestion.png" alt="Capture de l'onglet Gestion du stock, Entrée manuelle" loading="lazy">
+      <figcaption><b>Gestion du stock</b> — sous-onglet Entrée stock : le formulaire « Entrée manuelle » (qui ajoute une ligne à ranger) à gauche, les dernières entrées à droite.</figcaption>
     </figure>
 
-    <h3>Sous-onglet « Entrée stock »</h3>
-    <p>Pour enregistrer une réception de marchandise. Le formulaire <b>« Saisir une entrée »</b> demande : l'<b>article</b> (liste déroulante affichant le stock actuel de chacun), la <b>quantité reçue</b>, la <b>date de réception</b> (aujourd'hui par défaut), le <b>BL fournisseur</b> (ex : BLF-2026-XXX), la <b>DA liée</b> (ex : DA-2026-XXX) et l'<b>opérateur</b>. Le bouton <b>« Valider entrée »</b> enregistre le mouvement — confirmation « Entrée validée. Stock et historique mis à jour. » Le panneau <b>« Dernières entrées »</b> à droite affiche les cinq réceptions les plus récentes (article, date, quantité, opérateur).</p>
+    <h3>Sous-onglet « Entrée stock » — entrée manuelle</h3>
+    <p>Un bandeau vert le rappelle : <b>l'entrée ne crédite pas le stock tout de suite</b>, elle rejoint la liste <b>Rangement › À ranger</b>, où le type d'objet et l'emplacement sont confirmés. Le formulaire demande la <b>référence</b> (existante ou nouvelle — la liste propose les références connues ; pour une référence connue, la désignation, l'unité et le type se remplissent), la <b>désignation</b>, la <b>quantité</b>, l'<b>unité</b>, le <b>type d'objet</b> (ou « à choisir au rangement »), l'<b>affaire</b> (facultative) et le <b>motif</b> (obligatoire). Bouton <b>« Ajouter à la liste « À ranger » »</b>. À droite, <b>« Dernières entrées »</b>.</p>
 
     <h3>Sous-onglet « Sortie stock »</h3>
-    <p>Pour sortir de la matière ou des consommables du magasin. Le formulaire <b>« Saisir une sortie »</b> demande : l'<b>article</b>, la <b>quantité sortie</b>, la <b>date</b>, la <b>référence BDT / LOT / CMD</b> (le bon de travail, le lot ou la commande qui consomme — c'est ce lien qui rend la sortie traçable), l'<b>opérateur</b> et le <b>motif</b> parmi quatre : <i>Consommation production</i>, <i>Rebut / casse</i>, <i>Retour fournisseur</i>, <i>Transfert inter-atelier</i>. Le bouton <b>« Valider sortie »</b> enregistre ; le panneau <b>« Dernières sorties »</b> rappelle les six plus récentes avec leur motif.</p>
+    <p>Pour sortir réellement de la matière ou des consommables. Le formulaire demande l'<b>article</b> (les articles sans stock sont grisés), la <b>quantité sortie</b>, le <b>motif</b> (<i>Consommation production</i>, <i>Rebut / casse</i>, <i>Retour fournisseur</i>, <i>Transfert inter-atelier</i>, <i>Autre</i>), une <b>précision</b> (obligatoire pour « Autre »), le <b>BDT</b> et l'<b>affaire</b> (facultatifs). Bouton <b>« Valider la sortie »</b>, après confirmation. À droite, <b>« Dernières sorties »</b>.</p>
 
-    <h3>Sous-onglet « Ajustement / Inventaire »</h3>
-    <p>Pour recaler le stock théorique sur la réalité. Un bandeau jaune précise l'usage : <i>écart entre stock théorique et inventaire physique, perte, ou correction d'erreur de saisie</i>. Le formulaire demande : l'<b>article</b>, le <b>stock réel constaté</b> (la quantité comptée physiquement, pas l'écart), la <b>date d'inventaire</b>, le <b>motif</b> (<i>Inventaire physique périodique</i>, <i>Écart constaté</i>, <i>Perte / détérioration</i>, <i>Correction erreur de saisie</i>) et le <b>responsable inventaire</b>. Le bouton <b>« Valider ajustement »</b> confirme : « Ajustement validé. Écart tracé dans le journal. » À droite, le tableau <b>« Historique complet mouvements »</b> affiche les dix derniers mouvements tous types confondus (Date, Article, Type — badge <span class="b b-ok">ENTREE</span>, <span class="b b-crit">SORTIE</span>, <span class="b b-warn">AJUSTEMENT</span> ou <span class="b b-info">INVENTAIRE</span> —, Quantité, Opérateur).</p>
+    <h3>Sous-onglet « Niveaux d'approvisionnement »</h3>
+    <p>Le paramétrage de chaque référence. En tête, la case <b>« Masquer les produits vides »</b>, un champ <b>Rechercher</b> et le bouton <b>« Nouvel article »</b> (qui ouvre l'entrée manuelle). Un bandeau bleu rappelle que l'emplacement est fixé à la première mise en stock. Le tableau montre, par référence : <b>Article</b>, <b>Activité</b>, <b>Stock</b>, <b>Type d'objet</b> (liste), <b>Emplacement</b> (liste des zones du type, avec un bouton historique 🕘), <b>Seuil mini</b>, <b>Pt commande</b>, <b>Qté cmd</b>, <b>Réappro auto</b>, <b>Fournisseur</b> et la disquette qui enregistre les seuils. En dessous, le <b>catalogue fournisseurs par catégorie</b> (références déclarées dans les fiches fournisseurs, avec le stock réel ou « non stocké »).</p>
+    <figure class="shot">
+      <img src="../../assets/stock-niveaux.png" alt="Capture du sous-onglet Niveaux d'approvisionnement" loading="lazy">
+      <figcaption><b>Niveaux d'approvisionnement</b> — une référence avec son type d'objet et son emplacement fixe (liste des zones du type) ; les références vides sont masquées.</figcaption>
+    </figure>
 
-    <h3>Sous-onglet « Catalogue &amp; seuils »</h3>
-    <p>Le paramétrage de l'approvisionnement, référence par référence. Un tableau éditable liste chaque article avec : <b>Article</b>, <b>Activité</b>, <b>Stock</b> actuel, puis trois champs modifiables directement dans la ligne — <b>Seuil mini</b>, <b>Pt commande</b>, <b>Qté cmd</b> — la case à cocher <b>Réappro auto</b>, le <b>Fournisseur</b> et un bouton disquette <b>Action</b> qui enregistre la ligne (confirmation « Seuils enregistrés », complétée de « réappro auto activé » si la case est cochée). Le bouton <b>« Nouvel article »</b> ouvre le même formulaire d'ajout que l'onglet Stock en temps réel.</p>
-    <p>En dessous, la section <b>« Catalogue fournisseurs par catégorie »</b> agrège toutes les références déclarées dans les fiches fournisseurs (service Achats), groupées par catégorie (Matière, Accessoires…), avec les colonnes <b>Réf</b>, <b>Désignation</b>, <b>Fournisseur</b>, <b>Prix</b> et <b>Stock réel</b> : si la référence existe aussi dans votre stock, la quantité en magasin s'affiche en vert ; sinon la mention « non stocké » apparaît. C'est le pont entre ce que les fournisseurs proposent et ce que le magasin détient réellement.</p>
-
-    <h3>Pas à pas — enregistrer une réception</h3>
+    <h3>Pas à pas — faire une entrée manuelle</h3>
     <ol class="steps">
-      <li>Ouvrez <b>Gestion du stock → Entrée stock</b>.</li>
-      <li>Choisissez l'<b>article</b> dans la liste (le stock actuel s'affiche entre parenthèses), saisissez la <b>quantité reçue</b> et vérifiez la <b>date</b>.</li>
-      <li>Reportez le numéro du <b>BL fournisseur</b> et, si la réception solde une demande d'achat, le numéro de la <b>DA liée</b> : c'est ce qui permet de remonter du stock à la commande d'origine.</li>
-      <li>Indiquez votre nom en <b>opérateur</b> puis cliquez <b>« Valider entrée »</b>. Le mouvement apparaît dans « Dernières entrées » et dans l'onglet <b>Mouvements</b>.</li>
+      <li>Ouvrez <b>Gestion du stock → Entrée stock</b> (ou la flèche verte d'une ligne du Stock en temps réel).</li>
+      <li>Saisissez la <b>référence</b>, la <b>quantité</b> et le <b>motif</b> (« Retour atelier », « Régularisation »…) ; complétez désignation, unité, type d'objet et affaire si besoin.</li>
+      <li>Cliquez <b>« Ajouter à la liste « À ranger » »</b> : la page s'ouvre sur l'onglet Rangement ; acceptez la ligne pour créditer le stock.</li>
     </ol>
 
-    <h3>Pas à pas — régler les seuils et activer le réappro automatique</h3>
+    <h3>Pas à pas — sortir du stock</h3>
     <ol class="steps">
-      <li>Ouvrez <b>Gestion du stock → Catalogue &amp; seuils</b>.</li>
-      <li>Sur la ligne de l'article, ajustez <b>Seuil mini</b>, <b>Pt commande</b> et <b>Qté cmd</b> directement dans les champs.</li>
-      <li>Cochez <b>Réappro auto</b> si vous voulez que l'ERP crée <b>automatiquement une demande d'achat</b> dès que le stock de cette référence passe sous le point de commande — la génération automatique ne concerne que les références cochées.</li>
-      <li>Cliquez le bouton <b>disquette</b> de la ligne : l'ERP confirme « Seuils enregistrés ». Les jauges, statuts et alertes se recalculent avec les nouvelles valeurs.</li>
+      <li>Ouvrez <b>Gestion du stock → Sortie stock</b> (ou la flèche rouge d'une ligne).</li>
+      <li>Choisissez l'<b>article</b>, la <b>quantité</b> et le <b>motif</b>. Si la sortie sert un bon de travail, indiquez le <b>BDT</b> : l'ERP retrouve son lot et son affaire et impute la consommation au coût matière réel.</li>
+      <li>Cliquez <b>« Valider la sortie »</b> et confirmez. La notification donne le stock avant → après (et le lot imputé).</li>
+    </ol>
+
+    <h3>Pas à pas — régler les seuils et le réappro automatique</h3>
+    <ol class="steps">
+      <li>Ouvrez <b>Gestion du stock → Niveaux d'approvisionnement</b> et retrouvez la référence (Rechercher ; décochez « Masquer les produits vides » si elle est à zéro).</li>
+      <li>Ajustez <b>Seuil mini</b>, <b>Pt commande</b> et <b>Qté cmd</b> ; cochez <b>Réappro auto</b> pour qu'une DA se crée seule sous le point de commande.</li>
+      <li>Cliquez la <b>disquette</b> de la ligne : « Seuils enregistrés ».</li>
+    </ol>
+
+    <h3>Pas à pas — changer le type ou l'emplacement fixe d'une référence</h3>
+    <ol class="steps">
+      <li>Dans <b>Niveaux d'approvisionnement</b>, choisissez le nouveau <b>type d'objet</b> dans la colonne Type : il s'enregistre aussitôt et la liste des zones se met à jour (un type ne peut pas être vidé).</li>
+      <li>Choisissez la nouvelle zone dans la colonne <b>Emplacement</b> (« — aucun — » pour retirer l'emplacement). L'ERP demande confirmation (« Déplacer … de … vers … ») avec un <b>motif facultatif</b>.</li>
+      <li>Confirmez « Déplacer » : « Emplacement modifié et historisé ».</li>
+      <li>Le bouton 🕘 ouvre l'<b>historique des emplacements</b> de la référence : date, avant, après, motif, auteur (dont la première mise en stock).</li>
     </ol>
 
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
-      <li>Gardez toujours l'ordre <b>seuil mini &lt; point de commande &lt; seuil maxi</b> : c'est cette échelle qui donne leur sens aux statuts et aux jauges.</li>
-      <li>Une <b>sortie matière liée à un bon de travail</b> ne fait pas que décompter le magasin : elle alimente aussi le suivi des coûts de production (consommation imputée à la machine et au lot). D'où l'importance de renseigner la référence BDT / LOT / CMD.</li>
-      <li>Le tableau des seuils s'enregistre <b>ligne par ligne</b> : cliquez la disquette de chaque article modifié, sinon la saisie est perdue au changement de page.</li>
-      <li>Si le catalogue fournisseurs est vide, renseignez les catalogues dans les fiches fournisseurs (<b>Achats → Fournisseurs / ST</b>) : cette section se remplira automatiquement.</li>
+      <li>Gardez l'ordre <b>seuil mini &lt; point de commande &lt; seuil maxi</b>.</li>
+      <li>Une <b>sortie</b> est <b>refusée au-delà du stock disponible</b> ; un BDT ou une affaire inconnus sont refusés (rien n'est sorti). Une sortie notée pour une affaire <b>sans BDT</b> n'est pas valorisée dans le coût matière (message orange).</li>
+      <li>Un emplacement saisi avant le lot du 15/09/2026 (ex. <i>A1-01</i>) apparaît « (hors liste) » tant qu'aucune zone de ce nom n'existe pour le type : il reste l'emplacement de la référence.</li>
+      <li>Le tableau des seuils s'enregistre <b>ligne par ligne</b> (disquette).</li>
+      <li>Si le catalogue fournisseurs est vide, renseignez les catalogues dans <b>Achats → Fournisseurs / ST</b>.</li>
     </ul>
-    <div class="warn"><b>Attention :</b> l'historique des mouvements se conserve — on ne « supprime » pas une saisie erronée. En cas d'erreur (mauvaise quantité, mauvais article), passez par <b>Ajustement / Inventaire</b> avec le motif <i>Correction erreur de saisie</i> : l'écart reste tracé dans le journal, ce qui est exigé pour la traçabilité aéronautique.</div>
-    <div class="astuce"><b>Astuce :</b> pour l'ajustement, saisissez bien le <b>stock réel constaté</b> (le comptage physique), pas la différence : l'ERP calcule l'écart tout seul et le trace.</div>
+    <div class="warn"><b>Attention :</b> on ne « supprime » pas un mouvement. Une erreur de quantité se corrige par un <b>ajustement d'inventaire</b> (Rangement → Ajustement de stock, motif <i>Correction d'erreur de saisie</i>) : l'écart reste tracé, ce qui est exigé pour la traçabilité aéronautique.</div>
+    <div class="astuce"><b>Astuce :</b> l'entrée manuelle n'est pas faite pour les livraisons fournisseurs : elles passent par la réception et le PV (Expéditions), qui remplissent la liste « À ranger » tout seuls.</div>
   </section>
 
-  <!-- ════════════════════════ 3. MOUVEMENTS ════════════════════════ -->
+  <!-- ════════════════════════ 4. MOUVEMENTS ════════════════════════ -->
   <section class="tab" id="tab-mvts">
-    <div class="tab-head"><span class="tab-num">3</span><h2>Mouvements</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> C'est le journal de bord complet du magasin : chaque entrée, sortie, réception ou ajustement y est consigné avec son origine, son opérateur et sa date. C'est l'onglet de la traçabilité : en cas de doute sur un niveau de stock, d'audit ou de recherche d'une consommation, c'est ici que l'on remonte le fil.</p>
+    <div class="tab-head"><span class="tab-num">4</span><h2>Mouvements</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est le journal de bord complet du magasin : chaque entrée, sortie ou ajustement y est consigné avec son origine, son opérateur et sa date. C'est l'onglet de la traçabilité : en cas de doute sur un niveau de stock, d'audit ou de recherche d'une consommation, c'est ici que l'on remonte le fil.</p>
 
     <h3>Ce que vous voyez</h3>
-    <p>En haut, le titre avec le nombre total de mouvements et un champ <b>« Rechercher (article, source, opérateur…) »</b> qui filtre la liste en direct. Un bandeau bleu rappelle que chaque mouvement indique son <b>origine</b> : BDT (production), réception DA / BL, commande, consommation machine, ou sortie / saisie libre. Le tableau, trié du plus récent au plus ancien, comprend les colonnes <b>Date</b>, <b>Article</b>, <b>Type</b> (<span class="b b-ok">↓ Entrée</span>, <span class="b b-crit">↑ Sortie</span>, <span class="b b-info">± Ajustement</span>, <span class="b b-ok">↓ Réception</span>), <b>Qté</b>, <b>Avant→Après</b> (le niveau de stock avant puis après le mouvement), <b>Origine</b> (étiquette colorée : BDT, Réception DA, BL, Lot, Commande, Conso. machine, ou « Sortie / saisie libre » pour une saisie manuelle sans référence), <b>Opérateur</b> et <b>Motif</b>.</p>
+    <p>En haut, le titre avec le nombre de mouvements et un champ <b>« Rechercher (article, source, opérateur…) »</b>. Le tableau, du plus récent au plus ancien, comprend <b>Date</b>, <b>Article</b>, <b>Type</b> (<span class="b b-ok">↓ Entrée</span>, <span class="b b-crit">↑ Sortie</span>, <span class="b b-info">± Ajustement</span>), <b>Qté</b> (l'écart signé pour un ajustement), <b>Avant→Après</b>, <b>Origine</b>, <b>Opérateur</b> et <b>Motif</b>.</p>
+    <p>L'étiquette <b>Origine</b> dit d'où vient le mouvement : <b>Mise en stock · BC …</b> (entrée acceptée dans l'onglet Rangement), <b>Ajustement d'inventaire</b>, <b>BDT …</b> (production), <b>Réception BC …</b> (entrée faite directement au PV, avant le 15/09/2026), <b>Réception DA</b>, <b>BL</b>, <b>Lot</b>, <b>Commande</b>, <b>Conso. machine</b>, ou « Sortie / saisie libre ».</p>
     <figure class="shot">
       <img src="../../assets/stock-mvts.png" alt="Capture de l'onglet Mouvements" loading="lazy">
-      <figcaption><b>Mouvements</b> — le journal complet avec, pour chaque ligne, le type, la colonne Avant→Après et l'étiquette d'origine du mouvement.</figcaption>
+      <figcaption><b>Mouvements</b> — une entrée « Mise en stock » (rangement accepté) et un ajustement d'inventaire, avec la colonne Avant→Après.</figcaption>
     </figure>
 
     <h3>Pas à pas — retracer l'historique d'un article</h3>
     <ol class="steps">
-      <li>Tapez le nom de l'article (ou une référence de BDT, un nom d'opérateur, un motif) dans le champ de recherche : seules les lignes correspondantes restent affichées.</li>
-      <li>Lisez la colonne <b>Avant→Après</b> de haut en bas : vous suivez l'évolution exacte du niveau de stock, mouvement par mouvement.</li>
-      <li>L'étiquette <b>Origine</b> vous dit qui a consommé ou approvisionné : un bon de travail (production), une réception de demande d'achat, un bon de livraison, un lot, une commande, une machine — ou une saisie libre du magasin.</li>
+      <li>Tapez le nom de l'article (ou un n° de BDT, un opérateur, un motif) dans le champ de recherche.</li>
+      <li>Lisez la colonne <b>Avant→Après</b> de haut en bas : vous suivez l'évolution exacte du niveau de stock.</li>
+      <li>L'étiquette <b>Origine</b> vous dit qui a approvisionné ou consommé.</li>
     </ol>
 
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
-      <li>Ce journal est <b>en lecture seule</b> : les mouvements se créent depuis l'onglet Gestion du stock (ou automatiquement par la production et les réceptions), jamais ici.</li>
-      <li>Une origine « Sortie / saisie libre » signale un mouvement saisi sans référence de rattachement : à éviter autant que possible, car il casse la chaîne de traçabilité commande → lot → consommation.</li>
-      <li>Le compteur du bandeau d'onglet (en haut de page) reprend le nombre total de mouvements enregistrés.</li>
+      <li>Ce journal est <b>en lecture seule</b> : les mouvements naissent du rangement, des sorties, des ajustements et de la production, jamais ici.</li>
+      <li>Une ligne rangée n'a <b>qu'un</b> mouvement d'entrée : la base refuse un second crédit pour la même ligne.</li>
+      <li>L'onglet affiche les 200 derniers mouvements.</li>
     </ul>
-    <div class="astuce"><b>Astuce :</b> avant un inventaire tournant, filtrez l'article concerné et comparez le dernier « Après » du journal avec votre comptage physique : l'écart à régulariser se lit immédiatement.</div>
+    <div class="astuce"><b>Astuce :</b> avant un inventaire tournant, filtrez l'article et comparez le dernier « Après » avec votre comptage : l'écart à régulariser se lit immédiatement.</div>
   </section>
 
-  <!-- ════════════════════════ 4. ALERTES ET RÉAPPRO. ════════════════════════ -->
+  <!-- ════════════════════════ 5. ALERTES ET RÉAPPRO. ════════════════════════ -->
   <section class="tab" id="tab-alertes">
-    <div class="tab-head"><span class="tab-num">4</span><h2>Alertes et Réappro.</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> C'est la liste de courses du magasin : tous les articles passés sous leurs seuils y sont rassemblés, classés par gravité, avec la quantité à commander déjà proposée. De là, un clic crée la <b>demande d'achat</b> qui part chez les Achats. Un stock critique non traité, c'est une production arrêtée : cet onglet se consulte tous les jours.</p>
+    <div class="tab-head"><span class="tab-num">5</span><h2>Alertes et Réappro.</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est la liste de courses du magasin : tous les articles passés sous leurs seuils y sont rassemblés, classés par gravité, avec la quantité à commander déjà proposée. De là, un clic crée la <b>demande d'achat</b> qui part chez les Achats.</p>
 
     <h3>Ce que vous voyez</h3>
-    <p>En haut, le titre avec une pastille rouge <b>« N articles à commander »</b> (si au moins un article est sous ses seuils) et le bouton vert <b>« Nouvelle DA »</b> pour une demande d'achat libre. Quatre tuiles KPI résument la situation : <b>Articles critiques</b> (sous le seuil mini), <b>Articles bas</b> (sous le point de commande), <b>Valeur à commander</b> (estimation en euros des commandes urgentes : quantités à commander × prix unitaires) et <b>Livraison urgente (≤3j)</b> (articles critiques dont le fournisseur livre en 3 jours ou moins — il est encore temps d'être livré vite).</p>
-    <p>Suivent jusqu'à deux tableaux : <b>Stock CRITIQUE</b>, précédé d'un bandeau rouge « En dessous du seuil de sécurité. Commander immédiatement. », et <b>Stock BAS</b>, précédé d'un bandeau orange « Point de commande atteint. Planifier l'approvisionnement. ». Les deux partagent les mêmes colonnes : <b>Article</b>, <b>Activité</b>, <b>Stock actuel</b>, <b>Seuil mini</b>, <b>Écart</b> (le manque sous le point de commande), <b>Couverture</b> (jours restants), <b>Fournisseur</b> (avec son délai de livraison), <b>Qté à commander</b> (avec le montant estimé) et le bouton <b>« Créer DA »</b>. Si aucun article n'est en alerte, l'onglet affiche simplement « Tous les stocks sont corrects — Aucune alerte de réapprovisionnement. »</p>
+    <p>En haut, le titre avec une pastille rouge <b>« N articles à commander »</b> et le bouton vert <b>« Nouvelle DA »</b>. Quatre tuiles : <b>Articles critiques</b>, <b>Articles bas</b>, <b>Valeur à commander</b> (quantités à commander × prix unitaires) et <b>Livraison urgente (≤3j)</b>. Suivent les tableaux <b>Stock CRITIQUE</b> et <b>Stock BAS</b> : <b>Article</b>, <b>Activité</b>, <b>Stock actuel</b>, <b>Seuil mini</b>, <b>Écart</b>, <b>Couverture</b>, <b>Fournisseur</b> (avec son délai), <b>Qté à commander</b> (avec le montant estimé) et le bouton <b>« Créer DA »</b>. Sans alerte : « Tous les stocks sont corrects ».</p>
     <figure class="shot">
       <img src="../../assets/stock-alertes.png" alt="Capture de l'onglet Alertes et Réappro." loading="lazy">
       <figcaption><b>Alertes et Réappro.</b> — les quatre tuiles de synthèse puis les tableaux Stock CRITIQUE et Stock BAS, chacun avec son bouton « Créer DA » par ligne.</figcaption>
@@ -201,20 +281,20 @@
     <h3>Pas à pas — créer une DA depuis une alerte (le cas courant)</h3>
     <ol class="steps">
       <li>Sur la ligne de l'article en alerte, cliquez <b>« Créer DA »</b>.</li>
-      <li>L'ERP crée immédiatement la demande d'achat, pré-remplie avec l'article (nom + référence), la <b>quantité à commander</b> proposée, le <b>fournisseur</b> préféré, la priorité <b>urgent</b> et le demandeur « Stock ». Aucun formulaire à remplir.</li>
-      <li>Une notification confirme le numéro : « DA <b>DA-2026-XXX</b> créée et transmise aux Achats (à traiter). » La demande apparaît aussitôt dans <b>Achats → Demandes d'achat</b>, où l'acheteur la transformera en bon de commande.</li>
-      <li>À la réception de la marchandise, enregistrez l'entrée (onglet Gestion du stock) : l'article repasse au-dessus de ses seuils et sort de la liste des alertes.</li>
+      <li>L'ERP crée la demande, pré-remplie : article (nom + référence), <b>quantité à commander</b>, <b>fournisseur</b> préféré, priorité <b>urgent</b>, demandeur « Stock ».</li>
+      <li>La notification confirme le numéro ; la demande apparaît dans <b>Achats → Demandes d'achat</b>.</li>
+      <li>À la livraison, la réception et le PV de contrôle (Expéditions) mettent la marchandise dans <b>Rangement → À ranger</b> ; une fois rangée, l'article repasse au-dessus de ses seuils.</li>
     </ol>
 
     <h3>Pas à pas — créer une DA manuelle (hors alerte)</h3>
     <ol class="steps">
-      <li>Cliquez <b>« Nouvelle DA »</b> en haut de l'onglet : la fenêtre « Nouvelle demande d'achat » s'ouvre.</li>
-      <li>Saisissez la <b>désignation</b> (seul champ obligatoire), choisissez le <b>type</b> et la <b>priorité</b>, complétez quantité, fournisseur, date de livraison souhaitée et éventuel numéro d'affaire.</li>
-      <li>Cliquez <b>« Créer la DA »</b> : la demande part chez les Achats (« à traiter »), avec le demandeur « Stock ».</li>
+      <li>Cliquez <b>« Nouvelle DA »</b> : la fenêtre « Nouvelle demande d'achat » s'ouvre.</li>
+      <li>Saisissez la <b>désignation</b> (seul champ obligatoire), le <b>type</b>, la <b>priorité</b>, la quantité, le fournisseur, la date souhaitée et l'éventuel numéro d'affaire.</li>
+      <li>Cliquez <b>« Créer la DA »</b> : la demande part chez les Achats (« à traiter »).</li>
     </ol>
     <figure class="shot">
       <img src="../../assets/form-stock-da.png" alt="Formulaire de nouvelle demande d'achat" loading="lazy">
-      <figcaption><b>Nouvelle DA</b> — seul le champ « Article / Désignation » est obligatoire ; type, priorité et livraison souhaitée guident le travail de l'acheteur.</figcaption>
+      <figcaption><b>Nouvelle DA</b> — seul le champ « Article / Désignation » est obligatoire.</figcaption>
     </figure>
 
     <div class="tbl">
@@ -225,7 +305,7 @@
           <tr><td>Type</td><td>Liste : Matière / Outillage / Consommable / Chimique / Sous-traitance</td><td>Non</td><td>Famille d'achat ; aide les Achats à router la demande.</td></tr>
           <tr><td>Quantité</td><td>Texte libre (ex : 12 barres)</td><td>Non</td><td>Quantité souhaitée, avec son unité en clair.</td></tr>
           <tr><td>Fournisseur</td><td>Texte</td><td>Non</td><td>Fournisseur pressenti ; l'acheteur reste libre de le changer.</td></tr>
-          <tr><td>Priorité</td><td>Liste : Normal / Urgent / Critique</td><td>Non</td><td>Niveau d'urgence affiché côté Achats pour prioriser le traitement.</td></tr>
+          <tr><td>Priorité</td><td>Liste : Normal / Urgent / Critique</td><td>Non</td><td>Niveau d'urgence affiché côté Achats.</td></tr>
           <tr><td>Livraison souhaitée</td><td>Date</td><td>Non</td><td>Date à laquelle vous avez besoin de la marchandise.</td></tr>
           <tr><td>N° affaire (option)</td><td>Texte (AFF-2026-XXX)</td><td>Non</td><td>Rattache l'achat à une affaire cliente pour le suivi des coûts.</td></tr>
         </tbody>
@@ -234,23 +314,22 @@
 
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
-      <li>La <b>quantité à commander</b> proposée est la quantité de commande (EOQ) paramétrée sur l'article ; à défaut, l'ERP propose environ 80 % de l'écart entre le stock actuel et le seuil maxi.</li>
-      <li>La tuile <b>Valeur à commander</b> n'est qu'une estimation : elle multiplie les quantités à commander par les prix unitaires renseignés au catalogue.</li>
-      <li>Si vous avez coché <b>Réappro auto</b> sur une référence (Gestion du stock → Catalogue &amp; seuils), la DA se crée toute seule au passage sous le point de commande : inutile de la doubler ici, vérifiez d'abord dans <b>Achats → Demandes d'achat</b>.</li>
-      <li>Créer la DA ne commande rien chez le fournisseur : c'est l'acheteur qui la transforme en <b>bon de commande</b>, dont la réception se suit ensuite côté <b>Expéditions</b>.</li>
+      <li>La <b>quantité à commander</b> proposée est la quantité de commande paramétrée sur l'article ; à défaut, environ 80 % de l'écart entre le stock et le seuil maxi.</li>
+      <li>Le <b>réappro automatique</b> (case « Réappro auto » dans Niveaux d'approvisionnement) <b>compte ce qui attend dans « À ranger »</b> : une matière reçue mais pas encore rangée n'est pas recommandée. Si la liste « À ranger » est illisible (panne), le réappro automatique ne tourne pas à cet affichage.</li>
+      <li>Les tableaux d'alertes, eux, montrent le stock <b>rangé</b> : une référence dont la livraison attend son rangement peut y figurer — rangez-la plutôt que de recommander.</li>
+      <li>Créer la DA ne commande rien : c'est l'acheteur qui la transforme en <b>bon de commande</b>.</li>
     </ul>
-    <div class="warn"><b>Attention :</b> le bouton « Créer DA » crée une demande <b>à chaque clic</b> — cliquer deux fois crée deux demandes. Attendez la notification de confirmation avec le numéro de DA avant de recliquer.</div>
-    <div class="astuce"><b>Astuce :</b> surveillez la tuile <b>Livraison urgente (≤3j)</b> : ces articles critiques ont un fournisseur rapide — en créant la DA le matin même, vous pouvez éviter la rupture.</div>
+    <div class="warn"><b>Attention :</b> le bouton « Créer DA » crée une demande <b>à chaque clic</b>. Attendez la notification avec le numéro de DA avant de recliquer.</div>
+    <div class="astuce"><b>Astuce :</b> surveillez la tuile <b>Livraison urgente (≤3j)</b> : en créant la DA le matin même, vous pouvez éviter la rupture.</div>
   </section>
 
-  <!-- ════════════════════════ 5. DASHBOARD ════════════════════════ -->
+  <!-- ════════════════════════ 6. DASHBOARD ════════════════════════ -->
   <section class="tab" id="tab-dashboard">
-    <div class="tab-head"><span class="tab-num">5</span><h2>Dashboard</h2></div>
-    <p class="tab-but"><b>À quoi ça sert.</b> C'est la vue de pilotage du magasin : combien d'argent dort en stock, dans quelles catégories, quelle est la santé globale des niveaux et quels articles concentrent la valeur (analyse ABC). Utile pour la revue hebdomadaire, la préparation des inventaires et les arbitrages d'achats.</p>
+    <div class="tab-head"><span class="tab-num">6</span><h2>Dashboard</h2></div>
+    <p class="tab-but"><b>À quoi ça sert.</b> C'est la vue de pilotage du magasin : combien d'argent dort en stock, dans quelles catégories, quelle est la santé globale des niveaux et quels articles concentrent la valeur (analyse ABC).</p>
 
     <h3>Ce que vous voyez</h3>
-    <p>Quatre tuiles KPI en tête : <b>Valeur totale du stock</b> (en euros, avec le nombre de références), <b>Articles critiques</b> (action immédiate requise), <b>Couverture moyenne</b> (en jours de production) et <b>Mouvements ce mois</b> (entrées + sorties). Dessous, deux blocs côte à côte : <b>Valeur par catégorie</b> (barres horizontales : où se concentre l'argent immobilisé — matière première, consommables, chimiques…) et <b>État du stock global</b> (répartition des références par statut critique / bas / moyen / haut, en nombre et en pourcentage, avec l'objectif affiché : <b>0 critique, moins de 10 % bas</b>).</p>
-    <p>Enfin, le tableau <b>« Analyse ABC — Top articles par valeur de stock »</b> classe les références qui pèsent le plus : la classe <b>A</b> regroupe les articles totalisant 70 % de la valeur du stock, <b>B</b> les 20 % suivants, <b>C</b> les 10 % restants. Colonnes : <b>ABC</b> (badge de classe), <b>Article</b>, <b>Activité</b>, <b>Quantité</b>, <b>PU</b> (prix unitaire), <b>Valeur stock</b>, <b>Couverture</b> et <b>Statut</b>.</p>
+    <p>Quatre tuiles : <b>Valeur totale du stock</b>, <b>Articles critiques</b>, <b>Couverture moyenne</b> et <b>Mouvements ce mois</b>. Dessous, <b>Valeur par catégorie</b> et <b>État du stock global</b> (objectif : <b>0 critique, moins de 10 % bas</b>). Enfin, <b>« Analyse ABC — Top articles par valeur de stock »</b> : classe <b>A</b> (70 % de la valeur), <b>B</b> (20 %), <b>C</b> (10 %).</p>
     <figure class="shot">
       <img src="../../assets/stock-dashboard.png" alt="Capture de l'onglet Dashboard" loading="lazy">
       <figcaption><b>Dashboard</b> — les quatre KPI, la valeur par catégorie, l'état global du stock et l'analyse ABC en bas.</figcaption>
@@ -258,19 +337,18 @@
 
     <h3>Pas à pas — la revue hebdomadaire du magasin</h3>
     <ol class="steps">
-      <li>Vérifiez la tuile <b>Articles critiques</b> : si elle n'est pas à zéro, passez par l'onglet <b>Alertes et Réappro.</b> avant toute autre chose.</li>
-      <li>Comparez l'<b>état du stock global</b> à l'objectif (0 critique, &lt;10 % bas) : une dérive du pourcentage « bas » annonce les ruptures de la semaine suivante.</li>
-      <li>Parcourez l'<b>analyse ABC</b> : concentrez la surveillance (seuils justes, inventaires plus fréquents, négociation fournisseur) sur les articles de classe <b>A</b> — c'est là que se joue la valeur.</li>
-      <li>Un œil à la <b>couverture moyenne</b> et aux <b>mouvements du mois</b> confirme le rythme général : peu de mouvements et une couverture qui gonfle, c'est du stock qui dort.</li>
+      <li>Vérifiez que la liste <b>À ranger</b> est à jour, puis la tuile <b>Articles critiques</b>.</li>
+      <li>Comparez l'<b>état du stock global</b> à l'objectif.</li>
+      <li>Parcourez l'<b>analyse ABC</b> : concentrez la surveillance sur la classe <b>A</b>.</li>
+      <li>Un œil à la <b>couverture moyenne</b> et aux <b>mouvements du mois</b> confirme le rythme général.</li>
     </ol>
 
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
-      <li>Tous les chiffres sont recalculés à l'affichage à partir du stock et des mouvements réels — rien n'est saisi à la main dans cet onglet.</li>
-      <li>La <b>valeur du stock</b> dépend des prix unitaires renseignés au catalogue : un article sans prix compte pour zéro dans la valeur totale et dans l'analyse ABC.</li>
-      <li>La <b>couverture moyenne</b> ne prend en compte que les articles dont la consommation mensuelle est renseignée.</li>
+      <li>Tous les chiffres sont recalculés à l'affichage à partir du stock <b>rangé</b> et des mouvements réels.</li>
+      <li>La <b>valeur du stock</b> dépend des prix unitaires renseignés : un article sans prix compte pour zéro.</li>
     </ul>
-    <div class="note"><b>Bon à savoir :</b> un dashboard Stock plus complet (filtres par période, comparaisons, export) existe aussi dans <b>Tableaux de bord → Dashboard Stock</b>, commun à toute l'entreprise.</div>
+    <div class="note"><b>Bon à savoir :</b> le <b>Dashboard Stock</b> commun (Tableaux de bord) compte, dans ses ruptures et ses « sous le mini », la quantité qui attend son rangement : une référence arrivée mais pas encore rangée n'y apparaît pas en rupture.</div>
   </section>
 
   <div class="docnav">
@@ -279,7 +357,7 @@
   </div>
 
   <footer class="doc">
-    ERP Seem Semrac — manuel utilisateur généré depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs). En cas d'écart entre ce manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
+    ERP Seem Semrac — manuel utilisateur généré depuis le dépôt (docs/manuel/html). Les captures proviennent de docs/assets (rafraîchies par scripts_doc/capture_screens.mjs et capture_forms.mjs). En cas d'écart entre ce manuel et l'application, l'application fait foi ; signaler l'écart pour mise à jour.
   </footer>
 
 </div>

@@ -20,7 +20,7 @@ L'ERP couvre **toute la chaîne** d'un atelier d'usinage/traitement de surface a
 | **OAS** | Traitement de surface (bains, balancelles, relevés). |
 | **Qualité** | Non-conformités, 8D, contrôles (Cp/Cpk), dérogations, plans de contrôle. |
 | **Sécurité (HSE/RSE)** | DUER, accidents, EPI, chimie/FDS, ATEX, formations, environnement. |
-| **Stock** | Matières, mouvements, périssables (FIFO). |
+| **Stock** | **Rangement / mise en stock** de ce qui arrive (type d'objet, zone, emplacement fixe), matières, sorties, inventaires, mouvements, périssables (FIFO). |
 | **Expéditions** | Bons de livraison (partiels), PV. |
 | **Maintenance** | Machines, préventif → ordres de maintenance. |
 | **RH** | Salariés, rôles, congés/absences, habilitations. |
@@ -32,7 +32,7 @@ L'ERP couvre **toute la chaîne** d'un atelier d'usinage/traitement de surface a
 ## Les parcours métier (le fil rouge)
 - **Vendre → produire → livrer → facturer** : offre → commande → OF/BDT au planning → BL → facture.
 - **Retour client** : non-conformité → avoir *ou* commande prioritaire → relance de production.
-- **Acheter** : demande d'achat → bon de commande (certificat matière exigé ou non) → réception (références du fournisseur, hors France) → PV de contrôle ligne par ligne par un contrôleur ayant l'écriture Expéditions → stock, ou NC + quarantaine → décision Qualité.
+- **Acheter** : demande d'achat → bon de commande (certificat matière exigé ou non) → réception (références du fournisseur, hors France) → PV de contrôle avec la **quantité reçue de chaque ligne** par un contrôleur ayant l'écriture Expéditions → lignes conformes dans **Stock › À ranger** → rangement (le stock est crédité, la matière de l'affaire devient disponible) ; lignes en écart → NC fournisseur (une par ligne), quarantaine pour une observation → décision Qualité → À ranger ; excédent → Direction ; reliquat annoncé → BC de reliquat à dater aux Achats.
 - **Traiter une non-conformité** : NC → analyse 8D → actions correctives.
 - **Nouvelle pièce** : DT → nomenclature (BE) → planning de production.
 

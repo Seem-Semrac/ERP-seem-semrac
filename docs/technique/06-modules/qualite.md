@@ -34,7 +34,7 @@ Contrôle, non-conformités, 8D, libération de lots, capabilité, dérogations,
 <!-- /auto -->
 ## Points d'attention
 <!-- auto:notes -->
-NC « client » → bouton « Retour » → avoir / commande P. Porte qualité : BL bloqués (409) si quarantaine/NC bloquante. Capabilité via écart réduit → Cp/Cpk. QUARANTAINE : un lot issu d’une réception fournisseur (PV de contrôle non conforme) se tranche par « Décider » (POST /api/qualite/quarantaine/:id/decision-fournisseur) — renvoi au fournisseur, dérogation fournisseur ou entrée partielle en stock, compensé par un avoir (registre des Achats) ou un remplacement (le BC rouvre sa réception de la quantité non acceptée) ; la décision est réservée atomiquement (pas de double clic) et son motif est obligatoire. « Statuer » reste réservé aux quarantaines INTERNES et refuse un lot de réception (409).
+NC « client » → bouton « Retour » → avoir / commande P. Porte qualité : BL bloqués (409) si quarantaine/NC bloquante. Capabilité via écart réduit → Cp/Cpk. QUARANTAINE : un lot issu d’une réception fournisseur (PV de contrôle non conforme) se tranche par « Décider » (POST /api/qualite/quarantaine/:id/decision-fournisseur) — renvoi au fournisseur, dérogation fournisseur ou entrée partielle (lot F : la part acceptée part dans Stock › Mise en stock, ligne par ligne du BC — répartition obligatoire quand le lot couvre plusieurs articles), compensé par un avoir (registre des Achats) ou un remplacement (le BC rouvre sa réception de la quantité non acceptée) ; la décision est réservée atomiquement (pas de double clic) et son motif est obligatoire. « Statuer » reste réservé aux quarantaines INTERNES et refuse un lot de réception (409).
 <!-- /auto -->
 ## Lot reçu non conforme : la décision fournisseur (12/09/2026)
 
@@ -50,8 +50,8 @@ l'argent. Elle se tranche par
 | Décision | Stock | Quarantaine | Suite |
 |---|---|---|---|
 | Renvoi au fournisseur | rien n'entre | `statut=rejete`, `issue=retour_fournisseur` | retour à expédier (Expéditions) |
-| Dérogation fournisseur | tout le lot entre | `statut=libere_derogation`, `issue=derogation_fournisseur` | réfaction facultative → avoir |
-| Entrée partielle | la part acceptée entre | `statut=libere`, `issue=entree_partielle` | le reste repart ou part au rebut (registre des déchets) |
+| Dérogation fournisseur | tout le lot entre (lot F : part dans Stock › Mise en stock, crédité au rangement) | `statut=libere_derogation`, `issue=derogation_fournisseur` | réfaction facultative → avoir |
+| Entrée partielle | la part acceptée entre (lot F : idem, répartie par ligne du BC) | `statut=libere`, `issue=entree_partielle` | le reste repart ou part au rebut (registre des déchets) |
 
 **Compensation** (renvoi et entrée partielle) : `avoir` — inscrit dans `avoirs_fournisseurs`, montant
 pré-rempli au prix unitaire du BC (`prixUnitaireBc`), corrigeable — ou `remplacement` : `qte_recue` du
@@ -100,12 +100,65 @@ Le PV de contrôle d'une réception fournisseur se remplit aux **Expéditions** 
   observation, observation générale, gravité, certificat `{requis, confirme}`, contrôleur, saisi par) +
   `controleur_id`, `controleur_nom`, `saisi_par`, `certificat_matiere` (migration 012 / `cloud-10` ; sans elles, tout
   est en texte dans `observations`). L'onglet PV de Contrôle ne l'affiche pas encore.
-- **Décision fournisseur** (`/api/qualite/quarantaine/:id/decision-fournisseur`) : pour un **BC à plusieurs
+- ~~**Décision fournisseur**~~ (**remplacé au lot F**, section ci-dessous : répartition par ligne, file Mise en stock) (`/api/qualite/quarantaine/:id/decision-fournisseur`) : pour un **BC à plusieurs
   articles**, l'entrée en stock se fait ligne par ligne et **seulement si toute la commande est acceptée** ; une
   entrée partielle n'est pas répartissable par article → avertissement « Stock non crédité » ou « Entrée en stock
   incomplète ». Le montant de l'avoir reste à 0 avec avertissement quand la quantité commandée du BC est vide.
 - Valeurs `statut` / `decision` de `pv_controle` **inchangées** (contraintes CHECK du cloud) : `valide` / `libere`
   (conforme), `nc_ouverte` / `bloque` (non conforme).
+
+## Lot F : NC par ligne, quarantaines par ligne, part acceptée → Stock › Mise en stock (15/09/2026)
+
+Le PV de réception (Expéditions, section « Lot F ») change ce qui arrive en Qualité :
+
+- **Une NC fournisseur par ligne du BC en écart** (plus une NC « Logistique - Certificats » si le certificat exigé
+  manque) : `type_nc` « Fournisseur » (liste `NC_TYPE_OPTS`), `categorie` `quantitative` / `qualitative` / `quantitative
+  et qualitative`, `type_defaut` « Logistique - Quantité » pour un écart purement quantitatif, sinon « À requalifier » (la
+  Qualité précise la nature), `ref_article`, `designation`, `nb_pieces`, description détaillée, `detecteur`
+  « Réception ». ⚠ `categorie` sert aussi à « administratif / production » (`ncCategorieKey`, `qualSaveNC`) : à la
+  ré-édition, la catégorie est redemandée ; la nature reste en tête de la description.
+- **Une quarantaine par ligne qualitative** (part prévue reçue, `ligne_idx`) et **une pour le certificat absent**
+  (lignes sans observation) — un PV peut donc en créer plusieurs, ou **aucune** (écarts purement quantitatifs, suivis par
+  leurs NC). `recalculerStatutBc` exige que **toutes** les quarantaines d'un BL soient décidées (et au moins le nombre
+  annoncé par le PV) pour dire le BC « contrôlé ».
+- **L'excédent n'est jamais en quarantaine** : il attend la validation de la Direction, « sous réserve Qualité » quand la
+  ligne est qualitative ou le certificat absent (la Direction ne peut l'accepter qu'après la décision de la Qualité, et
+  pas si tout le lot a été renvoyé). Un excédent refusé crée une quarantaine **déjà décidée** `QEXC-<id validation>`
+  (`retour_fournisseur`, `rejete`, compensation `aucune`) qui apparaît aussi dans les listes de quarantaines.
+
+### Décision fournisseur : la part acceptée part dans la file
+
+`POST /api/qualite/quarantaine/:id/decision-fournisseur` — la part acceptée (dérogation = tout le lot, entrée partielle
+= `qte_acceptee`) **n'entre plus en stock** : elle devient des lignes `decision_qualite` de la file Stock › Mise en stock
+(une par ligne du BC couverte, `quarantaine_id`, `ligne_idx`, `pv_id`, BC, BL). Le stock est crédité et la porte matière
+s'ouvre **au rangement**.
+
+1. **Lignes couvertes** (`lignesDeQuarantaine`, `src/mise_en_stock.ts`), dans l'ordre de preuve : `quarantaines.ligne_idx`
+   → identifiant de la quarantaine dans `pv_controle.detail` v2 (ligne, ou `certificat_absent`) → motif « Ligne n · … » /
+   « Certificat matière absent … » → toute la réception (PV d'avant le lot F : lignes du BC, quantité commandée). Source
+   rendue : `ligne` / `certificat` / `reception`.
+2. **Répartition** (`repartirPartAcceptee`) : une seule ligne, ou plusieurs lignes du même article → toute la part sur la
+   première ; plusieurs articles tout acceptés → chaque ligne pour sa quantité ; plusieurs articles avec une part qui n'est
+   pas « tout » → corps **`repartition: [{idx, qte}]` obligatoire** (somme = part acceptée, chaque ligne ≤ sa quantité
+   en quarantaine). Sinon **400** `{champ: 'repartition', repartition_requise, lignes, error}` — vérifié **avant** la
+   réservation de la décision : elle n'est pas consommée. On n'invente jamais quelle référence entre en stock.
+3. Lecture du PV en panne (`getPVReceptionParNumStricte`) → **503**, rien n'est décidé.
+4. Réservation atomique (inchangée), puis `ajouterAMettreEnStock` ; entrées refusées listées « à saisir en entrée
+   manuelle ». Base sans la file → `crediterLignesRepli` (entrée directe ligne par ligne, motif « … · quarantaine q »)
+   + avertissement cloud-11.
+5. **Porte matière** : quand le BC devient `controle`, sans manque non remplacé (`matiereManquanteBc`, lecture stricte ;
+   panne → « réévaluée au prochain rangement »), elle est **évaluée** (`evaluerPorteMatiere`) — elle reste fermée tant
+   qu'une ligne est à ranger, mais s'ouvre si tout avait déjà été rangé (ex. lignes conformes rangées, puis renvoi sans rien
+   à ranger). Repli sans la file : ouverte seulement si le crédit direct est complet.
+6. Réponse : + `mise_en_stock {lignes, qte, ids, deja}` ; `resume` « N accepté(s), inscrit(s) dans Stock › Mise en stock (à
+   ranger) » ; `stock` et `bdt_debloques` seulement en repli.
+
+**Écran** (`quarFournModal`, `src/qualite.tsx`) : projection `QUAR_DATA[].reception` + `source_lignes` et `lignes` ; bloc
+**« Part acceptée par ligne du bon de commande »** dès que le lot couvre plusieurs lignes — pré-rempli en dérogation ;
+en entrée partielle, la quantité acceptée devient la **somme des lignes** (lecture seule), aucune ligne remplie ou somme
+nulle refusées avant envoi. Textes « entre en stock » remplacés par « part dans Stock › Mise en stock (le stock est
+crédité au rangement) » ; suite de la décision : « Part acceptée → Stock › Mise en stock ». Erreurs et avertissements
+échappés (`qfEsc`) et durables (`notifDurable`).
 
 ## NC émises depuis la Production : le « PV de non-conformité » (15/09/2026)
 

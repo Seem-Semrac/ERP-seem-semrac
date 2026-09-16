@@ -253,5 +253,38 @@ DA → BC, voir plus haut). Une colonne facultative absente de la base (ex. `cat
 colonnes obligatoires ne le sont jamais. Colonnes supposées présentes en cloud (déjà écrites par d'autres routes),
 non vérifiées sur le cloud.
 
+## BC de reliquat : le restant annoncé au PV, date à valider (lot F, 15/09/2026)
+
+> « S'il y a un reliquat annoncé par le fournisseur […] le BC du restant se génère pour aller dans les BC aux Achats pour
+> une attente de validation de la date. »
+
+- **Naissance** : au PV de réception (Expéditions), une ligne reçue en moins avec **« Reliquat annoncé »** coché crée un
+  `bons_de_commande` de reliquat (`creerBcReliquatPV` → `construireBcReliquat`, `src/pv_reception.ts`). Le BC d'origine
+  est considéré entièrement reçu pour ces lignes (il n'attend plus rien, `attend_reliquat` reste faux).
+- **Contenu** : `id` = `num_bc` = `<n° du BC d'origine>-R1` (`-R2`… : suffixe suivant parmi les `id` / `num_bc`
+  existants, relu et renuméroté sur 23505) ; mêmes fournisseur / sous-traitant, affaire, `cmd_ref`, DA, catégorie,
+  machine, poste, conditions et exigence de **certificat matière** ; `lignes[]` = lignes à reliquat avec `qte` = prévue −
+  reçue, `prix_unitaire` (ligne, sinon PU du BC d'origine à un article) et `reliquat_de {bc_id, num_bc, ligne_idx, pv_id,
+  bl_id}` ; `qte_commandee` = total ; **`montant_ht = 0`** (porté par le BC d'origine : pas de double comptage des
+  achats) ; **`date_livraison = null`** ; `statut 'envoye'` ; **pas** de validation fournisseur reprise ; `notes` « Reliquat
+  du bon de commande … annoncé au PV … ; montant porté par le BC d'origine ; date d'arrivée à valider » ;
+  **`bc_parent_id`** et **`date_a_valider = true`** (013).
+- **Idempotent par réception** : un reliquat déjà né du même BL (`reliquat_de.bl_id`) est repris, rien n'est recommandé
+  deux fois. Lecture des BC en panne → non créé, avertissement avec le détail à ressaisir.
+- **Achats › Bons de commande** : badge **« Reliquat de BC-… · date à valider »** (ambre) sous le n° du BC, puis
+  « Reliquat de BC-… » (bleu) une fois daté ; projection `reliquat_de` (n° du BC d'origine) et `date_a_valider`.
+- **Date d'arrivée** (`majDateArriveeBc`, deux routes `/api/bc/:id/date-arrivee` et
+  `/api/expeditions/bc/:id/date-arrivee`) : sur un BC `date_a_valider`, la date est écrite **avec** `date_a_valider =
+  false` par une transition **conditionnelle** (`majBonDeCommandeSi … {date_a_valider: true}`) ; réponse `date_validee:
+  true` (« Reliquat : date validée, il rejoint le calendrier des Expéditions »). Une validation fournisseur cliquée avant
+  ne fige **pas** un reliquat encore sans date (serveur et écran : `dateFigee` ignore `accuse` quand `date_a_valider` et
+  pas de date).
+- **Ensuite** : circuit normal — calendrier des Expéditions (un reliquat `date_a_valider` sans réception n'y figure pas),
+  réception, PV.
+- **Indicateurs** : `kpi.ts fournisseurs().fillRate` sort les BC de reliquat du dénominateur et retire du numérateur ce
+  qu'ils attendent encore (le manque ne compte plus deux fois).
+- **Base sans 013** (cloud avant `cloud-11`) : le BC de reliquat est créé **sans** `bc_parent_id` ni `date_a_valider`
+  (avertissement « fixez sa date d'arrivée aux Achats ») — pas de badge ; base sans la colonne certificat (012) : créé sans.
+
 ---
 > Fiche générée. Manuel utilisateur correspondant : `docs/manuel/achats.md`. Voir aussi `04-auth-rbac.md`, `07-api-reference.md`.

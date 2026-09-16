@@ -640,7 +640,45 @@ export interface ArticleStock {
   derniere_entree?: string
   dernier_mouvement?: string
   consommation_mensuelle?: number
+  /** Lot F (migration 013) : type d'objet de la référence (code de stock_types_objet), '' si non renseigné. */
+  type_objet?: string
+  actif?: boolean
 }
+
+// ─── MISE EN STOCK (lot F, 15/09/2026 · migration 013 / cloud-11) ─────
+export type StatutMiseEnStock = 'a_ranger' | 'range' | 'annule'
+export interface MiseEnStock {
+  id: string
+  statut: StatutMiseEnStock
+  origine: 'pv' | 'decision_qualite' | 'excedent_valide' | 'entree_manuelle'
+  bc_id?: string | null
+  bl_id?: string | null
+  pv_id?: string | null
+  ligne_idx?: number | null
+  quarantaine_id?: string | null
+  validation_id?: string | null
+  reference?: string | null
+  designation?: string | null
+  type_objet?: string | null
+  quantite: number
+  unite?: string | null
+  num_affaire?: string | null
+  fournisseur_nom?: string | null
+  motif?: string | null
+  stock_id?: string | null
+  emplacement?: string | null
+  mouvement_id?: string | null
+  cree_le?: string
+  cree_par?: string | null
+  range_le?: string | null
+  range_par?: string | null
+  annule_le?: string | null
+  annule_par?: string | null
+  annule_motif?: string | null
+}
+export interface StockTypeObjet { code: string; libelle: string; ordre: number; actif: boolean; created_at?: string }
+export interface StockZone { id: string; type_objet: string; zone: string; ordre: number; actif: boolean; created_at?: string; cree_par?: string | null }
+export interface StockEmplacementHistorique { id: string; stock_id?: string | null; reference?: string | null; type_objet?: string | null; avant?: string | null; apres?: string | null; motif?: string | null; par?: string | null; le: string; mise_en_stock_id?: string | null }
 
 export interface MouvementStock {
   id: string
@@ -658,6 +696,12 @@ export interface MouvementStock {
   lot_id?: string
   da_id?: string
   bl_id?: string
+  bc_id?: string
+  bdt_id?: string
+  stock_id?: string
+  reference?: string
+  /** Lot F : ligne de mises_en_stock créditée par ce mouvement d'entrée. */
+  mise_en_stock_id?: string
 }
 
 // ─── MAINTENANCE (GMAO) ───────────────────────────────────────

@@ -50,7 +50,7 @@
     <ul class="points">
       <li>Colonnes du tableau : <b>Domaine</b>, <b>Type</b>, <b>Objet</b>, <b>Émetteur</b>, <b>Montant</b>, <b>Priorité</b>, <b>Date</b>, puis les boutons d'action.</li>
       <li>Priorité : <span class="b b-crit">URGENT</span> / <span class="b b-crit">CRITIQUE</span> en rouge, sinon <span class="b b-ok">normal</span> en vert. Une non-conformité de gravité Critique ou Bloquante arrive automatiquement en « urgent ».</li>
-      <li>Trois boutons par ligne : l'<b>œil</b> bleu (consulter l'objet soumis), la <b>coche verte</b> (valider) et la <b>croix rouge</b> (refuser). L'œil n'apparaît que si la demande est reliée à un objet consultable.</li>
+      <li>Trois boutons par ligne : l'<b>œil</b> bleu (consulter l'objet soumis), la <b>coche verte</b> (valider) et la <b>croix rouge</b> (refuser). L'œil n'apparaît que si la demande est reliée à un objet consultable. Pour un <b>excédent de réception</b>, les boutons s'appellent <b>« Accepter »</b> et <b>« Refuser »</b>.</li>
       <li>Si aucune demande n'attend : « Aucune demande en attente de validation. »</li>
       <li>Sous le tableau, deux blocs de cartes apparaissent seulement s'ils sont alimentés : <b>Paiements de factures</b> (n° de facture, client, n° d'affaire, montant TTC et échéance) et <b>Congés fonctions support</b> (salarié, type de congé, période).</li>
     </ul>
@@ -71,6 +71,19 @@
       <img src="../../assets/form-direction-source.png" alt="Fenêtre de consultation de la pièce source ouverte depuis l'œil de la file à valider" loading="lazy">
       <figcaption><b>Consulter la pièce source</b> — l'œil ouvre la fiche réelle de l'objet soumis (ici une non-conformité critique), avec sous le titre la table d'origine et le numéro de pièce, puis chaque champ tel qu'il est en base : date, type, gravité, statut, détecteur, horodatages de création et de mise à jour. Le bouton violet <b>« Ouvrir dans le service »</b> en bas à droite bascule vers le service concerné ; la croix en haut à droite referme la fenêtre et vous laisse dans la file.</figcaption>
     </figure>
+
+    <h3>Pas à pas — décider d'un excédent de réception</h3>
+    <p>Quand le contrôleur d'une réception fournisseur compte <b>plus de pièces que prévu</b> sur une ligne, la quantité prévue part en stock et l'<b>excédent</b> vous est soumis : domaine <b>Expéditions</b>, type <b>« Excédent de réception »</b>, objet « Excédent de réception BC · ligne · +N (reçu … pour … prévu) », montant = prix unitaire × excédent.</p>
+    <ol class="steps">
+      <li><b>Accepter</b> : les pièces en trop sont gardées et partent dans <b>Stock › Rangement / Mise en stock</b> (le magasin les range). La notification le confirme.</li>
+      <li><b>Refuser</b> : la fenêtre <b>« Refuser l'excédent de réception »</b> s'ouvre, <b>sans</b> la case d'annulation (la demande ne se resoumet pas) ; saisissez le <b>motif</b> (obligatoire) et confirmez. Rien n'entre en stock et un <b>retour à expédier</b> est créé dans <b>Expéditions → Envois → Retours fournisseurs</b>.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-direction-refus-excedent.png" alt="Fenêtre de refus d'un excédent de réception" loading="lazy">
+      <figcaption><b>Refuser l'excédent de réception</b> — derrière, la ligne « Excédent de réception » de la file (domaine Expéditions, boutons « Accepter » / « Refuser ») ; dans la fenêtre, la note orange « Rien n'entre en stock : les pièces en trop sont à renvoyer au fournisseur », le motif obligatoire, pas de case « annulation totale ».</figcaption>
+    </figure>
+    <div class="warn"><b>Excédent d'un lot en quarantaine.</b> Si la ligne avait aussi une observation, ou si le certificat matière manquait, l'excédent ne peut être <b>accepté qu'après la décision de la Qualité</b> sur le lot (message « … l'excédent ne peut entrer en stock qu'après la décision de la Qualité ») ; si la Qualité a <b>renvoyé tout le lot</b>, il ne reste qu'à <b>refuser</b> l'excédent. Si l'excédent ne peut pas être inscrit dans le Stock (base non à jour, panne), la demande <b>reste en attente</b> et le message le dit.</div>
+    <p>Dans l'onglet <b>Traités</b>, ces décisions portent les badges <span class="b b-ok">ACCEPTÉ · MISE EN STOCK</span> et <span class="b b-crit">REFUSÉ · RETOUR FOURNISSEUR</span>.</p>
 
     <h3>Pas à pas — refuser : annulation totale ou renvoi en révision</h3>
     <ol class="steps">
@@ -95,7 +108,7 @@
 
     <h3>Pas à pas — alimenter la file avec le scan d'alertes</h3>
     <ol class="steps">
-      <li>Cliquez sur <b>« Scanner les alertes »</b> : l'ERP relit les données vives et détecte les <b>commandes en retard</b>, les <b>marges faibles</b> (moins de 15 % sur une commande soldée), les <b>factures clients impayées</b> après échéance, les <b>non-conformités critiques ou bloquantes ouvertes</b> et les <b>ruptures de stock</b> (article géré tombé à zéro).</li>
+      <li>Cliquez sur <b>« Scanner les alertes »</b> : l'ERP relit les données vives et détecte les <b>commandes en retard</b>, les <b>marges faibles</b> (moins de 15 % sur une commande soldée), les <b>factures clients impayées</b> après échéance, les <b>non-conformités critiques ou bloquantes ouvertes</b> et les <b>ruptures de stock</b> (article géré tombé à zéro — sauf si une livraison contrôlée de cette référence attend son rangement dans le Stock ; si cette liste est illisible, les ruptures ne sont pas évaluées à ce scan et un message le dit).</li>
       <li>Une notification résume le résultat : nombre d'alertes ajoutées, nombre déjà présentes, nombre détectées. Les nouvelles lignes apparaissent dans la file avec l'émetteur <b>« Moteur alertes »</b>.</li>
       <li>Traitez-les comme n'importe quelle demande : consultez l'objet avec l'œil, puis validez (vous prenez acte) ou refusez avec un motif.</li>
     </ol>
@@ -125,7 +138,7 @@
     <h3>Ce que vous voyez</h3>
     <p>Le titre <b>« Historique des validations traitées »</b> avec le nombre total de décisions. Deux rangées de filtres cumulables : d'abord par <b>catégorie</b> (Toutes catégories, puis les domaines présents), ensuite par <b>décision</b> (Toutes décisions · Validées · Refusées). Le tableau détaille : Catégorie, Type, Objet, Émetteur, Montant, Décision, Décidé le, Par, Commentaire, et l'œil de consultation.</p>
     <ul class="points">
-      <li>Décisions affichées : <span class="b b-ok">VALIDÉ</span> · <span class="b b-crit">REFUSÉ · ANNULATION</span> · <span class="b b-warn">REFUSÉ · RÉVISION</span> — le refus n'a donc pas un seul visage, on distingue toujours l'annulation du renvoi pour correction.</li>
+      <li>Décisions affichées : <span class="b b-ok">VALIDÉ</span> · <span class="b b-crit">REFUSÉ · ANNULATION</span> · <span class="b b-warn">REFUSÉ · RÉVISION</span> — le refus n'a donc pas un seul visage, on distingue toujours l'annulation du renvoi pour correction. Pour un excédent de réception : <span class="b b-ok">ACCEPTÉ · MISE EN STOCK</span> · <span class="b b-crit">REFUSÉ · RETOUR FOURNISSEUR</span>.</li>
       <li>La colonne <b>Commentaire</b> reprend le motif saisi lors du refus ; elle affiche « — » quand aucun commentaire n'a été laissé.</li>
       <li>Si aucune décision n'a encore été prise : « Aucune décision enregistrée pour l'instant. »</li>
     </ul>
@@ -159,7 +172,7 @@
     <p>Cinq sections repliées en cartes, chacune avec son <b>compteur</b> à droite du titre. Une section vide affiche « Rien à signaler ✓ ».</p>
     <ul class="points">
       <li><b>Commandes en retard (vs date promise client)</b> — Affaire, Client, Livraison promise (en rouge avec le nombre de jours de retard), Montant. Une commande livrée, close, terminée, soldée ou annulée n'y figure plus.</li>
-      <li><b>Stocks critiques (à réapprovisionner)</b> — Référence, Désignation, Stock / seuil, Emplacement. Un article apparaît dès que son stock est retombé <b>au niveau ou en dessous</b> de son point de commande (ou de son stock mini).</li>
+      <li><b>Stocks critiques (à réapprovisionner)</b> — Référence, Désignation, Stock / seuil, Emplacement. Un article apparaît dès que son stock — <b>rangé ou en attente de rangement</b> — est retombé <b>au niveau ou en dessous</b> de son point de commande (ou de son stock mini).</li>
       <li><b>Factures clients impayées en retard</b> — Facture, Client, Échéance (avec les jours de dépassement), Montant TTC. Les brouillons et les factures payées sont exclus.</li>
       <li><b>Non-conformités critiques / bloquantes ouvertes</b> — NC, Date, Gravité (<span class="b b-crit">Critique</span> ou <span class="b b-crit">Bloquante</span>), Lot ou type. Une NC clôturée, fermée, résolue ou traitée disparaît de la liste.</li>
       <li><b>Échéances Sécurité dépassées</b> — Type, Objet, Échéance. Le type précise l'origine : <span class="b b-info">VGP</span> (vérification périodique dépassée), <span class="b b-info">EPI</span> (péremption atteinte ou à moins de 30 jours), <span class="b b-info">Conformité</span> (obligation non conforme ou échue), <span class="b b-info">Habilitation</span> (certification expirée ou à renouveler), <span class="b b-info">ATEX</span> (revue de zone dépassée) et <span class="b b-info">Rejet hors VLE</span> (mesure environnementale non conforme).</li>

@@ -78,7 +78,13 @@ const MANIFEST = [
   { file: 'expeditions-receptions', path: '/expeditions/service', clicks: ['#exp-tab-receptions'], wait: 700 },
   { file: 'expeditions-calendrier',path: '/expeditions/service', clicks: ['#exp-tab-calendrier'], wait: 900, fullPage: true },
   { file: 'expeditions-fournisseurs', path: '/expeditions/service', clicks: ['#exp-tab-fournisseurs'], eval: "var f=(window.EXPF||[])[0]; if(f) expFournSel(f.id);", wait: 900 },
-  { file: 'stock-rt',              path: '/stock/service' },
+  // Lot F : le 1er onglet ouvert est « Rangement / Mise en stock » — le stock en temps réel se clique.
+  { file: 'stock-rt',              path: '/stock/service', clicks: ['#stk-tab-rt'], wait: 700 },
+  { file: 'stock-mes',             path: '/stock/service', clicks: ['#stk-tab-mes'], wait: 700 },
+  { file: 'stock-mes-ajustement',  path: '/stock/service', clicks: ['#stk-tab-mes', '#stk-mes-ajustement'], wait: 700 },
+  { file: 'stock-mes-types',       path: '/stock/service', clicks: ['#stk-tab-mes', '#stk-mes-types'], wait: 700, fullPage: true },
+  // Lot F : Gestion du stock › Niveaux d'approvisionnement (ex « Catalogue & seuils ») — colonnes Type d'objet et Emplacement
+  { file: 'stock-niveaux',         path: '/stock/service', clicks: ['#stk-tab-gestion', '#stk-gest-catalogue'], wait: 700 },
   { file: 'maintenance',           path: '/maintenance/service' },
   // Plan / Bâtiment
   { file: 'plans-maquette',        path: '/plans/service', wait: 1200 },

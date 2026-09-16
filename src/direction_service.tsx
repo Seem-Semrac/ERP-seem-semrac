@@ -24,7 +24,10 @@ function badge(txt: string, bg: string, col: string) {
 }
 const prioBadge = (p: string) => p === 'urgent' || p === 'critique'
   ? badge(p.toUpperCase(), '#fee2e2', '#b91c1c') : badge('normal', '#f0fdf4', '#15803d')
-const DOM_LABEL: Record<string, string> = { compta: 'Compta', rh: 'RH', qualite: 'Qualité', securite: 'Sécurité', achats: 'Achats', commercial: 'Commercial' }
+const DOM_LABEL: Record<string, string> = { compta: 'Compta', rh: 'RH', qualite: 'Qualité', securite: 'Sécurité', achats: 'Achats', commercial: 'Commercial', expeditions: 'Expéditions' }
+// Lot F (15/09/2026) : libellés des types connus ; un excédent de réception se décide « Accepter en stock » / « Refuser ».
+const TYPE_LABEL: Record<string, string> = { excedent_reception: 'Excédent de réception' }
+const estExcedent = (v: any) => String(v?.type || '') === 'excedent_reception'
 
 // ─── BLOC 1 : À VALIDER (file générique + factures + congés) ──
 function panelAValider(validations: any[], facturesValidation: any[], congesSupport: any[]) {
@@ -33,7 +36,7 @@ function panelAValider(validations: any[], facturesValidation: any[], congesSupp
   const rows = validations.length ? validations.map((v: any) => `
     <tr class="dv-row" data-dom="${escX(v.domaine || '')}" data-montant="${Number(v.montant) || 0}" data-date="${escX(v.created_at || '')}" style="border-bottom:1px solid #f1f5f9;">
       <td style="padding:9px 12px;">${badge(DOM_LABEL[v.domaine] || v.domaine || '—', '#eef2ff', '#4338ca')}</td>
-      <td style="padding:9px 12px;font-weight:700;font-size:.78rem;color:#111827;">${esc(v.type || '—')}</td>
+      <td style="padding:9px 12px;font-weight:700;font-size:.78rem;color:#111827;">${esc(TYPE_LABEL[v.type] || v.type || '—')}</td>
       <td style="padding:9px 12px;font-size:.78rem;color:#374151;">${esc(v.objet || '—')}</td>
       <td style="padding:9px 12px;font-size:.74rem;color:#6b7280;">${esc(v.emetteur || '—')}</td>
       <td style="padding:9px 12px;text-align:right;font-weight:700;font-size:.78rem;color:#111827;white-space:nowrap;">${v.montant != null ? eur2(v.montant) : '—'}</td>
@@ -41,8 +44,8 @@ function panelAValider(validations: any[], facturesValidation: any[], congesSupp
       <td style="padding:9px 12px;font-size:.72rem;color:#94a3b8;white-space:nowrap;">${d10(v.created_at)}</td>
       <td style="padding:9px 12px;text-align:right;white-space:nowrap;">
         ${(v.ref_table && v.ref_id != null && v.ref_id !== '') ? `<button class="src-eye" data-src-table="${escX(v.ref_table)}" data-src-id="${escX(v.ref_id)}" data-src-type="${escX(v.type || '')}" data-src-objet="${escX(v.objet || '')}" title="Consulter l'objet soumis" style="padding:6px 10px;background:#eef2ff;color:#4338ca;border:none;border-radius:7px;cursor:pointer;font-size:.74rem;font-weight:700;margin-right:5px;"><i class="fas fa-eye"></i></button>` : ''}
-        <button onclick="decideValidation('${v.id}','valide')" style="padding:6px 12px;background:#10b981;color:white;border:none;border-radius:7px;cursor:pointer;font-size:.74rem;font-weight:700;"><i class="fas fa-check"></i></button>
-        <button onclick="decideValidation('${v.id}','refuse')" style="padding:6px 10px;background:#fee2e2;color:#b91c1c;border:none;border-radius:7px;cursor:pointer;font-size:.74rem;font-weight:700;margin-left:5px;"><i class="fas fa-times"></i></button>
+        <button onclick="decideValidation('${v.id}','valide')" title="${estExcedent(v) ? 'Accepter : l&#39;excédent part dans Stock › Mise en stock' : 'Valider'}" style="padding:6px 12px;background:#10b981;color:white;border:none;border-radius:7px;cursor:pointer;font-size:.74rem;font-weight:700;"><i class="fas fa-check"></i>${estExcedent(v) ? ' Accepter' : ''}</button>
+        <button onclick="decideValidation('${v.id}','refuse'${estExcedent(v) ? ',1' : ''})" title="${estExcedent(v) ? 'Refuser : rien n&#39;entre en stock, retour au fournisseur à organiser' : 'Refuser'}" style="padding:6px 10px;background:#fee2e2;color:#b91c1c;border:none;border-radius:7px;cursor:pointer;font-size:.74rem;font-weight:700;margin-left:5px;"><i class="fas fa-times"></i>${estExcedent(v) ? ' Refuser' : ''}</button>
       </td>
     </tr>`).join('') : `<tr><td colspan="8" style="text-align:center;padding:26px;color:#cbd5e1;font-size:.82rem;">Aucune demande en attente de validation.</td></tr>`
 
@@ -388,13 +391,15 @@ function panelTraites(decided: any[]) {
   const pills = ['__all', ...doms].map((dmn, i) => `<button class="dt-pill" data-dom="${escX(dmn)}" onclick="dirFilterTr('${dmn}')" style="border:1.5px solid #e2e8f0;background:${i === 0 ? GOLD : 'white'};color:${i === 0 ? 'white' : '#475569'};border-radius:999px;padding:5px 13px;font-size:.74rem;font-weight:700;cursor:pointer;">${dmn === '__all' ? 'Toutes catégories' : (DOM_LABEL[dmn] || escX(dmn))}</button>`).join('')
   const decPills = [['__all', 'Toutes décisions', '#475569'], ['valide', 'Validées', '#15803d'], ['refuse', 'Refusées', '#b91c1c']]
     .map(([k, lab, col], i) => `<button class="dt-dec" data-dec="${k}" onclick="dirDecTr('${k}')" style="border:1.5px solid #e2e8f0;background:${i === 0 ? '#111827' : 'white'};color:${i === 0 ? 'white' : col};border-radius:999px;padding:5px 13px;font-size:.74rem;font-weight:700;cursor:pointer;">${lab}</button>`).join('')
+  // Excédent de réception refusé : ni révision ni annulation — les pièces repartent (retour à expédier, Expéditions).
   const decBadge = (v: any) => v.statut === 'valide'
-    ? badge('VALIDÉ', '#dcfce7', '#15803d')
+    ? badge(estExcedent(v) ? 'ACCEPTÉ · MISE EN STOCK' : 'VALIDÉ', '#dcfce7', '#15803d')
+    : estExcedent(v) ? badge('REFUSÉ · RETOUR FOURNISSEUR', '#fee2e2', '#b91c1c')
     : (refusMode(v) === 'annulation' ? badge('REFUSÉ · ANNULATION', '#fee2e2', '#b91c1c') : badge('REFUSÉ · RÉVISION', '#ffedd5', '#c2410c'))
   const rows = list.length ? list.map((v: any) => `
     <tr class="dt-row" data-dom="${escX(v.domaine || '')}" data-dec="${escX(v.statut || '')}" data-date="${escX(v.decided_at || v.created_at || '')}" style="border-bottom:1px solid #f1f5f9;">
       <td style="padding:9px 12px;">${badge(DOM_LABEL[v.domaine] || v.domaine || '—', '#eef2ff', '#4338ca')}</td>
-      <td style="padding:9px 12px;font-weight:700;font-size:.78rem;color:#111827;">${esc(v.type || '—')}</td>
+      <td style="padding:9px 12px;font-weight:700;font-size:.78rem;color:#111827;">${esc(TYPE_LABEL[v.type] || v.type || '—')}</td>
       <td style="padding:9px 12px;font-size:.78rem;color:#374151;">${esc(v.objet || '—')}</td>
       <td style="padding:9px 12px;font-size:.74rem;color:#6b7280;">${esc(v.emetteur || '—')}</td>
       <td style="padding:9px 12px;text-align:right;font-weight:700;font-size:.78rem;color:#111827;white-space:nowrap;">${v.montant != null ? eur2(v.montant) : '—'}</td>
@@ -465,11 +470,12 @@ export function pageServiceDirection(data: any = {}): string {
 ${panels.map((p, i) => `<div id="dir-panel-${i}" style="display:${i === 0 ? '' : 'none'};">${p}</div>`).join('')}
 <div id="refus-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
   <div style="background:white;border-radius:14px;padding:22px 24px;width:min(470px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.3);">
-    <div style="font-size:1rem;font-weight:800;color:#b91c1c;margin-bottom:4px;"><i class="fas fa-circle-xmark" style="margin-right:7px;"></i>Refuser cette validation</div>
-    <div style="font-size:.76rem;color:#6b7280;margin-bottom:14px;">Indiquez le motif, puis choisissez l'effet du refus sur l'élément.</div>
+    <div id="refus-titre" style="font-size:1rem;font-weight:800;color:#b91c1c;margin-bottom:4px;"><i class="fas fa-circle-xmark" style="margin-right:7px;"></i>Refuser cette validation</div>
+    <div id="refus-aide" style="font-size:.76rem;color:#6b7280;margin-bottom:14px;">Indiquez le motif, puis choisissez l'effet du refus sur l'élément.</div>
+    <div id="refus-exc-note" style="display:none;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 13px;margin-bottom:14px;font-size:.78rem;color:#9a3412;"><i class="fas fa-truck-arrow-right" style="margin-right:6px;"></i>Rien n’entre en stock : les pièces en trop sont <strong>à renvoyer au fournisseur</strong>. Un retour à expédier est créé dans <strong>Expéditions › Envois › Retours fournisseurs</strong>.</div>
     <label style="display:block;font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:5px;">Motif du refus *</label>
     <textarea id="refus-motif" rows="3" placeholder="Raison du refus…" style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 10px;font-size:.82rem;outline:none;resize:vertical;margin-bottom:14px;box-sizing:border-box;"></textarea>
-    <label style="display:flex;align-items:flex-start;gap:9px;background:#fef2f2;border:1.5px solid #fecaca;border-radius:10px;padding:11px 13px;cursor:pointer;margin-bottom:16px;">
+    <label id="refus-annul-box" style="display:flex;align-items:flex-start;gap:9px;background:#fef2f2;border:1.5px solid #fecaca;border-radius:10px;padding:11px 13px;cursor:pointer;margin-bottom:16px;">
       <input type="checkbox" id="refus-annul" style="margin-top:3px;width:16px;height:16px;accent-color:#dc2626;cursor:pointer;"/>
       <span style="font-size:.8rem;color:#374151;"><strong>Annulation totale</strong> de l'élément.<br/><span style="font-size:.72rem;color:#9ca3af;">Décoché = <strong>renvoi en révision</strong> (l'émetteur corrige et resoumet).</span></span>
     </label>
@@ -531,23 +537,38 @@ function dirDecTr(dec){ _trDec=dec;
   document.querySelectorAll('.dt-dec').forEach(function(b){ var d=b.getAttribute('data-dec'),on=d===dec; b.style.background=on?'#111827':'white'; b.style.color=on?'white':(d==='valide'?'#15803d':d==='refuse'?'#b91c1c':'#475569'); });
   _trApply();
 }
-var _refusId=null;
-function decideValidation(id, decision){
-  if(decision==='refuse'){ _refusId=id; var t=document.getElementById('refus-motif'); if(t)t.value=''; var a=document.getElementById('refus-annul'); if(a)a.checked=false; var m=document.getElementById('refus-modal'); if(m)m.style.display='flex'; return; }
+var _refusId=null, _refusExc=false;
+// exc : excédent de réception — fenêtre de refus sans « annulation / révision » (la demande ne se resoumet pas).
+function decideValidation(id, decision, exc){
+  if(decision==='refuse'){
+    _refusId=id; _refusExc=!!exc;
+    var t=document.getElementById('refus-motif'); if(t)t.value='';
+    var a=document.getElementById('refus-annul'); if(a)a.checked=false;
+    var box=document.getElementById('refus-annul-box'); if(box) box.style.display=_refusExc?'none':'flex';
+    var note=document.getElementById('refus-exc-note'); if(note) note.style.display=_refusExc?'block':'none';
+    var titre=document.getElementById('refus-titre'); if(titre) titre.innerHTML='<i class="fas fa-circle-xmark" style="margin-right:7px;"></i>'+(_refusExc?'Refuser l’excédent de réception':'Refuser cette validation');
+    var aide=document.getElementById('refus-aide'); if(aide) aide.textContent=_refusExc?'Indiquez le motif du refus (il accompagne le retour au fournisseur).':'Indiquez le motif, puis choisissez l’effet du refus sur l’élément.';
+    var m=document.getElementById('refus-modal'); if(m)m.style.display='flex'; return;
+  }
   _postDecision(id,'valide',null,null);
 }
 function refusCancel(){ var m=document.getElementById('refus-modal'); if(m)m.style.display='none'; _refusId=null; }
 function refusConfirm(){
   var motif=((document.getElementById('refus-motif')||{}).value||'').trim();
   if(!motif){ pushNotif('warn','fa-exclamation-triangle','Indiquez un motif de refus.',3000); return; }
-  var mode=(document.getElementById('refus-annul')||{}).checked?'annulation':'revision';
+  var mode=_refusExc?null:((document.getElementById('refus-annul')||{}).checked?'annulation':'revision');
   _postDecision(_refusId,'refuse',motif,mode); refusCancel();
 }
 function _postDecision(id, decision, comment, mode){
   fetch('/api/validations/'+encodeURIComponent(id)+'/decision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision:decision,commentaire:comment,refus_mode:mode})})
-    .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Échec.'); return; }
+    .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok){ pushNotif('err','fa-ban',String((j&&j.error)||'Échec.').replace(/&/g,'&amp;').replace(/</g,'&lt;'),9000); return; }
       var msg=decision==='refuse'?(mode==='annulation'?'Refusé — annulation totale.':'Refusé — renvoi en révision.'):'Validé.';
-      pushNotif(decision==='refuse'?'warn':'ok',decision==='refuse'?'fa-times':'fa-check',msg,3800); setTimeout(function(){softReload();},700); })
+      if(j.excedent&&j.message) msg=String(j.message).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+      // Excédent : message et avertissements DURABLES (réaffichés après le rechargement).
+      if(j.excedent){ notifDurable(decision==='refuse'?'warn':'ok',decision==='refuse'?'fa-times':'fa-check',msg,20000); }
+      else pushNotif(decision==='refuse'?'warn':'ok',decision==='refuse'?'fa-times':'fa-check',msg,3800);
+      (Array.isArray(j.avertissements)?j.avertissements:[]).forEach(function(a){ notifDurable('warn','fa-triangle-exclamation',String(a).replace(/&/g,'&amp;').replace(/</g,'&lt;'),60000); });
+      setTimeout(function(){softReload();},700); })
     .catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
 function validerPaiement(id, decision){

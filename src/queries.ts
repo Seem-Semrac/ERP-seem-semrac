@@ -2131,6 +2131,209 @@ export async function mouvementEntreeExiste(motif: string): Promise<{ existe: bo
   return { existe: (data ?? []).length > 0, error: null }
 }
 
+// ─── MISE EN STOCK (lot F, 15/09/2026 · migration 013 / cloud-11) ─────────────────────────────
+// File « À ranger », types d'objet, zones, historique des emplacements. Lectures STRICTES : l'erreur
+// remonte (supabase-js ne lève jamais) et une TABLE ABSENTE (cloud avant cloud-11) se distingue d'une
+// panne — l'écran dit « jouez cloud-11 » au lieu d'afficher une file vide trompeuse.
+const _mesTableAbsente = (e: any, table: string): boolean => {
+  if (!e) return false
+  if (e.code === '42P01' || e.code === 'PGRST205') return true
+  const m = String(e.message || '')
+  return m.includes(table) && !/column/i.test(m) && /(relation .*does not exist|could not find the table)/i.test(m)
+}
+const _mesColonneAbsente = (e: any): boolean => {
+  if (!e) return false
+  if (e.code === '42703' || e.code === 'PGRST204') return true
+  return /column .* does not exist|could not find the .* column/i.test(String(e.message || ''))
+}
+export type LectureMes<T> = { data: T; error: string | null; absente: boolean }
+export type EcritureMes = { data: any | null; error: string | null; code: string | null; absente: boolean }
+const _mesEcriture = (data: any, error: any, table: string): EcritureMes => error
+  ? { data: null, error: String(error.message || error.code || 'erreur inconnue'), code: (error as any).code ?? null, absente: _mesTableAbsente(error, table) }
+  : { data: data ?? null, error: null, code: null, absente: false }
+
+// Vérification lot F (16/09/2026) : PostgREST plafonne une réponse à 1000 lignes (PGRST_DB_MAX_ROWS, même défaut chez
+// Supabase). Une lecture « tout » qui décide (référence existante, file à ranger, porte matière) lit donc PAGE PAR PAGE,
+// jusqu'à une page incomplète — sinon la 1001ᵉ référence était « introuvable » et la porte s'ouvrait sur une file tronquée.
+export const PAGE_LECTURE = 1000
+async function _toutesLesPages(construire: () => any, max = 100): Promise<{ data: any[]; error: any | null }> {
+  const out: any[] = []
+  for (let page = 0; page < max; page++) {
+    const debut = page * PAGE_LECTURE
+    const { data, error } = await construire().range(debut, debut + PAGE_LECTURE - 1)
+    if (error) return { data: [], error }
+    const rows = (data ?? []) as any[]
+    out.push(...rows)
+    if (rows.length < PAGE_LECTURE) return { data: out, error: null }
+  }
+  return { data: out, error: { message: 'lecture trop volumineuse (plus de ' + (max * PAGE_LECTURE) + ' lignes)' } }
+}
+/** `limite` : les N plus récentes (affichage) ; `toutes: true` : TOUTES les lignes, lues page par page (décisions). `bcIds` : filtre. */
+export async function getMisesEnStock(opts: { statuts?: string[]; limite?: number; toutes?: boolean; bcIds?: string[] } = {}): Promise<LectureMes<any[]>> {
+  const construire = () => {
+    let r: any = supabase.from('mises_en_stock').select('*')
+    if (opts.statuts && opts.statuts.length) r = r.in('statut', opts.statuts)
+    if (opts.bcIds) r = r.in('bc_id', opts.bcIds.length ? opts.bcIds : ['-'])
+    return r.order('cree_le', { ascending: false }).order('id', { ascending: true })
+  }
+  const { data, error } = opts.toutes ? await _toutesLesPages(construire) : await construire().limit(opts.limite ?? 500)
+  if (error) return { data: [], error: error.message, absente: _mesTableAbsente(error, 'mises_en_stock') }
+  return { data: data ?? [], error: null, absente: false }
+}
+export async function getMiseEnStockStricte(id: string): Promise<LectureMes<any | null>> {
+  const { data, error } = await supabase.from('mises_en_stock').select('*').eq('id', id).maybeSingle()
+  if (error) return { data: null, error: error.message, absente: _mesTableAbsente(error, 'mises_en_stock') }
+  return { data: data ?? null, error: null, absente: false }
+}
+export async function createMiseEnStock(payload: Record<string, any>): Promise<EcritureMes> {
+  const { data, error } = await supabase.from('mises_en_stock').insert(payload).select().single()
+  return _mesEcriture(data, error, 'mises_en_stock')
+}
+/** Ligne existante pour une clé d'idempotence ({pv_id, ligne_idx, origine} | {quarantaine_id, ligne_idx, origine} | {validation_id, ligne_idx, origine}). */
+export async function trouverMiseEnStock(cle: Record<string, any>): Promise<LectureMes<any | null>> {
+  let r: any = supabase.from('mises_en_stock').select('*')
+  for (const [k, v] of Object.entries(cle || {})) r = (v === null || v === undefined) ? r.is(k, null) : r.eq(k, v)
+  const { data, error } = await r.order('cree_le', { ascending: true }).limit(1)
+  if (error) return { data: null, error: error.message, absente: _mesTableAbsente(error, 'mises_en_stock') }
+  return { data: ((data ?? []) as any[])[0] ?? null, error: null, absente: false }
+}
+/** Transition CONDITIONNELLE d'une ligne de file (a_ranger → range | annule…) : deux clics simultanés ⇒ le second voit `conflit`. */
+export async function majMiseEnStockSi(id: string, payload: Record<string, any>, attendu: Record<string, any>): Promise<{ data: any | null; error: string | null; code: string | null; conflit: boolean }> {
+  let r: any = supabase.from('mises_en_stock').update(payload).eq('id', id)
+  for (const [k, v] of Object.entries(attendu)) r = (v === null) ? r.is(k, null) : r.eq(k, v)
+  const { data, error } = await r.select()
+  if (error) return { data: null, error: error.message, code: (error as any).code ?? null, conflit: false }
+  const rows = (data ?? []) as any[]
+  return { data: rows[0] ?? null, error: null, code: null, conflit: rows.length === 0 }
+}
+export async function getStockTypesObjet(): Promise<LectureMes<any[]>> {
+  const { data, error } = await supabase.from('stock_types_objet').select('*').order('ordre', { ascending: true }).order('libelle', { ascending: true })
+  if (error) return { data: [], error: error.message, absente: _mesTableAbsente(error, 'stock_types_objet') }
+  return { data: data ?? [], error: null, absente: false }
+}
+export async function createStockTypeObjet(payload: Record<string, any>): Promise<EcritureMes> {
+  const { data, error } = await supabase.from('stock_types_objet').insert(payload).select().single()
+  return _mesEcriture(data, error, 'stock_types_objet')
+}
+export async function majStockTypeObjet(code: string, payload: Record<string, any>): Promise<EcritureMes> {
+  const { data, error } = await supabase.from('stock_types_objet').update(payload).eq('code', code).select()
+  return _mesEcriture(error ? null : (((data ?? []) as any[])[0] ?? null), error, 'stock_types_objet')
+}
+export async function getStockZones(): Promise<LectureMes<any[]>> {
+  const { data, error } = await supabase.from('stock_zones').select('*').order('type_objet', { ascending: true }).order('ordre', { ascending: true }).order('zone', { ascending: true })
+  if (error) return { data: [], error: error.message, absente: _mesTableAbsente(error, 'stock_zones') }
+  return { data: data ?? [], error: null, absente: false }
+}
+export async function createStockZone(payload: Record<string, any>): Promise<EcritureMes> {
+  const { data, error } = await supabase.from('stock_zones').insert(payload).select().single()
+  return _mesEcriture(data, error, 'stock_zones')
+}
+export async function majStockZone(id: string, payload: Record<string, any>): Promise<EcritureMes> {
+  const { data, error } = await supabase.from('stock_zones').update(payload).eq('id', id).select()
+  return _mesEcriture(error ? null : (((data ?? []) as any[])[0] ?? null), error, 'stock_zones')
+}
+export async function getHistoriqueEmplacements(opts: { stockId?: string; limite?: number } = {}): Promise<LectureMes<any[]>> {
+  let r: any = supabase.from('stock_emplacements_historique').select('*')
+  if (opts.stockId) r = r.eq('stock_id', opts.stockId)
+  const { data, error } = await r.order('le', { ascending: false }).limit(opts.limite ?? 200)
+  if (error) return { data: [], error: error.message, absente: _mesTableAbsente(error, 'stock_emplacements_historique') }
+  return { data: data ?? [], error: null, absente: false }
+}
+export async function createHistoriqueEmplacement(payload: Record<string, any>): Promise<EcritureMes> {
+  const { data, error } = await supabase.from('stock_emplacements_historique').insert(payload).select().single()
+  return _mesEcriture(data, error, 'stock_emplacements_historique')
+}
+/** Toutes les références de stock (projection de rangement), en lecture STRICTE. `typeObjetDispo` = colonne stock.type_objet présente (013). */
+export async function lireStockStricte(): Promise<{ data: any[]; error: string | null; typeObjetDispo: boolean }> {
+  const cols = 'id, reference, designation, famille, categorie, unite, stock_actuel, emplacement, actif, activite'
+  const r1 = await _toutesLesPages(() => supabase.from('stock').select(cols + ', type_objet').order('id', { ascending: true }))
+  if (!r1.error) return { data: r1.data, error: null, typeObjetDispo: true }
+  if (!_mesColonneAbsente(r1.error)) return { data: [], error: String(r1.error.message || r1.error.code || 'erreur inconnue'), typeObjetDispo: false }
+  const r2 = await _toutesLesPages(() => supabase.from('stock').select(cols).order('id', { ascending: true }))
+  if (r2.error) return { data: [], error: String(r2.error.message || r2.error.code || 'erreur inconnue'), typeObjetDispo: false }
+  return { data: r2.data, error: null, typeObjetDispo: false }
+}
+/** Quarantaines, BC et BDT en lecture STRICTE et complète (porte matière, manque matière) : une panne n'est pas « aucun manque ». */
+export async function getQuarantainesStricte(): Promise<{ data: any[]; error: string | null }> {
+  const r = await _toutesLesPages(() => supabase.from('quarantaines').select('*').order('id', { ascending: true }))
+  return { data: r.data, error: r.error ? String(r.error.message || r.error.code || 'erreur inconnue') : null }
+}
+export async function getBonsDeCommandeStricte(): Promise<{ data: any[]; error: string | null }> {
+  const r = await _toutesLesPages(() => supabase.from('bons_de_commande').select('*').order('id', { ascending: true }))
+  return { data: r.data, error: r.error ? String(r.error.message || r.error.code || 'erreur inconnue') : null }
+}
+export async function getBonsDeTravailStricte(): Promise<{ data: any[]; error: string | null }> {
+  const r = await _toutesLesPages(() => supabase.from('bons_de_travail').select('id, num_affaire, matiere_ok, lot_id, lot_ref').order('id', { ascending: true }))
+  return { data: r.data, error: r.error ? String(r.error.message || r.error.code || 'erreur inconnue') : null }
+}
+/** Un BDT par son id (sortie de stock imputée) : une panne n'est pas « BDT inconnu ». */
+export async function getBonDeTravailStricte(id: string): Promise<{ data: any | null; error: string | null }> {
+  const { data, error } = await supabase.from('bons_de_travail').select('id, num_affaire, lot_id, lot_ref, statut').eq('id', id).maybeSingle()
+  return { data: data ?? null, error: error ? error.message : null }
+}
+/** Une affaire est-elle connue (commande de ce n° d'affaire ou de cet id, ou BDT de cette affaire) ? Lecture stricte. */
+export async function affaireExisteStricte(num: string): Promise<{ existe: boolean; error: string | null }> {
+  for (const [table, col] of [['commandes', 'num_affaire'], ['commandes', 'id'], ['bons_de_travail', 'num_affaire']] as const) {
+    const r = await supabase.from(table).select('id').eq(col, num).limit(1)
+    if (r.error) return { existe: false, error: r.error.message }
+    if ((r.data ?? []).length) return { existe: true, error: null }
+  }
+  return { existe: false, error: null }
+}
+/** Type d'objet et famille par id de stock, pour l'écran (fail-soft : colonne absente ⇒ carte vide, `dispo` faux). */
+export async function lireTypesObjetStock(): Promise<{ parId: Record<string, { type_objet: string | null; famille: string | null }>; dispo: boolean }> {
+  const parId: Record<string, { type_objet: string | null; famille: string | null }> = {}
+  const r1 = await supabase.from('stock').select('id, type_objet, famille')
+  if (!r1.error) { for (const s of ((r1.data ?? []) as any[])) parId[String(s.id)] = { type_objet: s.type_objet ?? null, famille: s.famille ?? null }; return { parId, dispo: true } }
+  const r2 = await supabase.from('stock').select('id, famille')
+  if (!r2.error) for (const s of ((r2.data ?? []) as any[])) parId[String(s.id)] = { type_objet: null, famille: s.famille ?? null }
+  return { parId, dispo: false }
+}
+export async function getStockArticleStricte(id: string): Promise<{ data: any | null; error: string | null }> {
+  const { data, error } = await supabase.from('stock').select('*').eq('id', id).maybeSingle()
+  return { data: data ?? null, error: error ? error.message : null }
+}
+export async function createStockArticleStricte(payload: Record<string, any>): Promise<{ data: any | null; error: string | null; code: string | null }> {
+  const { data, error } = await supabase.from('stock').insert(payload).select().single()
+  return error ? { data: null, error: error.message, code: (error as any).code ?? null } : { data, error: null, code: null }
+}
+/** Mise à jour CONDITIONNELLE d'une référence de stock (stock_actuel lu, emplacement lu…) : pas de crédit ni de déplacement perdu. */
+export async function majStockSi(id: string, payload: Record<string, any>, attendu: Record<string, any>): Promise<{ data: any | null; error: string | null; code: string | null; conflit: boolean }> {
+  let r: any = supabase.from('stock').update(payload).eq('id', id)
+  for (const [k, v] of Object.entries(attendu)) r = (v === null || v === undefined) ? r.is(k, null) : r.eq(k, v)
+  const { data, error } = await r.select()
+  if (error) return { data: null, error: error.message, code: (error as any).code ?? null, conflit: false }
+  const rows = (data ?? []) as any[]
+  return { data: rows[0] ?? null, error: null, code: null, conflit: rows.length === 0 }
+}
+/** Indices pour PROPOSER le type d'objet d'une référence (catalogue fournisseur, registre chimique, catalogue EPI, nomenclatures). Fail-soft : ce n'est qu'une proposition. */
+export async function lireSignauxTypeObjet(): Promise<{ catalogue: Record<string, string>; chimiques: Set<string>; epi: Set<string>; nomenclature: Record<string, string> }> {
+  const k = (v: any) => String(v ?? '').trim().toLowerCase()
+  const [pf, ch, ep, fn] = await Promise.all([
+    supabase.from('produits_fournisseurs').select('reference, categorie'),
+    supabase.from('hse_produits_chimiques').select('ref_stock'),
+    supabase.from('hse_epi_catalogue').select('ref_stock'),
+    supabase.from('fournitures_nomenclature').select('ref_stock, categorie'),
+  ])
+  const catalogue: Record<string, string> = {}
+  for (const p of ((pf.error ? [] : pf.data) ?? []) as any[]) { const c = k(p.reference); if (c && p.categorie && !catalogue[c]) catalogue[c] = String(p.categorie) }
+  const chimiques = new Set<string>(((ch.error ? [] : ch.data) ?? []).map((x: any) => k(x.ref_stock)).filter(Boolean))
+  const epi = new Set<string>(((ep.error ? [] : ep.data) ?? []).map((x: any) => k(x.ref_stock)).filter(Boolean))
+  const nomenclature: Record<string, string> = {}
+  for (const f of ((fn.error ? [] : fn.data) ?? []) as any[]) { const c = k(f.ref_stock); if (c && f.categorie && !nomenclature[c]) nomenclature[c] = String(f.categorie) }
+  return { catalogue, chimiques, epi, nomenclature }
+}
+/** Catégorie des BC d'une liste d'ids (proposition du type d'objet). Fail-soft. */
+export async function getCategoriesBcs(ids: string[]): Promise<Record<string, string | null>> {
+  const out: Record<string, string | null> = {}
+  const uniq = Array.from(new Set((ids || []).filter(Boolean)))
+  if (!uniq.length) return out
+  const { data, error } = await supabase.from('bons_de_commande').select('id, categorie').in('id', uniq)
+  if (error) return out
+  for (const b of ((data ?? []) as any[])) out[String(b.id)] = b.categorie ?? null
+  return out
+}
+
 // ─── MAINTENANCE (GMAO) ───────────────────────────────────────
 
 export async function getOrdresMaintenance(): Promise<OrdreMaintenance[]> {
@@ -2462,6 +2665,12 @@ export async function getPVControlesResumeStricte(): Promise<{ data: any[] | nul
   const { data, error } = await supabase.from('pv_controle').select('id,num_pv,bl_id,bc_id,type_controle')
   if (error || !Array.isArray(data)) return { data: null, error: error?.message || 'lecture des PV de contrôle impossible' }
   return { data, error: null }
+}
+// PV de réception par son n° (quarantaines.pv_id), détail compris — décision de la Qualité (lot F) : une panne n'est pas « PV sans détail ».
+export async function getPVReceptionParNumStricte(numPv: string): Promise<{ data: any | null; error: string | null }> {
+  const { data, error } = await supabase.from('pv_controle').select('*').eq('num_pv', numPv).eq('type_controle', 'reception').limit(1)
+  if (error || !Array.isArray(data)) return { data: null, error: error?.message || 'lecture du PV de réception impossible' }
+  return { data: data[0] ?? null, error: null }
 }
 
 export async function getSalarie(id: string): Promise<any | null> {
@@ -3365,6 +3574,8 @@ export interface DashboardData {
   atexEnv?: any[]
   rseEnv?: any[]
   chimiques?: any[]
+  /** Lot F : lignes « à ranger » (reçu contrôlé, pas encore rangé) — chargées avec `stock` ; une rupture n'en est pas une. */
+  misesEnStockARanger?: any[]
 }
 
 const _safe = <T,>(p: Promise<T[]>): Promise<T[]> => p.catch(() => [] as T[])
@@ -3384,7 +3595,8 @@ export async function getDashboardData(extra: string[] = []): Promise<DashboardD
     stock, mouvementsStock, mtbf, machinesOpex, quarantaines, pointages,
     ecritures, nomenclatures, fournitures, controlesCotes, validations,
     fournisseurs, sousTraitants,
-    dechetsEnv, mesuresEnv, aspectsEnv, conformiteEnv, atexEnv, rseEnv, chimiques
+    dechetsEnv, mesuresEnv, aspectsEnv, conformiteEnv, atexEnv, rseEnv, chimiques,
+    misesEnStockARanger
   ] = await Promise.all([
     _safe(getDemandesTravaux()), _safe(getOffres()), _safe(getCommandes()), _safe(getLots()),
     _safe(getBonsDeTravail()), _safe(getBSTs()), _safe(getBonsDeCommande()), _safe(getBonsDeLivraison()),
@@ -3402,7 +3614,8 @@ export async function getDashboardData(extra: string[] = []): Promise<DashboardD
     E('fournisseurs', getFournisseurs), E('sousTraitants', getSousTraitantsAll),
     E('dechetsEnv', getHseDechets), E('mesuresEnv', getHseMesuresEnv), E('aspectsEnv', getHseAspectsImpacts),
     E('conformiteEnv', getHseConformite), E('atexEnv', getHseAtexZones), E('rseEnv', getHseRseIndicateurs),
-    E('chimiques', getHseChimiques)
+    E('chimiques', getHseChimiques),
+    E('stock', () => getMisesEnStock({ statuts: ['a_ranger'], toutes: true }).then(r => (r.error ? [] : r.data)))
   ])
   return {
     dts, offres, commandes, lots, bdts, bsts, bcs, bls,
@@ -3413,7 +3626,8 @@ export async function getDashboardData(extra: string[] = []): Promise<DashboardD
     stock, mouvementsStock, mtbf, machinesOpex, quarantaines, pointages,
     ecritures, nomenclatures, fournitures, controlesCotes, validations,
     fournisseurs, sousTraitants,
-    dechetsEnv, mesuresEnv, aspectsEnv, conformiteEnv, atexEnv, rseEnv, chimiques
+    dechetsEnv, mesuresEnv, aspectsEnv, conformiteEnv, atexEnv, rseEnv, chimiques,
+    misesEnStockARanger
   }
 }
 
@@ -3818,6 +4032,18 @@ export async function getValidations(): Promise<any[]> {
 }
 export async function createValidation(p: Record<string, any>) { const { data, error } = await supabase.from('validations').insert(p).select().single(); return { data, error } }
 export async function decideValidation(id: string, p: Record<string, any>) { const { data, error } = await supabase.from('validations').update(p).eq('id', id).select().single(); return { data, error } }
+// Lot F (15/09/2026) — excédent de réception : lecture STRICTE (une panne n'est pas « absente ») et décision
+// CONDITIONNELLE (la demande ne bouge que si elle est encore dans le statut lu : un double clic ne l'accepte pas deux fois).
+export async function getValidationStricte(id: string): Promise<{ data: any | null; error: string | null }> {
+  const { data, error } = await supabase.from('validations').select('*').eq('id', id).maybeSingle()
+  return { data: data ?? null, error: error ? error.message : null }
+}
+export async function decideValidationSi(id: string, p: Record<string, any>, statutAttendu: string): Promise<{ data: any | null; error: string | null; conflit: boolean }> {
+  const { data, error } = await supabase.from('validations').update(p).eq('id', id).eq('statut', statutAttendu).select()
+  if (error) return { data: null, error: error.message, conflit: false }
+  const rows = (data ?? []) as any[]
+  return { data: rows[0] ?? null, error: null, conflit: rows.length === 0 }
+}
 // Lecture générique d'un objet source (table + id) pour la consultation depuis le cockpit Direction.
 // La table est validée en amont (whitelist côté route). PK = colonne `id` pour toutes les tables ciblées.
 export async function getSourceRow(table: string, id: string) {

@@ -111,6 +111,7 @@ function quarSuiteDecision(q: any): string {
   if (Number(q.qte_retour) > 0) bits.push(q.retour_expedie_le
     ? `<span style="color:#15803d;">Retour expédié le ${escX(String(q.retour_expedie_le).slice(0, 10))}</span>`
     : `<span style="color:#b45309;font-weight:700;"><i class="fas fa-truck-arrow-right" style="margin-right:4px;"></i>Retour à expédier</span>`)
+  if (Number(q.qte_acceptee) > 0) bits.push(`<span style="color:#15803d;">Part acceptée → Stock › Mise en stock</span>`)
   if (String(q.compensation || '') === 'avoir') bits.push(`<span style="color:#0f766e;">Avoir réclamé (Achats)</span>`)
   if (String(q.compensation || '') === 'remplacement') bits.push(`<span style="color:#6d28d9;">Remplacement attendu</span>`)
   if (Number(q.qte_rebut) > 0) bits.push(`<span style="color:#b91c1c;">${escX(String(q.qte_rebut))} au rebut</span>`)
@@ -671,8 +672,13 @@ function panelQuarantaine(qs: Quarantaine[]) {
           </div>
           <div style="font-size:.64rem;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Que fait-on de ce lot ?</div>
           <label style="${QOPT}"><input type="radio" name="qf_dec" value="retour" onchange="qfMaj()" checked/><span><b>Renvoyer au fournisseur</b> — tout le lot repart, rien n’entre en stock.</span></label>
-          <label style="${QOPT}"><input type="radio" name="qf_dec" value="derogation" onchange="qfMaj()"/><span><b>Dérogation avec le fournisseur</b> — le lot est accepté en l’état et entre en stock.</span></label>
-          <label style="${QOPT}"><input type="radio" name="qf_dec" value="partielle" onchange="qfMaj()"/><span><b>Entrée partielle en stock</b> — après tri : une partie entre en stock, le reste repart ou part au rebut.</span></label>
+          <label style="${QOPT}"><input type="radio" name="qf_dec" value="derogation" onchange="qfMaj()"/><span><b>Dérogation avec le fournisseur</b> — le lot est accepté en l’état et part dans <b>Stock › Mise en stock</b> (le stock est crédité au rangement).</span></label>
+          <label style="${QOPT}"><input type="radio" name="qf_dec" value="partielle" onchange="qfMaj()"/><span><b>Entrée partielle en stock</b> — après tri : la part acceptée part dans <b>Stock › Mise en stock</b>, le reste repart ou part au rebut.</span></label>
+          <div id="qf_box_rep" style="display:none;border:1.5px solid #bae6fd;border-radius:10px;padding:12px;margin-bottom:10px;background:#f0f9ff;">
+            <div style="font-size:.64rem;font-weight:800;color:#075985;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">Part acceptée par ligne du bon de commande</div>
+            <div style="font-size:.7rem;color:#6b7280;margin-bottom:8px;">Ce lot couvre plusieurs articles : indiquez ce qui est accepté sur chaque ligne ; chaque ligne part dans Stock › Mise en stock sous sa référence.</div>
+            <div id="qf_rep_lignes"></div>
+          </div>
           <div id="qf_box_part" style="display:none;border:1.5px solid #bbf7d0;border-radius:10px;padding:12px;margin-bottom:10px;background:#f0fdf4;">
             <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;">
               <div style="width:170px;"><label style="${QLBL}">Quantité acceptée</label><input id="qf_acc" type="number" min="0" step="any" oninput="qfMaj()" style="${QINP}"/></div>
@@ -717,8 +723,14 @@ function panelQuarantaine(qs: Quarantaine[]) {
       function qsSubmit(mode){ qsPost({mode:mode, auteur:document.getElementById('qs_auteur').value, priorite:document.getElementById('qs_prio').value}).then(function(j){ if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'\\u00c9chec.'); return; } pushNotif('ok','fa-check',mode==='validation'?'Soumis \\u00e0 la validation de la Direction.':('D\\u00e9rogation '+(j.derogation||'')+' cr\\u00e9\\u00e9e \\u2014 \\u00e0 compl\\u00e9ter dans D\\u00e9rogations.'),4500); document.getElementById('quarStatuerModal').style.display='none'; setTimeout(function(){softReload();},900); }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur r\\u00e9seau.'); }); }
       function qsImmediate(issue){ var texte=document.getElementById('qs_texte').value; if(!texte){ pushNotif('err','fa-exclamation-circle','Renseignez la d\\u00e9cision.'); return; } qsPost({mode:'immediate', issue:issue, texte:texte, auteur:document.getElementById('qs_auteur').value}).then(function(j){ if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'\\u00c9chec.'); return; } pushNotif('ok','fa-check',issue==='libere'?'Lot lib\\u00e9r\\u00e9.':'Lot rejet\\u00e9.',3500); document.getElementById('quarStatuerModal').style.display='none'; setTimeout(function(){softReload();},900); }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur r\\u00e9seau.'); }); }
       // ── Décision sur un lot reçu d’un fournisseur : renvoi, dérogation, entrée partielle ──
-      var _qfCur=null, _qfMontantTouche=false, _qfEnCours=false;
-      function qfEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+      var _qfCur=null, _qfMontantTouche=false, _qfEnCours=false, _qfRepDec='';
+      function qfMulti(){ return !!(_qfCur&&_qfCur.reception&&(_qfCur.reception.lignes||[]).length>1); }
+      function qfRepEls(){ return document.querySelectorAll('#qf_rep_lignes .qf-rep'); }
+      function qfRepSomme(){ var s=0, els=qfRepEls(); for(var i=0;i<els.length;i++){ s+=Number(els[i].value)||0; } return Math.round(s*1000)/1000; }
+      (function(){ var c=document.getElementById('qf_rep_lignes'); if(c) c.addEventListener('input', function(){ qfMaj(); }); })();
+      // Échappe TOUT texte venu du serveur avant pushNotif (innerHTML) : erreurs de répartition et avertissements citent la
+      // référence et la désignation des lignes du BC, saisies aux Achats.
+      function qfEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
       function qfVal(n){ var e=document.querySelector('input[name='+n+']:checked'); return e?e.value:''; }
       function qfShow(id,v){ var e=document.getElementById(id); if(e) e.style.display=v?'block':'none'; }
       function qfTouche(){ _qfMontantTouche=true; }
@@ -739,6 +751,18 @@ function panelQuarantaine(qs: Quarantaine[]) {
         var c0=document.querySelector('input[name=qf_comp][value=avoir]'); if(c0) c0.checked=true;
         var r0=document.querySelector('input[name=qf_reste][value=retour]'); if(r0) r0.checked=true;
         document.getElementById('qf_pu_lbl').textContent = r.pu ? ('Prix unitaire du bon de commande : '+r.pu+' € HT') : 'Prix unitaire inconnu : saisissez le montant.';
+        // Lignes du BC couvertes par le lot (plusieurs articles : part acceptée ligne par ligne).
+        _qfRepDec='';
+        var cont=document.getElementById('qf_rep_lignes'); cont.innerHTML='';
+        (r.lignes||[]).forEach(function(l){
+          var row=document.createElement('div'); row.style.cssText='display:flex;gap:10px;align-items:center;margin-bottom:6px;font-size:.76rem;color:#374151;';
+          var lab=document.createElement('div'); lab.style.cssText='flex:1;min-width:0;';
+          lab.textContent='Ligne '+(Number(l.idx)+1)+(l.reference?' · '+l.reference:'')+(l.designation?' · '+l.designation:'')+(l.qte!=null?' — '+l.qte+(l.unite?' '+l.unite:'')+' en quarantaine':'');
+          var inp=document.createElement('input'); inp.type='number'; inp.min='0'; inp.step='any'; inp.className='qf-rep';
+          inp.setAttribute('data-idx',String(l.idx)); inp.setAttribute('data-qte',l.qte!=null?String(l.qte):'');
+          inp.style.cssText='width:110px;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 8px;font-size:.8rem;background:white;box-sizing:border-box;';
+          row.appendChild(lab); row.appendChild(inp); cont.appendChild(row);
+        });
         qfMaj();
         document.getElementById('quarFournModal').style.display='flex';
       }
@@ -748,6 +772,14 @@ function panelQuarantaine(qs: Quarantaine[]) {
         qfShow('qf_box_der', d==='derogation');
         qfShow('qf_box_comp', d!=='derogation');
         qfShow('qf_box_mont', d!=='derogation' && comp==='avoir');
+        var multi=qfMulti(), accEl=document.getElementById('qf_acc');
+        qfShow('qf_box_rep', multi && d!=='retour');
+        if(multi && d!==_qfRepDec){
+          // Dérogation : tout le lot, ligne par ligne ; entrée partielle : à saisir.
+          var els=qfRepEls(); for(var i=0;i<els.length;i++){ els[i].value = d==='derogation' ? (els[i].getAttribute('data-qte')||'') : ''; }
+          _qfRepDec=d;
+        }
+        if(multi && d==='partielle'){ accEl.readOnly=true; accEl.value=String(qfRepSomme()); } else { accEl.readOnly=false; }
         var qte=Number(document.getElementById('qf_qte').value)||0;
         var acc=Number(document.getElementById('qf_acc').value)||0;
         var reste = d==='retour' ? qte : (d==='partielle' ? Math.max(0, Math.round((qte-acc)*1000)/1000) : 0);
@@ -761,11 +793,24 @@ function panelQuarantaine(qs: Quarantaine[]) {
         var motif=document.getElementById('qf_motif').value.trim();
         if(motif.length<3){ pushNotif('err','fa-pen-to-square','Motif obligatoire : il justifie la décision auprès du fournisseur.'); return; }
         var qte=Number(document.getElementById('qf_qte').value)||0;
-        if(!(qte>0)){ pushNotif('err','fa-scale-balanced','Indiquez la quantité du lot : c’est elle qui fixe ce qui repart, ce qui entre en stock et le montant de l’avoir.',7000); return; }
+        if(!(qte>0)){ pushNotif('err','fa-scale-balanced','Indiquez la quantité du lot : c’est elle qui fixe ce qui repart, ce qui part en Mise en stock et le montant de l’avoir.',7000); return; }
         var body={decision:d, motif:motif, qte_lot:qte||null};
+        if(qfMulti() && d!=='retour'){
+          var rep=[], els=qfRepEls();
+          for(var i=0;i<els.length;i++){ var vr=els[i].value; rep.push({idx:Number(els[i].getAttribute('data-idx')), qte:(vr===''?0:Number(vr))}); }
+          body.repartition=rep;
+        }
         if(d==='partielle'){
           var brut=document.getElementById('qf_acc').value;
-          if(brut===''){ pushNotif('err','fa-scale-balanced','Indiquez la quantité acceptée (celle qui entre en stock).'); return; }
+          if(qfMulti()){
+            // Plusieurs articles : la quantité acceptée est la SOMME des lignes (champ en lecture seule, « 0 » même sans saisie).
+            // Aucune ligne remplie = oubli, pas « tout renvoyer » (décision définitive).
+            var saisies=0, elsP=qfRepEls(); for(var k=0;k<elsP.length;k++){ if(String(elsP[k].value).trim()!=='') saisies++; }
+            if(!saisies){ pushNotif('err','fa-scale-balanced','Indiquez la part acceptée de chaque ligne (0 sur une ligne dont rien n’est gardé). Pour tout renvoyer, choisissez « Renvoyer au fournisseur ».',8000); return; }
+            if(!(qfRepSomme()>0)){ pushNotif('err','fa-scale-balanced','Part acceptée nulle sur toutes les lignes : c’est un renvoi de tout le lot — choisissez « Renvoyer au fournisseur ».',8000); return; }
+            brut=String(qfRepSomme());
+          }
+          if(brut===''){ pushNotif('err','fa-scale-balanced','Indiquez la quantité acceptée (celle qui part en Mise en stock).'); return; }
           body.qte_acceptee=Number(brut); body.reste=qfVal('qf_reste');
         }
         if(d==='derogation'){
@@ -780,10 +825,10 @@ function panelQuarantaine(qs: Quarantaine[]) {
         fetch('/api/qualite/quarantaine/'+encodeURIComponent(id)+'/decision-fournisseur',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
           .then(function(r){return r.json();}).then(function(j){
             _qfEnCours=false; if(btn) btn.disabled=false;
-            if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Décision refusée.',8000); return; }
+            if(!j||!j.ok){ pushNotif('err','fa-ban',qfEsc((j&&j.error)||'Décision refusée.'),8000); return; }
             document.getElementById('quarFournModal').style.display='none';
-            pushNotif('ok','fa-clipboard-check',j.resume||'Décision enregistrée.',9000);
-            (j.avertissements||[]).forEach(function(a){ pushNotif('warn','fa-triangle-exclamation',a,12000); });
+            notifDurable('ok','fa-clipboard-check',qfEsc(j.resume||'Décision enregistrée.'),20000);
+            (j.avertissements||[]).forEach(function(a){ notifDurable('warn','fa-triangle-exclamation',qfEsc(a),60000); });
             setTimeout(function(){softReload();},1200);
           }).catch(function(){ _qfEnCours=false; if(btn) btn.disabled=false; pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
       }

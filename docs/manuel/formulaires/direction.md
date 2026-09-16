@@ -16,6 +16,18 @@ Le service Direction est un **cockpit de pilotage** : la plupart des écrans aff
 💡 **Astuce :** valider ne demande aucune saisie, c'est un simple clic. Le motif n'est demandé qu'en cas de refus.
 ⚠️ **Attention :** si vous refusez et laissez le motif vide (ou cliquez Annuler dans la fenêtre), le refus n'est pas enregistré. Le motif est obligatoire pour refuser.
 
+## Décider d'un excédent de réception (Accepter / Refuser)
+**Quand l'utiliser :** quand le PV de réception d'une livraison fournisseur a compté plus de pièces que prévu sur une ligne : l'excédent attend votre décision.
+**Où le trouver :** onglet « À valider », ligne de domaine « Expéditions » et de type « Excédent de réception » — boutons « Accepter » et « Refuser ».
+
+| Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
+|---|---|---|---|---|
+| Décision | deux boutons (Accepter / Refuser) | Oui | « Accepter » : l'excédent part dans Stock › Mise en stock. « Refuser » : rien n'entre en stock, un retour à expédier est créé aux Expéditions. | Refuser |
+| Motif du refus | zone de texte (fenêtre « Refuser l'excédent de réception ») | Oui (uniquement si vous refusez) | Pourquoi les pièces en trop ne sont pas gardées ; il accompagne le retour au fournisseur. Pas de case « annulation totale » : la demande ne se resoumet pas. | « Pièces non commandées, retour au fournisseur » |
+
+💡 **Astuce :** l'objet de la ligne dit tout : bon de commande, ligne, référence, « +N (reçu … pour … prévu) » ; le montant est le prix unitaire × l'excédent.
+⚠️ **Attention :** si la ligne est aussi en quarantaine (observation, certificat absent), l'acceptation est refusée tant que la Qualité n'a pas décidé du lot — et impossible si elle a tout renvoyé : refusez alors l'excédent.
+
 ## Trier la file à valider
 **Quand l'utiliser :** pour réorganiser la liste des demandes en attente, par date ou par montant.
 **Où le trouver :** onglet « À valider », en haut à droite du bloc, menu « Trier : ».

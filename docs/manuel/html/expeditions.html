@@ -80,7 +80,7 @@
     <ul class="points">
       <li><b>Client</b> — les <b>commandes en cours</b>, dès qu'elles sont passées en programmation. Chaque ligne porte l'affaire, le client, la pièce, une <b>barre d'avancement</b> (bons de travail soldés sur le total), la livraison prévue et l'état : <span class="b b-mut">En production</span>, <span class="b b-ok">Prête à expédier</span>, ou le <b>motif du blocage qualité</b> s'il y en a un.</li>
       <li><b>Sous-traitance</b> — les <b>BST en cours</b> : le sous-traitant, l'opération, la quantité, l'envoi prévu. La colonne d'état affiche <span class="b b-mut">🔒 attend …</span> quand l'opération précédente de la gamme n'est pas encore soldée.</li>
-      <li><b>Retours fournisseurs</b> — les lots refusés au contrôle que la <b>Qualité a décidé de renvoyer</b>. Une ligne par lot : <b>BL / lot</b> (avec le BC et la NC d'origine), <b>fournisseur</b>, <b>pièce</b> (avec la mention <i>avoir réclamé</i> ou <i>remplacement attendu</i>), <b>quantité à renvoyer</b>, <b>date de décision</b>, et le bouton <b>« Expédié »</b>.</li>
+      <li><b>Retours fournisseurs</b> — les lots refusés au contrôle que la <b>Qualité a décidé de renvoyer</b>, et les <b>excédents de réception refusés par la Direction</b> (pièces reçues en trop, sans avoir ni remplacement).Une ligne par lot : <b>BL / lot</b> (avec le BC et la NC d'origine), <b>fournisseur</b>, <b>pièce</b> (avec la mention <i>avoir réclamé</i> ou <i>remplacement attendu</i>), <b>quantité à renvoyer</b>, <b>date de décision</b>, et le bouton <b>« Expédié »</b>.</li>
     </ul>
     <figure class="shot">
       <img src="../../assets/expeditions-envois.png" alt="Capture de l'onglet Envois" loading="lazy">
@@ -129,15 +129,16 @@
     <ul class="points">
       <li><b>« en quarantaine — décision Qualité attendue »</b> — le lot est isolé, rien n'est encore tranché.</li>
       <li><b>« renvoyé au fournisseur · à expédier »</b>, puis <b>« · expédié »</b> une fois le colis parti (le lot figure alors dans <a href="#tab-envois">Envois → Retours fournisseurs</a>).</li>
-      <li><b>« dérogation fournisseur · entré en stock »</b> — le lot a été accepté en l'état.</li>
-      <li><b>« entrée partielle 6/10 »</b> — la part acceptée est entrée en stock, le reste est reparti ou a été mis au rebut.</li>
+      <li><b>« dérogation fournisseur · accepté »</b> — le lot a été accepté en l'état ; il part dans <b>Stock › Rangement / Mise en stock</b>.</li>
+      <li><b>« entrée partielle 6/10 »</b> — la part acceptée part dans Stock › Mise en stock, le reste est reparti ou a été mis au rebut.</li>
+      <li>Un PV peut porter <b>plusieurs quarantaines</b> (une par ligne avec observation, plus une si le certificat manque) : la ligne dit alors « 2 quarantaines : … ». Un PV non conforme pour un simple écart de quantité n'en a <b>aucune</b>.</li>
     </ul>
     <figure class="shot">
       <img src="../../assets/expeditions-receptions.png" alt="Capture de l'onglet Réceptions" loading="lazy">
       <figcaption><b>Réceptions</b> — les réceptions fournisseurs avec leurs informations (BL et commande du fournisseur, bloc hors France, lien « Corriger »), puis les retours de sous-traitance et les retours clients ; la colonne Contrôle porte le bouton « PV à faire ».</figcaption>
     </figure>
     <div class="warn"><b>Qui peut réceptionner et faire le PV.</b> La réception, la correction et le PV de contrôle sont réservés aux personnes qui ont l'<b>écriture sur les Expéditions</b> : la Direction, le rôle Logistique, ou une fiche salarié où la case « Écrire » des Expéditions est cochée (RH → Employés). Pour les autres, le bouton « PV à faire » est <b>grisé avec un cadenas</b> et une réception tentée est refusée avec un message qui le dit. ⚠ Depuis le 14/09/2026, <b>la Qualité ne signe plus les PV de réception</b> tant que cette case n'est pas cochée sur sa fiche.</div>
-    <div class="warn"><b>Le stock attend le PV.</b> Une réception n'entre <b>pas</b> en stock : le contenu n'y entre qu'au <b>PV conforme</b>, avec la quantité reçue. Une réception <b>refusée part toujours en quarantaine</b> : le PV non conforme ouvre une non-conformité « réception fournisseur », met le lot en quarantaine et rien n'entre en stock. C'est ensuite la <b>Qualité</b> qui décide — renvoi, dérogation fournisseur ou entrée partielle (Qualité → Quarantaine → bouton « Décider »). Chaque réception n'a <b>qu'un seul</b> PV : il ne se refait pas.</div>
+    <div class="warn"><b>Le stock attend le PV, puis le rangement.</b> Une réception n'entre <b>pas</b> en stock. Au <b>PV de contrôle</b>, vous saisissez la <b>quantité reçue de chaque ligne</b> : les quantités conformes partent dans <b>Stock › Rangement / Mise en stock</b>, où le magasin les accepte (type d'objet, zone de rangement) — c'est <b>seulement à ce moment</b> que le stock est crédité et que la matière devient disponible pour les BDT. Une ligne <b>avec une observation</b> part en <b>quarantaine</b> et la <b>Qualité</b> décide (renvoi, dérogation, entrée partielle — Qualité → Quarantaine → « Décider »). Chaque réception n'a <b>qu'un seul</b> PV : il ne se refait pas.</div>
     <div class="note"><b>Ce qui n'est <em>plus</em> ici.</b> Les commandes <b>à réceptionner</b> sont dans le <b>Calendrier</b> — c'est une action, elle vit avec les autres actions du jour. Et la <b>validation d'une commande par le fournisseur</b> se fait dans <b>Achats → onglet « Bons de commande »</b> : c'est l'acheteur qui suit l'accusé de réception de son fournisseur, pas l'expéditionnaire.</div>
 
     <h3>Pas à pas — enregistrer une réception fournisseur</h3>
@@ -145,7 +146,7 @@
     <ol class="steps">
       <li>Repérez la ligne du bon de commande et cliquez <b>« Traiter »</b>. Le <b>n° de bon de livraison interne</b> et le <b>n° d'affaire</b> sont <b>déjà remplis</b> — ils viennent du bon de commande, il n'y a pas à les ressaisir.</li>
       <li>Saisissez le <b>N° de commande fournisseur</b> et le <b>N° de BL fournisseur</b>, tels qu'ils figurent sur les papiers du colis. Les deux sont <b>obligatoires</b>.</li>
-      <li>Lisez le <b>bandeau vert</b> : il indique la <b>quantité qui sera enregistrée</b> — le <b>reste à recevoir</b> du bon de commande. Vous n'avez <b>pas de quantité à saisir</b>. S'il manque quelque chose ou si une pièce est abîmée, vous le direz au PV de contrôle, sur la ligne concernée.</li>
+      <li>Lisez le <b>bandeau vert</b> : il indique la <b>quantité attendue</b> — le <b>reste à recevoir</b> du bon de commande. Vous n'avez <b>pas de quantité à saisir</b> ici : la quantité <b>réellement reçue</b>, un manque, un excédent ou un <b>reliquat annoncé</b> par le fournisseur se déclarent au <b>PV de contrôle</b>, ligne par ligne.</li>
       <li>Répondez à <b>« Réception hors France ? »</b> (<b>Oui</b> ou <b>Non</b>, obligatoire). Si <b>Oui</b>, quatre champs apparaissent, tous obligatoires :
         <ul class="points">
           <li><b>Poids matière (kg)</b> — un nombre supérieur à 0 ; virgule décimale et espace entre les milliers acceptées (« 1 250,5 ») ;</li>
@@ -158,14 +159,9 @@
     </ol>
     <figure class="shot">
       <img src="../../assets/form-expeditions-reception.png" alt="Fenêtre d'enregistrement d'une réception" loading="lazy">
-      <figcaption><b>Enregistrer une réception</b> — N° de commande et N° de BL du fournisseur, bandeau de la quantité enregistrée (reste à recevoir), « Réception hors France ? » sur Oui : poids matière, nomenclature douane, code EWX et mode d'arrivée.</figcaption>
+      <figcaption><b>Enregistrer une réception</b> (ici un bon de commande de reliquat) — N° de commande et N° de BL du fournisseur, bandeau de la quantité attendue (reste à recevoir), « Réception hors France ? » sur Oui : poids matière, nomenclature douane, code EWX et mode d'arrivée. Plus de case « Livraison partielle ».</figcaption>
     </figure>
-    <div class="note"><b>Deux cas où la quantité se saisit quand même.</b>
-      <ul class="points">
-        <li><b>Le fournisseur livre en plusieurs fois</b> et annonce un reliquat : cochez <b>« Livraison partielle »</b> et indiquez la <b>quantité livrée</b> (lue sur son BL), qui doit être inférieure au reste à recevoir. Le bon de commande reste ouvert : le reliquat réapparaîtra dans « À réceptionner » quand il arrivera. Ce n'est pas possible pour un bon de commande à plusieurs articles — réceptionnez quand tout est arrivé, ou signalez les lignes manquantes au PV.</li>
-        <li><b>Le bon de commande ne porte pas de quantité exploitable</b> (bandeau jaune) : indiquez la <b>quantité livrée</b>, lue sur le BL fournisseur. Elle est obligatoire pour un bon de commande à un article, facultative s'il en compte plusieurs.</li>
-      </ul>
-    </div>
+    <div class="note"><b>Un seul cas où la quantité se saisit à la réception</b> : le bon de commande <b>ne porte pas de quantité exploitable</b> (bandeau jaune). Indiquez alors la <b>quantité livrée</b>, lue sur le BL fournisseur — obligatoire pour un bon de commande à un article, facultative s'il en compte plusieurs.<br><br>⚠ <b>Depuis le 15/09/2026, la case « Livraison partielle » n'existe plus.</b> Le fournisseur livre en plusieurs fois ? Réceptionnez normalement, puis au PV saisissez la quantité réellement reçue et cochez <b>« Reliquat »</b> sur la ligne : un <b>bon de commande de reliquat</b> est créé aux Achats pour le restant.</div>
     <div class="warn"><b>Refus possibles.</b> Un bon de commande <b>annulé</b> ou <b>déjà entièrement reçu</b> ne se réceptionne pas (message explicite). Si deux personnes valident la même réception en même temps, une seule passe ; l'autre est invitée à recharger la page. Si l'écran annonce que la base « n'a pas confirmé » la création du BL, rechargez dans un instant : si la réception n'apparaît pas dans l'onglet Réceptions, relancez-la.</div>
 
     <h3>Pas à pas — corriger les informations d'une réception</h3>
@@ -182,30 +178,46 @@
 
     <h3>Pas à pas — faire le PV de contrôle</h3>
     <ol class="steps">
-      <li>Dans l'onglet <b>Réceptions</b>, cliquez <b>« PV à faire »</b> sur la réception. Le bandeau rouge rappelle le bon de commande, le BL, la <b>quantité reçue</b> et les références du fournisseur.</li>
-      <li>Choisissez le <b>résultat</b> : <b>Conforme</b> ou <b>Non conforme</b>. Rien n'est coché d'avance.</li>
+      <li>Dans l'onglet <b>Réceptions</b>, cliquez <b>« PV à faire »</b> sur la réception. Le bandeau rouge rappelle le bon de commande, le BL, la <b>quantité attendue</b> et les références du fournisseur.</li>
+      <li>Choisissez le <b>résultat</b> : <b>Conforme</b> ou <b>Non conforme</b>. Rien n'est coché d'avance : c'est <b>votre</b> choix.</li>
       <li>Choisissez le <b>contrôleur</b> dans la liste : elle ne contient que les salariés actifs qui ont l'écriture sur les Expéditions. Si vous en faites partie, vous êtes pré-sélectionné.</li>
       <li>Si le bon de commande <b>exige un certificat matière</b>, une case violette apparaît : cochez <b>« Certificat matière reçu et conforme »</b> seulement si le certificat est là et conforme.</li>
-      <li><b>Conforme</b> : c'est tout — cliquez <b>« Valider le PV »</b>. Le contenu entre en stock.</li>
+      <li>Remplissez le <b>tableau des lignes du bon de commande</b> — il est affiché en Conforme <b>comme</b> en Non conforme. Pour chaque ligne :
+        <ul class="points">
+          <li><b>Qté prévue</b> : ce qui était attendu sur cette réception (lecture) ;</li>
+          <li><b>Qté reçue</b> : pré-remplie avec la quantité prévue — corrigez-la si vous avez compté autre chose (0 si rien n'est arrivé) ;</li>
+          <li><b>Reliquat annoncé</b> : la case apparaît quand vous avez reçu <b>moins</b> que prévu — cochez-la si le <b>fournisseur annonce</b> qu'il livrera le reste ;</li>
+          <li><b>Observation</b> : facultative — écrivez-y un défaut constaté (pièces abîmées, mauvaise nuance…).</li>
+        </ul>
+        La colonne <b>Conforme ?</b> se met à jour toute seule : <span class="b b-ok">Oui</span>, <span class="b b-crit">Non · quantitatif</span> (manque sans reliquat, ou excédent), <span class="b b-crit">Non · qualitatif</span> (observation écrite) ou les deux ; dessous, le détail (« manque 2 », « reliquat 15 », « excédent +2 · validation Direction », « quarantaine »). Le bouton <b>« Tout reçu comme prévu »</b> remet toutes les quantités reçues à la quantité prévue.</li>
+      <li><b>Conforme</b> : toutes les lignes doivent être à <span class="b b-ok">Oui</span> (un reliquat annoncé n'est pas un écart). Cliquez <b>« Valider le PV »</b> : les quantités reçues partent dans <b>Stock › Rangement / Mise en stock</b>, et un reliquat annoncé crée un <b>bon de commande de reliquat</b> aux Achats (date d'arrivée à valider).</li>
     </ol>
     <figure class="shot">
-      <img src="../../assets/form-expeditions-pv.png" alt="Fenêtre de PV de contrôle conforme" loading="lazy">
-      <figcaption><b>PV conforme</b> — le résultat, le contrôleur choisi dans la liste, et la case certificat matière quand le bon de commande l'exige. Rien d'autre à saisir.</figcaption>
+      <img src="../../assets/form-expeditions-pv.png" alt="Fenêtre de PV de contrôle conforme avec le tableau des quantités" loading="lazy">
+      <figcaption><b>PV conforme</b> — résultat, contrôleur, case certificat matière (exigée ici), puis le tableau des lignes : quantité prévue, quantité reçue, reliquat annoncé sur la 3<sup>e</sup> ligne (15 reçus sur 30), « Conforme ? » calculé.</figcaption>
     </figure>
-    <div class="warn"><b>Pas de conforme sans certificat.</b> Si le bon de commande exige un certificat matière et que la case n'est pas cochée, le PV <b>ne peut pas être conforme</b> : à la validation, il bascule en <b>Non conforme</b> et la non-conformité portera « Certificat matière absent ou non conforme ». Si les Achats ont changé cette exigence pendant que votre page était ouverte, le PV est refusé : rechargez la page et recommencez.</div>
-    <p><b>Non conforme</b> — la fenêtre s'agrandit et affiche <b>tout ce qui appartient au bon de commande</b> :</p>
+    <div class="warn"><b>Pas de conforme avec un écart, ni sans certificat.</b> Si une ligne est en écart (quantité différente sans reliquat, excédent, observation), le PV est refusé : « le PV ne peut pas être conforme : passez en Non conforme ». Si le bon de commande exige un certificat matière et que la case n'est pas cochée, le PV bascule en <b>Non conforme</b> (« Certificat matière absent ou non conforme »). Si les Achats ont changé cette exigence, ou si le bon de commande a changé pendant que la page était ouverte (« la quantité prévue a changé »), le PV est refusé : rechargez la page et recommencez — rien n'a été enregistré.</div>
+    <p><b>Non conforme</b> — la fenêtre affiche en plus <b>tout ce qui appartient au bon de commande</b> :</p>
     <ol class="steps">
       <li>En haut, l'<b>en-tête du bon de commande</b> : n° BC, fournisseur, date, livraison prévue, affaire(s), montant HT, conditions de paiement, articles, notes, et le lien <b>« Ouvrir le PDF du bon de commande »</b> si vous y avez droit.</li>
-      <li>Puis le <b>tableau de toutes les lignes</b> : n°, référence, désignation, quantité commandée, prix unitaire s'il existe, affaire, DA · lot · opération. Pour <b>chaque ligne</b>, répondez <b>Oui</b> (pas de problème) ou <b>Non</b>. Le bouton <b>« Tout à Oui »</b> répond Oui aux lignes encore sans réponse, sans toucher à celles déjà renseignées.</li>
-      <li>Sur chaque ligne en <b>Non</b>, la case <b>Observation</b> s'ouvre : elle est <b>obligatoire</b> — dites ce qui ne va pas (quantité manquante, pièces abîmées, mauvaise nuance…).</li>
-      <li>En bas, l'<b>observation générale</b> (facultative) pour un constat d'ensemble, et la <b>gravité</b> de la non-conformité (Majeure par défaut).</li>
-      <li>Cliquez <b>« Valider le PV »</b>. Il faut au moins une ligne en Non, ou un certificat exigé non confirmé. Une ligne oubliée ou une observation manquante est surlignée en rouge.</li>
+      <li>Le même <b>tableau des lignes</b> : saisissez les quantités reçues, cochez les reliquats annoncés et écrivez une <b>observation</b> sur chaque ligne qui a un défaut. Une ligne est <b>non conforme</b> si sa quantité reçue diffère de la prévue sans reliquat annoncé (<b>quantitatif</b>) ou si une observation est écrite (<b>qualitatif</b>) — les deux sont possibles.</li>
+      <li>En bas, l'<b>observation générale</b> (facultative) et la <b>gravité</b> de la non-conformité (Majeure par défaut).</li>
+      <li>Cliquez <b>« Valider le PV »</b>. Il faut au moins une ligne en écart, ou un certificat exigé non confirmé. Une ligne fautive est surlignée en rouge et le curseur va dans la case à corriger.</li>
     </ol>
     <figure class="shot">
-      <img src="../../assets/form-expeditions-pv-non-conforme.png" alt="Fenêtre de PV de contrôle non conforme, lignes du bon de commande" loading="lazy">
-      <figcaption><b>PV non conforme</b> — en-tête du bon de commande, une réponse Oui / Non par ligne avec l'observation obligatoire sur Non, observation générale et gravité. La non-conformité et la quarantaine partent en Qualité.</figcaption>
+      <img src="../../assets/form-expeditions-pv-non-conforme.png" alt="Fenêtre de PV de contrôle non conforme, lignes du bon de commande avec quantités" loading="lazy">
+      <figcaption><b>PV non conforme</b> — ligne 1 avec une observation (« Non · qualitatif », quarantaine), ligne 2 reçue à 14 pour 12 prévues (« Non · quantitatif », excédent soumis à la Direction), ligne 3 conforme ; observation générale et gravité.</figcaption>
     </figure>
-    <div class="note"><b>Ce qui part en Qualité.</b> La non-conformité reprend l'observation générale, une ligne « Ligne n · référence · désignation : observation » par ligne en Non, le certificat absent le cas échéant et le nom du contrôleur ; son détecteur est « Réception ». Le lot part en quarantaine avec la quantité reçue. Un bon de commande sans lignes détaillées affiche une seule ligne reconstituée (marquée <b>*</b>) à partir des articles et de la quantité commandée.</div>
+    <div class="note"><b>Ce que déclenche le PV, ligne par ligne.</b>
+      <ul class="points">
+        <li><b>Ligne conforme</b> (ou manque couvert par un reliquat annoncé) : la quantité reçue part dans <b>Stock › Rangement / Mise en stock</b>.</li>
+        <li><b>Manque sans reliquat</b> : une <b>non-conformité fournisseur quantitative</b> (nature « Logistique - Quantité ») ; ce qui est arrivé part quand même en Mise en stock.</li>
+        <li><b>Excédent</b> (reçu plus que prévu) : la quantité prévue part en Mise en stock ; l'<b>excédent</b> est <b>soumis à la Direction</b> (cockpit « À valider ») qui l'accepte en stock ou le fait renvoyer ; plus une non-conformité quantitative.</li>
+        <li><b>Observation</b> : une <b>non-conformité qualitative</b> (nature « À requalifier ») et la quantité reçue de la ligne part en <b>quarantaine</b> — rien de cette ligne en stock tant que la Qualité n'a pas décidé.</li>
+        <li><b>Reliquat annoncé</b> : un <b>bon de commande de reliquat</b> <code>…-R1</code> aux Achats, pour le restant, <b>date d'arrivée à valider</b>.</li>
+        <li><b>Certificat absent</b> : une non-conformité « Logistique - Certificats » et toute la réception (hors lignes déjà en quarantaine, hors excédents) reste <b>bloquée en quarantaine</b>.</li>
+      </ul>
+      Une non-conformité est créée <b>par ligne à problème</b>, toutes envoyées en Qualité (détecteur « Réception »). La notification de fin résume tout : lignes en Mise en stock, NC, quarantaines, excédents soumis, bon de commande de reliquat. Les messages orange restent affichés après le rechargement : lisez-les, ils disent ce qui serait à reprendre à la main.</div>
 
     <h3>Pas à pas — réceptionner un retour client</h3>
     <ol class="steps">
@@ -218,9 +230,10 @@
 
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
-      <li><b>Quantité reçue = reste à recevoir.</b> Un bon de commande de 100 pièces dont 40 sont déjà reçues enregistre 60 à la réception suivante. Un écart se signale au PV non conforme ; un reliquat annoncé, par « Livraison partielle ».</li>
-      <li><b>Bon de commande à plusieurs articles</b> : au PV conforme, chaque ligne entre en stock sur <b>son</b> article, pour sa quantité — à condition que la réception couvre toute la commande. Sinon, rien n'entre en stock automatiquement et l'écran le dit dès la réception.</li>
-      <li><b>Réception reçue sans quantité</b> : le PV conforme est enregistré mais rien n'entre en stock (« quantité reçue inconnue sur le BL ») ; prévenez la Direction pour régulariser.</li>
+      <li><b>Quantité attendue = reste à recevoir.</b> Un bon de commande de 100 pièces dont 40 sont déjà reçues attend 60 à la réception suivante. La quantité <b>réellement reçue</b> se saisit au PV ; c'est elle qui s'affiche ensuite dans l'onglet Réceptions. Un reliquat annoncé se coche au PV (« Reliquat ») et devient un bon de commande de reliquat.</li>
+      <li><b>Bon de commande à plusieurs articles</b> : au PV, chaque ligne a sa quantité reçue et part en Mise en stock sous <b>sa</b> référence.</li>
+      <li><b>Bon de commande de reliquat</b> (<code>BC-…-R1</code>) : il n'apparaît au Calendrier qu'une fois sa <b>date d'arrivée validée</b> par les Achats ; il se réceptionne ensuite comme un autre.</li>
+      <li>Un <b>excédent refusé</b> par la Direction apparaît dans <a href="#tab-envois">Envois → Retours fournisseurs</a> : les pièces en trop sont à renvoyer.</li>
       <li>Un lot que la Qualité a décidé de faire <b>remplacer</b> réapparaît dans « À réceptionner » : la livraison de remplacement se réceptionne comme une autre.</li>
       <li>La <b>date d'arrivée prévue</b> peut être modifiée, mais l'ERP <b>gèle la première date promise</b> : c'est elle, et non la date repoussée, qui sert à calculer l'OTD du fournisseur. Un fournisseur ne peut donc pas « racheter » sa ponctualité en décalant ses dates. Ce changement de date se fait <b>dans Achats → onglet « Bons de commande »</b> — pour <b>n'importe quelle commande encore attendue</b>, y compris une commande <b>déjà validée par le fournisseur</b>. Sur les lignes <b>déjà réceptionnées</b>, le bouton bleu « Date d'arrivée » laisse place à une pastille grise <span class="b b-mut">🔒 Figée</span>.</li>
       <li><b>Dès que la marchandise est arrivée, la date d'arrivée prévue est figée, définitivement</b> — et cela vaut aussi pour une <b>réception partielle</b>. Cette date est la <b>promesse du fournisseur</b> : la réécrire après coup effacerait le retard constaté. Une commande est considérée comme arrivée dès qu'elle porte une <b>date de réception réelle</b>, un <b>bon de livraison rattaché</b> ou un <b>statut de réception</b>.</li>

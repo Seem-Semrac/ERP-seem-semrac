@@ -475,8 +475,13 @@ export function stock(d: DashboardData, f?: DashFilter) {
   const st = filterRows((d.stock || []) as any[], f, { siteField: 'activite' }) as any[]
   const actifs = st.filter(a => a.actif !== false)
   const valorisation = sumBy(actifs, a => num(a.stock_actuel) * num(a.prix_achat_ht))
-  const ruptures = actifs.filter(a => num(a.stock_actuel) <= 0)
-  const sousMini = actifs.filter(a => num(a.stock_actuel) > 0 && num(a.stock_actuel) < (num(a.point_commande) || num(a.stock_mini)))
+  // Lot F (vérification 16/09/2026) : le stock n'est crédité qu'au RANGEMENT. Une référence dont la réception contrôlée attend
+  // son rangement (file « à ranger ») n'est pas en rupture : la matière est dans les murs. Valorisation inchangée (stock rangé).
+  const aRanger: Record<string, number> = {}
+  for (const l of ((d.misesEnStockARanger || []) as any[])) { const k = lc(String(l?.reference ?? '').trim()); if (k) aRanger[k] = (aRanger[k] || 0) + num(l.quantite) }
+  const dispo = (a: any) => num(a.stock_actuel) + (aRanger[lc(String(a.reference ?? '').trim())] || 0)
+  const ruptures = actifs.filter(a => dispo(a) <= 0)
+  const sousMini = actifs.filter(a => dispo(a) > 0 && dispo(a) < (num(a.point_commande) || num(a.stock_mini)))
 
   // Couverture moyenne (mois) = stock / conso mensuelle
   const couvertures = actifs.map(a => num(a.consommation_mensuelle) > 0 ? num(a.stock_actuel) / num(a.consommation_mensuelle) : null).filter((x): x is number => x != null)
@@ -729,8 +734,13 @@ export function fournisseurs(d: DashboardData, f?: DashFilter) {
   const otdGlobalVals = scores.map(s => s.otd).filter((x): x is number => x != null)
   const otdGlobal = otdGlobalVals.length ? Math.round(otdGlobalVals.reduce((s, v) => s + v, 0) / otdGlobalVals.length) : 0
   // Fill rate : qté reçue / qté commandée — vraies colonnes des BC (qte_recue/qte_commandee ; `quantite` n'existe pas).
-  const qteCmd = sumBy(bcs, b => num(b.qte_commandee))
-  const qteRecue = sumBy(bcs, b => num(b.qte_recue))
+  // Lot F (vérification 16/09/2026) : un reliquat annoncé au PV laisse le BC d'origine « tout reçu » et naît en BC de reliquat
+  // (bc_parent_id). Sa quantité n'est pas une nouvelle commande (hors dénominateur) et ce qu'il attend encore n'est pas reçu
+  // (retiré du numérateur) — sinon le manque comptait deux fois.
+  const estReliquat = (b: any) => String((b as any).bc_parent_id ?? '').trim() !== ''
+  const qteCmd = sumBy(bcs.filter(b => !estReliquat(b)), b => num(b.qte_commandee))
+  const qteRecue = sumBy(bcs.filter(b => !estReliquat(b)), b => num(b.qte_recue))
+    - sumBy(bcs.filter(estReliquat), b => Math.max(0, num(b.qte_commandee) - num(b.qte_recue)))
   const fillRate = qteCmd > 0 ? Math.min(100, Math.round(qteRecue / qteCmd * 100)) : 0
   // Série mensuelle de dépense (support de l'overlay N-1)
   const serieDep = monthlySeries(ff, 'date_facture', 'montant_ht', mk)

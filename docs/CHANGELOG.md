@@ -2,6 +2,152 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-15 — Lot F : PV de réception quantitatif / qualitatif, reliquat, Stock › Rangement / Mise en stock
+
+*« Dans le PV de contrôle de réception d'expédition je veux pouvoir avoir à côté de la case observations la quantité
+reçue à côté de la quantité prévue […] s'il y a un reliquat annoncé par le fournisseur, il faut recréer […] ce qu'il nous
+reste à recevoir. Il va falloir créer un nouvel onglet qui sera la mise en stock qui sera le premier onglet du stock dans
+lequel quand on aura fini le PV de réception avec ce qui a été validé conforme ça va directement référence par référence
+dans la liste des choses à rentrer dans le stock. Il faut avoir un bouton pour accepter l'entrée en stock avec la ref et
+le type d'objet […] pour chaque type une liste déroulante concernant la zone géographique […] chaque ref a son endroit
+défini, quand la ref est nouvelle on doit choisir l'endroit, quand la ref est ancienne […] il doit rester fixe. Mais on
+veut quand même une option pour le changer à la main […] dans les stocks on veut pouvoir masquer les produits vides. »*
+
+**Réponses de l'utilisateur** (elles font foi)
+1. Problème de **quantité** = NC **quantitative**, **observation** = **qualitative**, les deux possibles ; **une NC fournisseur
+   par ligne** de commande à problème.
+2. **Excédent** : « ce qui est voulu va au stock, le reste, la décision est soumise à validation hiérarchique ».
+3. PV mixte : les lignes conformes partent en Mise en stock tout de suite.
+4. Reliquat annoncé : « le BC du restant se génère pour aller dans les BC aux Achats pour une attente de validation de la date ».
+5. Conforme / Non conforme reste un **choix manuel** ; en Non conforme, les lignes en écart (quantité ou observation) sont non conformes.
+6. Type d'objet sans zone : « il faut lui en assigner une » (pas de texte libre non référencé).
+7. Droits : **écriture Stock** + **historique** des changements d'emplacement.
+8. **Porte matière** des BDT : ouverte **une fois rangée**, plus au PV conforme.
+9. Types d'objet **modifiables dans l'ERP** (départ : Matière première, Accessoire, Consommable, Outillage, Produit chimique, EPI).
+10. L'**ajustement de stock** devient un sous-onglet du nouvel onglet de rangement.
+11. « Masquer les produits vides » **coché par défaut**, mémorisé par poste.
+12. Sous-onglets Entrée / Sortie / Ajustement (décoratifs jusque-là) **rendus fonctionnels**.
+
+**Ce qui change**
+- **PV de contrôle à réception** (Expéditions › Réceptions) : le **tableau des lignes** est affiché en Conforme **comme** en Non
+  conforme — Qté prévue, **Qté reçue** (pré-remplie), case **Reliquat annoncé** (si reçu < prévu), **Conforme ?** calculé
+  (« Non · quantitatif », « Non · qualitatif » ou les deux), observation facultative ; « Tout reçu comme prévu ». À la
+  validation, par ligne : conforme → **Stock › Mise en stock** ; manque sans reliquat → **NC quantitative** (le reçu part quand
+  même en Mise en stock) ; **excédent** → le prévu en Mise en stock, l'excédent en **validation Direction** ; **observation** → **NC
+  qualitative** et **quarantaine** de la ligne ; **reliquat** → **BC de reliquat** `<n° du BC>-R1` aux Achats, **date à valider** ;
+  certificat matière absent → NC « Logistique - Certificats » et réception bloquée en quarantaine. Le BL prend la quantité
+  réellement reçue. Notification de synthèse, avertissements réaffichés après le rechargement.
+- **Réception** : la case « Livraison partielle » est **retirée** (le reliquat se déclare au PV).
+- **Stock** — nouvel onglet **« Rangement / Mise en stock »**, **ouvert par défaut** :
+  - **À ranger** : une ligne par entrée (PV, décision Qualité, excédent validé, entrée manuelle), type d'objet proposé, emplacement
+    fixe (cadenas) ou « à choisir » ; **« Accepter l'entrée en stock »** : type d'objet obligatoire, zone de la liste du type
+    (nouvelle référence), **nouvelle zone** obligatoire si le type n'en a aucune ; le stock est crédité **à ce moment-là** et la
+    porte matière de l'affaire s'ouvre quand toute sa matière est contrôlée et rangée ; annulation d'une ligne avec motif.
+  - **Ajustement de stock** (inventaire : quantité constatée + motif, écart signé) et **Types & zones** (types et zones
+    modifiables, désactivés, jamais supprimés).
+- **Gestion du stock** : **Entrée stock** = entrée manuelle vers la liste à ranger ; **Sortie stock** réelle (refus au-delà du
+  stock, BDT relu et lot imputé) ; **Niveaux d'approvisionnement** (ex « Catalogue & seuils ») avec **type d'objet** et
+  **emplacement fixe** éditables, changement confirmé (motif facultatif) et **historisé** (bouton historique).
+- **Stock en temps réel** : emplacement sous la référence, **« Masquer les produits vides »** (coché, mémorisé) ; « Ajouter
+  article » ouvre l'entrée manuelle (la fenêtre factice « Ajouter un article au catalogue » est supprimée).
+- **Qualité** (Quarantaine › Décider) : la part acceptée part dans Stock › Mise en stock ; lot couvrant **plusieurs articles** →
+  bloc **« Part acceptée par ligne du bon de commande »** (obligatoire en entrée partielle).
+- **Direction** (À valider) : type **« Excédent de réception »** avec **Accepter** (→ Mise en stock) / **Refuser** (motif ; retour
+  à expédier aux Expéditions, badge « REFUSÉ · RETOUR FOURNISSEUR ») ; l'excédent d'une ligne en quarantaine attend la Qualité.
+- **Achats** (Bons de commande) : badge **« Reliquat de BC-… · date à valider »** ; fixer la date d'arrivée valide le reliquat, qui
+  rejoint alors le calendrier des Expéditions.
+- **Calculs** : la quantité **à ranger** compte dans la DA du manque (acceptation d'offre), la génération de DA, le réappro
+  automatique, le scan d'alertes (pas de rupture), les stocks critiques du cockpit et les ruptures / « sous le mini » du dashboard
+  Stock ; le taux de service fournisseur sort les BC de reliquat.
+
+**Choix faits et points à valider**
+1. ⚠ **À trancher** : un PV **Conforme accepte** une ligne avec **reliquat annoncé** (le reçu est bon, le reste est recommandé).
+   La spécification disait « Conforme ⇒ aucun reliquat » ; appliquée à la lettre, un PV dont le seul écart est un reliquat était
+   impossible (Non conforme exige une ligne en écart). Alternative : refuser le reliquat en Conforme et autoriser un Non conforme
+   sans NC quand le seul écart est un reliquat.
+2. NC mixte (quantité + observation) : nature « À requalifier ». La NC écrit « quantitative / qualitative » dans `categorie`, déjà
+   utilisée par la Qualité pour « administratif / production » : à la ré-édition, la catégorie est redemandée (la nature reste en
+   tête de la description).
+3. Excédent d'une ligne qualitative ou d'une réception sans certificat : acceptable **seulement après la décision de la Qualité**, et
+   jamais si elle a tout renvoyé. Un refus crée une quarantaine déjà décidée `QEXC-<id>` (renvoi, compensation « aucune »), visible
+   aussi dans les listes de la Qualité.
+4. Porte matière aussi évaluée à l'**annulation** d'une ligne et au rangement d'une **entrée manuelle rattachée à une affaire**.
+   Base sans la file (cloud avant `cloud-11`) : le PV et la décision Qualité gardent l'entrée directe et l'ancienne porte.
+5. Référence créée au rangement : `categorie` = code du type ; un type choisi différent de celui de la référence ne la change pas
+   (avertissement) ; une zone qui est l'emplacement de références ne se renomme pas ; **aucune zone n'est amorcée** (listes à
+   fournir) ; les 20 emplacements existants (`A1-01`…) restent fixes mais « hors liste ».
+6. Panne de lecture de la file : pas de réappro automatique, génération de DA refusée (503), ruptures non évaluées ; à l'acceptation
+   d'une offre, les DA du manque sont créées quand même (demandeur « stock à ranger non vérifié »).
+7. Sortie notée pour une affaire sans BDT : acceptée, non valorisée dans le coût matière (avertissement).
+
+**Défauts corrigés en route** (vérification du lot : 32 signalements, 29 défauts réels corrigés, 1 à trancher ci-dessus, 1 = cette
+documentation) — excédent d'une ligne qualitative mis en quarantaine avec la matière commandée puis entré en stock par dérogation sans
+validation hiérarchique ; porte matière ouverte sur une panne de lecture des quarantaines (supabase-js ne lève jamais), jamais
+réévaluée après un rachat, une annulation ou une décision Qualité, et ouverte par un BC de reliquat pris pour un rachat ; lecture de la
+file limitée à 1 000 lignes (PostgREST) ; réappro automatique et DA déclenchées sur une file illisible ; PV sans colonne `detail` jamais
+« tranché » ; avertissement « à saisir en entrée manuelle » qui relistait des lignes déjà en file (double crédit) ; deux PV du même BL
+ou BC de reliquat en double ; BC de reliquat à 0 € sans prix unitaire (avoir non chiffré) ; `BL.qte` restée à la quantité attendue ;
+taux de service faussé par les reliquats ; sortie imputée à un BDT inconnu ; ruptures et stocks critiques ignorant le « à ranger » ;
+écrans : « Nouvelle zone » qui lisait encore la liste grisée, cadre d'emplacement réécrit sous le clic, panne affichée « Rien à
+ranger », avertissements perdus au rechargement (`notifDurable`), textes serveur non échappés, capture `stock-rt` qui ne cliquait plus
+son onglet.
+
+**Vérifications** : `tsc` 0 erreur · harnais toutes pages 60 PASS / 0 FAIL / 1 SKIP · règles pures : PV 79, Stock 41, raccordements 15,
+correctifs 16 · routes réelles (`app.request`) contre un PostgREST simulé en mémoire : PV 43, Stock 49, raccordements 21, correctifs 44
+(dont pannes simulées) · Playwright sur les pages rendues : PV 30, Qualité 12, correctifs 26 · **stack Docker réelle**
+(`AUTH_ENFORCE=on`, après deux `erp-docker.sh maj`) : correctifs 31, vérification du lot 103, API Stock 47 · migration **013** rejouée
+sur un PostgreSQL 18 jetable (transaction annulée ; idempotente appliquée deux fois comme `migrate.sh` ; contraintes et droits : anon
+n'efface ni la file ni l'historique ; doublons de référence → WARNING sans index ; `schema.sql` → structure identique) et sur `erp-db`
+en transaction annulée ; `cloud-11` : garde-fou qui refuse la base VM, passe deux fois sur une base type cloud ; filtre de mots-clés de
+`migrate.sh` · jeux `-TEST-` supprimés et **relus à 0** · phase documentation : voir la fin de cette entrée.
+
+**Scripts à jouer**
+- **Docker / VM** : `~/erp/docker/scripts/erp-docker.sh maj` applique **013** (déjà fait sur le Docker local ; l'index
+  `ux_mes_pv_bl_ligne`, ajouté à 013 après son premier passage, y a été créé à la main en `supabase_admin` — l'empreinte de 013 dans
+  `_erp_migrations` reste l'ancienne, sans conséquence ; une base neuve le reçoit par 013 ou `schema.sql`).
+- **Cloud (Studio Supabase EN LIGNE, SQL Editor — jamais celui du Docker)** : jouer **`cloud-6`**, **`cloud-10`** puis
+  **`docker/db/cloud/cloud-11-mise-en-stock.sql`**, **avant** de déployer le code. Lire les messages : un WARNING « N references de
+  stock sont en double » = index `ux_stock_reference` non créé (requête de liste et commande de création dans le message). Tant que
+  `cloud-11` n'est pas joué : Stock › Rangement affiche « jouez cloud-11 », le PV et la décision Qualité entrent le stock directement
+  (avertissement), types et emplacements non modifiables, BC de reliquat sans badge.
+- **Avant la mise en ligne** : saisir les **zones par type** (Stock › Rangement › Types & zones) ; vérifier qui range (écriture Stock :
+  Direction, Achats, Logistique) ; prévenir la Production que la matière d'une affaire n'est disponible qu'une fois **rangée** ;
+  `npm run build` puis déploiement (`erp-deploy`).
+
+**Limites connues** : pas de conversion d'unité ni de fractionnement d'une ligne au rangement ; BC à plusieurs articles re-réceptionné
+après un remplacement Qualité : quantité prévue = quantité commandée de la ligne ; `qte_recue` du BC d'origine inchangée quand un reliquat
+est déclaré (taux de service corrigé par le calcul) ; un manque purement quantitatif sans reliquat n'est pas compté comme matière
+manquante ; contraintes CHECK du cloud sur `type_nc` « Fournisseur », `non_conformites.categorie` et le statut `envoye` du BC de reliquat
+**non vérifiées en ligne** ; `recalculerStatutBc` exige désormais que **toutes** les quarantaines d'un BL soient décidées (y compris
+d'anciens PV qui en auraient plusieurs) ; `/api/validations/:id/decision` lit d'abord la demande strictement pour tous les types (503 en
+panne) ; onglet Mouvements limité aux 200 derniers ; prix unitaire « inconnu » dans la fenêtre Qualité pour un BC à plusieurs articles ;
+`bcsView` projette encore `stock_multi_ok` (plus lu) ; résumé du manuel Stock dans le hub `/manuels` (`src/manuels.tsx`) non mis à jour ;
+sur le Docker de développement, une quarantaine « certificat absent » créée avant les corrections sur un BC à plusieurs articles avec
+excédent demanderait une répartition impossible à équilibrer (donnée de développement seulement).
+
+- Fichiers : `src/mise_en_stock.ts` (nouveau), `src/index.tsx`, `src/stock_service.tsx`, `src/expeditions.tsx`, `src/pv_reception.ts`,
+  `src/reception.ts`, `src/qualite.tsx`, `src/direction_service.tsx`, `src/achats.tsx`, `src/queries.ts`, `src/kpi.ts`, `src/shared.ts`,
+  `src/types.ts` · Migration DB : **oui** (`docker/db/migrations/013-mise-en-stock.sql` ; cloud : `cloud-11` ; bloc en fin de
+  `docker/db/seed/schema.sql` ; ligne dans `docker/db/cloud/README.md`).
+- Doc mise à jour : `technique/06-modules/{stock,expeditions,achats,qualite,direction}.md` (sections « Lot F » ; blocs générés Stock et
+  Qualité via le manifeste de `gen_module_fiches.mjs`), `03-base-de-donnees.md`, `03b-tables-reference.md`, `04-auth-rbac.md` (écriture
+  Stock revérifiée, alimentation sans droit Stock, 403 excédent), `07-api-reference.md` (contrats « Lot F », référence régénérée),
+  `02-exploitation-runbook.md` (`cloud-11`, mise en service, 15 incidents), `manuel/html/stock.html` (**réécrit** : 6 onglets),
+  `manuel/html/{expeditions,achats,qualite,direction,production,index}.html` (+ `src/manuels_contenu.ts`),
+  `manuel/{stock,expeditions,achats,qualite,direction}.md`, `manuel/formulaires/{stock,expeditions,qualite,direction,00-index}.md`
+  (formulaires Stock réécrits : rangement, annulation, ajustement, types & zones, entrée manuelle, sortie, niveaux d'approvisionnement),
+  `manuel/parcours/09-stock.md` (réécrit) et `{03-achats,06-qualite,08-expeditions,13-direction}.md`,
+  `fiches-poste/{logistique,achats,qualite,direction}.md` (générateur `gen_fiches_poste.mjs`), cerveau · Outillage : `capture_screens.mjs`
+  (`stock-rt` clique son onglet ; `stock-mes`, `stock-mes-ajustement`, `stock-mes-types`, `stock-niveaux`), `capture_forms.mjs`
+  (`form-stock-rangement` remplace `form-stock-article` ; PV conforme avec reliquat et PV non conforme avec excédent remplis dans le
+  navigateur ; `form-qualite-decision-fournisseur`, `form-direction-refus-excedent`) · Captures refaites sur la stack Docker (jeu `-TEST-`
+  créé par les vraies routes puis supprimé et relu à 0) : nouvelles `stock-mes`, `stock-mes-ajustement`, `stock-mes-types`,
+  `stock-niveaux`, `form-stock-rangement`, `form-qualite-decision-fournisseur`, `form-direction-refus-excedent` ; refaites `stock-rt`,
+  `stock-gestion`, `stock-mvts`, `stock-alertes`, `achats-bc`, `expeditions-receptions`, `form-expeditions-reception`,
+  `form-expeditions-reception-correction`, `form-expeditions-pv`, `form-expeditions-pv-non-conforme` ; `form-stock-article.png`
+  supprimée (orpheline).
+- Vérifications de la phase documentation : `gen_api_ref.mjs` OK (395 routes, 50 familles ; 14 routes `/api/stock/…` entrées) · `gen_module_fiches.mjs --verifier` 0 écart · `gen_fiches_poste.mjs` (4 fiches changées) · `npm run build` OK (`src/manuels_contenu.ts` régénéré, 17 images copiées, `dist/_worker.js` 4,85 Mo) · `tsc --noEmit` 0 erreur · harnais 60 PASS / 0 FAIL / 1 SKIP · `lint_docs` 141 images · 191 liens · 0 cassé · `audit_manuels.mjs` sur le Docker 0 grave (aucun onglet manquant ni en trop ; « attention » = captures antérieures au code, hors lot).
+
 ## 2026-09-15 — Production : soldage des BDT débloqué · PV de non-conformité et demande d'achat signés à l'atelier
 
 *« Pour la production, les soldages de BDT ne fonctionnent pas. Seules les personnes habilitées à écrire dans la

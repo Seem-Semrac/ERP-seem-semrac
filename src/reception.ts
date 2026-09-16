@@ -10,6 +10,8 @@
 //   Quantité du BL = RESTE À RECEVOIR du BC (quantité commandée − quantité déjà reçue).
 //   Quantité commandée = `qte_commandee` si numérique, sinon la somme des `lignes[].qte` quand
 //   TOUTES les lignes en portent une numérique, sinon INCONNUE.
+// Lot F (15/09/2026) : la « livraison partielle » n'est plus déclarée à la réception (case retirée, champ ignoré) ;
+//   le reliquat se déclare au PV, ligne par ligne, et devient un bon de commande de reliquat (src/pv_reception.ts).
 // Correctifs de la vérification (14/09/2026) — deux exceptions, seulement là où la règle menait à une impasse :
 //   · LIVRAISON PARTIELLE (case, fournisseur qui annonce un reliquat) : la quantité livrée est saisie,
 //     le BC passe « recu_partiel » et le reliquat reste à réceptionner (sinon le manquant devenait une
@@ -225,7 +227,7 @@ export function repartitionStockMultiArticles(bc: any, qteBl: unknown, qteAccept
 /** Phrase d'avertissement quand un BC à plusieurs articles est reçu sans quantité exploitable. */
 export function avertissementQteInconnue(numBc: string): string {
   return 'Bon de commande ' + numBc + ' à plusieurs articles sans quantité exploitable : la réception est enregistrée sans quantité ; '
-    + 'au PV conforme, l’entrée en stock ne pourra pas se faire article par article.'
+    + 'au PV de contrôle, saisissez la quantité reçue de chaque ligne.'
 }
 
 // ─── Plan de réception ─────────────────────────────────────────
@@ -255,10 +257,10 @@ export type PlanReception =
 const nb = (n: number) => String(n).replace('.', ',')
 
 /** BC à plusieurs articles dont la réception ne pourra PAS entrer en stock ligne par ligne : on le dit dès la réception. */
-function avertissementStockMulti(bc: any, num: string, multi: boolean, qteBl: number | null): string | null {
-  if (!multi) return null
-  const r = repartitionStockMultiArticles(bc, qteBl)
-  return r.ok ? null : ('Bon de commande ' + num + ' : ' + r.raison + '. Au PV conforme, rien n’entrera en stock automatiquement.')
+// Lot F (15/09/2026) : obsolète — la quantité reçue est saisie LIGNE PAR LIGNE au PV et chaque ligne part dans la file
+// « Mise en stock » du Stock. Plus rien à annoncer dès la réception.
+function avertissementStockMulti(_bc: any, _num: string, _multi: boolean, _qteBl: number | null): string | null {
+  return null
 }
 
 /** Ce que la réception va écrire, ou pourquoi elle est refusée (409 état du BC · 400 quantité livrée). */
@@ -356,15 +358,12 @@ export function validerSaisieReception(body: any): ResultatSaisie {
   const hf = ouiNon(b.hors_france)
   if (hf == null) return ko('hors_france', 'Indiquez si la réception vient de hors France (Oui / Non).')
 
-  // Livraison partielle (facultative : absente = non) et quantité livrée (seulement si saisie).
-  // La cohérence avec le BC (reste à recevoir, quantité inconnue) est jugée par planReception.
+  // Quantité livrée (seulement si saisie : quantité commandée du BC inconnue). La cohérence avec le BC est jugée par planReception.
+  // ⚠ Lot F (15/09/2026) : la case « Livraison partielle » est RETIRÉE du formulaire — le reliquat annoncé par le fournisseur
+  //   se déclare au PV de contrôle, ligne par ligne (bon de commande de reliquat aux Achats). Un ancien client qui l'enverrait
+  //   encore n'a plus d'effet : la réception prend toujours le reste à recevoir.
   const vide = (v: unknown) => v == null || (typeof v === 'string' && v.trim() === '')
-  let livraison_partielle = false
-  if (!vide(b.livraison_partielle)) {
-    const p = ouiNon(b.livraison_partielle)
-    if (p == null) return ko('livraison_partielle', 'Livraison partielle : répondez oui ou non.')
-    livraison_partielle = p
-  }
+  const livraison_partielle = false
   let qte_livree: number | null = null
   if (!vide(b.qte_livree)) {
     const qn = nombreStrict(b.qte_livree)
