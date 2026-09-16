@@ -18,6 +18,8 @@
 // La gamme d'un lot est la FUSION des bons de travail et des bons de sous-traitance,
 // triée par `seq` — la colonne existe sur les deux tables, écrite par la cascade.
 
+import { calendrierCadence, ajouterHeuresOuvrees, prochainInstantOuvert, plageOuverteCalendrier, siteCadence, dateParis, type DonneesCadence, type CalendrierCadence } from './cadence'
+
 const nb = (v: any) => { const n = Number(v); return isFinite(n) ? n : 0 }
 const txt = (v: any) => String(v ?? '').trim()
 
@@ -144,22 +146,35 @@ export function blocagesEnvoiBds(bdsRows: any[], bdtRows: any[]): Record<string,
 //   · prédécesseur dans la goulotte                     → pas de contrainte (information seulement) ;
 //   · prédécesseur posé SANS heure (pose au clic)       → compté à PLAN_HEURE_DEFAUT, l'heure où le planning l'affiche ;
 //   · porteur du réglage en goulotte, morceaux posés    → pas avant le début du plus tôt des morceaux posés ;
-//   · prédécesseur BDT reçu                             → son début réel (`debut_reel`, jour prévu) ;
+//   · prédécesseur BDT reçu                             → son début réel (`debut_reel` ; jour : `recu_le`, voir debutBdt) ;
 //   · prédécesseur entièrement soldé                    → aucune contrainte ;
 //   · réglage non renseigné (null)                      → compté 0, et dit ;
 //   · BDT `oas_avant` (une étape OAS entre les deux)    → fin COMPLÈTE prévue du prédécesseur ;
 //   · successeur BDS (un carton, pas de chevauchement)  → fin complète, contrôlée au JOUR ;
 //   · prédécesseur BDS                                  → retour effectif, sinon début + durée (jours) à 5 h.
 //
-// Temps = heures de GRILLE du planning, de PLAN_DEBUT_JOUR à PLAN_FIN_JOUR : ce qui dépasse la fin
-// de journée reprend le lendemain au début de journée (ajouterHeuresPlanning). Jours calendaires.
+// TEMPS (lot G · G5, 16/09/2026) — deux régimes, choisis par le dernier argument `cadence` des fonctions ci-dessous :
+//   · cadence usine LISIBLE (DonneesCadence, src/cadence.ts) → HEURES OUVRÉES du site de l'opération (activité du BDT :
+//     Seem, Semrac ; toute autre valeur = union des deux sites). Le réglage / la durée ne consomment que du temps ouvert
+//     (pauses, nuits et jours fermés sautés, dimanche toujours fermé, samedi selon la cadence) ; un au plus tôt qui tombe sur
+//     du fermé est reporté au PROCHAIN INSTANT OUVERT du site de l'étape suivante ; le retour de sous-traitance compte à la
+//     première ouverture du jour de retour. Positions comparées en heures calendaires (jour × 24 + heure).
+//   · cadence ILLISIBLE (absente : cloud sans cloud-12, ou non fournie) → grille historique du planning, de PLAN_DEBUT_JOUR
+//     à PLAN_FIN_JOUR : ce qui dépasse la fin de journée reprend le lendemain au début de journée (ajouterHeuresPlanning).
+//     Les constantes PLAN_DEBUT_JOUR / PLAN_FIN_JOUR ne sont plus que ces valeurs par défaut.
 //
-// PROGRAMMER N'EST PAS PRODUIRE : rien n'est retiré du planning. Le serveur CALE une pose le même jour
-// à l'heure au plus tôt et refuse (409) un jour antérieur ; il ne décale jamais les étapes suivantes.
+// JOUR DE PLANNING (calage / refus) : la vue d'un jour D du planning couvre [D + début de sa fenêtre, D+1 + début de la
+// sienne[ — début de fenêtre = heure pleine de la première ouverture du jour (union des deux sites), PLAN_DEBUT_JOUR si le
+// jour est fermé. La nuit de D (Soirée 21:00 → 05:30) appartient donc au jour D. Le serveur CALE une pose sur le même jour
+// de planning (éventuellement au-delà de minuit : `cale_date`) et refuse (409) un jour de planning antérieur. Grille : jour
+// de planning = jour calendaire (comportement du lot C).
+//
+// PROGRAMMER N'EST PAS PRODUIRE : rien n'est retiré du planning par le chemin critique. Il ne décale jamais les étapes
+// suivantes (la remise en goulotte des successeurs devenus incohérents est une décision explicite : poste_oas.ts, G4).
 //
 // ⚠ Ce moteur est REPRIS ligne à ligne dans le script client de pageServiceProd (src/prod.tsx, fonctions
-//   « cc… ») pour le calage au glisser-déposer : toute modification se reporte des deux côtés
-//   (test de parité : scratchpad lotc/test_chemin.ts).
+//   « cc… », horloge `ccHorloge`) pour le calage au glisser-déposer : toute modification se reporte des deux côtés
+//   (tests de parité : scratchpad lotc/test_chemin.ts, lotg/test_planning_cadence.ts).
 
 export const PLAN_DEBUT_JOUR = 5
 export const PLAN_FIN_JOUR = 23
@@ -232,10 +247,79 @@ export function ajouterHeuresPlanning(dateIso: string, heure: number, h: number)
   return { date: isoDuJour(jour), heure: arr6(PLAN_DEBUT_JOUR + reste) }
 }
 
-/** Un DÉBUT ne se pose pas à 23 h (rien ne tient après) : lendemain à l'ouverture. */
-function versDebut(p: { date: string; heure: number }): { date: string; heure: number } {
+/** Grille : un DÉBUT ne se pose pas à 23 h (rien ne tient après) : lendemain à l'ouverture. */
+function versDebutGrille(p: { date: string; heure: number }): { date: string; heure: number } {
   if (p.heure >= PLAN_FIN_JOUR - EPS_H) return { date: isoDuJour((jourIdx(p.date) as number) + 1), heure: PLAN_DEBUT_JOUR }
   return p
+}
+
+// ─── Horloge du planning : grille 5 h-23 h ou heures ouvrées de la cadence usine (lot G · G5) ───
+export interface PosPlanning { date: string; heure: number }
+export interface TempsPlanning {
+  /** true : heures ouvrées de la cadence usine ; false : grille PLAN_DEBUT_JOUR → PLAN_FIN_JOUR (cadence illisible) */
+  cadence: boolean
+  /** `h` heures de travail de `op` à partir de (date, heure) ; null si impossible (date invalide, calendrier fermé) */
+  ajouter(op: any, dateIso: string, heure: number, h: number): PosPlanning | null
+  /** position de DÉBUT possible pour `cible` au plus tôt à `p` (grille : pas à 23 h ; cadence : prochain instant ouvert) */
+  versDebut(cible: any, p: PosPlanning): PosPlanning
+  /** position absolue comparable d'un jour à l'autre (grille : heures de grille bornées ; cadence : jour × 24 + heure) */
+  position(date: any, heure: any): number | null
+  /** position de reprise après le retour d'une sous-traitance le jour `dateIso`, pour la cible */
+  retourSt(cible: any, dateIso: string): PosPlanning
+  /** jour de PLANNING (numéro de jour) d'une position : grille = jour calendaire ; cadence = jour dont la vue la contient */
+  jourPlanning(date: any, heure: any): number | null
+  /** heure (pleine) où commence la vue du jour : première ouverture du jour, union des deux sites ; PLAN_DEBUT_JOUR si fermé */
+  debutFenetre(dateIso: string): number
+  /** calendrier de cadence de l'opération (site = activité), null en grille */
+  calendrier(op: any): CalendrierCadence | null
+}
+/** Cadence lue (heures ouvrées), horloge déjà construite (réutilisée), ou rien (grille). */
+export type SourceTemps = DonneesCadence | TempsPlanning | null | undefined
+
+/** Clé de site de cadence d'une opération : 'Seem', 'Semrac', sinon 'both' (union des deux sites : ouvert si l'un travaille). */
+export const cleSiteCadence = (op: any): string => siteCadence(op?.activite) || 'both'
+
+const HORLOGE_GRILLE: TempsPlanning = {
+  cadence: false,
+  ajouter: (_op, d, h, x) => ajouterHeuresPlanning(d, h, x),
+  versDebut: (_c, p) => versDebutGrille(p),
+  position: (d, h) => grille(d, h),
+  retourSt: (_c, d) => ({ date: d, heure: PLAN_DEBUT_JOUR }),
+  jourPlanning: (d) => jourIdx(d),
+  debutFenetre: () => PLAN_DEBUT_JOUR,
+  calendrier: () => null,
+}
+
+/** Horloge du planning : `tempsPlanning(cadence)` une fois par requête, puis passée aux fonctions (calendriers mémorisés). */
+export function tempsPlanning(source?: SourceTemps): TempsPlanning {
+  if (source && typeof (source as TempsPlanning).ajouter === 'function') return source as TempsPlanning
+  const cadence = source as DonneesCadence | null | undefined
+  if (!cadence || !Array.isArray(cadence.modeles) || !Array.isArray(cadence.cadences)) return HORLOGE_GRILLE
+  const cals: Record<string, CalendrierCadence> = {}
+  const cal = (op: any): CalendrierCadence => { const k = cleSiteCadence(op); return cals[k] || (cals[k] = calendrierCadence(cadence, k)) }
+  const pos = (i: { date: string; heure: number } | null): PosPlanning | null => (i ? { date: i.date, heure: arr6(i.heure) } : null)
+  const debutFenetre = (iso: string): number => { const p = plageOuverteCalendrier(cal(null), iso); return p ? Math.floor(p.debut + 1e-9) : PLAN_DEBUT_JOUR }
+  return {
+    cadence: true,
+    ajouter: (op, d, h, x) => pos(ajouterHeuresOuvrees(d, h, Math.max(0, numOuNull(x) ?? 0), cal(op))),
+    versDebut: (c, p) => pos(prochainInstantOuvert(p.date, p.heure, cal(c))) || p,
+    position: (d, h) => { const j = jourIdx(d), hh = numOuNull(h); return (j == null || hh == null) ? null : arr6(j * 24 + hh) },
+    // Un BDS repart au JOUR (calendrier du sous-traitant) ; un BDT reprend à la première ouverture du jour de retour.
+    retourSt: (c, d) => {
+      if (estBds(c)) return { date: d, heure: 0 }
+      const k = cal(c), p = plageOuverteCalendrier(k, d)
+      return pos(prochainInstantOuvert(d, p ? p.debut : 24, k)) || { date: d, heure: 0 }
+    },
+    jourPlanning: (d, h) => {
+      const j = jourIdx(d), hh = numOuNull(h)
+      if (j == null) return null
+      if (hh == null) return j
+      const abs = arr6(j * 24 + hh), jd = Math.floor(abs / 24)
+      return (abs - jd * 24) + EPS_H < debutFenetre(isoDuJour(jd)) ? jd - 1 : jd
+    },
+    debutFenetre,
+    calendrier: cal,
+  }
 }
 function heureReelle(v: any): number | null {
   const m = /^\s*(\d{1,2})[:h](\d{2})/.exec(txt(v))
@@ -247,15 +331,32 @@ function heureReelle(v: any): number | null {
 function estBds(op: any): boolean {
   return !!op && (('sous_traitant_id' in op) || ('date_retour_prevue' in op) || ('date_envoi' in op) || ('duree_days' in op) || ('date_debut' in op) || ('date_retour_effective' in op))
 }
-/** Début d'un BDT : reçu/soldé → début réel (jour prévu) ; posé (négation de enGoulotte) → jour + heure prévus.
- *  Sans heure en base, le BDT posé est compté à PLAN_HEURE_DEFAUT, l'heure où le planning l'affiche. */
-function debutBdt(op: any): { date: string; heure: number } | null {
+/**
+ * Début d'un BDT : reçu/soldé → début RÉEL ; posé (négation de enGoulotte) → jour + heure prévus. Sans heure en base, le BDT
+ * posé est compté à PLAN_HEURE_DEFAUT, l'heure où le planning l'affiche.
+ * Jour du début réel (revue du 16/09/2026 — `debut_reel` n'est qu'une heure « HH:MM », et les équipes de nuit la font passer
+ * minuit) : `recu_le` (instant de la réception, jour de Paris) quand la base le porte (migration 014 / cloud-12) ; sinon le
+ * jour prévu, et en heures ouvrées (`nuits`) le jour VOISIN quand l'heure réelle est à plus de 12 h de l'heure prévue
+ * (posé à 22 h, reçu à 00:30 → le lendemain ; posé à 1 h, reçu à 23:30 → la veille). Grille 5 h-23 h : jour prévu.
+ * Exporté : liste « Lots à venir » (poste_oas.ts). ⚠ Copie client : ccDebutBdt (src/prod.tsx).
+ */
+export function debutBdt(op: any, nuits = false): { date: string; heure: number } | null {
   const s = txt(op?.statut).toLowerCase()
   const d = txt(op?.date_prevue)
   if (opSoldee(op) || s === 'recu' || s === 'reçu') {
-    if (jourIdx(d) == null) return null
-    const h = heureReelle(op.debut_reel) ?? numOuNull(op.debut)
-    return { date: d.slice(0, 10), heure: h ?? PLAN_HEURE_DEFAUT }
+    const hr = heureReelle(op.debut_reel)
+    const jr = op?.recu_le ? dateParis(op.recu_le) : null
+    if (jr && jourIdx(jr) != null) return { date: jr, heure: hr ?? numOuNull(op.debut) ?? PLAN_HEURE_DEFAUT }
+    const j = jourIdx(d)
+    if (j == null) return null
+    if (hr == null) return { date: d.slice(0, 10), heure: numOuNull(op.debut) ?? PLAN_HEURE_DEFAUT }
+    let jour = j
+    if (nuits) {
+      const ecart = hr - (numOuNull(op.debut) ?? PLAN_HEURE_DEFAUT)
+      if (ecart > 12 + EPS_H) jour = j - 1
+      else if (ecart < -12 - EPS_H) jour = j + 1
+    }
+    return { date: isoDuJour(jour), heure: hr }
   }
   if (!s || s === 'a_programmer' || s === 'st' || estAnnulee(op) || txt(op?.operateur_id) === 'ST') return null
   if (!txt(op?.process_id) || jourIdx(d) == null) return null
@@ -288,7 +389,8 @@ function retourBds(op: any): string | null {
  * Au plus tôt de `cible` (BDT ou BDS) dans son lot. `opsDuLot` = BDT et BDS du lot (la cible peut y figurer :
  * c'est la version passée en argument qui compte). Ne dépend ni du jour ni de l'heure de la cible elle-même.
  */
-export function auPlusTot(cible: any, opsDuLot: any[]): AuPlusTot {
+export function auPlusTot(cible: any, opsDuLot: any[], cadence?: SourceTemps): AuPlusTot {
+  const T = tempsPlanning(cadence)
   const aucune = (raison: string): AuPlusTot => ({ date: null, heure: null, regle: 'aucune', depuis: null, raison })
   if (!cible) return aucune('opération inconnue')
   const k = cleLot(cible)
@@ -302,8 +404,9 @@ export function auPlusTot(cible: any, opsDuLot: any[]): AuPlusTot {
   const infos: string[] = []
   const libres: string[] = []
   const pousser = (p: { date: string; heure: number } | null, regle: RegleAuPlusTot, depuis: string, raison: string) => {
-    if (!p) return
-    const g = grille(p.date, p.heure)
+    // Cadence : aucun créneau ouvert sur l'horizon (modèles tous fermés) → dit, jamais une contrainte oubliée en silence.
+    if (!p) { if (T.cadence) infos.push('aucun créneau ouvert après ' + depuis + ' (cadence usine)'); return }
+    const g = T.position(p.date, p.heure)
     if (g == null) return
     cands.push({ date: p.date, heure: p.heure, g, regle, depuis, raison })
   }
@@ -313,7 +416,7 @@ export function auPlusTot(cible: any, opsDuLot: any[]): AuPlusTot {
   const bdsG = G.filter((o) => estBds(o)), bdtG = G.filter((o) => !estBds(o))
   for (const s of bdsG) {
     const r = retourBds(s)
-    if (r) pousser({ date: r, heure: PLAN_DEBUT_JOUR }, 'retour_st', txt(s.id), 'après le retour de sous-traitance de ' + txt(s.id))
+    if (r) pousser(T.retourSt(cible, r), 'retour_st', txt(s.id), 'après le retour de sous-traitance de ' + txt(s.id))
     else infos.push('sous-traitance ' + txt(s.id) + ' non planifiée')
   }
   if (bdtG.length) {
@@ -323,10 +426,9 @@ export function auPlusTot(cible: any, opsDuLot: any[]): AuPlusTot {
       // Fin COMPLÈTE : un carton ne part pas à moitié, et un lot passe entier à l'OAS.
       const manquants: string[] = []
       for (const m of nonSoldes) {
-        const d = debutBdt(m)
-        const fin = d ? ajouterHeuresPlanning(d.date, d.heure, dureeBdt(m)) : null
-        if (fin) pousser(fin, 'fin_complete', txt(m.id), 'après la fin de ' + txt(m.id) + (bdsCible ? '' : ' (passage OAS entre les deux)'))
-        else manquants.push(txt(m.id))
+        const d = debutBdt(m, T.cadence)
+        if (!d) { manquants.push(txt(m.id)); continue }
+        pousser(T.ajouter(m, d.date, d.heure, dureeBdt(m)), 'fin_complete', txt(m.id), 'après la fin de ' + txt(m.id) + (bdsCible ? '' : ' (passage OAS entre les deux)'))
       }
       if (manquants.length) infos.push('étape précédente non programmée (' + trierTextes(manquants).join(', ') + ')')
     } else {
@@ -336,34 +438,34 @@ export function auPlusTot(cible: any, opsDuLot: any[]): AuPlusTot {
         for (const p of porteurs) {
           const R = reglageDe(p) as number
           if (opSoldee(p)) { libres.push('réglage de ' + txt(p.id) + ' déjà fait'); continue }
-          const d = debutBdt(p)
+          const d = debutBdt(p, T.cadence)
           if (!d) { nonProgrammes.push(txt(p.id)); continue }
-          pousser(ajouterHeuresPlanning(d.date, d.heure, R), 'reglage', txt(p.id), 'après le réglage de ' + txt(p.id) + ' (' + fmtNb(R) + ' h)')
+          pousser(T.ajouter(p, d.date, d.heure, R), 'reglage', txt(p.id), 'après le réglage de ' + txt(p.id) + ' (' + fmtNb(R) + ' h)')
         }
         if (nonProgrammes.length) {
           // Porteur du réglage encore dans la goulotte, mais d'autres morceaux de l'étape sont posés : le réglage se
           // fait avant toute réalisation, donc l'étape suivante ne démarre pas avant le plus tôt d'entre eux.
-          let tot: { d: { date: string; heure: number }; g: number; id: string } | null = null
+          let tot: { d: { date: string; heure: number }; g: number; id: string; op: any } | null = null
           for (const m of bdtG) {
             if (opSoldee(m)) continue
-            const d = debutBdt(m); if (!d) continue
-            const g = grille(d.date, d.heure); if (g == null) continue
-            if (!tot || g < tot.g || (g === tot.g && txt(m.id) < tot.id)) tot = { d, g, id: txt(m.id) }
+            const d = debutBdt(m, T.cadence); if (!d) continue
+            const g = T.position(d.date, d.heure); if (g == null) continue
+            if (!tot || g < tot.g || (g === tot.g && txt(m.id) < tot.id)) tot = { d, g, id: txt(m.id), op: m }
           }
           const lesP = trierTextes(nonProgrammes).join(', ')
-          if (tot) pousser(ajouterHeuresPlanning(tot.d.date, tot.d.heure, 0), 'reglage', tot.id, 'après le début de ' + tot.id + ' (réglage de ' + lesP + ' non programmé)')
+          if (tot) pousser(T.ajouter(tot.op, tot.d.date, tot.d.heure, 0), 'reglage', tot.id, 'après le début de ' + tot.id + ' (réglage de ' + lesP + ' non programmé)')
           else infos.push('étape précédente non programmée (' + lesP + ', porteur du réglage)')
         }
       } else {
         // Aucun réglage positif : l'étape suivante peut démarrer dès que celle-ci démarre.
         const inconnu = bdtG.some((o) => reglageDe(o) == null)
-        let best: { d: { date: string; heure: number }; g: number; id: string } | null = null
+        let best: { d: { date: string; heure: number }; g: number; id: string; op: any } | null = null
         for (const m of bdtG) {
-          const d = debutBdt(m); if (!d) continue
-          const g = grille(d.date, d.heure); if (g == null) continue
-          if (!best || g < best.g || (g === best.g && txt(m.id) < best.id)) best = { d, g, id: txt(m.id) }
+          const d = debutBdt(m, T.cadence); if (!d) continue
+          const g = T.position(d.date, d.heure); if (g == null) continue
+          if (!best || g < best.g || (g === best.g && txt(m.id) < best.id)) best = { d, g, id: txt(m.id), op: m }
         }
-        if (best) pousser(ajouterHeuresPlanning(best.d.date, best.d.heure, 0), 'reglage', best.id, 'après le début de ' + best.id + (inconnu ? ' (réglage non renseigné, compté 0)' : ' (sans réglage)'))
+        if (best) pousser(T.ajouter(best.op, best.d.date, best.d.heure, 0), 'reglage', best.id, 'après le début de ' + best.id + (inconnu ? ' (réglage non renseigné, compté 0)' : ' (sans réglage)'))
         else infos.push('étape précédente non programmée (' + trierTextes(nonSoldes.map((o) => txt(o.id))).join(', ') + ')')
       }
     }
@@ -376,9 +478,9 @@ export function auPlusTot(cible: any, opsDuLot: any[]): AuPlusTot {
     for (const f of freres) {
       if (opSoldee(f)) continue
       const R = reglageDe(f) as number
-      const d = debutBdt(f)
+      const d = debutBdt(f, T.cadence)
       if (!d) { infos.push('réglage de ' + txt(f.id) + ' non programmé (même étape)'); continue }
-      pousser(ajouterHeuresPlanning(d.date, d.heure, R), 'reglage', txt(f.id), 'après le réglage de ' + txt(f.id) + ' (' + fmtNb(R) + ' h, même étape)')
+      pousser(T.ajouter(f, d.date, d.heure, R), 'reglage', txt(f.id), 'après le réglage de ' + txt(f.id) + ' (' + fmtNb(R) + ' h, même étape)')
     }
   }
 
@@ -388,15 +490,17 @@ export function auPlusTot(cible: any, opsDuLot: any[]): AuPlusTot {
   }
   let best = cands[0]
   for (const x of cands) if (x.g > best.g || (x.g === best.g && x.depuis < best.depuis)) best = x
-  const pos = bdsCible ? { date: best.date, heure: best.heure } : versDebut({ date: best.date, heure: best.heure })
+  const pos = bdsCible ? { date: best.date, heure: best.heure } : T.versDebut(cible, { date: best.date, heure: best.heure })
   return { date: pos.date, heure: pos.heure, regle: best.regle, depuis: best.depuis, raison: best.raison + (infos.length ? ' · ' + infos.join(' · ') : '') }
 }
 
 export interface ControleEnchainement {
-  /** libre : pose acceptée telle quelle · cale : même jour, heure ramenée à `cale_a` · refus : jour antérieur (409) */
+  /** libre : pose acceptée telle quelle · cale : même jour de planning, posée à `cale_date` `cale_a` · refus : jour antérieur (409) */
   etat: 'libre' | 'cale' | 'refus'
   au_plus_tot: AuPlusTot
   cale_a: number | null
+  /** jour où la pose est calée (heures ouvrées : peut être le lendemain calendaire, dans la nuit du même jour de planning) */
+  cale_date: string | null
   message: string | null
 }
 
@@ -409,24 +513,29 @@ export function messageCalage(h: number, apt: AuPlusTot): string {
  * demandés. BDT : jour antérieur à l'au plus tôt → refus ; même jour avant l'heure (ou sans heure) → calé à
  * l'au plus tôt (arrondi au centième supérieur). BDS : contrôle au jour seulement.
  */
-export function controleEnchainement(cible: any, opsDuLot: any[]): ControleEnchainement {
-  const apt = auPlusTot(cible, opsDuLot)
-  const libre = (): ControleEnchainement => ({ etat: 'libre', au_plus_tot: apt, cale_a: null, message: null })
+export function controleEnchainement(cible: any, opsDuLot: any[], cadence?: SourceTemps): ControleEnchainement {
+  const T = tempsPlanning(cadence)
+  const apt = auPlusTot(cible, opsDuLot, T)
+  const libre = (): ControleEnchainement => ({ etat: 'libre', au_plus_tot: apt, cale_a: null, cale_date: null, message: null })
   if (apt.regle === 'aucune' || apt.regle === 'inconnu' || apt.date == null || apt.heure == null) return libre()
-  const jA = jourIdx(apt.date) as number
   if (estBds(cible)) {
+    // Sous-traitance : contrôle au JOUR calendaire (un carton part un jour donné).
     const d = debutBds(cible)
     if (d == null) return libre()
-    if ((jourIdx(d) as number) < jA) return { etat: 'refus', au_plus_tot: apt, cale_a: null, message: txt(cible.id) + ' : dispo au plus tôt le ' + jjmm(apt.date) + ' (' + apt.raison + '). Planifiez-le ce jour-là ou après.' }
+    if ((jourIdx(d) as number) < (jourIdx(apt.date) as number)) return { etat: 'refus', au_plus_tot: apt, cale_a: null, cale_date: null, message: txt(cible.id) + ' : dispo au plus tôt le ' + jjmm(apt.date) + ' (' + apt.raison + '). Planifiez-le ce jour-là ou après.' }
     return libre()
   }
-  const j = jourIdx(cible.date_prevue)
-  if (j == null || j > jA) return libre()
-  if (j < jA) return { etat: 'refus', au_plus_tot: apt, cale_a: null, message: 'Au plus tôt le ' + jjmm(apt.date) + ' à ' + fmtHeurePlanning(apt.heure) + ' (' + apt.raison + ') : posez ' + txt(cible.id) + ' ce jour-là ou après.' }
+  const jA = T.jourPlanning(apt.date, apt.heure) as number
   const h = numOuNull(cible.debut)
-  if (h != null && (grille(cible.date_prevue, h) as number) >= (grille(apt.date, apt.heure) as number) - EPS_H) return libre()
-  const cale = Math.ceil(arr6(apt.heure * 100)) / 100
-  return { etat: 'cale', au_plus_tot: apt, cale_a: cale, message: messageCalage(cale, apt) }
+  const j = T.jourPlanning(cible.date_prevue, h)
+  if (j == null || j > jA) return libre()
+  if (j < jA) return { etat: 'refus', au_plus_tot: apt, cale_a: null, cale_date: null, message: 'Au plus tôt le ' + jjmm(apt.date) + ' à ' + fmtHeurePlanning(apt.heure) + ' (' + apt.raison + ') : posez ' + txt(cible.id) + ' ce jour-là ou après.' }
+  if (h != null && (T.position(cible.date_prevue, h) as number) >= (T.position(apt.date, apt.heure) as number) - EPS_H) return libre()
+  let cale = Math.ceil(arr6(apt.heure * 100)) / 100
+  let caleDate = apt.date
+  // Arrondi au centième qui passe minuit (23,995 → 24) : le lendemain à 0 h (heures ouvrées seulement : la grille s'arrête à 23 h).
+  if (T.cadence && cale >= 24) { cale = arr6(cale - 24); caleDate = isoDuJour((jourIdx(apt.date) as number) + 1) }
+  return { etat: 'cale', au_plus_tot: apt, cale_a: cale, cale_date: caleDate, message: messageCalage(cale, apt) }
 }
 
 /**
@@ -435,10 +544,10 @@ export function controleEnchainement(cible: any, opsDuLot: any[]): ControleEncha
  * crée pas lui-même une violation (9h15 demandé, au plus tôt 9h06 : 9h serait trop tôt → 10h).
  * `cible` porte déjà le jour et l'heure demandés ; `opsDuLot` null = pas de gamme à respecter (arrondi simple).
  */
-export function heureEntiereChemin(cible: any, opsDuLot: any[] | null): { heure: number; controle: ControleEnchainement | null } {
+export function heureEntiereChemin(cible: any, opsDuLot: any[] | null, cadence?: SourceTemps): { heure: number; controle: ControleEnchainement | null } {
   const entier = Math.round(Number(cible?.debut))
   if (!opsDuLot) return { heure: entier, controle: null }
-  const ctl = controleEnchainement({ ...cible, debut: entier }, opsDuLot)
+  const ctl = controleEnchainement({ ...cible, debut: entier }, opsDuLot, cadence)
   if (ctl.etat === 'cale' && ctl.cale_a != null) return { heure: Math.ceil(ctl.cale_a - 1e-9), controle: ctl }
   return { heure: entier, controle: null }
 }
@@ -446,8 +555,12 @@ export function heureEntiereChemin(cible: any, opsDuLot: any[] | null): { heure:
 /**
  * Opérations DÉJÀ POSÉES qui démarrent avant leur au plus tôt, indexées par id (message affichable).
  * BDT : posés (ni goulotte, ni reçus, ni soldés) avec une heure ; BDS : planifiés, pas encore partis.
+ * `opts.recus` (lot G, revue du 16/09/2026) : compte AUSSI les BDT reçus, à leur début réel — ils ne se déprogramment
+ * jamais, mais un déplacement qui les rend incohérents doit le dire (successeursEnViolation, G4). La carte « Enchaînements
+ * à revoir » garde la règle du lot C (reçus ignorés).
  */
-export function violationsEnchainement(bdtRows: any[], bdsRows: any[]): Record<string, string> {
+export function violationsEnchainement(bdtRows: any[], bdsRows: any[], cadence?: SourceTemps, opts: { recus?: boolean } = {}): Record<string, string> {
+  const T = tempsPlanning(cadence)
   const parLot = new Map<string, any[]>()
   const ranger = (op: any) => {
     const k = cleLot(op); if (!k) return
@@ -461,12 +574,13 @@ export function violationsEnchainement(bdtRows: any[], bdsRows: any[]): Record<s
     if (!b || estAnnulee(b)) continue
     const k = cleLot(b); if (!k) continue
     const s = txt(b.statut).toLowerCase()
-    if (opSoldee(b) || s === 'recu' || s === 'reçu') continue
-    const d = debutBdt(b); if (!d) continue
-    const apt = auPlusTot(b, parLot.get(k) || [])
+    const recu = s === 'recu' || s === 'reçu'
+    if (opSoldee(b) || (recu && !opts.recus)) continue
+    const d = debutBdt(b, T.cadence); if (!d) continue
+    const apt = auPlusTot(b, parLot.get(k) || [], T)
     if (apt.regle === 'aucune' || apt.regle === 'inconnu' || apt.date == null || apt.heure == null) continue
-    if ((grille(d.date, d.heure) as number) < (grille(apt.date, apt.heure) as number) - EPS_H) {
-      out[txt(b.id)] = txt(b.id) + ' posé le ' + jjmm(d.date) + ' à ' + fmtHeurePlanning(d.heure) + ' : au plus tôt le ' + jjmm(apt.date) + ' à ' + fmtHeurePlanning(apt.heure) + ' (' + apt.raison + ')'
+    if ((T.position(d.date, d.heure) as number) < (T.position(apt.date, apt.heure) as number) - EPS_H) {
+      out[txt(b.id)] = txt(b.id) + (recu ? ' reçu (commencé) le ' : ' posé le ') + jjmm(d.date) + ' à ' + fmtHeurePlanning(d.heure) + ' : au plus tôt le ' + jjmm(apt.date) + ' à ' + fmtHeurePlanning(apt.heure) + ' (' + apt.raison + ')'
     }
   }
   for (const s of (bdsRows || [])) {
@@ -475,7 +589,7 @@ export function violationsEnchainement(bdtRows: any[], bdsRows: any[]): Record<s
     const st = txt(s.statut).toLowerCase()
     if (txt(s.date_retour_effective) || ['envoye', 'envoyé', 'recu', 'reçu', 'solde', 'soldé'].includes(st)) continue
     const d = debutBds(s); if (d == null) continue
-    const apt = auPlusTot(s, parLot.get(k) || [])
+    const apt = auPlusTot(s, parLot.get(k) || [], T)
     if (apt.regle === 'aucune' || apt.regle === 'inconnu' || apt.date == null) continue
     if ((jourIdx(d) as number) < (jourIdx(apt.date) as number)) {
       out[txt(s.id)] = txt(s.id) + ' planifié le ' + jjmm(d) + ' : dispo au plus tôt le ' + jjmm(apt.date) + ' (' + apt.raison + ')'
@@ -485,16 +599,16 @@ export function violationsEnchainement(bdtRows: any[], bdsRows: any[]): Record<s
 }
 
 /**
- * Après une pose : les opérations SUIVANTES du lot (même étape ou étapes d'après), déjà posées, qui sont
- * désormais en violation. Jamais de décalage automatique : on les signale.
+ * Après une pose : les opérations SUIVANTES du lot (même étape ou étapes d'après), déjà posées OU REÇUES (début réel), qui
+ * sont désormais en violation. Jamais de décalage automatique : on les signale.
  */
-export function successeursEnViolation(cible: any, opsDuLot: any[]): Array<{ id: string; message: string }> {
+export function successeursEnViolation(cible: any, opsDuLot: any[], cadence?: SourceTemps): Array<{ id: string; message: string }> {
   const k = cleLot(cible)
   if (!k || cible?.seq == null) return []
   const idC = txt(cible.id)
   const ops = (opsDuLot || []).filter((o) => !!o && cleLot(o) === k && txt(o.id) !== idC)
   ops.push(cible)
-  const v = violationsEnchainement(ops.filter((o) => !estBds(o)), ops.filter((o) => estBds(o)))
+  const v = violationsEnchainement(ops.filter((o) => !estBds(o)), ops.filter((o) => estBds(o)), cadence, { recus: true })
   const sc = nb(cible.seq)
   return gammeDuLot(ops)
     .filter((o) => txt(o.id) !== idC && o.seq != null && nb(o.seq) >= sc && !!v[txt(o.id)])

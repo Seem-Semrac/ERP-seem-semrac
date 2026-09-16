@@ -26,5 +26,12 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 
 ![rh-employes](../assets/rh-employes.png)
 
+### 3. Lire les temps reconstitués depuis la présence
+1. Onglet **Gestion des Temps** : sans pointage, arrivée, départ et heures viennent de la **présence** saisie en Production, avec les horaires de la **cadence usine** du site ce jour-là.
+2. Heures = amplitude − pause (celle de la Journée, sinon 30 min au-delà de 6 h) ; « Validé par » indique la cadence utilisée.
+3. Les modèles d’horaires ne sont pas historisés : exporter la paie avant qu’un modèle soit modifié.
+
+![rh-temps](../assets/rh-temps.png)
+
 ---
 > Fiche générée (`scripts_doc/gen_fiches_poste.mjs`). Sécurité & traçabilité : `docs/technique/04-auth-rbac.md`.

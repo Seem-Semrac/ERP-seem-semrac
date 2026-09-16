@@ -262,6 +262,8 @@ réglage du process précédent ». Contrats des routes : `07-api-reference.md`.
 5 colonnes, `opShiftCol` range la journée en « Journée »), fiche RH et formulaire `/rh/conge`
 (`CRENEAUX.map(libelleCreneau)`). Code mort supprimé : `buildDayPresence`, `buildProcessBoard`.
 ⚠ `src/affectation.tsx` garde sa propre copie « Soirée/Nuit » (page redirigée, non touchée).
+⚠ **Lot G (16/09/2026)** : les horaires ne viennent plus de `SHIFTS` mais de la **cadence usine** du site et du jour
+(`src/cadence.ts`) ; `libelleCreneau` rend le libellé seul. Voir la section « Lot G » ci-dessous.
 
 ### C3 · Réglage stocké sur le BDT
 - **Migration 011** / `cloud-9` : `bons_de_travail.temps_reglage` (h, `null` = inconnu, réalisation =
@@ -350,6 +352,8 @@ Règle : pour deux étapes consécutives d'un lot (groupes de `seq`, annulées e
 `successeursEnViolation`, `ajouterHeuresPlanning` (grille 5 h–23 h, report au lendemain),
 `heureEntiereChemin`. Temps = `date_prevue` + `debut` (heures décimales) en **heures de grille**
 `PLAN_DEBUT_JOUR` (5) → `PLAN_FIN_JOUR` (23), jours calendaires ; un début calculé à 23 h passe au lendemain 5 h.
+⚠ **Lot G (16/09/2026)** : quand la cadence usine est lisible, ces calculs se font en **heures ouvrées** du site
+(horloge `tempsPlanning`, section « Lot G · G5 ») ; la grille ci-dessous ne vaut plus que pour une cadence illisible.
 
 | Étape précédente E(n) (groupe de `seq`) | Étape suivante E(n+1) | Au plus tôt (`regle`, `raison`) |
 |---|---|---|
@@ -399,9 +403,10 @@ Corrections de la revue :
   recollage à la **durée d'origine** (sinon somme) ; morceau 1 « réglage seul » autorisé ; réglage inconnu
   à la découpe → saisie sur la racine, sinon tout en réalisation (avertissement) ; durée des nouveaux BDT
   alignée sur `etapeDecomp`.
-- **À faire trancher** : horaires réels de la Soirée (`SHIFTS`, table `shifts`, `SHIFT_HMS`, 73 lignes `soir`
-  en base cloud) ; week-ends exclus ou non du chemin critique ; chevauchement de deux étapes sur un même
-  poste ; bouton « Recaler la suite ».
+- **À faire trancher** : ~~horaires réels de la Soirée~~, ~~week-ends exclus ou non du chemin critique~~,
+  ~~chevauchement de deux étapes sur un même poste~~ — **tranchés par le lot G (16/09/2026)** : cadence usine par site,
+  heures ouvrées, même process refusé ; reste le bouton « Recaler la suite » (le lot G remet les étapes incohérentes
+  en goulotte au lieu de les recaler).
 - **Hors lot, connus** : `src/affectation.tsx` garde « Soirée/Nuit » (page redirigée) ; `retirerAffectation`
   avale ses erreurs ; affectations chargées sur 14 jours ; la capacité compte 8 h par présent quel que soit le
   créneau ; carte et badges calculés sur `getBonsDeTravail` (non paginé) — les décisions serveur, elles,
@@ -614,6 +619,266 @@ la base Docker `AUTH_ENFORCE=on` 13 cas de soldage, 52 DA/NC, 33 correctifs (rat
 fenêtre contenue à 390 px, aucune balise injectée) ; `tsc` 0 ; harnais 60 PASS / 0 FAIL / 1 SKIP. Jeux `-TEST-`
 supprimés et relus (compteurs revenus à l'état initial).
 
+## Lot G : cadence usine par site, planning en heures ouvrées, chevauchement, remise en goulotte, process OAS (16/09/2026)
+
+**Demande** : « modèles d'horaires de l'usine par cadence (Bas / Moyen / Haut) […] cadence par site (Seem, Semrac),
+modifiable à tout moment · le dimanche est sauté, le samedi selon la cadence · le planning s'adapte à la cadence · les
+5 process de la machine OAS : les marquer OAS · chevauchement sur un même poste : autorisé si les process sont
+différents, refusé si c'est le même process · l'étape suivante devenue incohérente est remise en première position dans
+la goulotte, avec un message préventif ». Réponses de l'utilisateur, modèles fournis et scripts à jouer :
+`docs/CHANGELOG.md` (16/09/2026). Tables et colonnes : `03-base-de-donnees.md`. Contrats des routes :
+`07-api-reference.md` (section « Lot G »). Mise en ligne : `02-exploitation-runbook.md` (`cloud-12`).
+
+| Fichier | Rôle |
+|---|---|
+| `src/cadence.ts` | règles **pures** de la cadence (créneaux d'un jour, calendrier, heures ouvrées, validations serveur) + copie navigateur `CADENCE_CLIENT_JS` (objet global `CAD`) |
+| `src/cadence_db.ts` | lectures / écritures strictes de `horaires_modeles` et `cadence_site` |
+| `src/cadence_ui.ts` | volet « Cadence usine » + script commun de la page Production (`CADENCE_PAGE`, `cadCalendrier`, `cadHorairesCreneau`, `cadNotifierChangement`) |
+| `src/planning_cadence.ts` | planning adapté à la cadence : heure fermée, intervalle en heures ouvrées, fin prévue, fenêtre d'un jour (copie client `==PLAN-CADENCE-DEBUT/FIN==`) |
+| `src/poste_oas.ts` | G2 process OAS suivant et « Lots à venir », G3 chevauchement, G4 remise en goulotte (copie client `==POSTE-OAS-DEBUT/FIN==`) |
+| `src/gamme.ts` | chemin critique avec une **horloge** (`tempsPlanning`) : grille 5 h–23 h ou heures ouvrées (copie client `ccHorloge` dans `==CC-MOTEUR==`) |
+| `docker/db/migrations/014-cadence-usine.sql` · `docker/db/cloud/cloud-12-cadence-usine.sql` | tables, colonnes, amorce, données OAS |
+
+### G1 · Cadence usine : données et règles (`src/cadence.ts`)
+- **Tables** (014 / `cloud-12`) : `horaires_modeles` (niveau × jour 1–7 × créneau × partie, `debut`/`fin` « HH:MM »,
+  `actif`) amorcée avec les **65 lignes** fournies ; `cadence_site` (site, niveau, `depuis` = moment de la décision,
+  `effet` = jour d'application, `par`, `motif`), historique en **ajout seul**, amorce **Moyen** pour chaque site.
+  Un créneau fermé un jour = aucune ligne **active** : une ligne ne s'efface jamais, elle se ferme (`actif = false`).
+- **Conventions** (contrat pour la présence, la RH et le planning) : date `AAAA-MM-JJ`, calculs en UTC (ni fuseau ni
+  heure d'été) ; heure = **heures décimales** (5.5 = 05:30) ; un segment qui passe minuit a `fin > 24` (Soirée
+  21:00-05:30 → 21 → 29.5) et appartient au **jour où il commence** ; intervalles demi-ouverts `[debut, fin)` (à 13:15
+  pile, le Matin 05:30-13:15 est fermé) ; **dimanche toujours fermé** quels que soient les modèles ; un segment du
+  **samedi** qui passerait minuit est **coupé à 24:00** (la saisie le refuse, contrainte `NOT VALID` en base).
+- **Cadence d'un site à une date D** (`ligneCadenceDuSite`, `niveauDuSite`) : la ligne de plus grand (jour d'effet,
+  `depuis`) dont le jour d'effet ≤ D — jour d'effet = `effet`, sinon jour de Paris de `depuis` (lignes d'amorce) ;
+  avant la toute première ligne : la première. **Cadence courante** = celle d'aujourd'hui à Paris : un changement dont
+  l'effet est futur est « prévu » (`changementsPrevusCadence`), pas courant. Site sans ligne : `NIVEAU_DEFAUT` = Moyen.
+  Index par site mémorisé (signature du tableau) et recherche par dichotomie : 1 300 horaires sur 800 lignes
+  d'historique en moins de 300 ms, serveur comme navigateur.
+- **Un niveau, un jour** : `creneauxDuJour` (segments ouverts triés), `plageOuverteDuJour`, `horairesCreneau` →
+  `{ texte '05:30-13:15' ou '07:30-12:00 / 12:45-16:00', debut, fin, heures (pauses exclues), pauseMin }`,
+  `horairesCreneauSite`, `libelleCreneauDuJour`.
+- **Calendrier** (planning) : `calendrierCadence(donnees, activité ou sites)` — `Seem`/`Semrac` = un site, toute autre
+  valeur (`both`, `OAS`, vide) = **union** des deux sites (ouvert si l'un travaille) ; `segmentsDuJour`,
+  `intervallesDuJour`, `plageOuverteCalendrier` ; `estOuvert` (tient compte de la Soirée de la veille) ;
+  `prochainInstantOuvert` ; `ajouterHeuresOuvrees(date, heure, h, cal)` (ne consomme que du temps ouvert, saute pauses,
+  nuits et jours fermés ; départ sur du fermé = décompte au prochain instant ouvert ; fin pile en fin d'intervalle =
+  cette fin, pas le jour ouvert suivant ; `null` si rien n'est ouvert sur 400 jours) ; `heuresOuvreesEntre`.
+- **Copie navigateur** : `CADENCE_CLIENT_JS` (ES5, entre `==CAD-MOTEUR-DEBUT==` et `==CAD-MOTEUR-FIN==`) définit `var CAD`
+  avec les mêmes noms et résultats (parité vérifiée sur 65 142 cas). Les validations serveur n'y sont pas.
+  ⚠ Toute modification de `cadence.ts` se reporte dans la copie.
+- **Base** (`src/cadence_db.ts`) : `lireDonneesCadence()` → `{ data, error, absente }`, lecture **paginée** par pages de
+  1 000 (50 pages au plus, sinon erreur). `absente` = tables manquantes (cloud sans `cloud-12`) : repli toléré ;
+  `error` sans `absente` = **panne**, jamais traitée comme « tout ouvert » ni « tout fermé ». `insererCadenceSite`,
+  `insererModeleHoraire` (23505 = créée entre-temps), `majModeleHoraireSi(id, maj_le lu, patch)`.
+
+### G1 · Écran « Cadence usine » (Production › Process Ateliers, 3ᵉ volet)
+Bouton **« Cadence usine »** à côté de « Postes & Process » et « Machines » (`volShow('cad')`, lien direct
+`/production/service?tab=machines&vol=cad`). Rendu par `src/cadence_ui.ts` (`voletCadenceBouton`, `voletCadenceHTML`,
+`scriptVoletCadence`), données injectées par `scriptCadencePage(lecture)` juste après l'en-tête de la page.
+- **Une carte par site** : cadence courante, « En vigueur depuis le … (décidé le … par …) », motif, **semaine type**
+  (plage ouverte de chaque jour, « +1j » quand elle finit le lendemain), encadré **« Changement prévu »** pour un effet
+  futur, bouton **« Changer la cadence »**.
+- **Fenêtre de changement** (`cadOuvrirChangement`) : champ **« À partir du »** (demain par défaut, 62 jours de recul et
+  400 d'avance au plus), niveau **en vigueur à cette date** désactivé, aperçu de la semaine type du niveau choisi, motif
+  facultatif. Effet **aujourd'hui ou passé** : avertissement dans la fenêtre puis confirmation (`appConfirm`) — toute la
+  journée passe dans la nouvelle cadence, heures déjà travaillées comprises. Écriture puis relecture (`GET`) et
+  `cadNotifierChangement()` (présence, affectation, Gantt et volet redessinés).
+- **Modèles d'horaires** : pastilles Bas / Moyen / Haut (sites dans ce niveau indiqués), tableau 6 jours × 5 colonnes
+  (Matin, Après-midi, Soirée, Journée partie 1, Journée partie 2 après la pause), dimanche « Fermé (toujours) ». Deux
+  champs heure par case, **croix** = fermer le créneau, « +1j » quand la fin précède le début. Les cases modifiées sont
+  surlignées ; **seules elles** partent, avec le `maj_le` lu. Les saisies non enregistrées sont **conservées** quand le
+  volet se redessine (retour sur le volet, changement de cadence) ; une case modifiée entre-temps par quelqu'un d'autre
+  est signalée, pas écrasée. « Annuler les modifications » et le changement de niveau les abandonnent.
+- **Historique** : À partir du · Décidé le · Site · Cadence · Par · Motif (changements prévus marqués « prévu »).
+- **Tables absentes** : bandeau « jouez cloud-12 », pas de tableau, aucune écriture. **Panne** : bandeau d'erreur.
+- **Validations serveur** : `validerModelesNiveau` (HH:MM, début ≠ fin, 16 h au plus par segment, partie 2 réservée à la
+  Journée, une partie de Journée ne passe pas minuit, dimanche jamais ouvert, samedi sans nuit, 35 cellules au plus)
+  puis `planModeles` refuse aussi une Journée dont la partie 2 est ouverte sans la partie 1, ou commence avant la fin
+  de la partie 1 (400), et prépare les écritures (insert ou mise à jour
+  **conditionnelle** sur `maj_le` ; un conflit en cours d'écriture → 409 `partiel` avec ce qui est passé) ;
+  `validerChangementCadence` + `decisionChangementCadence` (effet absent = lendemain ; effet ≤ aujourd'hui sans
+  `confirme_retroactif` → 409 `confirmation_requise` ; `niveau_lu` comparé au niveau **à la date d'effet**, sinon 409
+  « modifiée entre-temps » ; même niveau → 409).
+- **Droits** : lecture = lecture Production (`GET /api/production/cadence`, `…/calendrier`) ; écriture = **écriture
+  Production**, contrôlée par le middleware puis revérifiée dans le handler (`droitEcritureProduction` → 403
+  « Modifier la cadence usine ou ses modèles d'horaires est réservé à l'écriture Production. »).
+
+### G1 · Créneaux : les horaires viennent de la cadence du site et du jour
+- `SHIFTS` (`src/shared.ts`) garde **identifiants, libellés et couleurs** (Matin, Journée, Après-midi, Soirée). Ses
+  horaires ne sont plus qu'un **repli** quand la cadence est illisible. `libelleCreneau()` (`src/presences.ts`) rend le
+  **libellé seul** (« Soirée », plus « Soirée 22h-6h ») ; `paletteCreneaux()` ne porte plus d'horaires.
+- **Présence** (onglet Présence opérateurs) : `cadHorairesCreneau(activite, date, creneau)` → `{ ouvert, texte, niveau,
+  secours, parSite }` (un opérateur « both » : « Seem 05:30-13:15 · Semrac fermé »). Menu d'une case : horaires du site
+  de l'opérateur ce jour-là ; créneau fermé **grisé** « fermé · cadence Moyen » et refusé côté client **sans requête**.
+  Une case déjà enregistrée sur un créneau fermé depuis s'affiche en **pointillés rouges** (jamais effacée) ; un jour
+  sans aucun créneau ouvert affiche « fermé ». « Programmer la semaine » **saute** les cases fermées et compte ce qu'elle
+  n'a pas programmé.
+- **Serveur** `POST /api/production/presence` : site = `salaries.entite` de l'opérateur (sinon `activite` du corps) ;
+  `controlePresenceCadence` → **409** `{ creneau_ferme: true, niveau, error: « Créneau « Matin » fermé en cadence Moyen
+  ce jour (samedi 19/09/2026, site Seem) : choisissez un créneau ouvert ou changez la cadence (Production › Process
+  Ateliers › Cadence usine). » }`. « absent » et un opérateur sans site de cadence ne sont jamais refusés ; tables
+  absentes : accepté avec `avertissement` ; panne de lecture : **503**, rien d'enregistré.
+- **Planning d'affectation** : `planCreneaux(activite)` rend les horaires du jour affiché, un indicateur fermé et le
+  niveau ; les sous-cases d'un poste fermées ce jour-là sont **grisées** (infobulle), les colonnes d'opérateurs portent
+  les horaires. ⚠ `POST /api/planning/affectation-poste` ne refuse **pas** un créneau fermé (non demandé).
+- **RH › Gestion des temps** (`pageRHTemps(…, dbCadence)`, route `/rh/temps`) : arrivée, départ, pause et heures d'une
+  présence = horaires du créneau dans la cadence du site **ce jour-là** ; `heuresPresence` = amplitude − pause (pause de
+  la Journée, sinon **30 min au-delà de 6 h**, la règle d'avant le lot G) : Matin 05:30-13:15 = 7,25 h, Journée
+  07:30-12:00 / 12:45-16:00 = 7,75 h. « Validé par » dit la source (« Planning présence · cadence Moyen ») ; créneau
+  fermé depuis ou cadence illisible : horaires par défaut, signalés.
+- **RH › Employés** : colonne et champ « Shift » sans horaires, infobulle qui renvoie à la cadence.
+
+### G2 · Process OAS : données, badge « → OAS », « Lots à venir »
+- **Données** (partie 4 de 014 / `cloud-12`) : les process rattachés à une **machine d'activité OAS** deviennent
+  `est_oas = true`, `activite = 'OAS'`, poste = poste de la machine, `taux_horaire_machine = null` (un NOTICE par
+  ligne, avant → après). **Garde-fou** : si l'un d'eux ne porte pas un nom de traitement de surface (Surtec,
+  désoxydation, oxydation, lavage, OAS), **rien** n'est modifié (WARNING avec la liste ; marquage à la main : Process
+  Ateliers › crayon › type OAS). Les process nommés comme un traitement de surface mais hors machine OAS sont listés,
+  pas modifiés. Docker : Desoxydation, Lavage, Oxydation Noire, Oxydation Incolore, Surtec 650 (machine
+  MACH-2026-020 « Palan OAS », poste OAS) — `activite` both/Seem → OAS, taux 90 → null.
+- **Conséquences écran** : la gamme du BE propose les process d'activité « OAS » sur les **deux** sites
+  (`src/be.tsx`) ; RH › Compétences les garde visibles avec les filtres Seem et Semrac (`rhFilterMatrice`).
+- **Badge « → OAS : <process> »** : `GET /production/service` calcule `oasSuivantParBdt` — nomenclature **validée**
+  d'indice le plus élevé dont `code_ref_produit` = pièce du BDT, étapes **consécutives** `est_oas` (sur l'étape ou sur
+  le process) juste après le rang `seq` du BDT — et pose `oas_suivant: string[]` sur chaque BDT `oas_apres`. Client :
+  `ppBadgeOas` (carte de goulotte) et `ppBadgeOasBarre` (barre), libellé « → OAS : Desoxydation › Oxydation Incolore »,
+  **repli « → OAS »** si la gamme ne le dit pas.
+- **Service OAS › Lots & Balancelles › « Lots à venir »** (`lotsAVenirOas`, section `#oasLotsAVenir` de
+  `pageServiceOAS(…, dbLotsAVenir)`) : une ligne par étape `oas_apres` (lot + `seq`, morceaux compris) **posée ou
+  reçue** et pas entièrement soldée. Colonnes : Lot / affaire, Client, Pièce, Quantité (`lots.qte`), Process OAS
+  suivant, BDT précédent (+ opération), **Fin prévue** (date + heure ; « aujourd'hui »), Statut du BDT (Programmé /
+  Reçu). Fin prévue = la plus tardive des morceaux posés : début (reçu : début réel, jour de `recu_le`) + durée en
+  **heures ouvrées** de la cadence du site (`ajouterPourOp`) ; les morceaux restés en goulotte sont comptés à part
+  (« n morceaux encore en goulotte (non comptés) »). Tri par fin prévue. Cadence illisible : grille 5 h–23 h ; la page
+  OAS n'est **jamais** bloquée.
+
+### G3 · Même process, même poste : pas de chevauchement
+- **Règle** (`chevauchementsMemeProcess`) : un BDT **occupe** son poste (`bdtOccupePoste`) s'il est posé (négation
+  d'`enGoulotte`) ou reçu — ni soldé, ni annulé, ni sous-traité. Deux BDT du **même `process_id`** (un process n'a qu'un
+  poste) ne se chevauchent pas ; des process différents sur le même poste, si. Intervalle = [début, fin[ en **heures
+  ouvrées** du site (`intervallePosteOuvre` : début reporté au prochain instant ouvert, fin = début + durée ou
+  `temps_alloue` ouvrées ; 6 h si le BDT n'a pas d'heure) ; grille : heures brutes (jour × 24 + heure + durée).
+- **409** : « Le poste Usinage Stama porte déjà un BDT du même process (BDT-…) de 08:00 à 11:00 : décalez la pose ou
+  choisissez un autre process du poste. » + `chevauchement: [{ id, date, debut, fin }]` (positions absolues, jour × 24 +
+  heure).
+- **Où** : `POST /api/production/bdt/:id/affecter` (sur la position finale, calage compris, avant toute écriture) ;
+  `PATCH /api/production/bdts/:id` seulement si `process_id`, `duree` ou `temps_alloue` changent, ou si le BDT se met à
+  occuper le poste (une réception ou un soldage ne bute jamais sur un chevauchement hérité) ; `POST
+  /api/production/bdts` créé posé. Client : `affectBDT` refuse **sans appel** (`ppChevauchements`) et montre la barre en
+  conflit (`ppMontrerConflit`).
+- **Course entre deux écrans** : après l'écriture, `chevauchementApresEcriture` relit les BDT du process ; s'il en trouve
+  un **écrit avant** (`updated_at` plus ancien, à égalité identifiant plus petit) qui chevauche, l'écriture est annulée
+  par une mise à jour **conditionnelle** (sur le `updated_at` écrit) → 409 `{ chevauchement, course: true, annule }`.
+  `POST /bdts` : le BDT reste créé mais dans la goulotte → 409 `{ …, cree_en_goulotte }` (géré par l'écran).
+- Lecture `lireBDTsDuProcess` stricte (`statut not in (a_programmer, solde, st)`, 5 000 lignes) : panne → **503**.
+
+### G4 · Déplacer une étape : les étapes suivantes devenues incohérentes retournent en goulotte
+- **Plan** (`planRemiseGoulotte`, copie client `ppPlanRemiseGoulotte`) : étapes du lot de `seq` ≥ la cible, **posées**
+  (ni goulotte, ni reçues, ni soldées), en violation du chemin critique **après** le déplacement et **pas avant**
+  (une violation déjà présente reste seulement signalée). Propagation : chaque étape retirée est placée
+  **virtuellement à son au plus tôt** pour juger la suivante, en cascade jusqu'à stabilité. Les BDT **reçus** rendus
+  incohérents vont dans `signaler` (jamais retirés, jamais bloquants à eux seuls) ; un BDS ne se retire jamais.
+- **Serveur** : sans `deprogrammer_successeurs` (`true`, ou la liste des id confirmés qui couvre le plan) → **409**
+  `{ error: message préventif, successeurs_a_deprogrammer: [{id, message}], successeurs_recus_signales }`. Avec l'accord :
+  le BDT est déplacé **puis** chaque successeur est déprogrammé par `deprogrammerBDTSiInchange` (conditionnel sur
+  `statut`, `date_prevue`, `process_id`, `debut` et `updated_at` lus ; écrit `remis_goulotte_le = maintenant` si la
+  colonne existe, réessai sans elle sinon). Réponse : `successeurs_deprogrammes`, `remis_goulotte_le`,
+  `successeurs_recus_signales`, `avertissement` (« Remis en goulotte : BDT-… », « Non remis en goulotte (toujours
+  signalés) : … », « Colonne remis_goulotte_le absente (migration 014 / cloud-12 à jouer) … »).
+- **Routes** : `/affecter`, `PATCH /bdts/:id` (si `process_id`, `duree`, `temps_alloue`, `statut`, `operateur_id`, `seq`,
+  `lot_id` ou `lot_ref` changent réellement), `POST /bst/:id/affecter-st` (409 **avant** la création du BC). ⚠ Pas
+  appliqué : `POST /bdts` créé posé (G3 seulement), `PATCH /api/production/bds/:id`, `POST /api/production/bst/affecter`.
+- **Écran** : `affectBDT` et `bstAssignDay` calculent le plan **avant** d'envoyer → `ppConfirmerRemise` (`appConfirm`
+  « Remettre en goulotte », bouton **« Déplacer et remettre en goulotte »** ; seulement des reçus : « Étape déjà
+  reçue » / « Déplacer quand même ») ; annuler = rien ne bouge. Si le serveur voit d'autres successeurs (planning
+  périmé), même message puis renvoi, les accords s'**accumulent** (`ppUnionIds`). `ppAppliquerRemise` remet les
+  successeurs en tête ; `pendSort` trie la goulotte par `remis_goulotte_le` décroissant **avant** l'échéance ; badge
+  rouge **« Remis en goulotte »** (infobulle « Déprogrammé automatiquement le … : une étape précédente du lot a été
+  déplacée. À reprogrammer. »). Un BDT reposé repart avec `remis_goulotte_le = null`.
+- La carte « Enchaînements à revoir » garde la règle du lot C (BDT reçus ignorés) : les reçus ne sont signalés qu'au
+  moment d'un déplacement.
+
+### G5 · Planning en heures ouvrées de la cadence
+- **Horloge** (`src/gamme.ts`) : `tempsPlanning(source)` → `TempsPlanning { cadence, ajouter, versDebut, position,
+  retourSt, jourPlanning, debutFenetre, calendrier }`. `DonneesCadence` → heures **ouvrées** ; `null` → **grille** 5 h–23 h
+  du lot C (`ajouterHeuresPlanning`) ; une horloge déjà construite est rendue telle quelle (calendriers mémorisés par
+  site, une horloge par requête). Dernier argument facultatif `cadence` sur `auPlusTot`, `controleEnchainement`,
+  `heureEntiereChemin`, `violationsEnchainement`, `successeursEnViolation` : absent = grille (comportement du lot C).
+  Site d'une opération : `cleSiteCadence(op)` = `Seem`, `Semrac`, sinon `both` (union).
+- **Règles en heures ouvrées** (ce qui change par rapport au tableau C7) : le réglage ou la durée d'une étape consomme
+  les heures **ouvertes de son site** ; l'au plus tôt qui tombe sur du fermé est reporté au **prochain instant ouvert du
+  site de l'étape suivante** ; dimanche toujours sauté, samedi selon la cadence ; après un retour de sous-traitance, un
+  BDT reprend à la **première ouverture** du jour de retour (un BST se contrôle au jour calendaire) ; si rien n'est
+  ouvert sur l'horizon, c'est **dit** (« aucun créneau ouvert après … »), jamais ignoré.
+- **Jour de planning** : la vue d'un jour D couvre `[D + debutFenetre(D), D+1 + debutFenetre(D+1)[`, où
+  `debutFenetre` = heure pleine de la première ouverture du jour, deux sites confondus (5 h si le jour est fermé). La
+  nuit de D appartient à D. Le serveur **cale** sur le même jour de planning — éventuellement après minuit, d'où
+  **`cale_date`** (lendemain calendaire) — et **refuse** (409) un jour de planning antérieur.
+- **Début réel d'un BDT reçu** (`debutBdt`, copie `ccDebutBdt`) : jour de Paris de **`bons_de_travail.recu_le`** (écrit
+  par `POST /bdt/:id/recu`, réessai sans la colonne si la base ne l'a pas) + `debut_reel` ; BDT reçu avant la colonne :
+  jour prévu, et en heures ouvrées le **jour voisin** si l'heure réelle est à plus de 12 h de l'heure prévue.
+  `POST /bdt/:id/solder` ajoute 24 h quand l'heure de fin précède `debut_reel` (reçu 22:00, soldé 03:00 → 5 h).
+- **Pose** (`src/planning_cadence.ts`, route `/affecter`) : `lireCadencePlanning()` → `{ temps, panne }` (tables absentes =
+  grille sans refus ; **panne = 503** « Lecture de la cadence usine impossible (heures ouvrées non vérifiables) … ») ;
+  `normaliserPose` ramène une heure d'axe ≥ 24 au lendemain calendaire (26 h le 15 → 2 h le 16) ; ordre des contrôles :
+  chemin critique (refus ou calage) → **heure fermée** (`refusHeureFermee`, 409 `{ heure_fermee: true, error,
+  prochain_ouvert }` : « Le poste Usinage Stama est fermé à cette heure (samedi 19/09 à 10h) en cadence Moyen (Seem) :
+  posez le BDT sur un créneau ouvert — prochain : lundi 21/09 à 5h30. ») → G3 → G4. Repli « colonne `debut` entière »
+  (cloud sans `cloud-4`) : l'heure arrondie est **recontrôlée** (heure fermée, G3) avant la réécriture. Succès :
+  `horaires: 'cadence' | 'grille'`, `cale_date` à côté de `cale_a`. Même régime pour `POST /bdts` créé posé, `PATCH
+  /bdts/:id` (champs G4) et `/bst/:id/affecter-st` (BST dans un lot). Site contrôlé = activité du process posé
+  s'il est d'un seul site (elle est écrite sur le BDT), sinon celle du BDT.
+- **Affichage** (script de `pageServiceProd`) : `PLAN_AXE` / `planMajAxe()` — l'axe du jour affiché va de la première
+  ouverture du jour à la première ouverture du lendemain (Haut : 5 h → 5 h ; en-tête « 0h … 5h », repère de minuit) ;
+  il s'**étend** si un BDT posé tombe hors de la plage ouverte (aucun BDT ne disparaît) ; un jour fermé garde une
+  grille 5 h–23 h entièrement hachurée (« Fermé ce jour (cadence usine) » sur une ligne vide). **Hachures** par ligne
+  selon le site du poste (`planFermesAxe` ; poste `both` = union), l'en-tête seulement là où **aucun** site ne travaille.
+  `bdtOnDay` : un BDT est sur la vue qui contient son début ; `planJourVue` ouvre la bonne vue pour « Voir sur le
+  planning » et `?focusBdt=`. **Dépôt** borné à la plage ouverte de la ligne (`planBornesDepot`) ; heure fermée à
+  l'intérieur (pause, trou) refusée côté client sans appel, trait de visée rouge « · fermé » ; pose au clic à l'heure
+  cliquée, y compris la nuit. **Bandeau** `#planCadenceInfo` : « Cadence usine du jeudi 17/09 : Moyen (Seem) · Bas
+  (Semrac) · plage ouverte 04:30 → 05:30 (+1j) » + légende ; repli : « Horaires par défaut du planning (5h → 23h) : … ».
+- **Barre qui traverse une fermeture — choix V1** : largeur = durée (heures de travail), jamais allongée ni coupée en
+  morceaux. `planFinOuvree(b)` → `data-deborde` : **lune** = posée sur une heure fermée (données anciennes), **pause** =
+  sa fin en heures ouvrées tombe après début + durée (fermeture traversée), **flèche** = la barre se poursuit après la
+  vue du jour ; fin prévue en heures ouvrées dans l'info-bulle.
+- **Cadence illisible** : tables absentes → grille 5 h–23 h, BDT au jour de leur date prévue, aucune heure refusée,
+  bandeau « jouez cloud-12 » ; panne → même affichage, mais toute pose répond 503 ; page OAS jamais bloquée.
+- **Enchaînements à revoir** (carte serveur `VIOL_CC`) et copie client calculés dans le même régime (heures ouvrées quand la
+  cadence est lisible).
+
+### Décisions et points ouverts
+- **Actées** (réponses de l'utilisateur, 16/09/2026) : cadence **par site**, modifiable à tout moment, dimanche fermé,
+  samedi selon la cadence ; planning, chemin critique et reports en heures ouvrées ; chevauchement refusé pour le
+  **même process** seulement ; successeurs incohérents **remis en tête de goulotte** après un message préventif ; process
+  de la machine OAS marqués OAS, badge « → OAS » et « Lots à venir » (aucune goulotte OAS). Haut jeudi/vendredi : Après-midi
+  et Soirée amorcées avec les horaires du lundi (confirmé). Reliquat en PV Conforme : voir `expeditions.md` (tranché).
+- **Choix faits, à confirmer** : date d'effet par défaut = **lendemain**, confirmation pour aujourd'hui ou le passé ;
+  **samedi sans nuit** (saisie refusée, moteur coupé à 24:00) ; pause RH = pause de la Journée sinon **30 min au-delà de
+  6 h** (`heuresPresence`) ; barre **V1** (largeur = durée, débordement signalé) ; une pose ou un calage de nuit écrit
+  `date_prevue` = **lendemain calendaire** (les écrans hors planning voient le jour calendaire) ; les morceaux `-Mk` d'un
+  BDT découpé (même process) ne peuvent plus se chevaucher sur le poste.
+- **Limites connues** : modèles d'horaires **non historisés** (les modifier change aussi les calculs du passé : RH ›
+  Temps, chemin critique, fin prévue OAS) ; deux changements de cadence simultanés passent tous les deux (la dernière
+  ligne l'emporte) ; G3 après écriture repose sur `updated_at` (horloges de deux isolats Cloudflare) — pas de contrainte en
+  base ; une présence enregistrée avant un changement de cadence sur un créneau devenu fermé est signalée, jamais effacée ;
+  `POST /api/planning/affectation-poste` ne refuse pas un créneau fermé ; `PATCH /bdts/:id` qui change `process_id` ou
+  `activite` d'un BDT posé ne contrôle pas l'heure fermée ; recoller une découpe ne passe pas par G3 ; poste `both`
+  hachuré sur l'union des sites alors que le refus d'heure fermée suit le site du BDT (un BDT Semrac peut être refusé sur
+  une heure non hachurée) ; BDT reçus avant `recu_le` : heuristique du jour voisin, travail de plus de 24 h sous-estimé au
+  soldage ; `computeLotsOAS` (lots arrivés à l'OAS) regroupe encore par `lot_id` seulement ; `src/affectation.tsx` (page
+  redirigée) garde sa copie de SHIFTS.
+
+**Tests** (scratchpad du lot, hors dépôt) : `lotg/test_cadence.ts` 150 (créneaux par niveau et jour, nuit, heures ouvrées,
+date d'effet, amorce identique 014 / cloud-12 / schema.sql, parité TS ↔ `CAD`), `lotg/test_oas_poste.ts` 141 (parité 3 946),
+`lotg/test_planning_cadence.ts` 187 (cas du lot C rejoués en Haut, pause, Bas jeudi → lundi, nuit, samedi, sites
+différents ; parité 9 452), `lotc/test_chemin.ts` 215 (régime grille), `lotg/e2e_cadence.mjs` 51 (routes réelles, tables
+absentes puis vraies tables), `lotg/ui_cadence.mjs` 35 et `lotg/ui_planning_cadence.mjs` 33 (Playwright),
+`revue_g/e2e_revue.mjs` 14 (Docker : `recu_le`, conditions de déprogrammation, propagation G4, reçus signalés, course G3 sur
+4 essais simultanés, 1 007 lignes d'historique), `revue_g/http_docker.mjs` 9 (image reconstruite, `AUTH_ENFORCE=on`).
+Jeux `-TEST-` supprimés et relus à 0.
+
 ## Mission
 <!-- auto:mission -->
 Planning Gantt BDT/BST, présence opérateurs, commandes & lots, process ateliers.
@@ -630,11 +895,11 @@ Planning Gantt BDT/BST, présence opérateurs, commandes & lots, process atelier
 <!-- /auto -->
 ## API (familles de routes)
 <!-- auto:api -->
-`production` · `bdt` · `bds` · `planning` · `process` · `machine(s)` · `presence` · `sortie-matiere`
+`production` · `bdt` · `bds` · `planning` · `process` · `machine(s)` · `presence` · `cadence` · `sortie-matiere`
 <!-- /auto -->
 ## Tables principales
 <!-- auto:tables -->
-`commandes` · `lots` · `bons_de_travail` · `bons_sous_traitance` · `machines` · `postes` · `shifts` · `absences` · `operateur_presence` · `affectation_poste` · `process_atelier`
+`commandes` · `lots` · `bons_de_travail` · `bons_sous_traitance` · `machines` · `postes` · `shifts` · `absences` · `operateur_presence` · `affectation_poste` · `process_atelier` · `horaires_modeles` · `cadence_site`
 <!-- /auto -->
 ## Points d'attention
 **Planning UNIQUE** : `/production/service`. L'ancienne page d'affectation par opérateur (`/production/planning`, `pageUnifiedPlanning`) et la sous-nav « Programmation | Affectation » ont été **supprimées** (2026-08-18, choix utilisateur : rester lean) ; la route redirige. Tout l'utile y était déjà : affectation opérateur→process par créneau (`affecterPoste`, sous-cases Matin/Journée/Après-midi/Soirée depuis le 14/09/2026), file d'attente, déprogrammation par retour dans la file.
@@ -644,6 +909,7 @@ Planning Gantt BDT/BST, présence opérateurs, commandes & lots, process atelier
 - BDT/BDS prioritaires (id BDTP/BDSP) encadrés rouge.
 - **Découpe d'un BDT** (revue 13/09/2026) : **uniquement** depuis les ciseaux d'une carte de la goulotte → modale `splitModal` (rangée dans `#ppanel-gantt-bdt`, 2 à 12 morceaux, temps **libre** par morceau) → `POST /api/production/bdt/:id/separer` ; le BDT d'origine garde le 1ᵉʳ morceau, les suivants sont créés en `-M2`/`-M3`… dans la goulotte. Plus de clic droit sur le planning, plus de prorata ; un BDT posé sur le planning est refusé (409). ⚠ **Revu le 14/09/2026 (lot C)** : seul le temps de réalisation se découpe, le réglage reste sur le morceau 1, et une découpe s'annule (voir la section Lot C). ⚠ **Interface revue le 15/09/2026** : **jauge** du temps de réalisation V à répartir (un segment coloré par morceau, gris = reste à répartir, rayures orange = dépassement, réglage à part en bloc hachuré fixe) + **un curseur par morceau** (`input range` 0…V, pas 0,01 arrondi au quart d'heure par le JS avec aimant sur la valeur qui complète V ; champ en heures synchronisé ; clavier flèches ±0,25 h, Page ±1 h) ; aides « Répartir également » (centièmes entiers, le dernier prend le reste) et « Mettre le reste sur le dernier morceau » ; une somme ≠ V demande une **confirmation** (`appConfirm`) avant l'envoi. Contrat serveur inchangé (`{ realisation, reglage? }`). Fonctions : `splitJauge`, `splitRender`, `splitAimant`, `splitRepartirEgal`, `splitResteDernier`, `splitPretAEnvoyer`, `splitEnvoyer`.
 - **Bandeau du service** (15/09/2026) : « Demande d'achat » et « PV de non-conformité » côte à côte (`#prod-hdr-actions`, `src/prod_da_nc.ts`), réservés à l'**écriture Production** du salarié qui signe par matricule + PIN. **Soldage** : l'opérateur qui a reçu le BDT **ou** une personne qui écrit en Production ; la matrice de compétences n'avertit plus que. **Réception** : un opérateur ou une personne qui écrit en Production (elle devient alors le réalisateur, `operateur_id`). Voir la section du 15/09/2026.
+- **Lot G (16/09/2026)** : Process Ateliers a un 3ᵉ volet **« Cadence usine »** (cadence par site, modèles d'horaires, historique) ; les horaires de la présence, de l'affectation et de RH › Temps viennent de la cadence ; le planning BDT suit les **heures ouvrées** du site (axe du jour, heures fermées hachurées, dépôt refusé sur une heure fermée, chemin critique et fin prévue en heures ouvrées) ; deux BDT du **même process** ne se chevauchent pas sur un poste (409) ; déplacer une étape **remet en goulotte** les étapes suivantes devenues incohérentes après un message préventif (badge « Remis en goulotte », en tête) ; badge **« → OAS »** sur le BDT qui précède l'OAS. Voir la section « Lot G ».
 - ℹ Cette fiche est **fusionnée, pas écrasée** par `scripts_doc/gen_module_fiches.mjs` : seuls les blocs `<!-- auto:… -->` sont régénérés depuis le manifeste ; ces points d'attention, écrits à la main, sont conservés.
 
 ---

@@ -16,8 +16,8 @@ L'ERP couvre **toute la chaîne** d'un atelier d'usinage/traitement de surface a
 | **Commercial** | Clients, offres, commandes, demandes de travaux (DT), avoirs, fiche client. |
 | **Bureau d'études (BE)** | Nomenclatures, gammes, plans/CAO (GED), répertoire des réfs clients. |
 | **Achats** | Demandes d'achat → bons de commande → réception. |
-| **Production** | Ordres de fabrication, BDT, lots, machines, planning. |
-| **OAS** | Traitement de surface (bains, balancelles, relevés). |
+| **Production** | Ordres de fabrication, BDT, lots, machines, planning selon la **cadence usine** de chaque site (Bas / Moyen / Haut), présence des opérateurs. |
+| **OAS** | Traitement de surface (lots à venir, bains, balancelles, relevés). |
 | **Qualité** | Non-conformités, 8D, contrôles (Cp/Cpk), dérogations, plans de contrôle. |
 | **Sécurité (HSE/RSE)** | DUER, accidents, EPI, chimie/FDS, ATEX, formations, environnement. |
 | **Stock** | **Rangement / mise en stock** de ce qui arrive (type d'objet, zone, emplacement fixe), matières, sorties, inventaires, mouvements, périssables (FIFO). |
@@ -35,6 +35,7 @@ L'ERP couvre **toute la chaîne** d'un atelier d'usinage/traitement de surface a
 - **Acheter** : demande d'achat → bon de commande (certificat matière exigé ou non) → réception (références du fournisseur, hors France) → PV de contrôle avec la **quantité reçue de chaque ligne** par un contrôleur ayant l'écriture Expéditions → lignes conformes dans **Stock › À ranger** → rangement (le stock est crédité, la matière de l'affaire devient disponible) ; lignes en écart → NC fournisseur (une par ligne), quarantaine pour une observation → décision Qualité → À ranger ; excédent → Direction ; reliquat annoncé → BC de reliquat à dater aux Achats.
 - **Traiter une non-conformité** : NC → analyse 8D → actions correctives.
 - **Nouvelle pièce** : DT → nomenclature (BE) → planning de production.
+- **Organiser l'atelier** : cadence usine de chaque site (Production › Process Ateliers › Cadence usine) → horaires des créneaux de présence, heures ouvertes du planning (heures fermées refusées), temps RH ; déplacer une étape remet en goulotte les étapes suivantes devenues incohérentes ; le BDT qui précède l'OAS annonce le lot dans « Lots à venir ».
 
 ## Où l'utilisateur trouve de l'aide
 - **Manuel utilisateur** : [`docs/manuel/`](../docs/manuel/) — un chapitre par service, avec captures.

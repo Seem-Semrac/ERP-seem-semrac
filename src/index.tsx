@@ -127,6 +127,9 @@ import { lireBcStrict, lirePvReceptionDuBcStrict, bcIdsAvecPvReceptionConforme, 
 import { pageFournisseurFiche } from './fournisseur_fiche'
 import { pageGanttBDT, pageGanttBST, pageCommandesProd, pageLotsProd, pageServiceProd, pageCommandeDetail, pageLotDetail } from './prod'
 import { pageServiceOAS } from './oas'
+// Lot G (16/09/2026) : chevauchement du même process sur un poste, successeurs remis en goulotte, process OAS suivant
+import { bdtOccupePoste, chevauchementsMemeProcess, planRemiseGoulotte, messageRemiseGoulotte, versGoulotte, oasSuivantParBdt, lotsAVenirOas, type SuccesseurADeprogrammer, type Chevauchement } from './poste_oas'
+import { lireBDTsDuProcess, deprogrammerBDTSiInchange } from './queries'
 import { pageServiceQualite } from './qualite'
 import { pageServiceSecurite } from './securite'
 import { pageServiceEnvironnement } from './environnement'
@@ -142,6 +145,12 @@ import { pageRapport8D } from './rapport8d'
 // Présences opérateur (lot C · C1, 14/09/2026) : lectures strictes + règles pures
 import { getPresencesFenetre, deletePresence, getSalarieCible, getCongeCible, majCongeSiStatut, getSalarieCompletCible, lireBDTOperateurPeriode } from './queries'
 import { validerCorpsPresence, validerFenetre, fenetreChargementPresences, messageEchecUpsert, CRENEAUX, libelleCreneau } from './presences'
+import { validerModelesNiveau, planModeles, validerChangementCadence, decisionChangementCadence, controlePresenceCadence, calendrierCadence, segmentsDuJour, plageOuverteCalendrier, estDateIso as estDateIsoCadence, isoPlusJours as isoPlusJoursCadence, niveauDuSite, ligneCadenceDuSite, jourEffetCadence, changementsPrevusCadence, NIVEAU_DEFAUT, MSG_CLOUD12, MSG_CADENCE_RESERVE } from './cadence'
+import { lireDonneesCadence, insererCadenceSite, insererModeleHoraire, majModeleHoraireSi } from './cadence_db'
+// Lot G · G5 (16/09/2026) : planning en heures ouvrées de la cadence (heure fermée, chevauchement, fin prévue OAS)
+import { heureFermee, intervallePosteOuvre, ajouterPourOp } from './planning_cadence'
+import { tempsPlanning, violationsEnchainement, auPlusTot, type TempsPlanning } from './gamme'
+import { versInstant as versInstantCadence, type DonneesCadence } from './cadence'
 // Lot D (14/09/2026) — réception fournisseur : règles pures + lectures strictes + droit d'écriture par service
 import { validerSaisieReception, planReception, construireBlReception, sansColonnesReception, patchBcReception, estColonneAbsente, AVERT_MIGRATION_012, lignesBc, quantitesBc, MSG_QTE_INCONNUE, bcMultiArticles, repartitionStockMultiArticles, validerInfosReception, patchInfosReception, COLONNES_BL_RECEPTION } from './reception'
 import { getBonDeCommandeStricte, majBonDeCommandeSi, getBonDeLivraisonStricte } from './queries'
@@ -6864,6 +6873,8 @@ app.get('/production/service', async (c) => {
   const monday = new Date(today); monday.setDate(today.getDate() - ((today.getDay() + 6) % 7))
   const weekFrom = monday.toISOString().slice(0, 10)
   const weekTo = new Date(monday.getTime() + 13 * 86400000).toISOString().slice(0, 10)
+  const cadenceP = lireDonneesCadence()   // lot G · G1 : cadence usine (modèles d'horaires + cadence par site), lue en parallèle
+  const nomsOasP =getNomenclatures().catch(() => [] as any[])   // lot G · G2 : gamme des nomenclatures (process OAS suivant), lue en parallèle
   const [bdts, machines, ops, lots, cmds, sousTraitants, processes, bds, bcs, stock, presences, absences, mouvements, affs, dts, conges, salaries, postes, machinesOpex, prepRows] = await Promise.all([
     getBonsDeTravail(), getMachines(), getOperateurs(), getLots(), getCommandes(), getSousTraitantsAll(),
     getProcessAtelier().catch(() => []),
@@ -6931,7 +6942,11 @@ app.get('/production/service', async (c) => {
       lot_ref: String(x.bdt.lot_ref ?? x.bdt.lot_id ?? ''), num_affaire: String(x.bdt.num_affaire ?? ''),
       cmd_ref: String(x.bdt.cmd_ref ?? ''), raison: x.raison as string,
     }))
-  return c.html(pageServiceProd(bdts as any[], machines, ops, lots, cmds, sousTraitants, processes, bds, bcStById, stock, presences, absences, mouvements, affByDate, congesOperateursPend, postes, machinesOpex, bdtsVigilance, salaries as any[]))
+  // Lot G · G2 : process OAS qui suit chaque BDT `oas_apres` dans la gamme de sa nomenclature → badge « → OAS : … »
+  // (carte de goulotte et barre). Tableau vide = introuvable (badge « → OAS » seul).
+  const oasSuivant = oasSuivantParBdt(bdts as any[], (await nomsOasP) as any[], processes as any[])
+  ;(bdts as any[]).forEach((b: any) => { if (b.oas_apres === true) b.oas_suivant = oasSuivant[String(b.id)] || [] })
+  return c.html(pageServiceProd(bdts as any[], machines, ops, lots, cmds, sousTraitants, processes, bds, bcStById, stock, presences, absences, mouvements, affByDate, congesOperateursPend, postes, machinesOpex, bdtsVigilance, salaries as any[], await cadenceP))
 })
 
 // ─── PLANNING UNIFIÉ (Gantt Usine BDT + Gantt Sous-Traitance BDS) ───
@@ -6980,8 +6995,58 @@ app.patch('/api/production/bdts/:id', async (c) => {
       }
     }
   }
+  // ── Lot G : le PATCH qui change le process, la durée, le statut ou la place dans la gamme d'un BDT suit les mêmes
+  //    règles que /affecter — G3 (même process sur le poste → 409) et G4 (successeurs rendus incohérents → 409
+  //    `successeurs_a_deprogrammer` sans `deprogrammer_successeurs`, sinon remis en goulotte après l'écriture).
+  const CHAMPS_G4 = ['process_id', 'duree', 'temps_alloue', 'statut', 'operateur_id', 'seq', 'lot_id', 'lot_ref']
+  let planPatch: PlanG4 = PLAN_G4_VIDE()
+  let bdtsLotPatch: any[] = []
+  let controleG3: { avant: any; temps: TempsPlanning } | null = null
+  if (CHAMPS_G4.some((k) => k in patch)) {
+    const [luG, cadG] = await Promise.all([getBDTStrict(id), lireCadencePlanning()])
+    if (luG.error) return c.json({ ok: false, error: 'Lecture du BDT impossible : ' + luG.error + '. Rien n’a été modifié.' }, 503)
+    if (!luG.data) return c.json({ ok: false, error: 'BDT introuvable.' }, 404)
+    // Lot G · G5 : chevauchement et chemin critique en heures ouvrées de la cadence (panne → 503).
+    if (cadG.panne) return c.json(refusCadenceIllisible(cadG.panne), 503)
+    const apresG = { ...luG.data, ...patch }
+    const change = (k: string) => (k in patch) && String(patch[k] ?? '') !== String((luG.data as any)[k] ?? '')
+    // G3 seulement si l'intervalle ou le process occupé change, ou si le BDT se met à occuper le poste : une réception
+    // ou un soldage par ce PATCH ne déplace rien et n'est jamais refusé pour un chevauchement hérité.
+    if (change('process_id') || change('duree') || change('temps_alloue') || ((change('statut') || change('operateur_id')) && !bdtOccupePoste(luG.data) && bdtOccupePoste(apresG))) {
+      const refusPoste = await refusChevauchementPoste(apresG, cadG.temps)
+      if (refusPoste) return c.json(refusPoste.body, refusPoste.status)
+      controleG3 = { avant: luG.data, temps: cadG.temps }
+    }
+    const cleG = cleLot(apresG)
+    if (cleG && apresG.seq != null && CHAMPS_G4.some(change)) {
+      const lo = await lireOperationsDuLot(cleG)
+      if (lo.error) return c.json({ ok: false, error: 'Lecture des opérations du lot ' + cleG + ' impossible (chemin critique non vérifiable) : ' + lo.error + '. Rien n’a été modifié.' }, 503)
+      bdtsLotPatch = lo.bdts
+      planPatch = planSuccesseursAGoulotte(luG.data, apresG, [...lo.bdts, ...lo.bds], (body as any).deprogrammer_successeurs, cadG.temps)
+      if (planPatch.refus) return c.json(planPatch.refus, 409)
+    }
+  }
   const { data, error } = await updateBDT(id, patch)
   if (error) return c.json({ ok: false, error: error.message })
+  // G3 après écriture (course entre deux écrans) : annulée si un BDT du même process écrit avant chevauche.
+  if (controleG3 && data) {
+    const g3 = await chevauchementApresEcriture({ ...controleG3.avant, ...data }, controleG3.temps)
+    if (g3.chevauchement.length) {
+      const restauration: Record<string, any> = {}
+      for (const k of Object.keys(patch)) restauration[k] = (controleG3.avant as any)[k] ?? null
+      const an = await annulerEcritureBDT(id, data, restauration)
+      return c.json(refusCourse(g3.chevauchement, an, 'modification annulée'), 409)
+    }
+  }
+  const remise = planPatch.liste.length ? await remettreSuccesseursEnGoulotte(planPatch.liste, bdtsLotPatch) : null
+  const avertSig = avertSignales(planPatch.signales)
+  if (remise || avertSig) {
+    const avertissement = [avertRemiseGoulotte(remise), avertSig].filter(Boolean).join(' ')
+    return c.json({ ok: true, data,
+      ...(remise ? { successeurs_deprogrammes: remise.ids, remis_goulotte_le: remise.ids.length && !remise.sansColonne ? remise.remisLe : null } : {}),
+      ...(planPatch.signales.length ? { successeurs_recus_signales: planPatch.signales } : {}),
+      ...(avertissement ? { avertissement } : {}) })
+  }
   return c.json({ ok: true, data })
 })
 
@@ -7011,16 +7076,40 @@ app.post('/api/production/bdts', async (c) => {
   const creePose = !!(payload.process_id && payload.date_prevue && !['', 'a_programmer'].includes(String(payload.statut || '')))
   // Toute pose écrit une heure (même règle que /affecter) : sans heure, celle où le planning affiche le BDT.
   if (creePose && (payload.debut == null || payload.debut === '' || isNaN(Number(payload.debut)))) payload.debut = PLAN_HEURE_DEFAUT
+  // Lot G · G5 : un BDT créé posé suit les horaires de la cadence usine (même règle que /affecter) ; panne → 503.
+  let tempsCreation: TempsPlanning = tempsPlanning(null)
+  if (creePose) {
+    const cad = await lireCadencePlanning()
+    if (cad.panne) return c.json(refusCadenceIllisible(cad.panne, 'Rien n’a été créé.'), 503)
+    tempsCreation = cad.temps
+    normaliserPose(payload, tempsCreation)
+  }
   if (creePose && cleLot(payload) && payload.seq != null) {
     const lo = await lireOperationsDuLot(cleLot(payload))
     if (lo.error) return c.json({ ok: false, error: 'Lecture des opérations du lot impossible (chemin critique non vérifiable) : ' + lo.error + '. Rien n’a été créé.' }, 503)
-    ctlCreation = controleEnchainement(payload, [...lo.bdts, ...lo.bds])
+    ctlCreation = controleEnchainement(payload, [...lo.bdts, ...lo.bds], tempsCreation)
     if (ctlCreation.etat === 'refus') return c.json({ ok: false, error: ctlCreation.message, au_plus_tot: ctlCreation.au_plus_tot }, 409)
-    if (ctlCreation.etat === 'cale') payload.debut = ctlCreation.cale_a
+    if (ctlCreation.etat === 'cale') { payload.debut = ctlCreation.cale_a; if (ctlCreation.cale_date) payload.date_prevue = ctlCreation.cale_date }
+  }
+  // G5 (lot G) : créé posé sur une heure fermée de la cadence du site → 409. G3 : il ne chevauche pas un BDT du même process.
+  if (creePose) {
+    const refusFerme = await refusHeureFermee(payload, tempsCreation)
+    if (refusFerme) return c.json(refusFerme.body, refusFerme.status)
+    const refusPoste = await refusChevauchementPoste(payload, tempsCreation)
+    if (refusPoste) return c.json(refusPoste.body, refusPoste.status)
   }
   const etatReglage = { sansReglage: false }
   const { data, error } = await creerBDTAvecReglage(payload, etatReglage)
   if (error) return c.json({ ok: false, error: error.message })
+  // G3 après écriture (course entre deux écrans) : le BDT créé posé qui chevauche un BDT du même process écrit avant lui
+  // est laissé dans la GOULOTTE (écriture conditionnelle), 409 `cree_en_goulotte`.
+  if (creePose && data) {
+    const g3 = await chevauchementApresEcriture({ ...payload, ...data }, tempsCreation)
+    if (g3.chevauchement.length) {
+      const an = await annulerEcritureBDT(String((data as any).id), data, { statut: 'a_programmer', process_id: null, machine_id: null, date_prevue: null, debut: null })
+      return c.json({ ...refusCourse(g3.chevauchement, an, 'BDT créé mais laissé dans la goulotte'), cree_en_goulotte: an.annule, data: an.annule ? { ...data, statut: 'a_programmer', process_id: null, machine_id: null, date_prevue: null, debut: null } : data }, 409)
+    }
+  }
   const avert = [etatReglage.sansReglage ? AVERT_CLOUD9 : '', ctlCreation && ctlCreation.etat === 'cale' ? String(ctlCreation.message) : ''].filter(Boolean).join(' ')
   const cale = ctlCreation && ctlCreation.etat === 'cale' ? { cale_a: ctlCreation.cale_a } : {}
   if (avert) return c.json({ ok: true, data, ...cale, avertissement: avert })
@@ -7448,15 +7537,166 @@ app.post('/api/production/poste/reorder', async (c) => {
   return c.json({ ok: true, n: ids.length })
 })
 
+// ─── Lot G (16/09/2026) · G3 chevauchement sur un poste / G4 successeurs remis en goulotte (règles : src/poste_oas.ts) ───
+// G3 : un BDT ne se pose pas sur un intervalle où un autre BDT du MÊME process occupe déjà le poste (posé ou reçu) :
+//      409 « Le poste X porte déjà un BDT du même process (BDT-…) de hh:mm à hh:mm ». Process différents : autorisé.
+//      Heures BRUTES pour l'instant (jour × 24 + heure + durée) — le passage en heures ouvrées se branche dans poste_oas.ts.
+// G4 : un déplacement qui rend incohérentes des étapes suivantes DÉJÀ POSÉES (chemin critique) ne passe qu'avec l'accord
+//      explicite `deprogrammer_successeurs` (true, ou la liste des id confirmés à l'écran) ; sans lui → 409
+//      `successeurs_a_deprogrammer`. Accordé : le BDT est déplacé PUIS ces successeurs sont remis en goulotte
+//      (écriture conditionnelle, `remis_goulotte_le` = maintenant si la colonne existe). Reçus / soldés / BDS : jamais.
+// ─── Lot G · G5 : la cadence usine pour le PLANNING (src/gamme.ts tempsPlanning, src/planning_cadence.ts) ───
+//   · lisible → heures OUVRÉES du site (chemin critique, chevauchement, heure fermée refusée) ;
+//   · tables absentes (cloud sans cloud-12) → grille 5 h-23 h du lot C, sans refus d'heure fermée (tolérance, la page le dit) ;
+//   · PANNE de lecture → 503 : une pose ne se valide pas avec des horaires inconnus (jamais « tout ouvert » en silence).
+async function lireCadencePlanning(): Promise<{ temps: TempsPlanning; panne: string | null }> {
+  const lu = await lireDonneesCadence()
+  if (lu.data) return { temps: tempsPlanning(lu.data as DonneesCadence), panne: null }
+  if (lu.absente) return { temps: tempsPlanning(null), panne: null }
+  return { temps: tempsPlanning(null), panne: lu.error || 'réponse vide' }
+}
+const refusCadenceIllisible = (panne: string, rien = 'Rien n’a été modifié.') => ({ ok: false, error: 'Lecture de la cadence usine impossible (heures ouvrées non vérifiables) : ' + panne + '. ' + rien })
+/** Nom affiché du poste d'un process (messages de refus) : poste, sinon « process », sinon l'identifiant. */
+async function nomPosteDuProcess(processId: any, procsLus?: any[]): Promise<string> {
+  const procs = procsLus || (await getProcessAtelier().catch(() => [] as any[]) as any[])
+  const proc = procs.find((p: any) => String(p.id) === String(processId))
+  const postes = proc?.poste_id ? (await getPostes().catch(() => [] as any[])) as any[] : []
+  const poste = postes.find((p: any) => String(p.id) === String(proc?.poste_id))
+  return String(poste?.nom || '') || (proc?.nom ? '« ' + String(proc.nom) + ' »' : String(processId ?? ''))
+}
+/** Heure de pose > 24 h ou < 0 (vue du jour qui déborde sur la nuit) ramenée au jour calendaire : 26 h le 15 → 2 h le 16.
+ *  Heures ouvrées seulement (la grille du lot C borne l'heure sur la journée). */
+function normaliserPose(patch: Record<string, any>, temps: TempsPlanning): void {
+  if (!temps.cadence || patch.debut == null || patch.debut === '' || !estDateIsoCadence(String(patch.date_prevue || ''))) return
+  const h = Number(patch.debut)
+  if (!Number.isFinite(h) || (h >= 0 && h < 24)) return
+  const i = versInstantCadence(String(patch.date_prevue), h)
+  patch.date_prevue = i.date
+  patch.debut = Math.round(i.heure * 100) / 100
+}
+/** G5 : pose sur une heure FERMÉE de la cadence du site du BDT → 409 (null = ouverte, ou grille). */
+async function refusHeureFermee(cible: any, temps: TempsPlanning, procsLus?: any[]): Promise<{ status: 409; body: any } | null> {
+  if (!temps.cadence || !heureFermee(cible, temps)) return null
+  const f = heureFermee(cible, temps, await nomPosteDuProcess(cible.process_id, procsLus)) as NonNullable<ReturnType<typeof heureFermee>>
+  return { status: 409, body: { ok: false, heure_fermee: true, error: f.message, prochain_ouvert: f.prochain } }
+}
+
+async function refusChevauchementPoste(cible: any, temps?: TempsPlanning): Promise<{ status: 409 | 503; body: any } | null> {
+  if (!bdtOccupePoste(cible)) return null
+  const lu = await lireBDTsDuProcess(String(cible.process_id))
+  if (lu.error) return { status: 503, body: { ok: false, error: 'Lecture des BDT du process impossible (chevauchement sur le poste non vérifiable) : ' + lu.error + '. Rien n’a été modifié.' } }
+  // G5 : intervalles en heures OUVRÉES de la cadence du site (grille : heures brutes, comme avant).
+  const intervalle = intervallePosteOuvre(temps)
+  if (!chevauchementsMemeProcess(cible, lu.data, { intervalle }).length) return null
+  // Conflit : nom du poste pour le message (lecture seulement dans ce cas).
+  const nomPoste = await nomPosteDuProcess(cible.process_id)
+  const ch = chevauchementsMemeProcess(cible, lu.data, { nomPoste, intervalle })
+  const autres = ch.length - 1
+  return { status: 409, body: {
+    ok: false,
+    error: ch[0].message + (autres > 0 ? ' (et ' + autres + ' autre' + (autres > 1 ? 's' : '') + ' BDT du même process : ' + ch.slice(1).map((x) => x.id).join(', ') + ')' : ''),
+    chevauchement: ch.map((x) => ({ id: x.id, date: x.date, debut: x.debut, fin: x.fin })),
+  } }
+}
+// Plan G4 (revue du 16/09/2026) : la remise en goulotte se propage au-delà de l'étape suivante (placement virtuel des étapes
+// retirées, poste_oas.ts planRemiseGoulotte) et les étapes déjà REÇUES rendues incohérentes sont SIGNALÉES (`signales` :
+// avertissement + successeurs_en_violation), jamais retirées et jamais bloquantes à elles seules.
+type PlanG4 = { liste: SuccesseurADeprogrammer[]; signales: SuccesseurADeprogrammer[]; refus: any | null }
+const PLAN_G4_VIDE = (): PlanG4 => ({ liste: [], signales: [], refus: null })
+function planSuccesseursAGoulotte(avant: any, apres: any, opsDuLot: any[], accord: any, temps?: TempsPlanning): PlanG4 {
+  const plan = planRemiseGoulotte(avant, apres, opsDuLot, {
+    violations: (a: any[], b: any[]) => violationsEnchainement(a, b, temps),
+    violationsRecus: (a: any[], b: any[]) => violationsEnchainement(a, b, temps, { recus: true }),
+    auPlusTot: (cible: any, ops: any[]) => auPlusTot(cible, ops, temps),
+  })
+  const liste = plan.retirer, signales = plan.signaler
+  if (!liste.length) return { liste, signales, refus: null }
+  const confirmes = Array.isArray(accord) ? accord.map((x: any) => String(x)) : null
+  if (accord === true || (confirmes && liste.every((s) => confirmes.includes(s.id)))) return { liste, signales, refus: null }
+  return { liste, signales, refus: { ok: false, error: messageRemiseGoulotte(String(apres?.id ?? ''), liste, signales), successeurs_a_deprogrammer: liste, successeurs_recus_signales: signales } }
+}
+/** Étapes reçues signalées par le plan G4, ajoutées aux successeurs en violation (sans doublon). */
+function avecSignales(successeurs: Array<{ id: string; message: string }>, signales: SuccesseurADeprogrammer[]): Array<{ id: string; message: string }> {
+  const vus = new Set(successeurs.map((x) => String(x.id)))
+  return [...successeurs, ...signales.filter((x) => !vus.has(String(x.id)))]
+}
+const avertSignales = (signales: SuccesseurADeprogrammer[]) => signales.length
+  ? 'Étape' + (signales.length > 1 ? 's' : '') + ' déjà reçue' + (signales.length > 1 ? 's' : '') + ' rendue' + (signales.length > 1 ? 's' : '') + ' incohérente' + (signales.length > 1 ? 's' : '') + ' (jamais déprogrammée' + (signales.length > 1 ? 's' : '') + ') : ' + signales.map((x) => x.message).join(' · ') + '.'
+  : ''
+
+// G3 APRÈS écriture (revue du 16/09/2026) : le refus préalable lit puis écrit sans verrou, et deux poses simultanées du même
+// process sur des intervalles qui se chevauchent passaient toutes les deux. Relecture des BDT du process : un chevauchement
+// avec un BDT écrit AVANT soi (updated_at plus ancien ; à égalité, identifiant plus petit) → la pose est ANNULÉE par une
+// écriture conditionnelle (updated_at écrit) qui rétablit l'état lu, puis 409. Le premier écrit garde sa place.
+function ecritAvant(o: any, ecrit: any): boolean {
+  const a = String(o?.updated_at ?? ''), b = String(ecrit?.updated_at ?? '')
+  const ta = Date.parse(a), tb = Date.parse(b)
+  if (!Number.isFinite(ta) || !Number.isFinite(tb)) return true
+  if (ta !== tb) return ta < tb
+  if (a !== b) return a < b
+  return String(o?.id ?? '') < String(ecrit?.id ?? '')
+}
+async function chevauchementApresEcriture(ecrit: any, temps: TempsPlanning): Promise<{ chevauchement: Chevauchement[]; erreur: string | null }> {
+  if (!ecrit || !bdtOccupePoste(ecrit)) return { chevauchement: [], erreur: null }
+  const lu = await lireBDTsDuProcess(String(ecrit.process_id))
+  if (lu.error) return { chevauchement: [], erreur: lu.error }
+  const anterieurs = lu.data.filter((o: any) => String(o?.id) !== String(ecrit.id) && ecritAvant(o, ecrit))
+  if (!chevauchementsMemeProcess(ecrit, anterieurs, { intervalle: intervallePosteOuvre(temps) }).length) return { chevauchement: [], erreur: null }
+  const nomPoste = await nomPosteDuProcess(ecrit.process_id)
+  return { chevauchement: chevauchementsMemeProcess(ecrit, anterieurs, { intervalle: intervallePosteOuvre(temps), nomPoste }), erreur: null }
+}
+/** Annule une écriture (rétablit `restauration`) SEULEMENT si le BDT porte encore l'updated_at écrit. */
+async function annulerEcritureBDT(id: string, ecrit: any, restauration: Record<string, any>): Promise<{ annule: boolean; error: string | null }> {
+  const attendu: Record<string, any> = ecrit?.updated_at != null
+    ? { updated_at: ecrit.updated_at }
+    : { process_id: ecrit?.process_id ?? null, date_prevue: ecrit?.date_prevue ?? null, debut: ecrit?.debut ?? null }
+  const r = await majBDTConditionnelle(id, restauration, attendu)
+  return { annule: !r.error && !!r.data, error: r.error }
+}
+function refusCourse(ch: Chevauchement[], annule: { annule: boolean; error: string | null }, quoi: string): any {
+  return {
+    ok: false,
+    error: ch[0].message + ' — posé en même temps depuis un autre écran : ' + (annule.annule ? quoi : 'annulation impossible (' + (annule.error || 'le BDT a changé entre-temps') + '), rechargez le planning et corrigez le chevauchement') + '.',
+    chevauchement: ch.map((x) => ({ id: x.id, date: x.date, debut: x.debut, fin: x.fin })),
+    course: true, annule: annule.annule,
+  }
+}
+async function remettreSuccesseursEnGoulotte(liste: SuccesseurADeprogrammer[], bdtsLus: any[]): Promise<{ ids: string[]; echecs: string[]; remisLe: string; sansColonne: boolean }> {
+  const remisLe = new Date().toISOString()
+  const ids: string[] = [], echecs: string[] = []
+  let sansColonne = false
+  for (const s of liste) {
+    const lu = (bdtsLus || []).find((b: any) => String(b?.id) === s.id)
+    if (!lu) { echecs.push(s.id + ' (introuvable)'); continue }
+    const r = await deprogrammerBDTSiInchange(lu, remisLe)
+    if (r.sansColonne) sansColonne = true
+    if (r.error) echecs.push(s.id + ' (' + r.error + ')')
+    else if (!r.data) echecs.push(s.id + ' (modifié entre-temps)')
+    else ids.push(s.id)
+  }
+  return { ids, echecs, remisLe, sansColonne }
+}
+function avertRemiseGoulotte(r: { ids: string[]; echecs: string[]; sansColonne: boolean } | null): string {
+  if (!r) return ''
+  return [
+    r.ids.length ? 'Remis en goulotte : ' + r.ids.join(', ') + '.' : '',
+    r.echecs.length ? 'Non remis en goulotte (toujours signalés) : ' + r.echecs.join(', ') + '.' : '',
+    r.ids.length && r.sansColonne ? 'Colonne remis_goulotte_le absente (migration 014 / cloud-12 à jouer) : ces BDT ne sont pas placés en tête de la goulotte.' : '',
+  ].filter(Boolean).join(' ')
+}
+
 // ─── API BDT : affecter à un process / réceptionner / solder ───
 app.post('/api/production/bdt/:id/affecter', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json().catch(() => ({}))
   const procId = body.process_id
   if (!procId) return c.json({ ok: false, error: 'process_id requis' })
-  const procs = await getProcessAtelier().catch(() => []) as any[]
+  const [procs, cad] = await Promise.all([getProcessAtelier().catch(() => []) as Promise<any[]>, lireCadencePlanning()])
   const proc = procs.find((p: any) => String(p.id) === String(procId))
   if (!proc) return c.json({ ok: false, error: 'Process introuvable' })
+  // Lot G · G5 : horaires de la cadence usine (heures ouvrées) ; panne → 503, tables absentes → grille du lot C.
+  if (cad.panne) return c.json(refusCadenceIllisible(cad.panne), 503)
+  const temps = cad.temps
   // Un BDT reçu ou soldé est en cours d'exécution ou terminé : il ne se replanifie plus.
   // Lecture STRICTE : une panne n'est pas « BDT introuvable » (avant : liste complète non paginée, erreur avalée).
   const lu = await getBDTStrict(id)
@@ -7477,8 +7717,11 @@ app.post('/api/production/bdt/:id/affecter', async (c) => {
     : (heureValide(cur.debut) ? Number(cur.debut) : PLAN_HEURE_DEFAUT)
   // Programmer, c'est poser sur un JOUR : le Gantt n'affiche que les BDT du jour sélectionné.
   patch.date_prevue = String(body.date_prevue || TODAY_ISO())
+  // Heures ouvrées : une heure de la nuit envoyée au-delà de 24 h (vue du jour) est ramenée au jour calendaire.
+  normaliserPose(patch, temps)
   // ── CHEMIN CRITIQUE (lot C, src/gamme.ts) : l'étape ne démarre pas avant la fin du réglage de l'étape
-  //    précédente du lot. Même jour trop tôt (ou sans heure) → CALÉE à l'au plus tôt ; jour antérieur → 409.
+  //    précédente du lot. Même jour de planning trop tôt (ou sans heure) → CALÉE à l'au plus tôt ; jour antérieur → 409.
+  //    Lot G · G5 : en heures ouvrées de la cadence du site (le calage peut tomber dans la nuit, le lendemain calendaire).
   //    Opérations du lot lues par requête CIBLÉE et STRICTE (une panne n'autorise rien en silence).
   const cle = cleLot(cur)
   let lot: { bdts: any[]; bds: any[] } = { bdts: [], bds: [] }
@@ -7487,10 +7730,21 @@ app.post('/api/production/bdt/:id/affecter', async (c) => {
     const lo = await lireOperationsDuLot(cle)
     if (lo.error) return c.json({ ok: false, error: 'Lecture des opérations du lot ' + cle + ' impossible (chemin critique non vérifiable) : ' + lo.error + '. Rien n’a été modifié.' }, 503)
     lot = lo
-    ctl = controleEnchainement({ ...cur, ...patch }, [...lo.bdts, ...lo.bds])
+    ctl = controleEnchainement({ ...cur, ...patch }, [...lo.bdts, ...lo.bds], temps)
     if (ctl.etat === 'refus') return c.json({ ok: false, error: ctl.message, au_plus_tot: ctl.au_plus_tot }, 409)
-    if (ctl.etat === 'cale') patch.debut = ctl.cale_a
+    if (ctl.etat === 'cale') { patch.debut = ctl.cale_a; if (ctl.cale_date) patch.date_prevue = ctl.cale_date }
   }
+  // ── G5 (lot G) : la position finale (calage compris) tombe sur une heure FERMÉE de la cadence du site → 409.
+  const refusFerme = await refusHeureFermee({ ...cur, ...patch }, temps, procs)
+  if (refusFerme) return c.json(refusFerme.body, refusFerme.status)
+  // ── G3 (lot G) : même process déjà sur le poste à cet intervalle → 409 ; G4 : successeurs rendus incohérents → 409
+  //    sans l'accord `deprogrammer_successeurs`. Contrôlés AVANT toute écriture, sur la position finale (calage compris).
+  const refusPoste = await refusChevauchementPoste({ ...cur, ...patch }, temps)
+  if (refusPoste) return c.json(refusPoste.body, refusPoste.status)
+  const planG4 = (cle && cur.seq != null) ? planSuccesseursAGoulotte(cur, { ...cur, ...patch }, [...lot.bdts, ...lot.bds], body.deprogrammer_successeurs, temps) : PLAN_G4_VIDE()
+  if (planG4.refus) return c.json(planG4.refus, 409)
+  // Reposé sur le planning : il n'est plus « remis en goulotte » (colonne 014 / cloud-12 effacée seulement si la ligne la porte).
+  if (Object.prototype.hasOwnProperty.call(cur, 'remis_goulotte_le') && cur.remis_goulotte_le != null) patch.remis_goulotte_le = null
   let cale = ctl?.etat === 'cale' ? ctl : null
   let arrondi: number | null = null
   let { data, error } = await updateBDT(id, patch)
@@ -7500,25 +7754,52 @@ app.post('/api/production/bdt/:id/affecter', async (c) => {
   //   de violation : l'heure entière est recontrôlée, et arrondie au-dessus si elle tombe avant l'au plus tôt.
   if (error && patch.debut != null && /integer/i.test(String(error.message || ''))) {
     const demande = Number(patch.debut)
-    const he = heureEntiereChemin({ ...cur, ...patch }, ctl ? [...lot.bdts, ...lot.bds] : null)
-    if (he.controle) cale = he.controle
+    const he = heureEntiereChemin({ ...cur, ...patch }, ctl ? [...lot.bdts, ...lot.bds] : null, temps)
+    if (he.controle) { cale = he.controle; if (he.controle.cale_date) patch.date_prevue = he.controle.cale_date }
     if (he.heure !== demande) arrondi = he.heure
     patch.debut = he.heure
+    // Lot G · G5 : l'heure pleine ne doit tomber ni sur une heure FERMÉE de la cadence (11h45 → 12 h, pause d'une Journée
+    // seule) ni sur un chevauchement du même process. Rien n'est encore écrit (la première écriture a échoué) : 409 sûr.
+    const refusFermeEntier = await refusHeureFermee({ ...cur, ...patch }, temps, procs)
+    if (refusFermeEntier) return c.json(refusFermeEntier.body, refusFermeEntier.status)
+    const refusPosteEntier = await refusChevauchementPoste({ ...cur, ...patch }, temps)
+    if (refusPosteEntier) return c.json(refusPosteEntier.body, refusPosteEntier.status)
     ;({ data, error } = await updateBDT(id, patch))
   }
   if (error) return c.json({ ok: false, error: error.message })
-  // Étapes suivantes déjà posées que cette pose rend invalides : signalées, JAMAIS décalées en cascade.
+  // G3 après écriture (course entre deux écrans) : un BDT du même process écrit AVANT celui-ci chevauche → pose annulée
+  // (retour à l'état lu), 409 ; aucun successeur n'a encore été touché.
+  if (data) {
+    const g3 = await chevauchementApresEcriture({ ...cur, ...patch, ...data }, temps)
+    if (g3.chevauchement.length) {
+      const restauration: Record<string, any> = {}
+      for (const k of Object.keys(patch)) restauration[k] = cur[k] ?? null
+      const an = await annulerEcritureBDT(id, data, restauration)
+      return c.json(refusCourse(g3.chevauchement, an, 'pose annulée'), 409)
+    }
+  }
+  // G4 (lot G) : successeurs accordés remis en goulotte APRÈS le déplacement (un échec les laisse signalés).
+  const remise = planG4.liste.length ? await remettreSuccesseursEnGoulotte(planG4.liste, lot.bdts) : null
+  const retires = new Set(remise ? remise.ids : [])
+  // Étapes suivantes déjà posées ou reçues que cette pose rend invalides (hors celles remises en goulotte) : signalées,
+  // JAMAIS décalées ; plus les étapes reçues que le plan G4 a vues derrière une étape remise en goulotte.
   const apres = { ...cur, ...patch, ...(data || {}) }
-  const successeurs = cle ? successeursEnViolation(apres, [...lot.bdts, ...lot.bds]) : []
+  const successeurs = cle ? avecSignales(successeursEnViolation(apres, [...lot.bdts.map((b: any) => (retires.has(String(b.id)) ? versGoulotte(b) : b)), ...lot.bds], temps), planG4.signales) : []
   const ecrit = Number(patch.debut)
   const avert = [
     cale && cale.au_plus_tot ? messageCalage(ecrit, cale.au_plus_tot) : '',
     arrondi != null ? 'Heure enregistrée à ' + fmtHeurePlanning(ecrit) + ' : la colonne « debut » est encore entière sur cette base (migration 005 / cloud-4 à jouer).' : '',
+    avertRemiseGoulotte(remise),
+    avertSignales(planG4.signales),
   ].filter(Boolean).join(' ')
   return c.json({
     ok: true, data, au_plus_tot: ctl ? ctl.au_plus_tot : null, successeurs_en_violation: successeurs,
+    ...(remise ? { successeurs_deprogrammes: remise.ids, remis_goulotte_le: remise.ids.length && !remise.sansColonne ? remise.remisLe : null } : {}),
+    ...(planG4.signales.length ? { successeurs_recus_signales: planG4.signales } : {}),
     // cale_a = heure RÉELLEMENT écrite quand elle diffère de celle demandée (calage ou arrondi) : l'écran l'affiche.
-    ...(cale || arrondi != null ? { cale_a: ecrit } : {}),
+    // cale_date = jour réellement écrit (heures ouvrées : un calage dans la nuit passe au lendemain calendaire).
+    ...(cale || arrondi != null ? { cale_a: ecrit, cale_date: patch.date_prevue } : {}),
+    horaires: temps.cadence ? 'cadence' : 'grille',
     ...(avert ? { avertissement: avert } : {}),
   })
 })
@@ -8007,8 +8288,13 @@ app.post('/api/production/bdt/:id/recu', async (c) => {
   }
   // Heure LOCALE de l'atelier (Europe/Paris). Le serveur tourne en UTC alors que l'heure de fin
   // vient du navigateur : le temps réel était majoré de 2 h en heure d'été.
-  const hhmm = new Date().toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' }).replace(/\s*h\s*/, ':')
-  const { data, error } = await updateBDT(id, { statut: 'recu', debut_reel: hhmm, operateur_id: op.id })
+  const maintenant = new Date()
+  const hhmm = maintenant.toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' }).replace(/\s*h\s*/, ':')
+  // recu_le (revue du 16/09/2026, migration 014 / cloud-12) : l'instant COMPLET de la réception — debut_reel n'est qu'une
+  // heure, et un BDT posé à 22 h reçu à 00:30 se plaçait 24 h trop tôt (chemin critique, fin prévue OAS). Colonne absente
+  // (base en retard) : réessai sans elle.
+  let { data, error } = await updateBDT(id, { statut: 'recu', debut_reel: hhmm, operateur_id: op.id, recu_le: maintenant.toISOString() })
+  if (error && /recu_le/i.test(String(error.message || ''))) ({ data, error } = await updateBDT(id, { statut: 'recu', debut_reel: hhmm, operateur_id: op.id }))
   if (error) return c.json({ ok: false, error: error.message })
   const nom = opFullName(op)
   const hist: Record<string, any> = {
@@ -8062,7 +8348,10 @@ app.post('/api/production/bdt/:id/solder', async (c) => {
     const dp = String(cur.debut_reel).slice(0, 5).split(':').map(Number)
     const fp = fin.split(':').map(Number)
     if (dp.length === 2 && fp.length === 2) {
-      const mins = (fp[0] * 60 + fp[1]) - (dp[0] * 60 + dp[1])
+      let mins = (fp[0] * 60 + fp[1]) - (dp[0] * 60 + dp[1])
+      // Équipe de nuit (revue du 16/09/2026) : reçu à 22:00, soldé à 03:00 → 5 h, pas −19 h (une fin avant le début = le
+      // lendemain ; les heures ne portent pas de date).
+      if (mins < 0) mins += 24 * 60
       tempsReel = Math.round((mins / 60) * 100) / 100
     }
   }
@@ -8285,13 +8574,20 @@ app.post('/api/production/bst/:id/affecter-st', async (c) => {
   let lotBds: { bdts: any[]; bds: any[] } = { bdts: [], bds: [] }
   const cibleBds = { ...bds, date_envoi: day, date_debut: day, ...(body.duree_days ? { duree_days: Number(body.duree_days) } : {}) }
   let ctlBds: ReturnType<typeof controleEnchainement> | null = null
+  let tempsBst: TempsPlanning = tempsPlanning(null)
   if (cleBds && bds.seq != null) {
-    const lo = await lireOperationsDuLot(cleBds)
+    const [lo, cad] = await Promise.all([lireOperationsDuLot(cleBds), lireCadencePlanning()])
     if (lo.error) return c.json({ ok: false, error: 'Lecture des opérations du lot ' + cleBds + ' impossible (chemin critique non vérifiable) : ' + lo.error + '. Rien n’a été modifié.' }, 503)
+    // Lot G · G5 : fin complète de l'étape précédente et successeurs en heures ouvrées de la cadence (panne → 503).
+    if (cad.panne) return c.json(refusCadenceIllisible(cad.panne), 503)
+    tempsBst = cad.temps
     lotBds = lo
-    ctlBds = controleEnchainement(cibleBds, [...lo.bdts, ...lo.bds])
+    ctlBds = controleEnchainement(cibleBds, [...lo.bdts, ...lo.bds], tempsBst)
     if (ctlBds.etat === 'refus') return c.json({ ok: false, error: ctlBds.message, au_plus_tot: ctlBds.au_plus_tot }, 409)
   }
+  // G4 (lot G) : un BST déplacé qui rend incohérents des BDT suivants déjà posés → 409 sans accord, AVANT de créer le BC.
+  const planBst = (cleBds && bds.seq != null) ? planSuccesseursAGoulotte(bds, cibleBds, [...lotBds.bdts, ...lotBds.bds], body.deprogrammer_successeurs, tempsBst) : PLAN_G4_VIDE()
+  if (planBst.refus) return c.json(planBst.refus, 409)
   const [sts, bcs] = await Promise.all([
     getSousTraitantsAll().catch(() => []), getBonsDeCommande().catch(() => []),
   ])
@@ -8326,8 +8622,13 @@ app.post('/api/production/bst/:id/affecter-st', async (c) => {
   if (isUuid) patch.sous_traitant_id = String(fournId)
   const { data, error } = await updateBDS(id, patch)
   if (error) return c.json({ ok: false, error: error.message })
-  const successeurs = cleBds ? successeursEnViolation({ ...cibleBds, ...patch, ...(data || {}) }, [...lotBds.bdts, ...lotBds.bds]) : []
-  return c.json({ ok: true, data, bc_id: bcId, fournisseur: st?.nom ?? String(fournId), au_plus_tot: ctlBds ? ctlBds.au_plus_tot : null, successeurs_en_violation: successeurs })
+  const remiseBst = planBst.liste.length ? await remettreSuccesseursEnGoulotte(planBst.liste, lotBds.bdts) : null
+  const retiresBst = new Set(remiseBst ? remiseBst.ids : [])
+  const successeurs = cleBds ? avecSignales(successeursEnViolation({ ...cibleBds, ...patch, ...(data || {}) }, [...lotBds.bdts.map((b: any) => (retiresBst.has(String(b.id)) ? versGoulotte(b) : b)), ...lotBds.bds], tempsBst), planBst.signales) : []
+  const avertBst = [avertRemiseGoulotte(remiseBst), avertSignales(planBst.signales)].filter(Boolean).join(' ')
+  return c.json({ ok: true, data, bc_id: bcId, fournisseur: st?.nom ?? String(fournId), au_plus_tot: ctlBds ? ctlBds.au_plus_tot : null, successeurs_en_violation: successeurs,
+    ...(remiseBst ? { successeurs_deprogrammes: remiseBst.ids, remis_goulotte_le: remiseBst.ids.length && !remiseBst.sansColonne ? remiseBst.remisLe : null } : {}),
+    ...(avertBst ? { avertissement: avertBst } : {}) })
 })
 
 // ─── API : créer une machine + l'intégrer au planning BDT (process atelier) ───
@@ -8460,6 +8761,105 @@ app.delete('/api/production/machine/:id', async (c) => {
   return c.json({ ok: true, process_detaches: procs.length })
 })
 
+// ─── API : cadence usine (lot G · G1, 16/09/2026) — règles src/cadence.ts, base src/cadence_db.ts ───
+// Lecture ouverte à la lecture Production ; écriture (changement de cadence d'un site, modèles d'horaires) réservée à
+// l'écriture Production (middleware + revérification ici pour un message clair). Tables absentes (cloud sans cloud-12) :
+// GET répond ok + disponible:false (aucune erreur bloquante en lecture) ; POST répond 409 table_absente.
+function droitEcritureProduction(c: any): { refus: boolean; par: string | null } {
+  const enforce = String((c.env as any)?.AUTH_ENFORCE ?? 'on').toLowerCase() !== 'off'
+  const user: any = (c as any).get('user') || null
+  return { refus: enforce && !peutEcrireService(user, 'production'), par: user ? (String(user.nom || user.sub || '').trim() || null) : null }
+}
+const jsonCloud12 = (c: any) => c.json({ ok: false, table_absente: true, error: MSG_CLOUD12 }, 409)
+
+app.get('/api/production/cadence', async (c) => {
+  const lu = await lireDonneesCadence()
+  if (lu.absente) return c.json({ ok: true, disponible: false, table_absente: true, avertissement: MSG_CLOUD12 })
+  if (lu.error || !lu.data) return c.json({ ok: false, error: 'Lecture de la cadence usine impossible : ' + (lu.error || 'réponse vide') }, 503)
+  const courantes: Record<string, any> = {}, prevus: Record<string, any[]> = {}
+  for (const site of ['Seem', 'Semrac']) {
+    const l = ligneCadenceDuSite(lu.data.cadences, site)
+    courantes[site] = l ? { niveau: l.niveau, effet: jourEffetCadence(l), depuis: l.depuis, par: l.par ?? null, motif: l.motif ?? null } : { niveau: NIVEAU_DEFAUT, effet: null, depuis: null, par: null, motif: null, defaut: true }
+    // Changements PRÉVUS (date d'effet future) : pas encore courants.
+    prevus[site] = changementsPrevusCadence(lu.data.cadences, site).map((x) => ({ niveau: x.ligne.niveau, effet: x.effet, depuis: x.ligne.depuis, par: x.ligne.par ?? null, motif: x.ligne.motif ?? null }))
+  }
+  return c.json({ ok: true, disponible: true, courantes, prevus, donnees: lu.data })
+})
+
+// Créneaux ouverts jour par jour pour une activité (Seem, Semrac ; autre valeur = union des deux sites) :
+// ?activite=Seem&from=AAAA-MM-JJ&to=AAAA-MM-JJ (62 jours au plus). Heures décimales, fin > 24 = lendemain.
+app.get('/api/production/cadence/calendrier', async (c) => {
+  const from = c.req.query('from'), to = c.req.query('to') || from
+  if (!estDateIsoCadence(from) || !estDateIsoCadence(to) || String(to) < String(from)) return c.json({ ok: false, error: 'from et to requis au format AAAA-MM-JJ (to ≥ from)' }, 400)
+  const jours: string[] = []
+  for (let d = String(from); d <= String(to) && jours.length <= 62; d = isoPlusJoursCadence(d, 1)) jours.push(d)
+  if (jours.length > 62) return c.json({ ok: false, error: 'fenêtre trop large (62 jours au plus)' }, 400)
+  const lu = await lireDonneesCadence()
+  if (lu.absente) return c.json({ ok: true, disponible: false, table_absente: true, avertissement: MSG_CLOUD12, jours: [] })
+  if (lu.error || !lu.data) return c.json({ ok: false, error: 'Lecture de la cadence usine impossible : ' + (lu.error || 'réponse vide') }, 503)
+  const cal = calendrierCadence(lu.data, c.req.query('activite') || '')
+  return c.json({
+    ok: true, disponible: true, sites: cal.sites,
+    jours: jours.map(d => ({ date: d, plage: plageOuverteCalendrier(cal, d), segments: segmentsDuJour(cal, d), niveaux: Object.fromEntries(cal.sites.map(s => [s, niveauDuSite(cal.cadences, s, d) || NIVEAU_DEFAUT])) })),
+  })
+})
+
+// Changer la cadence d'un site : { site, niveau, niveau_lu, effet?, confirme_retroactif?, motif? } — date d'effet (revue du
+// 16/09/2026) : absente = le lendemain ; aujourd'hui ou passée = 409 confirmation_requise sans confirme_retroactif.
+// Transition conditionnelle (le niveau relu à la date d'effet doit être celui que l'écran affichait) ; nouvelle ligne
+// d'historique (ajout seul), relue.
+app.post('/api/production/cadence/site', async (c) => {
+  const d = droitEcritureProduction(c)
+  if (d.refus) return c.json({ ok: false, error: MSG_CADENCE_RESERVE }, 403)
+  const b = await c.req.json().catch(() => ({} as any))
+  const v = validerChangementCadence(b)
+  if (!v.ok) return c.json({ ok: false, error: v.error }, 400)
+  const lu = await lireDonneesCadence()
+  if (lu.absente) return jsonCloud12(c)
+  if (lu.error || !lu.data) return c.json({ ok: false, error: 'Lecture de la cadence impossible, rien n’a été modifié : ' + (lu.error || 'réponse vide') }, 503)
+  const dec = decisionChangementCadence(lu.data.cadences, v)
+  if (!dec.ok) return c.json({ ok: false, error: dec.error, ...(dec.confirmation_requise ? { confirmation_requise: true } : {}) }, dec.http)
+  const w = await insererCadenceSite({ site: v.site, niveau: v.niveau, effet: dec.effet, par: d.par, motif: v.motif })
+  if (w.absente) return jsonCloud12(c)
+  if (w.error && /effet/i.test(w.error)) return c.json({ ok: false, error: 'Changement de cadence non enregistré : la colonne cadence_site.effet (date d’effet) manque — rejouez la migration 014 (Docker/VM) ou cloud-12 (cloud). Détail : ' + w.error }, 409)
+  if (w.error || !w.data) return c.json({ ok: false, error: 'Changement de cadence non enregistré : ' + (w.error || 'aucune ligne relue (droits ?)') }, 400)
+  return c.json({ ok: true, avant: dec.avant, effet: dec.effet, cadence: w.data })
+})
+
+// Modèles d'horaires d'un niveau : { niveau, cellules: [{jour_semaine, creneau, partie, ferme, debut, fin, maj_le_lu}] }.
+// Validation (HH:MM, début ≠ fin, dimanche fermé, Journée cohérente) puis écritures conditionnelles (maj_le lue) ; une
+// ligne ne s'efface jamais (fermer = actif false). Conflit en cours d'écriture : 409 partiel:true avec ce qui est passé.
+app.post('/api/production/cadence/modeles', async (c) => {
+  const d = droitEcritureProduction(c)
+  if (d.refus) return c.json({ ok: false, error: MSG_CADENCE_RESERVE }, 403)
+  const b = await c.req.json().catch(() => ({} as any))
+  const v = validerModelesNiveau(b)
+  if (!v.ok) return c.json({ ok: false, error: v.error }, 400)
+  const lu = await lireDonneesCadence()
+  if (lu.absente) return jsonCloud12(c)
+  if (lu.error || !lu.data) return c.json({ ok: false, error: 'Lecture des modèles impossible, rien n’a été modifié : ' + (lu.error || 'réponse vide') }, 503)
+  const plan = planModeles(lu.data.modeles, v.niveau, v.cellules)
+  if (!plan.ok) return c.json({ ok: false, error: plan.error }, plan.http)
+  const faites: string[] = []
+  const maintenant = new Date().toISOString()
+  for (const a of plan.actions) {
+    const w = a.type === 'insert'
+      ? await insererModeleHoraire({ ...a.payload, maj_le: maintenant, maj_par: d.par })
+      : await majModeleHoraireSi(a.id, a.maj_le, { ...a.patch, maj_le: maintenant, maj_par: d.par })
+    if (w.absente) return jsonCloud12(c)
+    const conflit = a.type === 'insert' ? w.code === '23505' : (!w.error && !w.data)
+    if (conflit || w.error || !w.data) {
+      const motif = conflit ? 'modifiée entre-temps par quelqu’un d’autre' : (w.error || 'aucune ligne relue (droits ?)')
+      return c.json({
+        ok: false, partiel: faites.length > 0, enregistrees: faites,
+        error: a.nom + ' : ' + motif + (faites.length ? ' — déjà enregistrées : ' + faites.join(', ') : ' — rien n’a été enregistré') + '. Rechargez la page.',
+      }, conflit ? 409 : 400)
+    }
+    faites.push(a.nom)
+  }
+  return c.json({ ok: true, modifiees: faites.length, inchangees: plan.inchangees })
+})
+
 // ─── API : présences opérateur (onglet Présence de /production/service) ───
 // Lot C · C1 (14/09/2026) — « un clic sur une case ne s'enregistre pas » :
 //  · Docker/VM : l'upsert exige un index unique (operateur_id, date_presence) que la base n'avait pas (42P10 → 400) —
@@ -8485,6 +8885,19 @@ app.post('/api/production/presence', async (c) => {
   // Nom + activité dérivés de la source de vérité (salaries) — jamais le nom figé du front ; salarié inconnu : nom du front
   const { data: s, error: eS } = await getSalarieCible(v.operateur_id)
   if (eS) return c.json({ ok: false, error: 'Lecture du salarié impossible : ' + eS.message }, 503)
+  // Lot G (16/09/2026) : un créneau FERMÉ ce jour-là dans la cadence du site de l'opérateur est refusé. Cadence absente
+  // (cloud sans cloud-12) : toléré, avertissement ; panne de lecture : refus 503 (jamais « tout ouvert » ni « tout fermé »).
+  let avertissementCadence: string | undefined
+  if (v.shift !== 'absent') {
+    const siteOp = s ? s.entite : (b.activite ? String(b.activite) : null)
+    const cad = await lireDonneesCadence()
+    if (cad.absente) avertissementCadence = MSG_CLOUD12
+    else if (cad.error || !cad.data) return c.json({ ok: false, error: 'Lecture de la cadence usine impossible, présence non enregistrée : ' + (cad.error || 'réponse vide') }, 503)
+    else {
+      const ctl = controlePresenceCadence(cad.data, siteOp, v.date_presence, v.shift, libelleCreneau(v.shift))
+      if (!ctl.ok) return c.json({ ok: false, creneau_ferme: true, niveau: ctl.niveau, error: ctl.error }, 409)
+    }
+  }
   const { data, error } = await upsertPresence({
     operateur_id: v.operateur_id,
     operateur_nom: s ? (`${s.prenom ?? ''} ${s.nom ?? ''}`.trim() || s.id) : (b.operateur_nom ? String(b.operateur_nom) : null),
@@ -8494,7 +8907,7 @@ app.post('/api/production/presence', async (c) => {
     source: b.source ? String(b.source) : 'manuel',
   })
   if (error) { const m = messageEchecUpsert(error, 'operateur_id, date_presence'); return c.json({ ok: false, error: m.error }, m.status) }
-  return c.json({ ok: true, presence: data })
+  return c.json({ ok: true, presence: data, ...(avertissementCadence ? { avertissement: avertissementCadence } : {}) })
 })
 
 // Vider une case (opérateur × jour) : corps JSON { operateur_id, date_presence } (ou mêmes paramètres en query).
@@ -9063,15 +9476,20 @@ app.get('/production/pilotage', (c) => {
 // OAS
 // ══════════════════════════════════════════════════════════════
 app.get('/oas/service', async (c) => {
-  const [bdtsOAS, balancelles, relevesEau, relevesBains, ops, allBdts, lots, noms, procsAll, postesAllOas] = await Promise.all([
+  const [bdtsOAS, balancelles, relevesEau, relevesBains, ops, allBdts, lots, noms, procsAll, postesAllOas, cadOas] = await Promise.all([
     getBonsDeTravailOAS(), getBalancelles(), getRelevesEau(), getRelevesBains(), getOperateurs(),
     getBonsDeTravail(), getLots(), getNomenclatures().catch(() => []),
-    getProcessAtelier().catch(() => [] as any[]), getPostes().catch(() => [] as any[])
+    getProcessAtelier().catch(() => [] as any[]), getPostes().catch(() => [] as any[]),
+    lireDonneesCadence(),
   ])
   // Types de bain OAS = process d'activité OAS (est_oas, ou activité OAS, ou rattachés à un poste OAS).
   const oasPosteIds = new Set((postesAllOas as any[]).filter((p: any) => String(p.activite) === 'OAS').map((p: any) => String(p.id)))
   const oasProcesses = (procsAll as any[]).filter((p: any) => p.est_oas || String(p.activite) === 'OAS' || (p.poste_id && oasPosteIds.has(String(p.poste_id))))
-  return c.html(pageServiceOAS(bdtsOAS, balancelles, relevesEau, relevesBains, ops, allBdts, lots, noms, oasProcesses))
+  // Lot G · G2 : « Lots à venir » = lots dont l'étape qui précède l'OAS (BDT oas_apres) est posée ou en cours, fin prévue.
+  // G5 : fin prévue en heures OUVRÉES de la cadence du site du BDT ; cadence illisible (absente ou en panne) → grille 5 h-23 h
+  // (lecture : jamais bloquant).
+  const lotsAVenir = lotsAVenirOas(allBdts as any[], lots as any[], oasSuivantParBdt(allBdts as any[], noms as any[], procsAll as any[]), { ajouter: ajouterPourOp(cadOas.data as DonneesCadence | null), nuits: tempsPlanning(cadOas.data as DonneesCadence | null).cadence })
+  return c.html(pageServiceOAS(bdtsOAS, balancelles, relevesEau, relevesBains, ops, allBdts, lots, noms, oasProcesses, lotsAVenir))
 })
 
 app.get('/oas/session', (c) => {
@@ -11348,12 +11766,13 @@ app.get('/rh/temps', async (c) => {
   const ym = d.toISOString().slice(0, 7)
   const monthFrom = ym + '-01'
   const monthTo = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).toISOString().slice(0, 10)
-  const [pts, sals, conges, presences] = await Promise.all([
+  const [pts, sals, conges, presences, cadence] = await Promise.all([
     getPointages(), getSalaries(), getConges().catch(() => []),
-    getPresences(monthFrom, monthTo).catch(() => [])
+    getPresences(monthFrom, monthTo).catch(() => []),
+    lireDonneesCadence(),   // lot G : horaires des présences selon la cadence du site et du jour (illisible → horaires par défaut)
   ])
   const emps = (sals as any[]).map(mapSalarieToEmploye)
-  return c.html(pageRHTemps(pts, emps, conges, presences))
+  return c.html(pageRHTemps(pts, emps, conges, presences, cadence.data))
 })
 
 app.get('/rh/pointage', async (c) => {

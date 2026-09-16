@@ -16,9 +16,10 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 ## Vos tâches courantes
 ### 1. Affecter un BDT à un opérateur
 1. **/production/service** → onglet **Planning Gantt BDT** (planning unique).
-2. Glisser une carte de « **BDT à classer** » (au-dessus du planning) sur le poste, ou sur la sous-case **Matin / Journée / Après-midi / Soirée** de l'opérateur. Le chemin critique s'applique à la pose : l'étape suivante d'un lot ne démarre qu'après le réglage de la précédente (calée le même jour, refusée un jour avant).
-3. Un clic sur un BDT n'affiche que **son poste + l'étape d'avant et d'après** ; « Tout afficher » lève le focus.
-4. Les BDT prioritaires (BDTP) sont encadrés en rouge.
+2. Glisser une carte de « **BDT à classer** » (au-dessus du planning) sur le poste, ou sur la sous-case **Matin / Journée / Après-midi / Soirée** de l'opérateur. Le chemin critique s'applique à la pose : l'étape suivante d'un lot ne démarre qu'après le réglage de la précédente, en heures travaillées (calée le même jour, refusée un jour avant).
+3. Le planning suit la **cadence usine** du jour (bandeau au-dessus du Gantt) : les heures **hachurées** refusent le dépôt ; deux BDT du **même process** ne se chevauchent pas sur un poste. Le BDT qui précède l’OAS porte le badge **« → OAS : … »**.
+4. Un clic sur un BDT n'affiche que **son poste + l'étape d'avant et d'après** ; « Tout afficher » lève le focus.
+5. Les BDT prioritaires (BDTP) sont encadrés en rouge.
 
 ![production-service](../assets/production-service.png)
 
@@ -48,20 +49,34 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 
 ![production-service](../assets/production-service.png)
 
-### 6. Programmer la présence et traiter les congés des opérateurs
-1. Onglet **Présence opérateurs** : clic sur une case → menu **Matin / Journée / Après-midi / Soirée / Absent / Effacer** (un choix = un enregistrement ; en cas d’échec la case revient à sa valeur).
-2. « **Programmer la semaine** » pour appliquer un créneau à plusieurs opérateurs ; le message compte les échecs. Une semaine pas encore lue est verrouillée.
+### 6. Déplacer une étape d’un lot
+1. Glisser la barre : si des étapes suivantes déjà posées deviennent incohérentes, la fenêtre **« Remettre en goulotte »** les liste **avant** d’enregistrer.
+2. **Déplacer et remettre en goulotte** : elles reviennent en tête de la goulotte (badge « Remis en goulotte »), à reprogrammer ; **Annuler** : rien ne bouge.
+3. Une étape déjà **reçue** n’est jamais déprogrammée : elle est seulement signalée.
+
+![form-production-remise-goulotte](../assets/form-production-remise-goulotte.png)
+
+### 7. Régler la cadence usine (horaires de l’usine)
+1. Onglet **Process Ateliers** → **Cadence usine** : une carte par site (Seem, Semrac) avec sa cadence **Bas / Moyen / Haut** et sa semaine type.
+2. **Changer la cadence** : date « À partir du » (demain par défaut ; aujourd’hui ou le passé = confirmation), niveau, motif. Présence, planning et RH › Temps suivent aussitôt.
+3. **Modèles d’horaires** : heures HH:MM par jour et créneau, croix = fermé, « +1j » = finit le lendemain ; dimanche toujours fermé. Enregistrer n’envoie que les cases modifiées.
+
+![production-cadence](../assets/production-cadence.png)
+
+### 8. Programmer la présence et traiter les congés des opérateurs
+1. Onglet **Présence opérateurs** : clic sur une case → menu **Matin / Journée / Après-midi / Soirée / Absent / Effacer** avec les **horaires du jour** selon la cadence du site (un choix = un enregistrement ; en cas d’échec la case revient à sa valeur). Un créneau **fermé** ce jour-là est grisé et refusé.
+2. « **Programmer la semaine** » pour appliquer un créneau à plusieurs opérateurs ; les jours où il est fermé sont sautés ; le message compte les échecs. Une semaine pas encore lue est verrouillée.
 3. Vue « Demandes de congés à traiter » : **Approuver** ou refuser les congés des **opérateurs** (absences posées, BDT renvoyés au pool, solde décompté) — jamais votre propre congé.
 
-![production-presence](../assets/production-presence.png)
+![production-presence-cadence](../assets/production-presence-cadence.png)
 
-### 7. Découper un BDT ou annuler une découpe
+### 9. Découper un BDT ou annuler une découpe
 1. Goulotte « BDT à classer » → **ciseaux** : seule la **réalisation** se découpe, le réglage reste sur le morceau 1.
 2. Sur la carte d’un morceau : **Annuler la découpe** (tant qu’aucun morceau n’est posé, reçu ou soldé) → le BDT d’origine retrouve sa durée.
 
 ![form-production-separer](../assets/form-production-separer.png)
 
-### 8. Saisir le taux horaire machine d'un process
+### 10. Saisir le taux horaire machine d'un process
 1. Onglet **Process Ateliers** → volet **Postes & Process** → déplier le poste : chaque process affiche « X €/h », « taux à saisir » ou « coût RH ».
 2. Crayon du process → **Type** (Machine / Manuel / OAS) → **Taux horaire machine (€/h HT)** → Enregistrer. Vide = « taux à saisir » (temps machine compté 0 €).
 3. Seul le process machine porte un taux : ni la machine ni le poste. Le temps homme est valorisé au coût chargé RH (fiche salarié). Taux de départ = ancien coût de la machine, souvent 35 €/h : à vérifier.

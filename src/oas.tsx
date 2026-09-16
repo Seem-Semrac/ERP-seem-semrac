@@ -169,6 +169,9 @@ export const pageServiceOAS = (
   dbLots?: Lot[],
   dbNomenclatures?: any[],
   dbOasProcesses?: any[],
+  // Lot G (16/09/2026) : lots dont l'étape qui précède l'OAS est posée ou en cours (src/poste_oas.ts lotsAVenirOas),
+  // triés par fin prévue. Absent (appelant pas à jour) → section « Lots à venir » vide.
+  dbLotsAVenir?: any[],
 ) => {
   const today = TODAY()
   // Types de bain OAS = NOMS des process OAS (postes/process d'activité OAS). Défaut = anciennes valeurs si aucun process OAS.
@@ -250,6 +253,38 @@ export const pageServiceOAS = (
       ${TD(statutBadge(l.statut))}
       ${TD(l.bdt_suivant ? `<span style="font-size:.72rem;color:#64748b;">${escX(l.bdt_suivant)}</span>` : '<span style="color:#94a3b8;font-size:.72rem;">—</span>')}
       ${TD(`<button onclick="openBalFromLot('${escX(l.id)}')" style="padding:5px 11px;border-radius:7px;background:linear-gradient(135deg,${CYAN},${CYAN_D});color:white;border:none;font-size:.72rem;font-weight:700;cursor:pointer;"><i class="fas fa-atom" style="margin-right:4px;"></i>Balancelle</button>`)}
+    </tr>`
+  }).join('')
+
+  // ── Lots à venir (lot G, 16/09/2026) ─────────────────────────
+  // Aucun BDT n'est posé dans une goulotte OAS (il n'y en a pas) : c'est l'étape qui PRÉCÈDE l'OAS (BDT « oas_apres »)
+  // qui annonce le lot. Une ligne par étape posée ou en cours, triée par fin prévue (la plus proche en tête).
+  const lotsAVenir = Array.isArray(dbLotsAVenir) ? dbLotsAVenir : []
+  const fmtFinPrevue = (d: any, h: any) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || ''))
+    const n = Number(h)
+    if (!m || h == null || !isFinite(n)) return '<span style="color:#94a3b8;">non calculable</span>'
+    let H = Math.floor(n), M = Math.round((n - H) * 60)
+    if (M === 60) { H++; M = 0 }
+    const jour = m[0] === today ? 'aujourd’hui' : (m[3] + '/' + m[2] + '/' + m[1])
+    return `<span style="font-weight:700;color:#0e7490;">${jour}</span> <span style="color:#475569;">${String(H).padStart(2, '0')}:${String(M).padStart(2, '0')}</span>`
+  }
+  const lotsAVenirRows = lotsAVenir.map((l: any) => {
+    const noms = Array.isArray(l.process_oas) ? l.process_oas.map((x: any) => String(x || '').trim()).filter(Boolean) : []
+    const procOas = noms.length
+      ? noms.map((n: string) => `<span style="background:${CYAN}1f;color:${CYAN_D};border-radius:999px;padding:2px 8px;font-size:.66rem;font-weight:700;white-space:nowrap;">${escX(n)}</span>`).join(' ')
+      : '<span style="color:#94a3b8;font-size:.72rem;" title="Process OAS introuvable dans la gamme de la nomenclature">OAS (process non retrouvé)</span>'
+    const bdts = Array.isArray(l.bdts) ? l.bdts : []
+    const goul = Number(l.en_goulotte) || 0
+    return `<tr>
+      ${TD(`<span style="font-weight:700;color:#0891b2;">${escX(l.lot)}</span>${l.affaire ? `<div style="font-size:.6rem;color:#64748b;margin-top:2px;">Aff. ${escX(l.affaire)}</div>` : ''}`)}
+      ${TD(escX(l.client || '—'))}
+      ${TD(escX(l.piece || '—'))}
+      ${TD(l.qte != null ? `<span style="font-weight:700;">${escX(l.qte)}</span>` : '—')}
+      ${TD(procOas)}
+      ${TD(`<span style="font-size:.72rem;color:#374151;font-family:monospace;">${bdts.map((x: any) => escX(x)).join('<br>')}</span>${l.operation ? `<div style="font-size:.62rem;color:#64748b;">${escX(l.operation)}</div>` : ''}`)}
+      ${TD(fmtFinPrevue(l.fin_date, l.fin_heure) + (goul > 0 ? `<div style="font-size:.6rem;color:#b45309;margin-top:2px;"><i class="fas fa-inbox" style="margin-right:3px;"></i>${goul} morceau${goul > 1 ? 'x' : ''} encore en goulotte (non compté${goul > 1 ? 's' : ''})</div>` : ''))}
+      ${TD(statutBadge(l.statut === 'recu' ? 'recu' : 'programme'))}
     </tr>`
   }).join('')
 
@@ -413,6 +448,15 @@ ${(() => {
         <div style="font-size:.78rem;color:#64748b;margin-top:2px;">${lotsActifs.length} lot${lotsActifs.length!==1?'s':''} arrivés à l'étape OAS (transfert automatique au solde du BDT précédent) · ${balEnCours} balancelle${balEnCours!==1?'s':''} en cours</div>
       </div>
       <button onclick="openNewBal()" style="display:inline-flex;align-items:center;gap:6px;padding:10px 20px;background:linear-gradient(135deg,${CYAN},${CYAN_D});color:white;border-radius:10px;font-size:.85rem;font-weight:700;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(6,182,212,.3);"><i class="fas fa-plus"></i>Nouvelle balancelle</button>
+    </div>
+
+    <!-- Lots à venir (lot G) : l'étape qui précède l'OAS est programmée ou en cours -->
+    <div id="oasLotsAVenir" style="margin-bottom:8px;font-size:.82rem;font-weight:800;color:#0e7490;display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><i class="fas fa-hourglass-half" style="color:${CYAN};"></i>Lots à venir <span style="background:${CYAN}1f;color:${CYAN_D};border-radius:999px;padding:1px 8px;font-size:.66rem;">${lotsAVenir.length}</span><span style="font-weight:500;color:#64748b;font-size:.72rem;">— l’étape qui précède l’OAS est programmée ou en cours au planning ; triés par fin prévue</span></div>
+    <div class="card" style="overflow-x:auto;margin-bottom:24px;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="background:#ecfeff;">${TH('Lot / affaire')}${TH('Client')}${TH('Pièce')}${TH('Quantité')}${TH('Process OAS suivant')}${TH('BDT précédent')}${TH('Fin prévue')}${TH('Statut du BDT')}</tr></thead>
+        <tbody>${lotsAVenirRows || `<tr><td colspan="8" style="text-align:center;padding:24px;color:#94a3b8;">Aucun lot annoncé : aucune étape précédant l’OAS n’est programmée ni en cours au planning de production.</td></tr>`}</tbody>
+      </table>
     </div>
 
     <!-- Tableau Lots à l'OAS -->

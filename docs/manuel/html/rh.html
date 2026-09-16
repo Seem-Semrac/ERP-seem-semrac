@@ -51,7 +51,7 @@
       <li>La colonne <b>ERP</b> affiche une clé : <b>verte</b> = identifiant ERP actif (le salarié a un code PIN, il peut se connecter et pointer) · <b>grise</b> = pas de code PIN, donc pas d'accès.</li>
       <li>Statut : <span class="b b-ok">actif</span> ou <span class="b b-crit">inactif</span>. Un second badge apparaît sous le statut si la fiche a été soumise à la Direction (décision de validation).</li>
       <li>Le <b>rôle</b> est affiché en pastille : Opérateur (bleu pour Seem, rose pour Semrac), OAS (opérateur), Qualité, Commercial, Bureau d'Études, Achats, Logistique, Production, Comptable, Maintenance, RH, Direction.</li>
-      <li>Shifts proposés : <b>Matin 6h-14h</b>, <b>Journée 7h-17h</b>, <b>Après-midi 14h-22h</b>, <b>Soirée 22h-6h</b> (les quatre créneaux de la présence opérateurs de la Production).</li>
+      <li>Shifts proposés : <b>Matin</b>, <b>Journée</b>, <b>Après-midi</b>, <b>Soirée</b> (les quatre créneaux de la présence opérateurs de la Production). Depuis le 16/09/2026, ils n'ont plus d'horaires fixes : les horaires dépendent de la <b>cadence usine</b> du site et du jour, réglée en Production › Process Ateliers › Cadence usine (l'info-bulle de la colonne le rappelle).</li>
       <li>Deux boutons par ligne : <b>« Fiche »</b> (ouvre la fiche complète — un clic n'importe où sur la ligne fait la même chose) et la <b>corbeille</b> (supprimer le salarié).</li>
       <li>Un bandeau jaune <b>« Salariés à rattacher »</b> peut s'afficher au-dessus de la liste : ce sont des noms cités ailleurs dans l'ERP (accidents du travail, dotations EPI, habilitations) mais qui n'ont pas de fiche. Chaque ligne indique la provenance (<span class="b b-crit">accident(s)</span>, <span class="b b-info">EPI</span>, <span class="b b-mut">habilit.</span>) et propose <b>« Créer &amp; rattacher »</b>, qui ouvre une fiche vierge préremplie avec le nom.</li>
     </ul>
@@ -91,7 +91,7 @@
         <tr><td>Activité (opérateur)</td><td>Seem / Semrac</td><td>Oui si Opérateur ou OAS</td><td>Site de rattachement ; le champ est masqué pour les fonctions support.</td></tr>
         <tr><td>Poste</td><td>Texte</td><td>Non</td><td>Intitulé métier libre (ex. « Usinage CN ») — visible dans l'organigramme.</td></tr>
         <tr><td>Contrat</td><td>CDI / CDD / Apprenti / Intérim / Stage</td><td>Non (CDI par défaut)</td><td>Nature du contrat.</td></tr>
-        <tr><td>Shift</td><td>Matin 6h-14h / Journée 7h-17h / Après-midi 14h-22h / Soirée 22h-6h</td><td>Non</td><td>Horaire théorique — sert à reconstituer les temps quand il n'y a pas de pointage.</td></tr>
+        <tr><td>Shift</td><td>Matin / Journée / Après-midi / Soirée</td><td>Non</td><td>Créneau habituel du salarié. Ses horaires ne sont pas fixes : ils suivent la cadence usine du site et du jour (Production › Process Ateliers › Cadence usine).</td></tr>
         <tr><td>Date d'entrée</td><td>Date</td><td>Non</td><td>Date d'embauche (aujourd'hui par défaut).</td></tr>
         <tr><td>Taux horaire chargé (€/h)</td><td>Nombre, masqué</td><td>Non</td><td>Confidentiel : révélé seulement en maintenant le clic, et seulement avec les droits d'écriture RH. Alimente la masse salariale du Dashboard.</td></tr>
         <tr><td>E-mail · Téléphone · Adresse</td><td>Texte</td><td>Non</td><td>Coordonnées.</td></tr>
@@ -214,6 +214,7 @@
     <ul class="points">
       <li>Un clic de trop fait repasser la case de <b>★★★</b> à <b>—</b> : le cycle boucle. Vérifiez toujours l'état final de la case après vos clics.</li>
       <li>La liste des process vient du <b>référentiel Production</b> : pour ajouter une ligne à la matrice, il faut créer le process côté Production, pas ici.</li>
+      <li>Les process de traitement de surface (activité <b>OAS</b> : Surtec 650, Désoxydation, Oxydation noire, Oxydation incolore, Lavage) restent visibles avec les filtres Seem et Semrac.</li>
       <li>Les process affichant « Aucun opérateur habilité » sont des points de fragilité industrielle : traitez-les en plan de formation avant qu'une absence ne bloque un lot.</li>
     </ul>
     <div class="astuce"><b>Astuce :</b> avant de valider un congé long (page Gestion des Temps), passez par le Diagramme : il montre en une ligne s'il reste quelqu'un d'habilité sur les process concernés.</div>
@@ -261,7 +262,9 @@
       <li>Tant que la personne n'a pas pointé sa sortie, la colonne Départ affiche <b>« En cours »</b> en bleu et les heures ne sont pas encore calculées.</li>
       <li><b>« Cumul du mois »</b> additionne les heures par salarié et les compare à la base mensuelle de <b>151,67 h</b> : le pourcentage est vert au-delà, orange en dessous.</li>
       <li>Statuts d'un congé : <span class="b b-warn">En attente</span> · <span class="b b-ok">Validé</span> · <span class="b b-crit">Refusé</span> · <span class="b b-mut">Annulé</span>.</li>
-      <li>Si aucune badgeuse n'a alimenté la journée, l'ERP reconstitue les temps à partir de la <b>présence saisie en Production</b> : l'horaire du shift du salarié est appliqué (6h-14h, 14h-22h, 7h-17h ou nuit), le type affiché est « présence » et la colonne « Validé par » indique « Planning présence ».</li>
+      <li>Si aucune badgeuse n'a alimenté la journée, l'ERP reconstitue les temps à partir de la <b>présence saisie en Production</b>. Depuis le 16/09/2026, l'arrivée, le départ et les heures sont ceux du <b>créneau de la présence dans la cadence usine du site de l'opérateur, ce jour-là</b> : par exemple en cadence Moyen, Matin 05:30 → 13:15 = <b>7,25 h</b> (30 min de pause déduites), Journée 07:30 → 16:00 avec la pause de 12:00 à 12:45 = <b>7,75 h</b>, Soirée 21:00 → 05:30 = <b>8 h</b>. Le type affiché est « présence » et « Validé par » indique la source : « Planning présence · cadence Moyen ».</li>
+      <li><b>Pause</b> : celle de la Journée (entre ses deux parties) ; pour les autres créneaux, <b>30 min</b> sont déduites au-delà de 6 h de présence (règle d'avant le 16/09/2026, en attente de décision RH).</li>
+      <li>« Validé par : Planning présence · ⚠ créneau fermé en cadence X ce jour (horaires par défaut) » : la présence a été saisie avant un changement de cadence qui a fermé ce créneau ; les horaires par défaut sont appliqués (Matin 6h-14h, Journée 7h-17h, Après-midi 14h-22h, Soirée 22h-6h). Faites corriger la présence en Production si besoin. Même repli, signalé « horaires par défaut », si la cadence n'est pas encore disponible sur la base.</li>
     </ul>
     <figure class="shot">
       <img src="../../assets/rh-temps.png" alt="Capture de la page Gestion des Temps" loading="lazy">
@@ -323,6 +326,7 @@
       <li>Si une conséquence de la validation n'a pas pu se faire — jours d'absence manquants, bons de travail non renvoyés au pool, solde non décompté — un <b>message orange</b> la détaille : vérifiez le planning de présence et le solde avant de considérer l'absence comme acquise.</li>
       <li>Un congé <b>déjà traité</b> (double clic, validé entre-temps depuis la Production ou la Direction) est refusé avec « Congé déjà traité… rechargez la page » : rien n'est posé ni décompté une seconde fois.</li>
       <li>Les congés des <b>opérateurs</b> peuvent aussi être approuvés par le responsable de production, depuis l'onglet <b>Présence opérateurs</b> du service Production (jamais sa propre demande).</li>
+      <li>Les horaires reconstitués suivent les <b>modèles d'horaires actuels</b> de la cadence : si la Production modifie un modèle, les heures des mois passés recalculées ici changent aussi (seule la cadence de chaque site est historisée). Faites l'export de paie avant de modifier un modèle.</li>
       <li>Les corrections de pointage sont <b>tracées</b> (motif + matricule autorisant) : c'est ce qui rend l'export de paie défendable.</li>
     </ul>
     <div class="warn"><b>Attention :</b> valider un congé <b>libère les bons de travail</b> affectés à l'opérateur sur la période — ils retournent au pool des bons à affecter. Prévenez la Production, sinon des bons attendront sans titulaire au planning.</div>

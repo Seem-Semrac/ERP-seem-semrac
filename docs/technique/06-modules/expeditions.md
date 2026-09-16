@@ -64,9 +64,10 @@ gardées). En Non conforme s'ajoutent l'en-tête du BC, l'observation générale
 | manque ou excédent + observation | quantitative et qualitative | comme qualitative, NC « À requalifier » |
 
 - **Conforme** : refuse toute ligne en écart (400 « passez en Non conforme ») ; conforme impossible sans le certificat
-  exigé (inchangé). ⚠ **À trancher** : un PV Conforme **accepte** une ligne avec reliquat annoncé (le reçu est bon, le
-  reste est recommandé) ; la spécification disait « Conforme ⇒ aucun reliquat » — appliquée à la lettre, un PV dont le
-  seul écart est un reliquat était impossible (Non conforme exige une ligne en écart).
+  exigé (inchangé). **Tranché par l'utilisateur le 16/09/2026** : un PV Conforme **accepte** une ligne avec reliquat
+  annoncé (le reçu est bon, le reste est recommandé en BC de reliquat) — comportement conservé tel quel. (La
+  spécification du lot F disait « Conforme ⇒ aucun reliquat » ; appliquée à la lettre, un PV dont le seul écart est un
+  reliquat était impossible, Non conforme exigeant une ligne en écart.)
 - **Non conforme** : au moins une ligne en écart **ou** le certificat exigé absent.
 - **Certificat absent** (Non conforme) : toutes les lignes sans observation mettent leur part prévue reçue en quarantaine
   avec une NC « Logistique - Certificats » (réception bloquée) ; `quarantaines_attendues` compte les lignes qualitatives

@@ -126,6 +126,23 @@ de non-conformité (401). Il peut ouvrir les pages et les formulaires.
 - ⚠ Rôle `qualite` : lecture seule sur le Stock — il décide du lot, il ne range pas. Rôle `production` : pas de sortie par
   Stock › Gestion (la sortie matière de l'atelier reste `POST /api/production/sortie-matiere`).
 
+## Cadence usine et planning : écriture Production revérifiée (lot G, 16/09/2026)
+
+- **Aucune nouvelle famille d'API** : les routes de la cadence sont sous `/api/production/cadence…` (famille `production`
+  déjà mappée). Lecture (`GET /api/production/cadence`, `/calendrier`) : lecture Production (middleware). Écriture
+  (`POST /api/production/cadence/site`, `/modeles`) : **écriture Production** (direction, rôle `production`, jeton
+  `ecrire:production`), revérifiée dans le handler (`droitEcritureProduction(c)` = `peutEcrireService(user,
+  'production')`, actif sauf `AUTH_ENFORCE=off`) → **403** « Modifier la cadence usine ou ses modèles d'horaires est
+  réservé à l'écriture Production. ». Le nom de la session est écrit dans `cadence_site.par` / `horaires_modeles.maj_par`.
+- **Pages** : le volet Cadence usine est visible de tout lecteur de la Production ; un lecteur voit les boutons mais
+  l'écriture lui est refusée (403 affiché).
+- **Présence, planning, remise en goulotte** : aucun droit nouveau. Le refus d'un créneau fermé (`POST
+  /api/production/presence`), d'une heure fermée, d'un chevauchement du même process et l'accord
+  `deprogrammer_successeurs` (`/affecter`, `PATCH /bdts/:id`, `/bst/:id/affecter-st`) s'appliquent à quiconque a déjà le
+  droit d'écrire sur ces routes : ce sont des règles métier, pas des droits.
+- **Lectures ajoutées à des pages d'autres services** : `/rh/temps` (RH) et `/oas/service` (OAS) lisent la cadence côté
+  serveur ; aucun appel navigateur vers `/api/production/cadence` depuis ces pages (pas de 403 pour un lecteur RH ou OAS).
+
 ## Cas particuliers
 - **`plans` (Plan/Bâtiment)** : **sans jeton**, lecture ouverte à tout connecté et écriture BE/Production/Maintenance/Qualité/Direction. **Avec jetons**, `lire:plans` / `ecrire:plans` décident seuls.
 - **`habilitations`** : **sans jeton**, géré par RH **et** Qualité (jeton `habilitations`), sans donner accès au reste de la RH. **Avec jetons**, suit le niveau accordé sur `rh` ou `qualite` — sinon fermer la RH par les cases laissait les habilitations grandes ouvertes.

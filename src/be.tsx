@@ -2633,7 +2633,8 @@ ${BE_ETAPE_COUT_JS}
     }
     // N2 : filtrage strict des process par site (SEEM → process SEEM, SEMRAC → process SEMRAC ; 'both'/non typés visibles partout)
     var _entPl = String((document.getElementById('nom-f-entite')||{}).value || '').toLowerCase();
-    var PROCS = (BE_REFS_JS.process_atelier || []).filter(function(p){ var a=String(p.activite||'').toLowerCase(); return !a || a==='both' || a==='tout' || a==='seem & semrac' || a===_entPl; });
+    // Lot G (16/09/2026) : les process OAS (activité « OAS », migration 014 / cloud-12) restent proposés dans la gamme des deux sites.
+    var PROCS = (BE_REFS_JS.process_atelier || []).filter(function(p){ var a=String(p.activite||'').toLowerCase(); return !a || a==='both' || a==='tout' || a==='seem & semrac' || a==='oas' || a===_entPl; });
     // Postes filtrés par site (comme les process) → alimentent le select « Poste »
     var POSTES = (BE_REFS_JS.postes || []).filter(function(p){ var a=String(p.activite||'').toLowerCase(); return !a || a==='both' || a==='tout' || a==='seem & semrac' || a===_entPl; });
     var _procById = {}; (BE_REFS_JS.process_atelier || []).forEach(function(p){ _procById[String(p.id)]=p; });

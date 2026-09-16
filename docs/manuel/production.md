@@ -11,9 +11,9 @@ En haut à droite du bandeau, deux boutons ouverts depuis **n'importe quel ongle
 ## Les onglets
 - **Planning Gantt BDT** — **Le seul planning de l'atelier.** Files « BDT à classer » et « BST à planifier » **au-dessus** du Gantt, puis un Gantt par poste, puis le bloc « Affectation des ressources aux postes » (opérateurs du jour par créneau). BDT/BDS prioritaires encadrés rouge. Bouton « Agrandir le planning ».
 - **Planning Gantt BST** — Planning de la sous-traitance (vue de 21 jours). Chaque carte « BST à planifier » indique « **Dispo le …** » quand l'étape précédente du lot fixe un jour au plus tôt.
-- **Présence opérateurs** — Programmation des horaires sur **4 créneaux** (Matin 6h-14h · Journée 7h-17h · Après-midi 14h-22h · Soirée 22h-6h) ou absent, par un **menu** au clic sur la case, et congés des opérateurs. Pilote qui est affectable dans le planning.
+- **Présence opérateurs** — Programmation des présences sur **4 créneaux** (Matin · Journée · Après-midi · Soirée) ou absent, par un **menu** au clic sur la case, et congés des opérateurs. Les **horaires** de chaque créneau suivent la **cadence usine** du site et du jour ; un créneau fermé ce jour-là est grisé et refusé. Pilote qui est affectable dans le planning.
 - **Commandes & Lots** — Vue des commandes à faire, découpées en lots et BDT.
-- **Process Ateliers** — Référentiel des postes, machines et process. **Seul le process machine porte un coût horaire** (« Taux horaire machine »), saisi à la main ; machines et postes n'en ont plus.
+- **Process Ateliers** — Référentiel des postes, machines et process. **Seul le process machine porte un coût horaire** (« Taux horaire machine »), saisi à la main ; machines et postes n'en ont plus. 3ᵉ volet **« Cadence usine »** : cadence de chaque site (Bas / Moyen / Haut) et modèles d'horaires de l'usine.
 - **Dashboards** — Programmation et production.
 
 > Il n'y a **plus de page « Affectation » séparée** ni de sous-navigation « Programmation | Affectation » : tout se fait sur le planning unique.
@@ -53,14 +53,29 @@ Réservé aux personnes qui ont l'**écriture sur la Production**. La NC arrive 
 
 ![Formulaire PV de non-conformité — Production](../assets/form-production-pvnc.png)
 
+### Régler la cadence usine (horaires de l'usine)
+Les horaires de l'usine dépendent de la **cadence** de chaque site — **Bas**, **Moyen** ou **Haut** —, modifiable **à tout moment**. Elle pilote la présence, le planning et RH › Gestion des temps. Le **dimanche est toujours fermé** ; le samedi suit la cadence. Écriture réservée à l'**écriture Production**.
+1. Onglet **Process Ateliers** → bouton **« Cadence usine »**. Une carte par site : cadence en vigueur, depuis quand et par qui, motif, **semaine type**, et « **Changement prévu** » pour une cadence à venir.
+2. **Changer la cadence** d'un site : bouton **« Changer la cadence »** → **À partir du** (demain par défaut) → niveau (celui en vigueur à cette date est grisé ; l'aperçu de la semaine type s'affiche) → motif facultatif → **« Passer Seem en cadence Haut à partir du … »**. Une date d'effet **aujourd'hui ou passée** affiche un avertissement puis demande une confirmation : toute la journée passe dans la nouvelle cadence, heures déjà travaillées comprises.
+3. **Modifier un modèle d'horaires** : pastille du niveau → changer les heures d'une case (HH:MM) ou cliquer la **croix** pour fermer le créneau ce jour-là (« +1j » = finit le lendemain) → **Enregistrer** (seules les cases surlignées partent ; « Annuler les modifications » les abandonne). Refusé : heure mal écrite, début = fin, plus de 16 h, dimanche ouvert, créneau du samedi qui finit le lendemain, Journée incohérente.
+4. **Historique** en bas : À partir du · Décidé le · Site · Cadence · Par · Motif.
+
+![Volet Cadence usine](../assets/production-cadence.png)
+![Changer la cadence d'un site](../assets/form-production-cadence.png)
+
+> **Modèles de départ** (16/09/2026). **Bas** : lun → mer Matin 05:30-13:15, Après-midi 13:15-21:00, Soirée 21:00-05:30, Journée 07:30-12:00 + 12:45-16:00 ; jeu Matin 04:30-13:15, Journée 07:30-12:30 ; ven, sam, dim fermés. **Moyen** : lun → jeu comme Bas ; ven Matin 04:50-13:15, Journée 07:30-12:00 ; sam, dim fermés. **Haut** : lun → ven trois équipes + Journée 07:30-12:00 + 12:45-16:45 ; sam Matin 05:30-12:00 ; dim fermé. ⚠ Haut jeudi et vendredi : Après-midi et Soirée reprennent les horaires du lundi (à vérifier). Les deux sites démarrent en **Moyen**. Les modèles ne sont pas historisés : les modifier change aussi les heures recalculées pour le passé.
+
 ### Programmer la présence des opérateurs
 1. Onglet **Présence opérateurs** → **Planning de présence** (grille opérateurs × 7 jours, ‹ › pour changer de semaine).
-2. **Cliquer une case** : un menu s'ouvre — **Matin 6h-14h · Journée 7h-17h · Après-midi 14h-22h · Soirée 22h-6h · Absent · Effacer** (le créneau en place est coché). Un choix = **un seul** enregistrement. S'il échoue, la case revient à la dernière valeur enregistrée et un message rouge donne la raison. **Effacer** vide vraiment la case (« Non programmé »). Au clavier : Entrée ouvre le menu, flèches pour choisir, Échap pour refermer.
-3. **Semaine entière** : « **Programmer la semaine** » → créneau (ou Effacer), jours, opérateurs cochés → « Appliquer à la semaine ». Le message final compte les cases enregistrées **et les échecs**.
+2. **Cliquer une case** : un menu s'ouvre — **Matin · Journée · Après-midi · Soirée · Absent · Effacer** (le créneau en place est coché), chaque créneau avec **ses horaires du jour** pour le site de l'opérateur (cadence usine). Un créneau **fermé** ce jour-là est grisé « fermé · cadence Moyen » et ne se choisit pas ; s'il est forcé, le serveur refuse : « Créneau « Matin » fermé en cadence Moyen ce jour (samedi 19/09/2026, site Seem) : … ». Un choix = **un seul** enregistrement. S'il échoue, la case revient à la dernière valeur enregistrée et un message rouge donne la raison. **Effacer** vide vraiment la case (« Non programmé »). Au clavier : Entrée ouvre le menu, flèches pour choisir, Échap pour refermer.
+3. **Semaine entière** : « **Programmer la semaine** » → créneau (ou Effacer), jours, opérateurs cochés → « Appliquer à la semaine ». Les jours où ce créneau est fermé sont **sautés** (« N cases non programmées : créneau fermé ce jour-là… »). Le message final compte les cases enregistrées **et les échecs**.
 4. Une semaine **jamais lue** a ses cases **verrouillées** (« … » pendant la lecture, « ? » + bouton « Réessayer » si elle a échoué) : on ne peut pas écraser une présence qu'on ne voit pas. Les absences RH (cadenas) ne se modifient pas ici.
 5. **Congés des opérateurs** : vue « Demandes de congés à traiter » → **Approuver** (pose les absences, renvoie au pool les BDT de la période, décompte le solde) ou ✕. Réservé aux congés d'**opérateurs** ; **personne ne valide son propre congé** ; un congé déjà traité est refusé. Si un effet n'a pas pu se faire, un message orange le dit.
 
 ![Présence opérateurs — menu d'une case](../assets/production-presence.png)
+![Menu d'une case du vendredi en cadence Moyen : Après-midi et Soirée fermés](../assets/production-presence-cadence.png)
+
+> Une case **« fermé »** = aucun créneau ouvert ce jour-là (dimanche, samedi hors Haut…). Une case en **pointillés rouges** porte un créneau enregistré avant un changement de cadence qui l'a fermé : à corriger à la main.
 
 ### Voir l'étape d'un BDT (focus)
 Cliquer une carte BDT ou BST **isole son étape** : seul le poste (ou le sous-traitant) qui peut la prendre reste affiché, encadré de **l'étape précédente et de l'étape suivante** — gammes BDT et BDS confondues. Recliquer sort du focus.
@@ -72,11 +87,34 @@ Chaque BDT distingue son **réglage** (fixe, fait une seule fois) de sa **réali
 - **Infobulle, réception, soldage** : lignes Réglage / Réalisation.
 - **Nouveau BDT** : champ facultatif « dont réglage (h) ».
 
+### Le planning suit la cadence usine
+- **Axe du jour** : de la première équipe du jour à la première équipe du lendemain (5 h → 5 h quand la Soirée travaille, trait à minuit). La nuit appartient au jour où la Soirée commence : un BDT posé à 2 h s'affiche sur la vue de la **veille**, et une pose après minuit est enregistrée au **lendemain**.
+- **Hachures grises** = aucune équipe du **site du poste** ne travaille. Bandeau au-dessus du Gantt : « Cadence usine du jeudi 17/09 : Moyen (Seem) · Bas (Semrac) · plage ouverte 04:30 → 05:30 (+1j) ». Jour fermé : grille 5 h–23 h toute hachurée, « Fermé ce jour ».
+- **Poser sur une heure fermée est refusé** (trait de visée rouge « · fermé ») : « Le poste Usinage Stama est fermé à cette heure (samedi 19/09 à 10h) en cadence Moyen (Seem) : posez le BDT sur un créneau ouvert — prochain : lundi 21/09 à 5h30. »
+- **Heures ouvrées** : réglage et durée ne comptent que les heures travaillées du site (pauses, nuits, jours fermés sautés ; dimanche toujours, samedi selon la cadence). Exemple en Bas : posé jeudi 12h45 avec 1 h de réglage → étape suivante au plus tôt **lundi 6 h**.
+- **Barre** : largeur = durée. Icône **pause** = le travail traverse une fermeture (fin prévue dans l'info-bulle) ; **flèche** = se poursuit après la vue du jour ; **lune** = posé sur une heure fermée (ancienne donnée).
+- Sans cadence (base pas à jour) : grille 5 h–23 h, bandeau « Horaires par défaut du planning (5h → 23h) … jouez cloud-12 ».
+
+![Planning selon la cadence : hachures, badge « → OAS », carte « Remis en goulotte »](../assets/production-planning-cadence.png)
+
+### Même process, même poste : pas de chevauchement
+Deux BDT de **process différents** peuvent se chevaucher sur un poste ; deux BDT du **même process**, non : « Le poste Usinage Stama porte déjà un BDT du même process (BDT-…) de 08:00 à 11:00 : décalez la pose ou choisissez un autre process du poste. » (la barre en place est soulignée). Un BDT reçu occupe le poste, un BDT soldé le libère. Les morceaux d'un BDT découpé s'enchaînent.
+
+### Déplacer une étape : les suivantes incohérentes reviennent en goulotte
+1. Déplacer une barre (ou planifier un BST) qui rendrait incohérentes des étapes suivantes **déjà posées** ouvre **avant tout enregistrement** la fenêtre **« Remettre en goulotte »** : « Déplacer BDT-… remettra dans la goulotte l'étape suivante : · BDT-… — … au plus tôt … ».
+2. **« Déplacer et remettre en goulotte »** : le BDT est déplacé, les étapes listées sont déprogrammées et reviennent **en tête de la goulotte** avec le badge rouge **« Remis en goulotte »** ; à reprogrammer. **« Annuler »** : rien ne bouge.
+3. Une étape **déjà reçue** n'est jamais déprogrammée : elle est seulement signalée (« Étape déjà reçue » · « Déplacer quand même »). Une étape déjà incohérente avant le déplacement reste dans « Enchaînements à revoir ».
+
+![Message préventif « Remettre en goulotte »](../assets/form-production-remise-goulotte.png)
+
+### Le badge « → OAS »
+L'OAS n'a pas de BDT ni de goulotte : le BDT **qui précède** le traitement de surface porte un badge cyan **« → OAS : Desoxydation › Oxydation Incolore »** (process OAS suivants de la gamme ; « → OAS » seul si introuvable), sur sa carte et sur sa barre. Le service OAS voit le lot dans **« Lots à venir »** avec la fin prévue de ce BDT.
+
 ### Chemin critique : l'étape suivante démarre après le réglage de la précédente
-Deux étapes consécutives d'un lot peuvent se chevaucher, mais l'étape d'après ne commence qu'après le **réglage** de l'étape d'avant (début + réglage). Cas particuliers : étape précédente soldée ou en goulotte → rien ; reçue → son début réel ; posée sans heure → comptée à 6 h ; porteur du réglage en goulotte mais morceaux posés → pas avant le plus tôt des morceaux ; OAS entre les deux ou étape suivante sous-traitée → **fin complète** ; étape précédente sous-traitée → jour de retour, 5 h. Grille 5 h–23 h (report au lendemain).
+Deux étapes consécutives d'un lot peuvent se chevaucher, mais l'étape d'après ne commence qu'après le **réglage** de l'étape d'avant (début + réglage). Cas particuliers : étape précédente soldée ou en goulotte → rien ; reçue → son début réel (au jour de la réception) ; posée sans heure → comptée à 6 h ; porteur du réglage en goulotte mais morceaux posés → pas avant le plus tôt des morceaux ; OAS entre les deux ou étape suivante sous-traitée → **fin complète** ; étape précédente sous-traitée → jour de retour, à la première équipe du jour. **Heures ouvrées** de la cadence usine (sans cadence : grille 5 h–23 h, report au lendemain).
 - Au glisser, une **zone rouge hachurée** montre la partie de journée interdite (« au plus tôt 9h30 · après le réglage de … »).
 - Posé trop tôt le bon jour → **calé** à l'au plus tôt (« Calé à 9h30 (chemin critique) ») ; un jour avant → **refusé**. Posé au clic, sans heure → le BDT garde son heure, sinon 6 h.
-- Déplacer une étape ne décale **jamais** les suivantes : elles sont signalées (message + carte rouge **« Enchaînements à revoir »** + pastille rouge sur la barre).
+- Déplacer une étape ne décale **jamais** les suivantes : celles qui deviennent incohérentes sont **remises en goulotte** après confirmation (voir plus haut) ; celles déjà reçues ou déjà incohérentes restent signalées (carte rouge **« Enchaînements à revoir »** + pastille rouge sur la barre).
 - BST : « **Dispo le …** » sur la carte ; un jour antérieur est refusé (aucun BC créé).
 
 ![Chemin critique — carte « Enchaînements à revoir », segment de réglage, pastille rouge](../assets/production-gantt-reglage.png)
@@ -103,6 +141,7 @@ Depuis le 14/09/2026, le coût horaire se saisit **sur le process**, et seulemen
 2. Chaque process affiche une pastille : **« X €/h »** (taux saisi), **« taux à saisir »** (process machine sans taux : son temps machine compte 0 €), **« coût RH »** (process manuel).
 3. **Crayon** du process → **Type** (Machine / Manuel / OAS) → **Taux horaire machine (€/h HT)** → **Enregistrer**. Vide = « taux à saisir ».
 4. Pour un process **manuel**, pas de taux : une note rappelle que le temps homme est valorisé au **coût chargé RH** des opérateurs (fiche salarié, service RH), avec la moyenne du site.
+5. Les process de la machine **OAS** (Surtec 650, Désoxydation, Oxydation noire, Oxydation incolore, Lavage) sont de **type OAS** (activité « OAS ») depuis le 16/09/2026, sans taux : un traitement de surface est chiffré au prix.
 
 ![Modifier le process](../assets/form-production-process-edit.png)
 

@@ -26,7 +26,11 @@ Sur cet écran, vous renseignez :
 - **Type** — Interne (opérateur) ou Sous-traitance. « Sous-traitance » fait apparaître des cases supplémentaires (sous-traitant, délai retour).
 - **Opérateur assigné** — la personne ou le poste qui fera le travail. La liste ne se remplit **qu'après** avoir choisi l'opération.
 
-**➡️ Ensuite :** le BDT apparaît sur le **planning Gantt**, au statut « Programmé ». Vous pouvez le **glisser** sur la ligne d'un opérateur au bon créneau. Si l'étape précédente du lot est déjà posée, il ne peut pas commencer avant la fin de son réglage : posé trop tôt le même jour, il est **calé** automatiquement ; un jour plus tôt, il est **refusé**. Il attend maintenant d'être démarré par l'opérateur.
+**➡️ Ensuite :** le BDT apparaît sur le **planning Gantt**, au statut « Programmé ». Vous pouvez le **glisser** sur la ligne d'un poste au bon créneau. Le planning suit la **cadence usine** du jour : les heures **hachurées** (aucune équipe du site ne travaille) refusent le dépôt. Si l'étape précédente du lot est déjà posée, il ne peut pas commencer avant la fin de son réglage, compté en heures travaillées : posé trop tôt le même jour, il est **calé** automatiquement ; un jour plus tôt, il est **refusé**. Deux BDT du **même process** ne se chevauchent pas sur un poste. Si vous **déplacez** ensuite une étape et que les suivantes deviennent incohérentes, une fenêtre propose de les **remettre en goulotte** (en tête, badge « Remis en goulotte ») avant d'enregistrer. Le BDT qui précède un passage à l'OAS porte le badge **« → OAS : … »**. Il attend maintenant d'être démarré par l'opérateur.
+
+![Planning selon la cadence : hachures, badge « → OAS », carte « Remis en goulotte »](../../assets/production-planning-cadence.png)
+
+![Message préventif « Remettre en goulotte »](../../assets/form-production-remise-goulotte.png)
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/production.md).
 
@@ -96,14 +100,20 @@ Depuis le panneau « Sous-traitance en cours » → « Nouvelle ST ». Vous rens
 
 ## Étape 6 — Programmer la présence des opérateurs
 **⬅️ Avant :** Pour affecter des BDT, il faut savoir **qui** est présent et sur quel créneau (matin, journée, après-midi, soirée).
-**📝 Ici, vous :** définissez d'un coup les plages horaires (shifts) de plusieurs opérateurs sur toute une semaine.
+**📝 Ici, vous :** définissez d'un coup les créneaux de plusieurs opérateurs sur toute une semaine. Les **horaires** de chaque créneau ne sont pas fixes : ils suivent la **cadence usine** (Bas, Moyen ou Haut) du site de l'opérateur, jour par jour — réglée dans Process Ateliers › **Cadence usine** (écriture Production).
 
 Onglet Présence opérateurs → « Programmer la semaine ». Vous renseignez :
-- **Shift à appliquer** — Matin, Journée, Après-midi, Soirée, Absent, ou Effacer (vide réellement les cases).
+- **Shift à appliquer** — Matin, Journée, Après-midi, Soirée, Absent, ou Effacer (vide réellement les cases). Les jours où ce créneau est **fermé** dans la cadence du site sont sautés, et le message le dit.
 - **Jours concernés** — Lun → Ven (5 jours ouvrés) ou Lun → Dim (7 jours).
 - **Opérateurs cibles** — une case par opérateur ; des boutons permettent de tout cocher/décocher ou de sélectionner par site (Seem / Semrac).
 
-**➡️ Ensuite :** les créneaux de présence s'affichent sur le **planning Gantt**. Les opérateurs disponibles deviennent des lignes cibles pour glisser les BDT. Les jours déjà marqués en absence RH ne sont **pas** modifiés, même si l'opérateur est coché.
+**➡️ Ensuite :** les créneaux de présence s'affichent sur le **planning Gantt**. Les opérateurs disponibles deviennent des lignes cibles pour glisser les BDT. Les jours déjà marqués en absence RH ne sont **pas** modifiés, même si l'opérateur est coché. Case par case, le menu affiche les horaires du jour et **grise** un créneau fermé (« fermé · cadence Moyen »). Ces horaires servent aussi à la RH (Gestion des temps).
+
+![Menu d'une case du vendredi en cadence Moyen : Après-midi et Soirée fermés](../../assets/production-presence-cadence.png)
+
+**Changer la cadence d'un site** : Process Ateliers → « Cadence usine » → « Changer la cadence » → date « À partir du » (demain par défaut), niveau, motif. Aujourd'hui ou une date passée demandent une confirmation (les heures déjà travaillées sont recalculées).
+
+![Fenêtre « Changer la cadence »](../../assets/form-production-cadence.png)
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/production.md).
 

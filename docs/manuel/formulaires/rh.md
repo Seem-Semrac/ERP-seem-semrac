@@ -14,7 +14,7 @@
 | Activité (opérateur) | liste déroulante (Seem, Semrac) | Non | L'usine de rattachement. N'apparaît que si le rôle est « Opérateur » ou « OAS ». | Seem |
 | Poste | texte | Non | L'intitulé précis du poste occupé. | Usinage CN |
 | Contrat | liste déroulante (CDI, CDD, Apprenti, Interim, Stage) | Non | Le type de contrat de travail. Par défaut CDI. | CDI |
-| Shift | liste déroulante (Matin 6h-14h, Journée 7h-17h, Après-midi 14h-22h, Soirée 22h-6h) | Non | L'équipe / horaire de travail habituel. | Matin 6h-14h |
+| Shift | liste déroulante (Matin, Journée, Après-midi, Soirée) | Non | L'équipe habituelle du salarié. Les horaires ne sont pas fixes : ils suivent la **cadence usine** du site et du jour (Production › Process Ateliers › Cadence usine). | Matin |
 | Date d'entrée | date | Non | Le jour d'arrivée dans l'entreprise. | 01/09/2025 |
 | Taux horaire chargé (€/h) | nombre **confidentiel** | Non | Coût horaire complet du salarié (salaire + charges). **Masqué par `***`** : réservé aux personnes ayant les **droits d'écriture RH** (RH / Direction) — pour les autres, la valeur n'est même pas dans la page. Pour le voir/éditer : **maintenir le clic** dessus (il réapparaît masqué au relâchement). | 28.50 |
 | Email | texte | Non | L'adresse e-mail professionnelle. | a.dupont@seem.fr |

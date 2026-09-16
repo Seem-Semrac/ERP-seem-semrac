@@ -144,6 +144,17 @@ const M = [
   { file: 'form-production-soldage',  path: '/production/service', tabClick: '#ptab-gantt-bdt', wait: 700,
     fn: "(function(){var b=BDTS.filter(function(x){return Number(x.duree||0)>0;})[0]||BDTS[0];if(!b) throw new Error('aucun BDT');"
       + "b.statut='recu';if(!b.operateurId&&OPERATEURS[0]) b.operateurId=OPERATEURS[0].id;openSoldageModal(b.id);})()" },
+  // Production — lot G (16/09/2026). Rien n'est envoyé : on ouvre, on remplit DANS LE NAVIGATEUR, on capture.
+  //   Cadence usine : volet « Cadence usine » (Process Ateliers), fenêtre « Changer la cadence » de Seem, niveau Haut coché
+  //   (aperçu de la semaine type), date d'effet = demain (valeur par défaut), motif d'exemple.
+  { file: 'form-production-cadence',  path: '/production/service', tabClick: '#ptab-machines', wait: 900,
+    fn: "(function(){volShow('cad');cadOuvrirChangement('Seem');var r=document.querySelector('#cadModal input[name=cadNiv][value=haut]');if(!r) throw new Error('fenêtre absente');r.checked=true;r.dispatchEvent(new Event('change',{bubbles:true}));var m=document.getElementById('cadMotif');if(m) m.value='Pic de charge (exemple)';})()" },
+  //   Remise en goulotte (G4) : deux étapes de LOT-2026-0001-01 posées mardi prochain (ouvert dans les trois cadences) DANS LE NAVIGATEUR (Poinçonnage à 8 h, réglage
+  //   0,48 h ; Contrôle à 8h30), puis on demande de déplacer le Poinçonnage à 9 h : le message préventif s'ouvre AVANT tout
+  //   envoi (on ne clique pas). Fenêtre de confirmation sans champ de saisie → noFields.
+  { file: 'form-production-remise-goulotte', path: '/production/service', tabClick: '#ptab-gantt-bdt', wait: 900, noFields: true,
+    fn: "(function(){var j=CAD.isoPlusJours(cadAujourdhui(),1);while(CAD.jourSemaineIso(j)!==2) j=CAD.isoPlusJours(j,1);currentDate=j;var pose=function(id,pid,h){var b=BDTS.find(function(z){return z.id===id;});if(!b) throw new Error(id+' absent');b.process=pid;b.statut='programme';b.datePrevue=currentDate;b.debut=h;b.sansHeure=false;};"
+      + "pose('BDT-2026-0001-01-01','PROC-2026-016',8);pose('BDT-2026-0001-01-02','proc-man-r3',8.5);buildAll();affectBDT('BDT-2026-0001-01-01','PROC-2026-016',9);})()" },
   // OAS — clôture avec autocontrôle (≠ création de balancelle)
   { file: 'form-oas-cloture-balancelle', path: '/oas/service', fn: "openCloreBalModal('BAL-DEMO','OAS-2026-1042','LOT-2026-014','Bride alu 7075')", wait: 800 },
   // Expéditions (lot D, 14/09/2026 — tableaux globaux EXP_BC / EXP_PV / EXP_BLREC). Aucune écriture : on ouvre, on remplit

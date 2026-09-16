@@ -15,6 +15,9 @@
 > - nouvelles tables **`mises_en_stock`** (file « À ranger » : `statut`, `origine`, `bc_id`, `bl_id`, `pv_id`, `ligne_idx`, `quarantaine_id`, `validation_id`, `reference`, `designation`, `type_objet`, `quantite`, `unite`, `num_affaire`, `fournisseur_nom`, `motif`, `stock_id`, `emplacement`, `mouvement_id`, `cree_le`, `cree_par`, `range_le`, `range_par`, `annule_le`, `annule_par`, `annule_motif`), **`stock_types_objet`** (`code`, `libelle`, `ordre`, `actif`, `created_at` — 6 lignes amorcées), **`stock_zones`** (`id`, `type_objet`, `zone`, `ordre`, `actif`, `created_at`, `cree_par` — vide au départ), **`stock_emplacements_historique`** (`id`, `stock_id`, `reference`, `type_objet`, `avant`, `apres`, `motif`, `par`, `le`, `mise_en_stock_id` — ajout seul) ;
 > - `stock` **`+ type_objet`** (index unique `ux_stock_reference` sur `lower(btrim(reference))`, créé seulement sans doublons) ; `mouvements_stock` **`+ mise_en_stock_id`** (index unique partiel) ; `bons_de_commande` **`+ bc_parent_id`**, **`+ date_a_valider`** ; `quarantaines` **`+ ligne_idx`**. Détail : `03-base-de-donnees.md`, section Stock.
 
+> ⚠ 16/09/2026 (lot G Production / cadence usine), ajouts à la main — migration Docker **014** (jouée sur le Docker local) ; **cloud : `cloud-12` pas encore joué**, la sonde REST cloud ne les verra qu'après :
+> - nouvelles tables **`horaires_modeles`** (`id`, `niveau`, `jour_semaine`, `creneau`, `partie`, `debut`, `fin`, `actif`, `maj_le`, `maj_par` ; 65 lignes amorcées) et **`cadence_site`** (`id`, `site`, `niveau`, `depuis`, `effet`, `par`, `motif` ; 2 lignes d'amorce Moyen) ;
+> - `bons_de_travail` **`+ remis_goulotte_le`**, **`+ recu_le`** (timestamptz) ; données `process_atelier` des machines OAS (`est_oas`, `activite = 'OAS'`). Détail : `03-base-de-donnees.md`, section Production.
 
 ## Commercial
 

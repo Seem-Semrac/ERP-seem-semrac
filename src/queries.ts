@@ -3171,6 +3171,44 @@ export async function lireOperationsDuLot(cle: string): Promise<{ bdts: any[]; b
   return { bdts: fusion(lignes[0], lignes[1]), bds: fusion(lignes[2], lignes[3]), error: null }
 }
 
+// ─── Lot G (16/09/2026) : chevauchement du même process sur un poste, successeurs remis en goulotte ──────
+// BDT portant ce process et susceptibles d'occuper le poste (posés ou reçus), lecture STRICTE : une panne n'est jamais
+// « poste libre ». Le filtre fin (jour, heure, durée, négation d'enGoulotte) est fait par src/poste_oas.ts.
+export async function lireBDTsDuProcess(processId: string): Promise<{ data: any[]; error: string | null }> {
+  const p = String(processId ?? '').trim()
+  if (!p) return { data: [], error: null }
+  const { data, error } = await supabase.from('bons_de_travail').select('*').eq('process_id', p)
+    .not('statut', 'in', '("a_programmer","solde","st")').limit(5000)
+  return { data: (data ?? []) as any[], error: error ? error.message : null }
+}
+
+// Déprogrammation d'un successeur (G4), CONDITIONNÉE à l'état lu (statut, jour, process, heure, et updated_at quand la
+// ligne le porte) : un BDT reçu, soldé ou reposé entre la lecture et l'écriture n'est pas retiré — revue du 16/09/2026 :
+// reposer le successeur le même jour sur le même process ne change que `debut`, et cette correction (la plus naturelle
+// d'une violation) était écrasée. `remis_goulotte_le` (migration 014 / cloud-12) est écrit si la ligne lue porte la
+// colonne ; refus de la base sur cette colonne (cache PostgREST en retard) → réessai sans elle.
+// `data` null sans erreur = le BDT a changé entre-temps.
+export async function deprogrammerBDTSiInchange(lu: any, remisLe: string): Promise<{ data: any | null; error: string | null; sansColonne: boolean }> {
+  const patch: Record<string, any> = { process_id: null, machine_id: null, statut: 'a_programmer', date_prevue: null, debut: null, operateur_id: null }
+  const avecCol = !!lu && Object.prototype.hasOwnProperty.call(lu, 'remis_goulotte_le')
+  const colonnes = ['statut', 'date_prevue', 'process_id', 'debut', ...(lu && lu.updated_at != null && lu.updated_at !== '' ? ['updated_at'] : [])]
+  const essai = async (p: Record<string, any>) => {
+    let q: any = supabase.from('bons_de_travail').update({ ...p, updated_at: new Date().toISOString() }).eq('id', String(lu?.id ?? ''))
+    for (const col of colonnes) {
+      const v = lu?.[col]
+      q = (v == null || v === '') ? q.is(col, null) : q.eq(col, v)
+    }
+    const { data, error } = await q.select()
+    return { data: ((data ?? []) as any[])[0] ?? null, error: error ? String(error.message || error.code || 'erreur') : null }
+  }
+  if (avecCol) {
+    const r = await essai({ ...patch, remis_goulotte_le: remisLe })
+    if (!r.error || !/remis_goulotte_le/i.test(r.error)) return { ...r, sansColonne: false }
+  }
+  const r2 = await essai(patch)
+  return { ...r2, sansColonne: true }
+}
+
 // Lecture STRICTE d'un BDS par id : une panne n'est jamais confondue avec « introuvable ».
 export async function getBDSStrict(id: string): Promise<{ data: any | null; error: string | null }> {
   const { data, error } = await supabase.from('bons_sous_traitance').select('*').eq('id', id).maybeSingle()

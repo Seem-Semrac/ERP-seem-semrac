@@ -21,7 +21,14 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 
 ![oas](../assets/oas.png)
 
-### 2. Suivre les lots en balancelle
+### 2. Voir venir les lots (« Lots à venir »)
+1. Onglet **Lots & Balancelles** → tableau **Lots à venir** : lots dont le BDT qui précède l’OAS est programmé ou reçu au planning de production.
+2. Colonnes : process OAS suivant, BDT précédent, **fin prévue** (heures travaillées de la cadence usine), statut ; tri par fin prévue.
+3. Quand ce BDT est soldé, le lot passe dans « Lots arrivés à l’OAS ».
+
+![oas-lots-a-venir](../assets/oas-lots-a-venir.png)
+
+### 3. Suivre les lots en balancelle
 1. Onglet **Lots & Balancelles**.
 
 ![oas](../assets/oas.png)

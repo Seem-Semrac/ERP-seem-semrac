@@ -237,12 +237,12 @@
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
-| Shift à appliquer | liste déroulante (Matin 6h-14h, Journée 7h-17h, Après-midi 14h-22h, Soirée 22h-6h, Absent, Effacer (non programmé)) | Oui | La plage horaire à mettre en place. « Effacer » vide réellement les cases (plus d'« absent » enregistré à la place). Le message final compte les cases enregistrées et les échecs. | Matin 6h-14h |
+| Shift à appliquer | liste déroulante (Matin, Journée, Après-midi, Soirée, Absent, Effacer (non programmé)) | Oui | Le créneau à mettre en place. Ses horaires dépendent de la **cadence usine** du site de chaque opérateur et du jour. Les jours où ce créneau est **fermé** dans la cadence du site sont sautés (« N cases non programmées : créneau fermé ce jour-là dans la cadence du site »). « Effacer » vide réellement les cases. Le message final compte les cases enregistrées et les échecs. | Matin |
 | Jours concernés | liste déroulante (Lun → Ven (5 jours ouvrés), Lun → Dim (7 jours)) | Oui | Les jours de la semaine à programmer. | Lun → Ven (5 jours ouvrés) |
 | Opérateurs cibles | case à cocher (une case par opérateur) | Oui | Les opérateurs auxquels appliquer le shift. Des boutons permettent de tout cocher/décocher ou de sélectionner par site (Seem / Semrac). | Antoine D., Karim B. |
 
 💡 **Astuce :** Utilisez les boutons « Seem » / « Semrac » pour cocher rapidement tous les opérateurs d'un site.
-⚠️ **Attention :** Les jours où un opérateur est déjà en absence RH ne sont pas modifiés, même s'il est coché. La semaine doit avoir été lue (sinon : « réessayez dans un instant »).
+⚠️ **Attention :** Les jours où un opérateur est déjà en absence RH ne sont pas modifiés, même s'il est coché, ni les jours où le créneau est fermé dans la cadence de son site (dimanche toujours ; samedi, vendredi après-midi… selon la cadence). La semaine doit avoir été lue (sinon : « réessayez dans un instant »).
 
 ## Case de présence (menu d'un jour)
 **Quand l'utiliser :** Pour programmer ou corriger le créneau d'un opérateur sur un jour.
@@ -250,6 +250,52 @@
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
-| Créneau | menu (Matin 6h-14h, Journée 7h-17h, Après-midi 14h-22h, Soirée 22h-6h, Absent, Effacer) | Oui | Un choix = un seul enregistrement. En cas d'échec, la case revient à la dernière valeur enregistrée et un message donne la raison. « Effacer » vide la case. Au clavier : flèches haut/bas, Entrée, Échap ou Tab pour refermer. | Journée 7h-17h |
+| Créneau | menu (Matin, Journée, Après-midi, Soirée — chacun avec ses horaires du jour —, Absent, Effacer) | Oui | Un choix = un seul enregistrement. Les horaires affichés sont ceux de la **cadence usine** du site de l'opérateur ce jour-là (ex. vendredi en Moyen : Matin 04:50-13:15). Un créneau **fermé** ce jour-là est grisé « fermé · cadence Moyen » et ne se choisit pas (le serveur le refuse aussi : « Créneau « Matin » fermé en cadence Moyen ce jour … »). En cas d'échec, la case revient à la dernière valeur enregistrée et un message donne la raison. « Effacer » vide la case. Au clavier : flèches haut/bas, Entrée, Échap ou Tab pour refermer. | Journée (07:30-12:00 / 12:45-16:00) |
 
+![Menu d'une case du vendredi en cadence Moyen](../../assets/production-presence-cadence.png)
+
+💡 **Astuce :** Une case « fermé » = aucun créneau ouvert ce jour-là ; une case en pointillés rouges porte un créneau enregistré avant un changement de cadence qui l'a fermé (à corriger).
 ⚠️ **Attention :** Les cases d'une semaine jamais lue sont verrouillées (« … » pendant la lecture, « ? » en cas d'échec : bouton « Réessayer ») ; les absences RH (cadenas) ne se modifient pas ici.
+
+## Changer la cadence d'un site (Cadence usine)
+**Quand l'utiliser :** Pour passer un site (Seem ou Semrac) en cadence Bas, Moyen ou Haut à partir d'un jour donné : les horaires de la présence, du planning et de RH › Gestion des temps suivent aussitôt.
+**Où le trouver :** Onglet Process Ateliers → bouton « Cadence usine » → bouton « Changer la cadence » sur la carte du site. Réservé à l'écriture Production.
+
+| Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
+|---|---|---|---|---|
+| À partir du | date (demain par défaut ; 62 jours en arrière à 400 jours en avant) | Oui | Le premier jour où la nouvelle cadence s'applique. La fenêtre rappelle la cadence du site à cette date. **Aujourd'hui ou une date passée** : un avertissement orange s'affiche et une confirmation est demandée, car toute la journée passe dans la nouvelle cadence, heures déjà travaillées comprises. | 17/09/2026 |
+| Niveau | choix unique (Bas, Moyen, Haut) | Oui | La nouvelle cadence. Le niveau déjà en vigueur à la date choisie est grisé. Choisir un niveau affiche l'aperçu de sa **semaine type** (première équipe → fin de la dernière, « +1j », « fermé »). | Haut |
+| Motif | texte (500 caractères au plus) | Non | La raison du changement, visible sur la carte du site et dans l'historique. | Pic de charge |
+
+![Fenêtre « Cadence de Seem »](../../assets/form-production-cadence.png)
+
+💡 **Astuce :** Un changement dont la date est future apparaît sur la carte du site comme « Changement prévu » et dans l'historique avec la mention « prévu » : il ne s'applique qu'à partir de sa date.
+⚠️ **Attention :** Si quelqu'un a changé la cadence entre-temps, l'enregistrement est refusé (« … a été modifiée entre-temps (maintenant : Moyen) : rechargez la page ») ; un site déjà dans ce niveau à cette date est refusé aussi. Le bouton de validation dit exactement ce qui va se passer : « Passer Seem en cadence Haut à partir du 17/09/2026 ».
+
+## Modèles d'horaires d'une cadence (Cadence usine)
+**Quand l'utiliser :** Pour corriger les horaires d'une équipe un jour donné, ou ouvrir / fermer un créneau, pour un niveau de cadence (Bas, Moyen ou Haut).
+**Où le trouver :** Onglet Process Ateliers → bouton « Cadence usine » → bloc « Modèles d'horaires » → pastille du niveau. Réservé à l'écriture Production.
+
+| Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
+|---|---|---|---|---|
+| Niveau | pastilles (Bas, Moyen, Haut) | Oui | Le modèle à afficher et modifier ; les sites actuellement dans ce niveau sont indiqués à côté. Changer de niveau abandonne les saisies non enregistrées. | Moyen |
+| Matin / Après-midi / Soirée — un jour | deux heures HH:MM (début → fin), croix pour fermer | Non | Les horaires du créneau ce jour-là. Case vide (croix) = créneau **fermé** ce jour-là. Une fin plus tôt que le début = créneau qui finit **le lendemain** (« +1j »), rattaché au jour où il commence. 16 h au plus. Un créneau du **samedi** ne peut pas finir le lendemain (le dimanche est fermé). | Soirée 21:00 → 05:30 (+1j) |
+| Journée (1) / Journée (2, après pause) — un jour | deux heures HH:MM chacune, croix pour fermer | Non | La Journée en deux parties, avant et après la pause. La partie 2 exige la partie 1 et commence après sa fin ; aucune partie ne passe minuit. Journée en une seule partie : fermer la partie 2. | 07:30 → 12:00 puis 12:45 → 16:00 |
+
+💡 **Astuce :** Les cases modifiées sont surlignées en jaune ; « Enregistrer » n'envoie qu'elles, « Annuler les modifications » les abandonne. Vos saisies non enregistrées restent affichées si vous changez de volet et revenez.
+⚠️ **Attention :** Un modèle s'applique à **tous les sites** dans ce niveau et aussi aux dates passées (RH › Gestion des temps recalcule les heures des mois précédents). Le dimanche est toujours fermé. Si une case a été modifiée par quelqu'un d'autre entre-temps : « … a été modifié entre-temps : rechargez la page » (bouton « Relire »).
+
+## Remettre en goulotte (déplacer une étape)
+**Quand l'utiliser :** La fenêtre s'ouvre toute seule quand vous déplacez un BDT (ou planifiez un BST) et que ce déplacement rendrait incohérentes des étapes suivantes du lot déjà posées au planning.
+**Où le trouver :** Planning Gantt BDT (glisser ou clic sur une barre) ou Planning Gantt BST — avant tout enregistrement.
+
+| Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
+|---|---|---|---|---|
+| Étapes remises en goulotte | lecture (liste) | — | Chaque étape suivante qui deviendrait incohérente, avec la raison : « BDT-… posé le 22/09 à 8h30 : au plus tôt le 22/09 à 9h29 (après le réglage de BDT-… (0,48 h)) ». | BDT-2026-0001-01-02 |
+| Déplacer et remettre en goulotte | bouton | — | Déplace le BDT, puis déprogramme les étapes listées : elles reviennent **en tête** de la goulotte avec le badge « Remis en goulotte », à reprogrammer. | — |
+| Annuler | bouton | — | Rien ne bouge. | — |
+
+![Fenêtre « Remettre en goulotte »](../../assets/form-production-remise-goulotte.png)
+
+💡 **Astuce :** Une étape déjà **reçue** n'est jamais déprogrammée : elle apparaît dans un second paragraphe (« Déjà reçue … seulement signalée ») ; si elle est seule, la fenêtre s'intitule « Étape déjà reçue » avec le bouton « Déplacer quand même ».
+⚠️ **Attention :** Si le planning a changé entre-temps, la fenêtre peut se rouvrir avec une liste complétée : relisez-la avant de confirmer.

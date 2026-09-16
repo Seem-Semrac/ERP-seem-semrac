@@ -6,8 +6,9 @@
 import { SHIFTS } from './shared'
 
 /** Les 4 créneaux de travail, dans l'ordre d'affichage : Matin · Journée · Après-midi · Soirée.
- *  Libellés, horaires et couleurs viennent de SHIFTS (src/shared.ts), seule source.
- *  Identifiants historiques conservés (aucune migration de données) ; `soir` garde ses horaires 22h–6h. */
+ *  Identifiants, libellés et couleurs viennent de SHIFTS (src/shared.ts). Identifiants historiques conservés.
+ *  Horaires : depuis le lot G (16/09/2026), ceux de la CADENCE du site et du jour (src/cadence.ts) ; ceux de SHIFTS ne
+ *  sont plus qu'un repli quand la cadence est illisible. Un créneau fermé ce jour-là est refusé à l'enregistrement. */
 export const CRENEAUX = ['matin', 'journee', 'apmidi', 'soir'] as const
 
 /** Valeurs acceptées pour une case de présence : un créneau, ou « absent ».
@@ -47,16 +48,19 @@ export function nbJours(from: string, to: string): number {
 
 const heure = (h: number) => `${((h % 24) + 24) % 24}h`
 
-/** « 6h-14h » ; « 22h-6h » pour la soirée (fin stockée 30 = 6h du lendemain). */
+/** Horaires PAR DÉFAUT d'un créneau (SHIFTS) : « 6h-14h » ; « 22h-6h » pour la soirée (fin stockée 30 = 6h du lendemain).
+ *  ⚠ Lot G (16/09/2026) : les horaires AFFICHÉS viennent de la cadence du site et du jour (src/cadence.ts,
+ *  horairesCreneauSite). Ceux-ci ne servent plus que de repli quand la cadence est illisible (cloud sans cloud-12). */
 export function horairesCreneau(id: string): string {
   const s = SHIFTS[id]
   return s ? `${heure(s.start)}-${heure(s.end)}` : ''
 }
 
-/** « Matin 6h-14h », « Soirée 22h-6h »… (identifiant inconnu : rendu tel quel). */
+/** Libellé d'un créneau : « Matin », « Soirée »… (identifiant inconnu : rendu tel quel). Sans horaires depuis le lot G :
+ *  ils dépendent du site et du jour (cadence usine) — voir horairesCreneauSite dans src/cadence.ts. */
 export function libelleCreneau(id: string): string {
   const s = SHIFTS[id]
-  return s ? `${s.label} ${horairesCreneau(id)}` : id
+  return s ? s.label : id
 }
 
 /** Couleur de TEXTE d'un créneau : la teinte SHIFTS foncée. La couleur SHIFTS brute écrite sur son propre fond pâle (ou
@@ -67,13 +71,14 @@ export function couleurTexteCreneau(id: string): string {
 }
 
 /** Palette de l'onglet Présence : { id: [fond, texte, libellé, horaires] }, créneaux puis « absent ».
- *  Fond dérivé de la couleur SHIFTS (même teinte sur la grille et sur le planning), texte foncé lisible (couleurTexteCreneau). */
+ *  Fond dérivé de la couleur SHIFTS (même teinte sur la grille et sur le planning), texte foncé lisible (couleurTexteCreneau).
+ *  Horaires : '' depuis le lot G — le navigateur les calcule par site et par jour (cadHorairesCreneau, src/cadence_ui.ts). */
 export function paletteCreneaux(): Record<string, [string, string, string, string]> {
   const out: Record<string, [string, string, string, string]> = {}
   for (const k of CRENEAUX) {
     const s = SHIFTS[k]
     const col = s ? s.color : '#64748b'
-    out[k] = [col + '1f', couleurTexteCreneau(k), s ? s.label : k, horairesCreneau(k)]
+    out[k] = [col + '1f', couleurTexteCreneau(k), s ? s.label : k, '']
   }
   out.absent = ['#fef2f2', '#b91c1c', 'Absent', '']
   return out

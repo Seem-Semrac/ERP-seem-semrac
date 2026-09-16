@@ -5390,4 +5390,163 @@ begin
 end
 $$;
 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 014 · Cadence usine par site (modèles d'horaires Bas / Moyen / Haut), remise en goulotte — lot G (16/09/2026)
+-- (report des parties 1 à 3 de docker/db/migrations/014-cadence-usine.sql — une base neuve naît déjà à jour, le lanceur
+--  de migrations la rejoue sans effet ; la partie 4, marquage OAS de process EXISTANTS, n'a pas d'objet sur une base vide)
+-- ═══════════════════════════════════════════════════════════════════════════
+create table if not exists public.horaires_modeles (
+  id            text primary key default gen_random_uuid()::text,
+  niveau        text not null,
+  jour_semaine  integer not null,
+  creneau       text not null,
+  partie        integer not null default 1,
+  debut         text not null,
+  fin           text not null,
+  actif         boolean not null default true,
+  maj_le        timestamptz not null default now(),
+  maj_par       text
+);
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conrelid = 'public.horaires_modeles'::regclass and conname = 'horaires_modeles_niveau_valide') then
+    alter table public.horaires_modeles add constraint horaires_modeles_niveau_valide check (niveau in ('bas', 'moyen', 'haut'));
+  end if;
+  if not exists (select 1 from pg_constraint where conrelid = 'public.horaires_modeles'::regclass and conname = 'horaires_modeles_jour_valide') then
+    alter table public.horaires_modeles add constraint horaires_modeles_jour_valide check (jour_semaine between 1 and 7);
+  end if;
+  if not exists (select 1 from pg_constraint where conrelid = 'public.horaires_modeles'::regclass and conname = 'horaires_modeles_creneau_valide') then
+    alter table public.horaires_modeles add constraint horaires_modeles_creneau_valide check (creneau in ('matin', 'apmidi', 'soir', 'journee'));
+  end if;
+  if not exists (select 1 from pg_constraint where conrelid = 'public.horaires_modeles'::regclass and conname = 'horaires_modeles_partie_valide') then
+    alter table public.horaires_modeles add constraint horaires_modeles_partie_valide check (partie = 1 or (partie = 2 and creneau = 'journee'));
+  end if;
+  if not exists (select 1 from pg_constraint where conrelid = 'public.horaires_modeles'::regclass and conname = 'horaires_modeles_heures_valides') then
+    alter table public.horaires_modeles add constraint horaires_modeles_heures_valides
+      check (debut ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' and fin ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' and debut <> fin);
+  end if;
+  if not exists (select 1 from pg_constraint where conrelid = 'public.horaires_modeles'::regclass and conname = 'horaires_modeles_dimanche_ferme') then
+    alter table public.horaires_modeles add constraint horaires_modeles_dimanche_ferme check (jour_semaine <> 7 or actif = false);
+  end if;
+  -- Samedi : un créneau qui finirait le lendemain travaillerait le dimanche (toujours fermé). NOT VALID : contrôle les
+  -- écritures à venir sans bloquer la migration sur une ligne saisie à la main auparavant (le moteur la coupe à 24:00).
+  if not exists (select 1 from pg_constraint where conrelid = 'public.horaires_modeles'::regclass and conname = 'horaires_modeles_samedi_sans_nuit') then
+    alter table public.horaires_modeles add constraint horaires_modeles_samedi_sans_nuit check (jour_semaine <> 6 or actif = false or fin > debut) not valid;
+  end if;
+end
+$$;
+create unique index if not exists ux_horaires_modeles_cle on public.horaires_modeles (niveau, jour_semaine, creneau, partie);
+comment on table public.horaires_modeles is
+  'Modeles d horaires de l usine par niveau de cadence (Production > Process Ateliers > Cadence usine). Creneau ferme un jour = pas de ligne active (une ligne ne s efface pas : actif = false). Fin < debut = creneau qui finit le lendemain, rattache au jour ou il commence. Dimanche toujours ferme.';
+
+insert into public.horaires_modeles (id, niveau, jour_semaine, creneau, partie, debut, fin) values
+  -- BAS : lundi, mardi, mercredi
+  ('bas-1-matin-1', 'bas', 1, 'matin', 1, '05:30', '13:15'), ('bas-1-apmidi-1', 'bas', 1, 'apmidi', 1, '13:15', '21:00'),
+  ('bas-1-soir-1', 'bas', 1, 'soir', 1, '21:00', '05:30'), ('bas-1-journee-1', 'bas', 1, 'journee', 1, '07:30', '12:00'),
+  ('bas-1-journee-2', 'bas', 1, 'journee', 2, '12:45', '16:00'),
+  ('bas-2-matin-1', 'bas', 2, 'matin', 1, '05:30', '13:15'), ('bas-2-apmidi-1', 'bas', 2, 'apmidi', 1, '13:15', '21:00'),
+  ('bas-2-soir-1', 'bas', 2, 'soir', 1, '21:00', '05:30'), ('bas-2-journee-1', 'bas', 2, 'journee', 1, '07:30', '12:00'),
+  ('bas-2-journee-2', 'bas', 2, 'journee', 2, '12:45', '16:00'),
+  ('bas-3-matin-1', 'bas', 3, 'matin', 1, '05:30', '13:15'), ('bas-3-apmidi-1', 'bas', 3, 'apmidi', 1, '13:15', '21:00'),
+  ('bas-3-soir-1', 'bas', 3, 'soir', 1, '21:00', '05:30'), ('bas-3-journee-1', 'bas', 3, 'journee', 1, '07:30', '12:00'),
+  ('bas-3-journee-2', 'bas', 3, 'journee', 2, '12:45', '16:00'),
+  -- BAS : jeudi (vendredi, samedi, dimanche fermés)
+  ('bas-4-matin-1', 'bas', 4, 'matin', 1, '04:30', '13:15'), ('bas-4-journee-1', 'bas', 4, 'journee', 1, '07:30', '12:30'),
+  -- MOYEN : lundi → jeudi
+  ('moyen-1-matin-1', 'moyen', 1, 'matin', 1, '05:30', '13:15'), ('moyen-1-apmidi-1', 'moyen', 1, 'apmidi', 1, '13:15', '21:00'),
+  ('moyen-1-soir-1', 'moyen', 1, 'soir', 1, '21:00', '05:30'), ('moyen-1-journee-1', 'moyen', 1, 'journee', 1, '07:30', '12:00'),
+  ('moyen-1-journee-2', 'moyen', 1, 'journee', 2, '12:45', '16:00'),
+  ('moyen-2-matin-1', 'moyen', 2, 'matin', 1, '05:30', '13:15'), ('moyen-2-apmidi-1', 'moyen', 2, 'apmidi', 1, '13:15', '21:00'),
+  ('moyen-2-soir-1', 'moyen', 2, 'soir', 1, '21:00', '05:30'), ('moyen-2-journee-1', 'moyen', 2, 'journee', 1, '07:30', '12:00'),
+  ('moyen-2-journee-2', 'moyen', 2, 'journee', 2, '12:45', '16:00'),
+  ('moyen-3-matin-1', 'moyen', 3, 'matin', 1, '05:30', '13:15'), ('moyen-3-apmidi-1', 'moyen', 3, 'apmidi', 1, '13:15', '21:00'),
+  ('moyen-3-soir-1', 'moyen', 3, 'soir', 1, '21:00', '05:30'), ('moyen-3-journee-1', 'moyen', 3, 'journee', 1, '07:30', '12:00'),
+  ('moyen-3-journee-2', 'moyen', 3, 'journee', 2, '12:45', '16:00'),
+  ('moyen-4-matin-1', 'moyen', 4, 'matin', 1, '05:30', '13:15'), ('moyen-4-apmidi-1', 'moyen', 4, 'apmidi', 1, '13:15', '21:00'),
+  ('moyen-4-soir-1', 'moyen', 4, 'soir', 1, '21:00', '05:30'), ('moyen-4-journee-1', 'moyen', 4, 'journee', 1, '07:30', '12:00'),
+  ('moyen-4-journee-2', 'moyen', 4, 'journee', 2, '12:45', '16:00'),
+  -- MOYEN : vendredi (samedi, dimanche fermés)
+  ('moyen-5-matin-1', 'moyen', 5, 'matin', 1, '04:50', '13:15'), ('moyen-5-journee-1', 'moyen', 5, 'journee', 1, '07:30', '12:00'),
+  -- HAUT : lundi → vendredi (jeudi et vendredi : Après-midi et Soirée = horaires du lundi, voir la migration 014)
+  ('haut-1-matin-1', 'haut', 1, 'matin', 1, '05:30', '13:15'), ('haut-1-apmidi-1', 'haut', 1, 'apmidi', 1, '13:15', '21:00'),
+  ('haut-1-soir-1', 'haut', 1, 'soir', 1, '21:00', '05:30'), ('haut-1-journee-1', 'haut', 1, 'journee', 1, '07:30', '12:00'),
+  ('haut-1-journee-2', 'haut', 1, 'journee', 2, '12:45', '16:45'),
+  ('haut-2-matin-1', 'haut', 2, 'matin', 1, '05:30', '13:15'), ('haut-2-apmidi-1', 'haut', 2, 'apmidi', 1, '13:15', '21:00'),
+  ('haut-2-soir-1', 'haut', 2, 'soir', 1, '21:00', '05:30'), ('haut-2-journee-1', 'haut', 2, 'journee', 1, '07:30', '12:00'),
+  ('haut-2-journee-2', 'haut', 2, 'journee', 2, '12:45', '16:45'),
+  ('haut-3-matin-1', 'haut', 3, 'matin', 1, '05:30', '13:15'), ('haut-3-apmidi-1', 'haut', 3, 'apmidi', 1, '13:15', '21:00'),
+  ('haut-3-soir-1', 'haut', 3, 'soir', 1, '21:00', '05:30'), ('haut-3-journee-1', 'haut', 3, 'journee', 1, '07:30', '12:00'),
+  ('haut-3-journee-2', 'haut', 3, 'journee', 2, '12:45', '16:45'),
+  ('haut-4-matin-1', 'haut', 4, 'matin', 1, '05:30', '13:15'), ('haut-4-apmidi-1', 'haut', 4, 'apmidi', 1, '13:15', '21:00'),
+  ('haut-4-soir-1', 'haut', 4, 'soir', 1, '21:00', '05:30'), ('haut-4-journee-1', 'haut', 4, 'journee', 1, '07:30', '12:00'),
+  ('haut-4-journee-2', 'haut', 4, 'journee', 2, '12:45', '16:45'),
+  ('haut-5-matin-1', 'haut', 5, 'matin', 1, '05:30', '13:15'), ('haut-5-apmidi-1', 'haut', 5, 'apmidi', 1, '13:15', '21:00'),
+  ('haut-5-soir-1', 'haut', 5, 'soir', 1, '21:00', '05:30'), ('haut-5-journee-1', 'haut', 5, 'journee', 1, '07:30', '12:00'),
+  ('haut-5-journee-2', 'haut', 5, 'journee', 2, '12:45', '16:45'),
+  -- HAUT : samedi, Matin seulement (dimanche fermé)
+  ('haut-6-matin-1', 'haut', 6, 'matin', 1, '05:30', '12:00')
+on conflict do nothing;
+
+alter table public.horaires_modeles enable row level security;
+drop policy if exists hmod_lecture on public.horaires_modeles;
+drop policy if exists hmod_ajout   on public.horaires_modeles;
+drop policy if exists hmod_maj     on public.horaires_modeles;
+create policy hmod_lecture on public.horaires_modeles for select to anon, authenticated using (true);
+create policy hmod_ajout   on public.horaires_modeles for insert to anon, authenticated with check (true);
+create policy hmod_maj     on public.horaires_modeles for update to anon, authenticated using (true) with check (true);
+revoke all on table public.horaires_modeles from anon, authenticated;
+grant select, insert, update on table public.horaires_modeles to anon, authenticated;
+
+create table if not exists public.cadence_site (
+  id      text primary key default gen_random_uuid()::text,
+  site    text not null,
+  niveau  text not null,
+  depuis  timestamptz not null default now(),
+  par     text,
+  motif   text
+);
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conrelid = 'public.cadence_site'::regclass and conname = 'cadence_site_site_valide') then
+    alter table public.cadence_site add constraint cadence_site_site_valide check (site in ('Seem', 'Semrac'));
+  end if;
+  if not exists (select 1 from pg_constraint where conrelid = 'public.cadence_site'::regclass and conname = 'cadence_site_niveau_valide') then
+    alter table public.cadence_site add constraint cadence_site_niveau_valide check (niveau in ('bas', 'moyen', 'haut'));
+  end if;
+end
+$$;
+-- Date d'effet (revue du 16/09/2026) : un changement s'applique à partir d'un JOUR choisi (le lendemain par défaut), pas
+-- à toute la journée où il est décidé. NULL (lignes d'amorce) = le jour de `depuis` à Paris.
+alter table public.cadence_site add column if not exists effet date;
+comment on column public.cadence_site.effet is
+  'Jour a partir duquel cette cadence s applique (Paris). NULL = jour de depuis. Cadence d un site a une date D = ligne de plus grand (effet, depuis) avec effet <= D.';
+create index if not exists idx_cadence_site_depuis on public.cadence_site (site, depuis desc);
+comment on table public.cadence_site is
+  'Cadence de l usine par site (Bas / Moyen / Haut), historique en ajout seul : la cadence courante d un site est sa derniere ligne ; a une date donnee, la derniere ligne dont le jour de depuis (Paris) precede ou egale cette date.';
+
+insert into public.cadence_site (id, site, niveau, par, motif)
+select v.id, v.site, 'moyen', 'migration 014', 'Amorce : cadence Moyen (a ajuster dans Production > Process Ateliers > Cadence usine)'
+  from (values ('amorce-seem', 'Seem'), ('amorce-semrac', 'Semrac')) as v(id, site)
+ where not exists (select 1 from public.cadence_site c where c.site = v.site)
+on conflict do nothing;
+
+alter table public.cadence_site enable row level security;
+drop policy if exists cads_lecture on public.cadence_site;
+drop policy if exists cads_ajout   on public.cadence_site;
+create policy cads_lecture on public.cadence_site for select to anon, authenticated using (true);
+create policy cads_ajout   on public.cadence_site for insert to anon, authenticated with check (true);
+revoke all on table public.cadence_site from anon, authenticated;
+grant select, insert on table public.cadence_site to anon, authenticated;
+
+do $$
+begin
+  if to_regclass('public.bons_de_travail') is not null then
+    alter table public.bons_de_travail add column if not exists remis_goulotte_le timestamptz;
+    create index if not exists idx_bdt_remis_goulotte on public.bons_de_travail (remis_goulotte_le) where remis_goulotte_le is not null;
+    -- Horodatage complet de la réception (revue du 16/09/2026) : debut_reel n'est qu'une heure « HH:MM ».
+    alter table public.bons_de_travail add column if not exists recu_le timestamptz;
+  end if;
+end
+$$;
+
 notify pgrst, 'reload schema';

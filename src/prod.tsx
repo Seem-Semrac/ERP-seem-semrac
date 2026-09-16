@@ -5,6 +5,8 @@ import { escX, layout, serviceHeader, OPERATEURS as OPS_FB, BDT_DATA, SHIFTS, AB
 import { cleLot, violationsEnchainement, PLAN_DEBUT_JOUR, PLAN_FIN_JOUR, PLAN_HEURE_DEFAUT } from './gamme'
 import { LOGO_SVG, BRAND } from './brand'
 import { CRENEAUX, paletteCreneaux, joursChargesPage } from './presences'
+import { scriptCadencePage, voletCadenceBouton, voletCadenceHTML, scriptVoletCadence } from './cadence_ui'
+import type { LectureCadence } from './cadence_db'
 import type { BonDeTravail, Machine, Operateur, Lot, Commande, FournisseurSt } from './types'
 import { blocDaNcProduction, refFormulairesProd } from './prod_da_nc'
 
@@ -1232,6 +1234,9 @@ export const pageServiceProd = (
   // serveur, la MOYENNE du coût chargé RH affichée pour un process manuel. Aucun taux individuel ne part au navigateur.
   // Absent (appelant pas encore à jour) → la moyenne n'est simplement pas affichée.
   dbSalaries?:   any[],
+  // Lot G · G1 : cadence usine (src/cadence_db.ts lireDonneesCadence). Absente / en panne / non fournie → horaires par
+  // défaut des créneaux (SHIFTS) et bandeau dans le volet « Cadence usine » ; jamais bloquant.
+  dbCadence?:    LectureCadence | null,
 ) => {
   const TODAY = new Date().toISOString().slice(0,10)
   // Postes : plus aucun taux (14/09/2026) — `taux_horaire_manuel` n'est plus ni lu ni écrit.
@@ -1359,9 +1364,13 @@ export const pageServiceProd = (
     ? dbBDTs.map(b => {
         const racine = racineBdt(b.id), rang = rangMorceauBdt(b.id), rangs = _rangsFamille[racine] || [rang]
         const tr = (b as any).temps_reglage
-        return {id:b.id,op:b.operateur_id||'',process:(b as any).process_id||'pending',client:b.client_nom||'',piece:b.piece,operation:b.operation,duree:b.duree,debut:b.debut!=null?Number(b.debut):PLAN_HEURE_DEFAUT,priorite:b.priorite,statut:b.statut,resultat:(b as any).resultat||null,activite:b.activite||'Seem',machineId:b.machine_id||null,tempsAlloue:(b as any).temps_alloue||b.duree,debutReel:(b as any).debut_reel||null,finReel:(b as any).fin_reel||null,lotId:(b as any).lot_id||(b as any).lot_ref||null,numAffaire:(b as any).num_affaire||null,dateEcheance:(b as any).date_echeance||null,seq:(b as any).seq!=null?(b as any).seq:null,cmdId:(b as any).cmd_id||null,datePrevue:(b as any).date_prevue||null,oxydation:(b as any).oxydation||null,
+        return {id:b.id,op:b.operateur_id||'',process:(b as any).process_id||'pending',client:b.client_nom||'',piece:b.piece,operation:b.operation,duree:b.duree,debut:b.debut!=null?Number(b.debut):PLAN_HEURE_DEFAUT,priorite:b.priorite,statut:b.statut,resultat:(b as any).resultat||null,activite:b.activite||'Seem',machineId:b.machine_id||null,tempsAlloue:(b as any).temps_alloue||b.duree,debutReel:(b as any).debut_reel||null,recuLe:(b as any).recu_le||null,finReel:(b as any).fin_reel||null,lotId:(b as any).lot_id||(b as any).lot_ref||null,numAffaire:(b as any).num_affaire||null,dateEcheance:(b as any).date_echeance||null,seq:(b as any).seq!=null?(b as any).seq:null,cmdId:(b as any).cmd_id||null,datePrevue:(b as any).date_prevue||null,oxydation:(b as any).oxydation||null,
           reglage:(tr!=null&&tr!=='')?Number(tr):null, racine, rangMorceau:rang, posMorceau:rangs.indexOf(rang)+1, nbMorceaux:rangs.length,
-          oasAvant:!!(b as any).oas_avant, oasApres:!!(b as any).oas_apres, cleLot:cleLot(b), sansHeure:(b.debut==null||(b.debut as any)==='')}
+          oasAvant:!!(b as any).oas_avant, oasApres:!!(b as any).oas_apres, cleLot:cleLot(b), sansHeure:(b.debut==null||(b.debut as any)==='')
+          // Lot G : process OAS suivant (route /production/service, tableau vide = introuvable) · remis en goulotte par un déplacement (014 / cloud-12)
+          , oasSuivant:(Array.isArray((b as any).oas_suivant)?(b as any).oas_suivant:null), remisGoulotteLe:((b as any).remis_goulotte_le||null)
+          // Lot G · G5 : activité BRUTE (site de cadence du BDT ; « activite » ci-dessus vaut Seem par défaut pour l'affichage)
+          , activiteBrute:((b as any).activite ?? null)}
       })
     : BDT_DEFAULT
   const PROCESS_J = sjX(procForGantt)   // sjX (et non JSON.stringify) : un nom contenant « </script> » ne casse plus la page
@@ -1442,7 +1451,8 @@ export const pageServiceProd = (
   // ─── Chemin critique : enchaînements à revoir (lot C, src/gamme.ts) ─────
   // Calculés ICI sur les lignes mêmes que reçoit le script client (BDT bruts + BST au statut piloté par le BC),
   // pour que la carte rendue par le serveur et celle que le client recalcule après chaque pose soient identiques.
-  const VIOL_CC: Record<string, string> = violationsEnchainement((dbBDTs ?? []) as any[], bdsRowsForBst)
+  // Lot G · G5 : en heures ouvrées de la cadence usine quand elle est lisible (même régime que le script client).
+  const VIOL_CC: Record<string, string> = violationsEnchainement((dbBDTs ?? []) as any[], bdsRowsForBst, dbCadence && dbCadence.data ? dbCadence.data : null)
   const violCcHtml = (() => {
     const bdtById: Record<string, any> = {}; (dbBDTs ?? []).forEach((b: any) => { bdtById[String(b.id)] = b })
     const bdsById: Record<string, any> = {}; bdsRowsForBst.forEach((x: any) => { bdsById[String(x.id)] = x })
@@ -1651,6 +1661,7 @@ ${serviceHeader({
   tabIdPrefix: 'ptab',
   activeId: 'gantt-bdt'
 })}
+${scriptCadencePage(dbCadence)}
 
 <!-- ═══ PANEL 1 : GANTT BDT ══════════════════════════════════ -->
 <div id="ppanel-gantt-bdt">
@@ -1733,7 +1744,7 @@ ${serviceHeader({
     <div id="pendingDropZone" class="card" style="padding:14px 16px;border-radius:14px;transition:outline .12s;margin-bottom:14px;" ondragover="onPendingOver(event)" ondragleave="onPendingLeave(event)" ondrop="onPendingDrop(event)">
       <div style="margin-bottom:10px;">
         <div style="font-weight:700;color:#1e293b;font-size:.82rem;display:flex;align-items:center;gap:6px;"><i class="fas fa-inbox" style="color:#f97316;"></i> BDT à classer / en attente de programmation<span id="cntPend" style="background:#ffedd5;color:#c2410c;font-size:.65rem;font-weight:700;padding:1px 7px;border-radius:999px;margin-left:auto;">0</span></div>
-        <div style="font-size:.62rem;color:#94a3b8;margin-top:3px;">Triés par échéance, puis par lot et ordre de gamme · Glisser une carte sur le planning pour la programmer (l’heure est calée après le réglage de l’étape précédente : chemin critique) · <i class="fas fa-rotate-left"></i> sur une carte découpée pour annuler la découpe · déposer ici une barre du planning pour la déprogrammer · <i class="fas fa-scissors"></i> sur une carte pour découper le BDT en morceaux (le réglage reste sur le 1er morceau, seule la réalisation se répartit) — la découpe se fait uniquement ici, dans la goulotte</div>
+        <div style="font-size:.62rem;color:#94a3b8;margin-top:3px;">Triés par échéance, puis par lot et ordre de gamme · Glisser une carte sur le planning pour la programmer (l’heure est calée après le réglage de l’étape précédente : chemin critique) · <i class="fas fa-rotate-left"></i> sur une carte découpée pour annuler la découpe · déposer ici une barre du planning pour la déprogrammer · <i class="fas fa-scissors"></i> sur une carte pour découper le BDT en morceaux (le réglage reste sur le 1er morceau, seule la réalisation se répartit) — la découpe se fait uniquement ici, dans la goulotte · <span style="color:#b91c1c;font-weight:700;">Remis en goulotte</span> (en tête) : BDT déprogrammé parce qu’une étape précédente a été déplacée · <span style="color:#0e7490;font-weight:700;">→ OAS</span> : le lot part à l’OAS au soldage de ce BDT · deux BDT du même process ne se chevauchent pas sur un poste</div>
       </div>
       <div id="pendingList" style="overflow-y:auto;max-height:240px;display:flex;flex-wrap:wrap;gap:8px;margin:0 -4px;padding:4px;"></div>
     </div>
@@ -1744,8 +1755,10 @@ ${serviceHeader({
       <button onclick="clearFocusLot()" style="margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:.74rem;font-weight:700;color:#374151;background:white;border:1px solid #e2e8f0;border-radius:8px;padding:5px 12px;cursor:pointer;"><i class="fas fa-eye"></i> Tout afficher</button>
     </div>
     <div style="margin-bottom:16px;overflow-x:auto;">
-      <!-- min-width = colonne Postes (300 px) + journée ENTIÈRE (18 h × 50 px) : à 1120 px, les heures après 21h24 étaient coupées (impossible d'y déposer) -->
-      <div class="card" style="overflow:hidden;min-width:${300 + (PLAN_FIN_JOUR - PLAN_DEBUT_JOUR) * 50}px;">
+      <!-- min-width = colonne Postes (300 px) + journée ENTIÈRE (18 h × 50 px) : à 1120 px, les heures après 21h24 étaient coupées (impossible d'y déposer).
+           Lot G · G5 : avec la cadence usine, la journée affichée suit la plage ouverte du jour ; planMajAxe ajuste cette largeur. -->
+      <div id="planCadenceInfo" style="font-size:.66rem;color:#64748b;margin:0 0 6px 2px;"></div>
+      <div id="planGanttCard" class="card" style="overflow:hidden;min-width:${300 + (PLAN_FIN_JOUR - PLAN_DEBUT_JOUR) * 50}px;">
         <div class="gantt-header-row">
           <div style="padding:8px 10px;border-right:1px solid rgba(255,255,255,.1);font-size:.72rem;font-weight:700;color:#94a3b8;display:flex;align-items:center;gap:6px;"><i class="fas fa-cubes-stacked" style="color:#64748b;"></i> Postes</div>
           <div id="hoursHdr" style="position:relative;min-height:34px;overflow:hidden;"></div>
@@ -2021,6 +2034,7 @@ ${blocDaNcProduction(refFormulairesProd({ commandes: dbCmds ?? [], lots: dbLots 
       <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#f8fafc;border:1px solid #e2e8f0;margin-right:4px;"></span>Non programmé</span>
       <button onclick="openPresWeekModal()" style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#f97316,#ea580c);color:white;cursor:pointer;font-size:.78rem;font-weight:700;"><i class="fas fa-calendar-week"></i>Programmer la semaine</button>
       <span style="color:#94a3b8;flex-basis:100%;"><i class="fas fa-info-circle" style="margin-right:4px;"></i>Cliquez une case pour choisir Matin, Journée, Après-midi, Soirée, Absent ou Effacer · chaque choix est enregistré aussitôt (la case revient à sa valeur si l'enregistrement échoue) · ou utilisez « Programmer la semaine » pour appliquer un créneau à toute la semaine affichée</span>
+      <span style="color:#94a3b8;flex-basis:100%;"><i class="fas fa-business-time" style="margin-right:4px;color:#0d9488;"></i>Horaires selon la <strong>cadence usine</strong> du site de l'opérateur et du jour (Process Ateliers › Cadence usine) : un créneau fermé ce jour-là est grisé dans le menu et refusé ; « fermé » = aucun créneau ouvert ce jour-là.</span>
     </div>
     <div class="card" style="overflow:hidden;">
       <div style="overflow-x:auto;"><div id="presGrid"></div></div>
@@ -2235,6 +2249,7 @@ ${blocDaNcProduction(refFormulairesProd({ commandes: dbCmds ?? [], lots: dbLots 
     <div style="display:flex;gap:8px;margin-bottom:16px;">
       <button id="volbtn-pp" onclick="volShow('pp')" style="padding:8px 18px;border-radius:9px;border:none;background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:white;cursor:pointer;font-size:.82rem;font-weight:700;"><i class="fas fa-object-group" style="margin-right:6px;"></i>Postes &amp; Process</button>
       <button id="volbtn-mach" onclick="volShow('mach')" style="padding:8px 18px;border-radius:9px;border:1.5px solid #e2e8f0;background:white;color:#374151;cursor:pointer;font-size:.82rem;font-weight:700;"><i class="fas fa-cogs" style="margin-right:6px;color:#f97316;"></i>Machines</button>
+      ${voletCadenceBouton()}
     </div>
 
     <!-- VOLET « Postes & Process » (affiché par défaut) -->
@@ -2396,7 +2411,9 @@ ${blocDaNcProduction(refFormulairesProd({ commandes: dbCmds ?? [], lots: dbLots 
       </div>
     </div>
     </div><!-- /vol-mach -->
+${voletCadenceHTML()}
   </div>
+${scriptVoletCadence()}
   <!-- Modal Nouveau / Édition poste de travail -->
   <div id="posteModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center;z-index:520;">
     <div style="background:white;border-radius:20px;box-shadow:0 24px 64px rgba(0,0,0,.25);width:100%;max-width:520px;margin:1rem;overflow:hidden;">
@@ -2524,16 +2541,17 @@ function _avertTaux(j){
 function openProcModalForPoste(pid){ openProcModal(); var pp=document.getElementById('p_poste'); if(pp) pp.value=pid; }
 window.openProcModalForPoste=openProcModalForPoste;
 // (Demande d'achat depuis la Production : fonctions odaOpen/odaSubmit déplacées dans src/prod_da_nc.ts, 15/09/2026.)
+// Trois volets (lot G) : Postes & Process · Machines · Cadence usine.
 function volShow(which){
-  var m=document.getElementById('vol-mach'), p=document.getElementById('vol-pp');
-  var bm=document.getElementById('volbtn-mach'), bp=document.getElementById('volbtn-pp');
+  var VOLETS={pp:'linear-gradient(135deg,#8b5cf6,#7c3aed)',mach:'linear-gradient(135deg,#f97316,#ea580c)',cad:'linear-gradient(135deg,#0d9488,#0f766e)'};
+  if(!VOLETS[which]) which='pp';
   var offB='white', offC='#374151', offBd='1.5px solid #e2e8f0';
-  if(which==='pp'){ if(m)m.style.display='none'; if(p)p.style.display='';
-    if(bp){bp.style.background='linear-gradient(135deg,#8b5cf6,#7c3aed)';bp.style.color='white';bp.style.border='none';}
-    if(bm){bm.style.background=offB;bm.style.color=offC;bm.style.border=offBd;} }
-  else { if(p)p.style.display='none'; if(m)m.style.display='';
-    if(bm){bm.style.background='linear-gradient(135deg,#f97316,#ea580c)';bm.style.color='white';bm.style.border='none';}
-    if(bp){bp.style.background=offB;bp.style.color=offC;bp.style.border=offBd;} }
+  Object.keys(VOLETS).forEach(function(k){
+    var v=document.getElementById('vol-'+k), b=document.getElementById('volbtn-'+k), on=(k===which);
+    if(v) v.style.display=on?'':'none';
+    if(b){ b.style.background=on?VOLETS[k]:offB; b.style.color=on?'white':offC; b.style.border=on?'none':offBd; var ic=b.querySelector('i'); if(ic&&k!=='pp') ic.style.color=on?'white':(k==='mach'?'#f97316':'#0d9488'); }
+  });
+  if(which==='cad' && typeof cadRenderVolet==='function'){ try{ cadRenderVolet(); }catch(e){} }
 }
 function openPosteModal(){ document.getElementById('po_id').value=''; document.getElementById('po_title').innerHTML='<i class="fas fa-object-group" style="margin-right:8px;"></i>Nouveau poste'; document.getElementById('po_save').innerHTML='<i class="fas fa-plus"></i> Créer le poste'; document.getElementById('po_nom').value=''; document.getElementById('po_code').value=''; document.getElementById('po_activite').value='Seem'; document.getElementById('po_couleur').value='#8b5cf6'; document.getElementById('po_ordre').value='100'; document.getElementById('posteModal').style.display='flex'; }
 function openPosteEdit(id){ var p=(POSTES_JS||[]).find(function(x){return String(x.id)===String(id);}); if(!p){ pushNotif('err','fa-ban','Poste introuvable.'); return; } document.getElementById('po_id').value=p.id; document.getElementById('po_title').innerHTML='<i class="fas fa-edit" style="margin-right:8px;"></i>Modifier le poste'; document.getElementById('po_save').innerHTML='<i class="fas fa-save"></i> Enregistrer'; document.getElementById('po_nom').value=p.nom||''; document.getElementById('po_code').value=p.code||''; document.getElementById('po_activite').value=p.activite||'Seem'; document.getElementById('po_couleur').value=p.couleur||'#8b5cf6'; document.getElementById('po_ordre').value=(p.ordre!=null?p.ordre:100); document.getElementById('posteModal').style.display='flex'; }
@@ -2863,9 +2881,10 @@ var TODAY_REAL = '${TODAY}';                                  // date réelle fi
 var AFFECTATIONS = ${sjX(dbAffectations || {})};   // { 'YYYY-MM-DD': { opId: [{p:process_id, s:shift}, …] } } (multi-affectation)
 var dragOpId=null, selOpId=null, selBdtId=null;   // sélection au clic (clic-pour-sélectionner puis clic-pour-placer)
 var filtAct='all', filtType='all', filtAffaire='', dragId=null, _grabDX=0, soldageBdtId=null, recuBdtId=null, focusLot=null;
-var DAY_START=${PLAN_DEBUT_JOUR},DAY_END=${PLAN_FIN_JOUR},TOTAL_H=DAY_END-DAY_START,PX_H=50,LANE_W=TOTAL_H*50,SNAP=0.25;   // grille du planning = gamme.ts PLAN_DEBUT_JOUR / PLAN_FIN_JOUR
-// Un BDT s'affiche le jour de sa date prévue ; sans date prévue → rattaché au jour réel (à programmer)
-function bdtOnDay(b){ return (b.datePrevue || TODAY_REAL) === currentDate; }
+var DAY_START=${PLAN_DEBUT_JOUR},DAY_END=${PLAN_FIN_JOUR},TOTAL_H=DAY_END-DAY_START,PX_H=50,LANE_W=TOTAL_H*50,SNAP=0.25;   // axe du jour affiché : grille gamme.ts PLAN_DEBUT_JOUR / PLAN_FIN_JOUR par défaut, plage ouverte de la cadence usine sinon (planMajAxe, lot G · G5)
+// Un BDT s'affiche le jour de sa date prévue ; sans date prévue → rattaché au jour réel (à programmer).
+// Lot G · G5 (cadence lisible) : sur la vue du jour qui contient son début (la nuit après minuit appartient à la veille).
+function bdtOnDay(b){ if(!PLAN_AXE.cadence) return (b.datePrevue || TODAY_REAL) === currentDate; var a=planAbsBdt(b); return a!=null&&a>=PLAN_AXE.absS-1e-9&&a<PLAN_AXE.absE-1e-9; }
 // UN BDT EST DANS LA GOULOTTE tant qu'il n'a pas ete POSE sur le planning (11/09/2026).
 // « Quand les BDT sont a programmer ils ne doivent pas apparaitre dans le planning : ils sont
 //   programmes quand on les passe de la goulotte au planning. » Avant, l'appartenance se lisait
@@ -2878,7 +2897,10 @@ function enGoulotte(b){ var s=String(b.statut||''); if(s==='st'||b.op==='ST'||s=
 //    controleEnchainement, violationsEnchainement). Toute modification se reporte des DEUX côtés :
 //    le serveur cale / refuse la pose avec la même règle (test de parité lotc/test_chemin.ts).
 //    Règle : l étape suivante d un lot ne démarre pas avant la fin du RÉGLAGE de l étape précédente.
-var CC_DEBUT=DAY_START, CC_FIN=DAY_END, CC_HJ=CC_FIN-CC_DEBUT, CC_EPS=1e-6, CC_HEURE_DEFAUT=${PLAN_HEURE_DEFAUT};
+//    Lot G · G5 : horloge ccHorloge (copie de gamme.ts tempsPlanning) — heures OUVRÉES de la cadence usine quand elle est
+//    lisible (CAD + cadDonnees du script cadence), grille CC_DEBUT → CC_FIN sinon (tests lotg/test_planning_cadence.ts).
+//    CC_DEBUT / CC_FIN restent les constantes de la grille : DAY_START / DAY_END suivent désormais l axe du jour affiché.
+var CC_DEBUT=${PLAN_DEBUT_JOUR}, CC_FIN=${PLAN_FIN_JOUR}, CC_HJ=CC_FIN-CC_DEBUT, CC_EPS=1e-6, CC_HEURE_DEFAUT=${PLAN_HEURE_DEFAUT};
 function ccTxt(v){ return String(v==null?'':v).trim(); }
 function ccNb(v){ var n=Number(v); return isFinite(n)?n:0; }
 function ccNum(v){ if(v==null||v==='') return null; var n=Number(v); return isFinite(n)?n:null; }
@@ -2924,10 +2946,59 @@ function ccAjouter(dateIso,heure,h){
   return {date:ccIsoJour(jour),heure:ccArr6(CC_DEBUT+reste)};
 }
 function ccVersDebut(p){ if(p.heure>=CC_FIN-CC_EPS) return {date:ccIsoJour(ccJour(p.date)+1),heure:CC_DEBUT}; return p; }
+// Horloge du planning (copie de gamme.ts tempsPlanning) : mémorisée tant que les données de cadence de la page sont les mêmes.
+var CC_HORLOGE_MEMO=null;
+function ccCleSite(op){ var s=(typeof CAD!=='undefined')?CAD.siteCadence(op&&op.activite):null; return s||'both'; }
+function ccHorloge(){
+  var d=(typeof cadDonnees==='function'&&typeof CAD!=='undefined')?cadDonnees():null;
+  if(d&&(!Array.isArray(d.modeles)||!Array.isArray(d.cadences))) d=null;
+  if(CC_HORLOGE_MEMO&&CC_HORLOGE_MEMO.d===d) return CC_HORLOGE_MEMO.h;
+  var h;
+  if(!d){
+    h={cadence:false,
+      ajouter:function(op,dt,hr,x){ return ccAjouter(dt,hr,x); },
+      versDebut:function(c,p){ return ccVersDebut(p); },
+      position:function(dt,hr){ return ccGrille(dt,hr); },
+      retourSt:function(c,dt){ return {date:dt,heure:CC_DEBUT}; },
+      jourPlanning:function(dt,hr){ return ccJour(dt); },
+      debutFenetre:function(){ return CC_DEBUT; },
+      calendrier:function(){ return null; }};
+  } else {
+    var cals={};
+    var cal=function(op){ var k=ccCleSite(op); return cals[k]||(cals[k]=CAD.calendrierCadence(d,k)); };
+    var pos=function(i){ return i?{date:i.date,heure:ccArr6(i.heure)}:null; };
+    var debutFenetre=function(iso){ var p=CAD.plageOuverteCalendrier(cal(null),iso); return p?Math.floor(p.debut+1e-9):CC_DEBUT; };
+    h={cadence:true,
+      ajouter:function(op,dt,hr,x){ var n=ccNum(x); return pos(CAD.ajouterHeuresOuvrees(dt,hr,Math.max(0,n==null?0:n),cal(op))); },
+      versDebut:function(c,p){ return pos(CAD.prochainInstantOuvert(p.date,p.heure,cal(c)))||p; },
+      position:function(dt,hr){ var j=ccJour(dt), hh=ccNum(hr); return (j==null||hh==null)?null:ccArr6(j*24+hh); },
+      retourSt:function(c,dt){ if(ccEstBds(c)) return {date:dt,heure:0}; var k=cal(c), p=CAD.plageOuverteCalendrier(k,dt); return pos(CAD.prochainInstantOuvert(dt,p?p.debut:24,k))||{date:dt,heure:0}; },
+      jourPlanning:function(dt,hr){ var j=ccJour(dt), hh=ccNum(hr); if(j==null) return null; if(hh==null) return j; var abs=ccArr6(j*24+hh), jd=Math.floor(abs/24); return (abs-jd*24)+CC_EPS<debutFenetre(ccIsoJour(jd))?jd-1:jd; },
+      debutFenetre:debutFenetre,
+      calendrier:cal};
+  }
+  CC_HORLOGE_MEMO={d:d,h:h}; return h;
+}
+// Jour de Paris d un horodatage (copie de cadence.ts dateParis, autonome : le moteur ne dépend pas du script de cadence).
+var CC_FMT_PARIS, CC_MEMO_PARIS={};
+function ccDateParis(ts){ if(!ts) return null; var k=String(ts); if(Object.prototype.hasOwnProperty.call(CC_MEMO_PARIS,k)) return CC_MEMO_PARIS[k];
+  var r=null, d=new Date(k);
+  if(!isNaN(d.getTime())){ try{ if(CC_FMT_PARIS===undefined) CC_FMT_PARIS=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Paris',year:'numeric',month:'2-digit',day:'2-digit'}); var p=CC_FMT_PARIS.formatToParts(d), o={}; for(var i=0;i<p.length;i++) o[p[i].type]=p[i].value; if(o.year&&o.month&&o.day) r=o.year+'-'+o.month+'-'+o.day; }catch(e){ CC_FMT_PARIS=null; } if(!r) r=d.toISOString().slice(0,10); }
+  CC_MEMO_PARIS[k]=r; return r; }
 function ccHeureReelle(v){ var m=/^\\s*(\\d{1,2})[:h](\\d{2})/.exec(ccTxt(v)); if(!m) return null; var H=Number(m[1]), M=Number(m[2]); return (H>23||M>59)?null:ccArr6(H+M/60); }
+// Début réel d un reçu (revue du 16/09/2026) : jour de recu_le (Paris) s il est lisible ; sinon jour prévu, et en heures ouvrées
+// le jour voisin quand l heure réelle est à plus de 12 h de l heure prévue (équipes de nuit). Copie de gamme.ts debutBdt.
 function ccDebutBdt(op){
   var s=ccTxt(op&&op.statut).toLowerCase(), d=ccTxt(op&&op.date_prevue), h;
-  if(ccSoldee(op)||s==='recu'||s==='reçu'){ if(ccJour(d)==null) return null; h=ccHeureReelle(op.debut_reel); if(h==null) h=ccNum(op.debut); return {date:d.slice(0,10),heure:(h==null?CC_HEURE_DEFAUT:h)}; }
+  if(ccSoldee(op)||s==='recu'||s==='reçu'){
+    var hr=ccHeureReelle(op.debut_reel), jr=op.recu_le?ccDateParis(op.recu_le):null;
+    if(jr&&ccJour(jr)!=null){ h=hr; if(h==null) h=ccNum(op.debut); return {date:jr,heure:(h==null?CC_HEURE_DEFAUT:h)}; }
+    var jd=ccJour(d); if(jd==null) return null;
+    if(hr==null){ h=ccNum(op.debut); return {date:d.slice(0,10),heure:(h==null?CC_HEURE_DEFAUT:h)}; }
+    var jour=jd;
+    if(ccHorloge().cadence){ var hp=ccNum(op.debut); var ecart=hr-(hp==null?CC_HEURE_DEFAUT:hp); if(ecart>12+CC_EPS) jour=jd-1; else if(ecart<-12-CC_EPS) jour=jd+1; }
+    return {date:ccIsoJour(jour),heure:hr};
+  }
   if(!s||s==='a_programmer'||s==='st'||ccAnnulee(op)||ccTxt(op&&op.operateur_id)==='ST') return null;
   if(!ccTxt(op&&op.process_id)||ccJour(d)==null) return null;
   h=ccNum(op.debut); return {date:d.slice(0,10),heure:(h==null?CC_HEURE_DEFAUT:h)};
@@ -2946,34 +3017,35 @@ function ccAuPlusTot(cible,opsDuLot){
   var idC=ccTxt(cible.id);
   var ops=(opsDuLot||[]).filter(function(o){ return !!o&&ccCleLot(o)===k&&ccTxt(o.id)!==idC; });
   ops.push(cible);
+  var T=ccHorloge();
   var bdsCible=ccEstBds(cible), cands=[], infos=[], libres=[];
-  function pousser(p,regle,depuis,raison){ if(!p) return; var g=ccGrille(p.date,p.heure); if(g==null) return; cands.push({date:p.date,heure:p.heure,g:g,regle:regle,depuis:depuis,raison:raison}); }
+  function pousser(p,regle,depuis,raison){ if(!p){ if(T.cadence) infos.push('aucun créneau ouvert après '+depuis+' (cadence usine)'); return; } var g=T.position(p.date,p.heure); if(g==null) return; cands.push({date:p.date,heure:p.heure,g:g,regle:regle,depuis:depuis,raison:raison}); }
   var G=ccGroupePrec(cible,ops).slice().sort(ccParId);
   var bdsG=G.filter(function(o){ return ccEstBds(o); }), bdtG=G.filter(function(o){ return !ccEstBds(o); });
-  bdsG.forEach(function(s){ var r=ccRetourBds(s); if(r) pousser({date:r,heure:CC_DEBUT},'retour_st',ccTxt(s.id),'après le retour de sous-traitance de '+ccTxt(s.id)); else infos.push('sous-traitance '+ccTxt(s.id)+' non planifiée'); });
+  bdsG.forEach(function(s){ var r=ccRetourBds(s); if(r) pousser(T.retourSt(cible,r),'retour_st',ccTxt(s.id),'après le retour de sous-traitance de '+ccTxt(s.id)); else infos.push('sous-traitance '+ccTxt(s.id)+' non planifiée'); });
   if(bdtG.length){
     var nonSoldes=bdtG.filter(function(o){ return !ccSoldee(o); });
     if(!nonSoldes.length) libres.push('étape précédente soldée');
     else if(bdsCible||!!cible.oas_avant){
       var manquants=[];
-      nonSoldes.forEach(function(m){ var d=ccDebutBdt(m); var fin=d?ccAjouter(d.date,d.heure,ccDureeBdt(m)):null; if(fin) pousser(fin,'fin_complete',ccTxt(m.id),'après la fin de '+ccTxt(m.id)+(bdsCible?'':' (passage OAS entre les deux)')); else manquants.push(ccTxt(m.id)); });
+      nonSoldes.forEach(function(m){ var d=ccDebutBdt(m); if(!d){ manquants.push(ccTxt(m.id)); return; } pousser(T.ajouter(m,d.date,d.heure,ccDureeBdt(m)),'fin_complete',ccTxt(m.id),'après la fin de '+ccTxt(m.id)+(bdsCible?'':' (passage OAS entre les deux)')); });
       if(manquants.length) infos.push('étape précédente non programmée ('+ccTrierTextes(manquants).join(', ')+')');
     } else {
       var porteurs=bdtG.filter(function(o){ var r=ccReglage(o); return (r==null?0:r)>0; });
       if(porteurs.length){
         var nonProg=[];
-        porteurs.forEach(function(p){ var R=ccReglage(p); if(ccSoldee(p)){ libres.push('réglage de '+ccTxt(p.id)+' déjà fait'); return; } var d=ccDebutBdt(p); if(!d){ nonProg.push(ccTxt(p.id)); return; } pousser(ccAjouter(d.date,d.heure,R),'reglage',ccTxt(p.id),'après le réglage de '+ccTxt(p.id)+' ('+ccFmtNb(R)+' h)'); });
+        porteurs.forEach(function(p){ var R=ccReglage(p); if(ccSoldee(p)){ libres.push('réglage de '+ccTxt(p.id)+' déjà fait'); return; } var d=ccDebutBdt(p); if(!d){ nonProg.push(ccTxt(p.id)); return; } pousser(T.ajouter(p,d.date,d.heure,R),'reglage',ccTxt(p.id),'après le réglage de '+ccTxt(p.id)+' ('+ccFmtNb(R)+' h)'); });
         if(nonProg.length){
           var tot=null;
-          bdtG.forEach(function(m){ if(ccSoldee(m)) return; var d=ccDebutBdt(m); if(!d) return; var g=ccGrille(d.date,d.heure); if(g==null) return; if(!tot||g<tot.g||(g===tot.g&&ccTxt(m.id)<tot.id)) tot={d:d,g:g,id:ccTxt(m.id)}; });
+          bdtG.forEach(function(m){ if(ccSoldee(m)) return; var d=ccDebutBdt(m); if(!d) return; var g=T.position(d.date,d.heure); if(g==null) return; if(!tot||g<tot.g||(g===tot.g&&ccTxt(m.id)<tot.id)) tot={d:d,g:g,id:ccTxt(m.id),op:m}; });
           var lesP=ccTrierTextes(nonProg).join(', ');
-          if(tot) pousser(ccAjouter(tot.d.date,tot.d.heure,0),'reglage',tot.id,'après le début de '+tot.id+' (réglage de '+lesP+' non programmé)');
+          if(tot) pousser(T.ajouter(tot.op,tot.d.date,tot.d.heure,0),'reglage',tot.id,'après le début de '+tot.id+' (réglage de '+lesP+' non programmé)');
           else infos.push('étape précédente non programmée ('+lesP+', porteur du réglage)');
         }
       } else {
         var inconnu=bdtG.some(function(o){ return ccReglage(o)==null; }), best=null;
-        bdtG.forEach(function(m){ var d=ccDebutBdt(m); if(!d) return; var g=ccGrille(d.date,d.heure); if(g==null) return; if(!best||g<best.g||(g===best.g&&ccTxt(m.id)<best.id)) best={d:d,g:g,id:ccTxt(m.id)}; });
-        if(best) pousser(ccAjouter(best.d.date,best.d.heure,0),'reglage',best.id,'après le début de '+best.id+(inconnu?' (réglage non renseigné, compté 0)':' (sans réglage)'));
+        bdtG.forEach(function(m){ var d=ccDebutBdt(m); if(!d) return; var g=T.position(d.date,d.heure); if(g==null) return; if(!best||g<best.g||(g===best.g&&ccTxt(m.id)<best.id)) best={d:d,g:g,id:ccTxt(m.id),op:m}; });
+        if(best) pousser(T.ajouter(best.op,best.d.date,best.d.heure,0),'reglage',best.id,'après le début de '+best.id+(inconnu?' (réglage non renseigné, compté 0)':' (sans réglage)'));
         else infos.push('étape précédente non programmée ('+ccTrierTextes(nonSoldes.map(function(o){ return ccTxt(o.id); })).join(', ')+')');
       }
     }
@@ -2982,7 +3054,7 @@ function ccAuPlusTot(cible,opsDuLot){
   if(!bdsCible&&!((rc==null?0:rc)>0)){
     var sc=ccNb(cible.seq);
     var freres=ops.filter(function(o){ var r=ccReglage(o); return o!==cible&&!ccAnnulee(o)&&!ccEstBds(o)&&o.seq!=null&&ccNb(o.seq)===sc&&(r==null?0:r)>0; }).sort(ccParId);
-    freres.forEach(function(f){ if(ccSoldee(f)) return; var R=ccReglage(f), d=ccDebutBdt(f); if(!d){ infos.push('réglage de '+ccTxt(f.id)+' non programmé (même étape)'); return; } pousser(ccAjouter(d.date,d.heure,R),'reglage',ccTxt(f.id),'après le réglage de '+ccTxt(f.id)+' ('+ccFmtNb(R)+' h, même étape)'); });
+    freres.forEach(function(f){ if(ccSoldee(f)) return; var R=ccReglage(f), d=ccDebutBdt(f); if(!d){ infos.push('réglage de '+ccTxt(f.id)+' non programmé (même étape)'); return; } pousser(T.ajouter(f,d.date,d.heure,R),'reglage',ccTxt(f.id),'après le réglage de '+ccTxt(f.id)+' ('+ccFmtNb(R)+' h, même étape)'); });
   }
   if(!cands.length){
     if(infos.length) return {date:null,heure:null,regle:'inconnu',depuis:null,raison:infos.join(' · ')};
@@ -2990,30 +3062,35 @@ function ccAuPlusTot(cible,opsDuLot){
   }
   var b0=cands[0];
   cands.forEach(function(x){ if(x.g>b0.g||(x.g===b0.g&&x.depuis<b0.depuis)) b0=x; });
-  var pos=bdsCible?{date:b0.date,heure:b0.heure}:ccVersDebut({date:b0.date,heure:b0.heure});
+  var pos=bdsCible?{date:b0.date,heure:b0.heure}:T.versDebut(cible,{date:b0.date,heure:b0.heure});
   return {date:pos.date,heure:pos.heure,regle:b0.regle,depuis:b0.depuis,raison:b0.raison+(infos.length?' · '+infos.join(' · '):'')};
 }
 function ccMessageCalage(h,apt){ return 'Calé à '+ccFmtH(h)+' (chemin critique) : '+apt.raison; }
 function ccControle(cible,opsDuLot){
+  var T=ccHorloge();
   var apt=ccAuPlusTot(cible,opsDuLot);
-  var libre={etat:'libre',au_plus_tot:apt,cale_a:null,message:null};
+  var libre={etat:'libre',au_plus_tot:apt,cale_a:null,cale_date:null,message:null};
   if(apt.regle==='aucune'||apt.regle==='inconnu'||apt.date==null||apt.heure==null) return libre;
-  var jA=ccJour(apt.date);
   if(ccEstBds(cible)){
     var db=ccDebutBds(cible);
     if(db==null) return libre;
-    if(ccJour(db)<jA) return {etat:'refus',au_plus_tot:apt,cale_a:null,message:ccTxt(cible.id)+' : dispo au plus tôt le '+ccJJMM(apt.date)+' ('+apt.raison+'). Planifiez-le ce jour-là ou après.'};
+    if(ccJour(db)<ccJour(apt.date)) return {etat:'refus',au_plus_tot:apt,cale_a:null,cale_date:null,message:ccTxt(cible.id)+' : dispo au plus tôt le '+ccJJMM(apt.date)+' ('+apt.raison+'). Planifiez-le ce jour-là ou après.'};
     return libre;
   }
-  var j=ccJour(cible.date_prevue);
-  if(j==null||j>jA) return libre;
-  if(j<jA) return {etat:'refus',au_plus_tot:apt,cale_a:null,message:'Au plus tôt le '+ccJJMM(apt.date)+' à '+ccFmtH(apt.heure)+' ('+apt.raison+') : posez '+ccTxt(cible.id)+' ce jour-là ou après.'};
+  var jA=T.jourPlanning(apt.date,apt.heure);
   var h=ccNum(cible.debut);
-  if(h!=null&&ccGrille(cible.date_prevue,h)>=ccGrille(apt.date,apt.heure)-CC_EPS) return libre;
-  var cale=Math.ceil(ccArr6(apt.heure*100))/100;
-  return {etat:'cale',au_plus_tot:apt,cale_a:cale,message:ccMessageCalage(cale,apt)};
+  var j=T.jourPlanning(cible.date_prevue,h);
+  if(j==null||j>jA) return libre;
+  if(j<jA) return {etat:'refus',au_plus_tot:apt,cale_a:null,cale_date:null,message:'Au plus tôt le '+ccJJMM(apt.date)+' à '+ccFmtH(apt.heure)+' ('+apt.raison+') : posez '+ccTxt(cible.id)+' ce jour-là ou après.'};
+  if(h!=null&&T.position(cible.date_prevue,h)>=T.position(apt.date,apt.heure)-CC_EPS) return libre;
+  var cale=Math.ceil(ccArr6(apt.heure*100))/100, caleDate=apt.date;
+  if(T.cadence&&cale>=24){ cale=ccArr6(cale-24); caleDate=ccIsoJour(ccJour(apt.date)+1); }
+  return {etat:'cale',au_plus_tot:apt,cale_a:cale,cale_date:caleDate,message:ccMessageCalage(cale,apt)};
 }
-function ccViolations(bdtRows,bdsRows){
+// opts.recus (lot G, revue du 16/09/2026) : compte aussi les BDT reçus à leur début réel (plan G4) ; la carte garde la règle du lot C.
+function ccViolations(bdtRows,bdsRows,opts){
+  opts=opts||{};
+  var T=ccHorloge();
   var parLot=Object.create(null), out={};
   function ranger(op){ var k=ccCleLot(op); if(!k) return; (parLot[k]=parLot[k]||[]).push(op); }
   (bdtRows||[]).forEach(function(b){ if(b) ranger(b); });
@@ -3021,12 +3098,12 @@ function ccViolations(bdtRows,bdsRows){
   (bdtRows||[]).forEach(function(b){
     if(!b||ccAnnulee(b)) return;
     var k=ccCleLot(b); if(!k) return;
-    var s=ccTxt(b.statut).toLowerCase();
-    if(ccSoldee(b)||s==='recu'||s==='reçu') return;
+    var s=ccTxt(b.statut).toLowerCase(), recu=(s==='recu'||s==='reçu');
+    if(ccSoldee(b)||(recu&&!opts.recus)) return;
     var d=ccDebutBdt(b); if(!d) return;
     var apt=ccAuPlusTot(b,parLot[k]||[]);
     if(apt.regle==='aucune'||apt.regle==='inconnu'||apt.date==null||apt.heure==null) return;
-    if(ccGrille(d.date,d.heure)<ccGrille(apt.date,apt.heure)-CC_EPS) out[ccTxt(b.id)]=ccTxt(b.id)+' posé le '+ccJJMM(d.date)+' à '+ccFmtH(d.heure)+' : au plus tôt le '+ccJJMM(apt.date)+' à '+ccFmtH(apt.heure)+' ('+apt.raison+')';
+    if(T.position(d.date,d.heure)<T.position(apt.date,apt.heure)-CC_EPS) out[ccTxt(b.id)]=ccTxt(b.id)+(recu?' reçu (commencé) le ':' posé le ')+ccJJMM(d.date)+' à '+ccFmtH(d.heure)+' : au plus tôt le '+ccJJMM(apt.date)+' à '+ccFmtH(apt.heure)+' ('+apt.raison+')';
   });
   (bdsRows||[]).forEach(function(x){
     if(!x||ccAnnulee(x)) return;
@@ -3041,10 +3118,221 @@ function ccViolations(bdtRows,bdsRows){
   return out;
 }
 // Adaptateur : carte BDT du planning (projection bdtsForGantt) → ligne au format des colonnes brutes du moteur.
-function ccRowBdt(b){ return {id:b.id,seq:b.seq,statut:b.statut,lot_id:b.cleLot,lot_ref:null,date_prevue:b.datePrevue,debut:(b.sansHeure?null:b.debut),duree:b.duree,temps_alloue:b.tempsAlloue,temps_reglage:b.reglage,debut_reel:b.debutReel,oas_avant:!!b.oasAvant,process_id:(b.process==='pending'?null:b.process),operateur_id:(b.op||null)}; }
+function ccRowBdt(b){ return {id:b.id,seq:b.seq,statut:b.statut,lot_id:b.cleLot,lot_ref:null,date_prevue:b.datePrevue,debut:(b.sansHeure?null:b.debut),duree:b.duree,temps_alloue:b.tempsAlloue,temps_reglage:b.reglage,debut_reel:b.debutReel,recu_le:(b.recuLe||null),oas_avant:!!b.oasAvant,process_id:(b.process==='pending'?null:b.process),operateur_id:(b.op||null),activite:(b.activiteBrute!==undefined?b.activiteBrute:(b.activite||null))}; }
 function ccOpsDuLot(k){ var out=[]; if(!k) return out; BDTS.forEach(function(b){ if(b.cleLot===k) out.push(ccRowBdt(b)); }); if(typeof BST_DATA!=='undefined'&&BST_DATA) BST_DATA.forEach(function(s){ if(ccCleLot(s)===k) out.push(s); }); return out; }
 function ccViolationsPage(){ return ccViolations(BDTS.map(ccRowBdt),(typeof BST_DATA!=='undefined'&&BST_DATA)?BST_DATA:[]); }
 // ==CC-MOTEUR-FIN==
+// ==POSTE-OAS-DEBUT==
+// ── LOT G (16/09/2026) : copie ligne à ligne de src/poste_oas.ts — bdtOccupePoste, intervalleBrut, fmtInstantPoste,
+//    messageChevauchement, chevauchementsMemeProcess (G3), versGoulotte, successeursADeprogrammer, messageRemiseGoulotte (G4),
+//    comparerRemisGoulotte (tri de la goulotte), libelleOasSuivant (G2). Toute modification se reporte des DEUX côtés
+//    (test de parité lotg/test_oas_poste.ts). Heures BRUTES pour le chevauchement (jour × 24 + heure + durée).
+var PP_EPS=1e-6;
+function ppRecu(op){ var s=ccTxt(op&&op.statut).toLowerCase(); return s==='recu'||s==='reçu'; }
+function ppOccupe(op){ if(!op||ccEstBds(op)) return false; var s=ccTxt(op.statut).toLowerCase(); if(!s||s==='a_programmer'||s==='st'||ccAnnulee(op)||ccTxt(op.operateur_id)==='ST'||ccSoldee(op)) return false; return !!ccTxt(op.process_id)&&ccJour(op.date_prevue)!=null; }
+function ppIntervalleBrut(op){ var j=ccJour(op&&op.date_prevue); if(j==null) return null; var h=ccNum(op.debut); if(h==null) h=CC_HEURE_DEFAUT; var d=ccNum(op.duree); if(d==null) d=ccNum(op.temps_alloue); d=Math.max(0,d==null?0:d); return {debut:ccArr6(j*24+h),fin:ccArr6(j*24+h+d)}; }
+// Lot G · G5 : intervalle en heures OUVRÉES de la cadence du site (planning_cadence.ts intervallePosteOuvre) ; grille : brut.
+function ppIntervalle(op){
+  var H=ccHorloge(); if(!H.cadence) return ppIntervalleBrut(op);
+  if(H.jourPlanning(ccTxt(op&&op.date_prevue).slice(0,10),null)==null) return null;
+  var iso=ccTxt(op.date_prevue).slice(0,10), h=ccNum(op.debut); if(h==null) h=CC_HEURE_DEFAUT;
+  var d=ccNum(op.duree); if(d==null) d=ccNum(op.temps_alloue); d=Math.max(0,d==null?0:d);
+  var fin=H.ajouter(op,iso,h,d); if(!fin) return ppIntervalleBrut(op);
+  var dep=H.versDebut(op,{date:iso,heure:h});
+  return {debut:H.position(dep.date,dep.heure),fin:H.position(fin.date,fin.heure)};
+}
+function ppFmtInstant(abs,jourRef){ var tm=Math.round(abs*60); var j=Math.floor(tm/1440), m=tm-j*1440; var HH=Math.floor(m/60), MM=m%60; var hhmm=(HH<10?'0':'')+HH+':'+(MM<10?'0':'')+MM; if(jourRef!=null&&j===jourRef) return hhmm; var iso=ccIsoJour(j); return hhmm+' le '+iso.slice(8,10)+'/'+iso.slice(5,7); }
+function ppMessageChevauchement(c,nomPoste,jourRef){ return 'Le poste '+(ccTxt(nomPoste)||'(sans nom)')+' porte déjà un BDT du même process ('+c.id+') de '+ppFmtInstant(c.debut,jourRef)+' à '+ppFmtInstant(c.fin,jourRef)+' : décalez la pose ou choisissez un autre process du poste.'; }
+function ppChevauchements(cible,autres,nomPoste){
+  if(!ppOccupe(cible)) return [];
+  var ic=ppIntervalle(cible); if(!ic) return [];
+  var pid=ccTxt(cible.process_id), idC=ccTxt(cible.id), jourRef=Math.floor(Math.round(ic.debut*60)/1440), vus=Object.create(null), out=[];
+  (autres||[]).forEach(function(o){
+    var id=ccTxt(o&&o.id);
+    if(!o||id===idC||vus[id]||ccTxt(o.process_id)!==pid||!ppOccupe(o)) return;
+    var io=ppIntervalle(o); if(!io) return;
+    if(io.debut<ic.fin-PP_EPS&&ic.debut<io.fin-PP_EPS){ vus[id]=true; out.push({id:id,debut:io.debut,fin:io.fin,date:ccIsoJour(Math.floor(Math.round(io.debut*60)/1440)),message:ppMessageChevauchement({id:id,debut:io.debut,fin:io.fin},nomPoste||'',jourRef)}); }
+  });
+  return out.sort(function(a,b){ return a.debut!==b.debut?a.debut-b.debut:(a.id<b.id?-1:(a.id>b.id?1:0)); });
+}
+function ppVersGoulotte(op){ var o={}; for(var k in op){ if(Object.prototype.hasOwnProperty.call(op,k)) o[k]=op[k]; } o.statut='a_programmer'; o.process_id=null; o.machine_id=null; o.date_prevue=null; o.debut=null; o.operateur_id=null; return o; }
+function ppViolations(bdts,bds){ return ccViolations(bdts,bds); }
+function ppViolationsRecus(bdts,bds){ return ccViolations(bdts,bds,{recus:true}); }
+function ppOrdreGamme(a,b){ var sa=ccNb(a.seq), sb=ccNb(b.seq); if(sa!==sb) return sa-sb; var x=ccTxt(a.id), y=ccTxt(b.id); return x<y?-1:(x>y?1:0); }
+// Plan G4 (copie de poste_oas.ts planRemiseGoulotte, revue du 16/09/2026) : une étape retirée est placée VIRTUELLEMENT à son au
+// plus tôt pour juger la suite (la remise en goulotte se propage) ; les étapes REÇUES rendues incohérentes sont signalées.
+function ppPlanRemiseGoulotte(avant,apres,opsDuLot){
+  var k=ccCleLot(apres); if(!k||!apres||apres.seq==null) return {retirer:[],signaler:[]};
+  var idC=ccTxt(apres.id);
+  var base=(opsDuLot||[]).filter(function(o){ return !!o&&ccCleLot(o)===k&&ccTxt(o.id)!==idC; });
+  function calc(f,ops){ return f(ops.filter(function(o){ return !ccEstBds(o); }),ops.filter(function(o){ return ccEstBds(o); })); }
+  var etatAvant=(avant&&ccCleLot(avant)===k)?base.concat([avant]):base;
+  var vAvant=calc(ppViolations,etatAvant);
+  var sc=ccNb(apres.seq), etat=base.concat([apres]), vus=Object.create(null), retirer=[];
+  for(var tour=0;tour<=base.length;tour++){
+    var v=calc(ppViolations,etat);
+    var nouveaux=etat.filter(function(o){ var id=ccTxt(o.id); return id!==idC&&!vus[id]&&!ccEstBds(o)&&o.seq!=null&&ccNb(o.seq)>=sc&&!!v[id]&&!vAvant[id]&&ppOccupe(o)&&!ppRecu(o); }).sort(ppOrdreGamme);
+    if(!nouveaux.length) break;
+    nouveaux.forEach(function(o){ var id=ccTxt(o.id); vus[id]=true; retirer.push({id:id,message:v[id]}); });
+    nouveaux.forEach(function(o){
+      var id=ccTxt(o.id), a=ccAuPlusTot(o,etat), virt;
+      if(a&&a.regle!=='aucune'&&a.regle!=='inconnu'&&a.date!=null&&a.heure!=null){ virt={}; for(var kk in o){ if(Object.prototype.hasOwnProperty.call(o,kk)) virt[kk]=o[kk]; } virt.date_prevue=a.date; virt.debut=a.heure; }
+      else virt=ppVersGoulotte(o);
+      etat=etat.map(function(x){ return ccTxt(x.id)===id?virt:x; });
+    });
+  }
+  var vRAvant=calc(ppViolationsRecus,etatAvant), vR=calc(ppViolationsRecus,etat);
+  var signaler=etat.filter(function(o){ var id=ccTxt(o.id); return id!==idC&&!vus[id]&&!ccEstBds(o)&&ppRecu(o)&&o.seq!=null&&ccNb(o.seq)>=sc&&!!vR[id]&&!vRAvant[id]; }).sort(ppOrdreGamme).map(function(o){ return {id:ccTxt(o.id),message:vR[ccTxt(o.id)]}; });
+  return {retirer:retirer,signaler:signaler};
+}
+function ppSuccesseursADeprogrammer(avant,apres,opsDuLot){ return ppPlanRemiseGoulotte(avant,apres,opsDuLot).retirer; }
+function ppMessageRemiseGoulotte(idDeplace,succ,sig){
+  sig=sig||[]; var n=succ.length, r=sig.length, m=[];
+  if(n) m.push('Déplacer '+idDeplace+' remettra dans la goulotte '+(n>1?'les étapes suivantes':'l’étape suivante')+' :\\n'+succ.map(function(s){ return '· '+s.id+' — '+s.message; }).join('\\n')+'\\n\\n'+(n>1?'Elles seront déprogrammées':'Elle sera déprogrammée')+' et placée'+(n>1?'s':'')+' en tête de la goulotte, à reprogrammer.');
+  if(r) m.push((n?'Déjà reçue'+(r>1?'s':''):'Déplacer '+idDeplace+' rendra incohérente'+(r>1?'s':'')+' '+(r>1?'des étapes déjà reçues':'une étape déjà reçue'))+' (commencée'+(r>1?'s':'')+' à l’atelier : jamais déprogrammée'+(r>1?'s':'')+', seulement signalée'+(r>1?'s':'')+') :\\n'+sig.map(function(s){ return '· '+s.id+' — '+s.message; }).join('\\n'));
+  return m.join('\\n\\n')+'\\n\\nAnnuler : rien ne bouge.';
+}
+function ppComparerRemis(a,b){ var ra=ccTxt(a), rb=ccTxt(b); if(ra===rb) return 0; if(!ra) return 1; if(!rb) return -1; return ra<rb?1:-1; }
+function ppLibelleOas(noms){ var l=(noms||[]).map(function(x){ return ccTxt(x); }).filter(Boolean); return l.length?'→ OAS : '+l.join(' › '):'→ OAS'; }
+// ==POSTE-OAS-FIN==
+// ==PLAN-CADENCE-DEBUT==
+// ── LOT G · G5 (16/09/2026) : copie ligne à ligne de src/planning_cadence.ts — jourLongPlanning, niveauxCalendrier, heureFermee,
+//    fenetreJour (intervallePosteOuvre = ppIntervalle ci-dessus). Toute modification se reporte des DEUX côtés
+//    (test de parité lotg/test_planning_cadence.ts). Cadence illisible : grille 5 h-23 h, aucune heure « fermée ».
+function plJourLong(iso){ var j=CAD.jourSemaineIso(iso); return (j?CAD.JOURS[j].toLowerCase()+' ':'')+ccJJMM(iso); }
+function plNiveaux(cal,iso){ return cal.sites.map(function(s){ return CAD.LIBELLES_NIVEAU[(CAD.niveauDuSite(cal.cadences,s,iso)||CAD.NIVEAU_DEFAUT)]+' ('+s+')'; }).join(' · '); }
+function plHeureFermee(op,nomPoste){
+  var H=ccHorloge(); if(!H.cadence) return null;
+  var d=ccTxt(op&&op.date_prevue).slice(0,10);
+  if(H.jourPlanning(d,null)==null) return null;
+  var h=ccNum(op.debut); if(h==null) h=CC_HEURE_DEFAUT;
+  var cal=H.calendrier(op); if(!cal) return null;
+  var i=CAD.versInstant(d,h);
+  if(CAD.estOuvert(i.date,i.heure,cal)) return null;
+  var p=CAD.prochainInstantOuvert(i.date,i.heure,cal), nom=ccTxt(nomPoste);
+  return {
+    message:(nom?'Le poste '+nom+' est':'Le poste est')+' fermé à cette heure ('+plJourLong(i.date)+' à '+ccFmtH(i.heure)+') en cadence '
+      +plNiveaux(cal,i.date)+' : posez le BDT sur un créneau ouvert'+(p?' — prochain : '+plJourLong(p.date)+' à '+ccFmtH(p.heure):' — aucun créneau ouvert')+'.',
+    prochain:p?{date:p.date,heure:ccArr6(p.heure)}:null
+  };
+}
+function plFenetre(dateIso){
+  var H=ccHorloge(), m=/^([0-9]{4})-([0-9]{2})-([0-9]{2})/.exec(ccTxt(dateIso));
+  var j=(H.cadence&&m)?H.jourPlanning(m[0],null):null;
+  if(j==null) return {cadence:false,ouvert:true,debut:CC_DEBUT,fin:CC_FIN,finMax:CC_FIN,plage:null};
+  var iso=m[0], lendemain=ccIsoJour(j+1);
+  var debut=H.debutFenetre(iso), finMax=24+H.debutFenetre(lendemain);
+  var p=CAD.plageOuverteCalendrier(H.calendrier(null),iso);
+  var fin=p?Math.min(finMax,Math.ceil(p.fin-1e-9)):Math.min(finMax,CC_FIN);
+  return {cadence:true,ouvert:!!p,debut:debut,fin:Math.max(fin,debut+1),finMax:finMax,plage:p?{debut:ccArr6(p.debut),fin:ccArr6(p.fin)}:null};
+}
+// ==PLAN-CADENCE-FIN==
+// ── Lot G · G5 : AFFICHAGE du planning adapté à la cadence — axe du jour, heures fermées grisées, dépôt borné, débordement ──
+// La vue d un jour D couvre [D + début de fenêtre, D+1 + début de fenêtre du lendemain[ (union des deux sites, indépendant du
+// filtre Seem / Semrac) : un BDT posé à 2 h du matin pendant la Soirée de D s affiche sur D, à droite de minuit.
+// Cadence illisible : grille 5 h-23 h du lot C, BDT affichés au jour de leur date prévue (comportement inchangé).
+var PLAN_AXE={cadence:false,date:null,j:null,s:CC_DEBUT,e:CC_FIN,absS:null,absE:null,ouvert:true,plage:null,cle:''};
+function planAbsBdt(b){ var j=ccJour(b&&(b.datePrevue||TODAY_REAL)); if(j==null) return null; var h=Number(b.debut); if(!isFinite(h)) h=CC_HEURE_DEFAUT; return ccArr6(j*24+h); }
+// Jour de la VUE qui affiche un BDT posé (même règle que bdtOnDay) : cadence → la nuit après minuit appartient à la veille ;
+// grille → sa date prévue. Sert à « Voir sur le planning » et à ?focusBdt= (sinon un BDT de 2 h ouvrait une vue où il n est pas).
+function planJourVue(b){ var d=b&&(b.datePrevue||TODAY_REAL); var H=ccHorloge(); if(!H.cadence||ccJour(d)==null) return d; var h=Number(b.debut); if(!isFinite(h)) h=CC_HEURE_DEFAUT; var j=H.jourPlanning(d,h); return j==null?d:ccIsoJour(j); }
+function planMajAxe(){
+  var H=ccHorloge(), jC=ccJour(currentDate), ancienne=PLAN_AXE.cle;
+  if(!H.cadence||jC==null){ PLAN_AXE={cadence:false,date:currentDate,j:jC,s:CC_DEBUT,e:CC_FIN,absS:null,absE:null,ouvert:true,plage:null,cle:''}; }
+  else {
+    var f=plFenetre(currentDate), s0=f.debut, e0=f.fin, cap=f.finMax;
+    // Aucun BDT posé ne disparaît : l axe s étend jusqu au début (+ 1 h) des barres de la vue posées au-delà de la plage ouverte.
+    BDTS.forEach(function(b){ if(enGoulotte(b)) return; var a=planAbsBdt(b); if(a==null) return; var r=a-jC*24; if(r>=s0-1e-9&&r<cap-1e-9&&r+1>e0) e0=Math.min(cap,Math.ceil(r+1-1e-9)); });
+    if(e0<=s0) e0=s0+1;
+    PLAN_AXE={cadence:true,date:currentDate,j:jC,s:s0,e:e0,absS:jC*24+s0,absE:jC*24+cap,ouvert:f.ouvert,plage:f.plage,cle:''};
+  }
+  DAY_START=PLAN_AXE.s; DAY_END=PLAN_AXE.e; TOTAL_H=DAY_END-DAY_START; LANE_W=TOTAL_H*PX_H;
+  // Clé : jour, axe, mode, et (revue du 16/09/2026) niveaux de cadence + plage ouverte — ou l avertissement en repli — pour que le
+  // bandeau suive un changement de cadence fait dans la page (l axe peut rester identique, ex. Moyen → Haut un lundi).
+  PLAN_AXE.cle=String(PLAN_AXE.date)+'|'+DAY_START+'|'+DAY_END+'|'+(PLAN_AXE.cadence?1:0)+'|'+(PLAN_AXE.cadence?(plNiveaux(H.calendrier(null),currentDate)+'|'+(PLAN_AXE.plage?PLAN_AXE.plage.debut+'-'+PLAN_AXE.plage.fin:'ferme')):String((typeof CADENCE_PAGE!=='undefined'&&CADENCE_PAGE&&CADENCE_PAGE.avertissement)||''));
+  var card=document.getElementById('planGanttCard'); if(card&&PLAN_AXE.cadence) card.style.minWidth=(300+LANE_W)+'px';
+  if(PLAN_AXE.cle!==ancienne) planInfoCadence();
+  return PLAN_AXE.cle!==ancienne;
+}
+// Heure d axe (DAY_START … DAY_END, au-delà de 24 = lendemain) → texte « 2h (+1j) »
+function planFmtAxe(t){ return fmtHour(((t%24)+24)%24)+(t>=24?' (+1j)':''); }
+// Intervalles OUVERTS de la cadence d une activité (poste : both = union) sur l axe du jour affiché, en heures d axe.
+function planOuvertsAxe(activite){
+  if(!PLAN_AXE.cadence) return [[DAY_START,DAY_END]];
+  var H=ccHorloge(), cal=H.calendrier({activite:activite}); if(!cal) return [[DAY_START,DAY_END]];
+  var j=PLAN_AXE.j, a0=j*24+DAY_START, a1=j*24+DAY_END, ivs=[];
+  for(var o=-1;o<=1;o++){ CAD.intervallesDuJour(cal,ccIsoJour(j+o)).forEach(function(iv){ ivs.push([iv[0]+24*(j+o),iv[1]+24*(j+o)]); }); }
+  ivs.sort(function(x,y){ return x[0]-y[0]; });
+  var fus=[]; ivs.forEach(function(iv){ var der=fus[fus.length-1]; if(der&&iv[0]<=der[1]+1e-9){ if(iv[1]>der[1]) der[1]=iv[1]; } else fus.push([iv[0],iv[1]]); });
+  var out=[]; fus.forEach(function(iv){ var d=Math.max(iv[0],a0), f=Math.min(iv[1],a1); if(f>d+1e-9) out.push([ccArr6(d-j*24),ccArr6(f-j*24)]); });
+  return out;
+}
+// Zones FERMÉES (aucune équipe du site ouverte) sur l axe du jour : complément des intervalles ouverts.
+function planFermesAxe(activite){
+  if(!PLAN_AXE.cadence) return [];
+  var z=[], t=DAY_START;
+  planOuvertsAxe(activite).forEach(function(iv){ if(iv[0]>t+1e-9) z.push([t,iv[0]]); if(iv[1]>t) t=iv[1]; });
+  if(DAY_END>t+1e-9) z.push([t,DAY_END]);
+  return z;
+}
+function planPosteDeLane(lane){ var id=lane&&lane.dataset?lane.dataset.posteid:null; if(id==null) return null; return (typeof POSTES_JS!=='undefined'?POSTES_JS:[]).find(function(p){ return String(p.id)===String(id); })||null; }
+// Dépôt borné à la plage OUVERTE du jour sur la ligne (site du poste), au quart d heure intérieur.
+function planBornesDepot(lane){
+  var po=planPosteDeLane(lane), ouv=planOuvertsAxe(po?po.activite:'both');
+  var lo=DAY_START, hi=Math.max(DAY_START,DAY_END-SNAP);
+  if(ouv.length){ lo=Math.max(lo,Math.ceil(ouv[0][0]/SNAP-1e-9)*SNAP); hi=Math.min(hi,Math.floor((ouv[ouv.length-1][1]-SNAP)/SNAP+1e-9)*SNAP); }
+  if(hi<lo) hi=lo;
+  return [lo,hi];
+}
+// Position de pose : heure d axe → jour calendaire + heure (26 h le 15/09 → 16/09 à 2 h).
+function planPoseDepuisAxe(t){ var k=Math.floor(t/24); return {date:ccIsoJour(PLAN_AXE.j+k),heure:Math.round((t-24*k)*100)/100}; }
+// Fin en heures ouvrées d une barre et débordement sur une fermeture (choix V1 : largeur = durée, débordement signalé).
+function planFinOuvree(b){
+  var H=ccHorloge(); if(!H.cadence||!b) return null;
+  var r=ccRowBdt(b), d=ccTxt(b.datePrevue||TODAY_REAL).slice(0,10); if(ccJour(d)==null) return null;
+  var h=ccNum(r.debut); if(h==null) h=CC_HEURE_DEFAUT;
+  var dur=ccDureeBdt(r), fin=H.ajouter(r,d,h,dur); if(!fin) return null;
+  var dep=H.versDebut(r,{date:d,heure:h}), a0=H.position(d,h);
+  return {fin:fin,ferme:H.position(dep.date,dep.heure)>a0+CC_EPS,deborde:H.position(fin.date,fin.heure)>a0+dur+CC_EPS};
+}
+function planFmtPos(p){ return ccJJMM(p.date)+' '+ccFmtH(p.heure); }
+// Bandeau au-dessus du planning : horaires du jour (cadence) ou repli sur la grille par défaut (cadence illisible).
+function planInfoCadence(){
+  var el=document.getElementById('planCadenceInfo'); if(!el) return;
+  if(!PLAN_AXE.cadence){
+    var av=(typeof CADENCE_PAGE!=='undefined'&&CADENCE_PAGE&&CADENCE_PAGE.avertissement)?CADENCE_PAGE.avertissement:'';
+    el.innerHTML=av?'<span style="color:#b45309;"><i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>Horaires par défaut du planning (5h → 23h) : '+ccEsc(av)+'</span>':'';
+    return;
+  }
+  var H=ccHorloge(), cal=H.calendrier(null), p=PLAN_AXE.plage;
+  el.innerHTML='<i class="fas fa-business-time" style="color:#0d9488;margin-right:4px;"></i>Cadence usine du '+ccEsc(plJourLong(currentDate))+' : <strong>'+ccEsc(plNiveaux(cal,currentDate))+'</strong>'
+    +(p?' · plage ouverte '+CAD.heuresVersHhmm(p.debut)+' → '+CAD.heuresVersHhmm(p.fin)+(p.fin>24?' (+1j)':''):' · <strong style="color:#b91c1c;">journée fermée</strong>')
+    +' · <span style="color:#94a3b8;">hachures = aucune équipe du site ouverte (dépôt refusé) · une barre garde sa durée ; <i class="fas fa-pause"></i> = déborde sur une fermeture · <i class="fas fa-arrow-right"></i> = se poursuit après la vue du jour · <i class="fas fa-moon"></i> = posée sur une heure fermée (fin prévue en heures ouvrées dans l info-bulle)</span>';
+}
+// ── Lot G : AFFICHAGE — badge « → OAS », badge « Remis en goulotte », barre en conflit, message préventif ──
+function ppBadgeOas(b){ if(!b||!b.oasApres) return ''; var lib=ppLibelleOas(b.oasSuivant); return '<span class="pp-oas" title="'+ccEsc('Étape suivante : traitement de surface à l’OAS (sans BDT). '+lib)+'" style="background:#cffafe;color:#0e7490;font-weight:800;border-radius:999px;padding:1px 7px;white-space:nowrap;"><i class="fas fa-atom" style="margin-right:3px;"></i>'+ccEsc(lib)+'</span>'; }
+function ppBadgeOasBarre(b){ if(!b||!b.oasApres) return ''; var lib=ppLibelleOas(b.oasSuivant); return '<span class="pp-oas-barre" title="'+ccEsc(lib)+'" style="display:inline-block;margin-left:4px;background:rgba(255,255,255,.92);color:#0e7490;border-radius:4px;padding:0 4px;font-size:.52rem;font-weight:800;text-shadow:none;vertical-align:middle;white-space:nowrap;">'+ccEsc(lib)+'</span>'; }
+function ppFmtRemis(iso){ var d=new Date(iso); if(isNaN(d.getTime())) return ''; var p=function(n){ return (n<10?'0':'')+n; }; return p(d.getDate())+'/'+p(d.getMonth()+1)+' à '+p(d.getHours())+':'+p(d.getMinutes()); }
+function ppBadgeRemis(b){ if(!b||!b.remisGoulotteLe) return ''; var q=ppFmtRemis(b.remisGoulotteLe); return '<span class="pp-remis" title="'+ccEsc('Déprogrammé automatiquement'+(q?' le '+q:'')+' : une étape précédente du lot a été déplacée. À reprogrammer.')+'" style="background:#fee2e2;color:#b91c1c;font-weight:800;border-radius:999px;padding:1px 7px;white-space:nowrap;"><i class="fas fa-rotate-left" style="margin-right:3px;"></i>Remis en goulotte</span>'; }
+function ppNomPosteDuProcess(procId){ var pr=PROCESS.find(function(x){ return String(x.id)===String(procId); }); var po=pr?(typeof POSTES_JS!=='undefined'?POSTES_JS:[]).find(function(x){ return String(x.id)===String(pr.poste_id); }):null; return po?String(po.nom||''):(pr?'« '+pr.nom+' »':String(procId)); }
+// Barre(s) en conflit (G3) : liseré rouge 6 s et amenée dans la vue. Une barre d un autre jour n est pas affichée : le message donne son jour.
+function ppMontrerConflit(ch){
+  var bars=document.querySelectorAll('#ganttBody .bdt-bar');
+  (ch||[]).forEach(function(x){
+    for(var i=0;i<bars.length;i++){
+      var el=bars[i]; if(el.dataset.bdtid!==String(x.id)) continue;
+      el.classList.add('pp-conflit'); el.style.outline='3px solid #dc2626'; el.style.outlineOffset='1px'; el.style.zIndex='30';
+      try{ el.scrollIntoView({block:'nearest',inline:'center',behavior:'smooth'}); }catch(e){}
+      (function(e2){ setTimeout(function(){ e2.classList.remove('pp-conflit'); e2.style.outline=''; e2.style.outlineOffset=''; e2.style.zIndex=''; },6000); })(el);
+    }
+  });
+}
+// Réponse d une pose (BDT ou BST) : les successeurs que le serveur a remis en goulotte y repartent localement, en tête.
+function ppAppliquerRemise(j){ (j&&Array.isArray(j.successeurs_deprogrammes)?j.successeurs_deprogrammes:[]).forEach(function(sid){ var s=BDTS.find(function(x){ return String(x.id)===String(sid); }); if(!s) return; s.process='pending'; s.machineId=null; s.statut='a_programmer'; s.datePrevue=null; s.sansHeure=true; s.op=''; s.remisGoulotteLe=j.remis_goulotte_le||null; }); }
+function ppConfirmerRemise(idDeplace,succ,sig){ var retire=(succ||[]).length>0; return appConfirm(ppMessageRemiseGoulotte(idDeplace,succ||[],sig||[]),{title:retire?'Remettre en goulotte':'Étape déjà reçue',okLabel:retire?'Déplacer et remettre en goulotte':'Déplacer quand même',icon:retire?'fa-rotate-left':'fa-link-slash',danger:true}); }
+// Revue du 16/09/2026 : les id confirmés s ACCUMULENT d une fenêtre à l autre (liste de l écran puis liste du serveur) — remplacés,
+// ils faisaient tourner les confirmations en boucle quand l écran et le serveur ne voyaient pas les mêmes successeurs.
+function ppUnionIds(ids,liste){ var out=[], vus=Object.create(null); (ids||[]).concat((liste||[]).map(function(s){ return (s&&s.id!=null)?s.id:s; })).forEach(function(x){ var k=String(x); if(!vus[k]){ vus[k]=true; out.push(k); } }); return out; }
 // ── Chemin critique et temps (lot C) : AFFICHAGE — goulotte, barres, info-bulle, glisser-déposer, carte « Enchaînements à revoir » ──
 var CC_VIOL={};   // { id : message } — opérations posées avant leur au plus tôt, recalculées à chaque rendu
 function ccMajViolations(){ try{ CC_VIOL=ccViolationsPage(); }catch(e){ CC_VIOL={}; } return CC_VIOL; }
@@ -3086,7 +3374,8 @@ function ccVoir(id){
   var b=BDTS.find(function(x){ return String(x.id)===String(id); });
   if(b){
     if(typeof showProdTab==='function') showProdTab('gantt-bdt');
-    if(b.datePrevue&&b.datePrevue!==currentDate){ currentDate=b.datePrevue; var pd=document.getElementById('planDate'); if(pd) pd.value=currentDate; }
+    var jv=planJourVue(b);
+    if(b.datePrevue&&jv!==currentDate){ currentDate=jv; var pd=document.getElementById('planDate'); if(pd) pd.value=currentDate; }
     focusLot=b.id; updateFocusBanner(); buildAll();
     return;
   }
@@ -3111,7 +3400,8 @@ function ccMontrerZone(lane){
   var apt=ccAptDrag();
   var jA=(apt&&apt.date)?ccJour(apt.date):null, jC=ccJour(currentDate);
   if(!apt||apt.regle==='aucune'||apt.regle==='inconnu'||jA==null||jC==null||jA<jC){ ccCacherZone(); return; }
-  var hFin=(jA>jC)?DAY_END:Math.min(DAY_END,apt.heure);
+  // Cadence : position de l au plus tôt sur l axe du jour (au-delà de 24 h = nuit du jour affiché).
+  var hFin=PLAN_AXE.cadence?Math.min(DAY_END,(jA-jC)*24+apt.heure):((jA>jC)?DAY_END:Math.min(DAY_END,apt.heure));
   if(hFin<=DAY_START){ ccCacherZone(); return; }
   var rect=lane.getBoundingClientRect();
   var z=document.getElementById('dropZoneCC');
@@ -3120,6 +3410,7 @@ function ccMontrerZone(lane){
   var l=document.getElementById('dropZoneCCLbl');
   if(!l){ l=document.createElement('div'); l.id='dropZoneCCLbl'; l.style.cssText='position:fixed;z-index:61;pointer-events:none;background:#dc2626;color:white;font-size:.6rem;font-weight:700;padding:1px 6px;border-radius:4px;white-space:nowrap;max-width:460px;overflow:hidden;text-overflow:ellipsis;'; document.body.appendChild(l); }
   l.textContent='au plus tôt '+(jA>jC?('le '+ccJJMM(apt.date)+' à '):'')+ccFmtH(apt.heure)+' · '+apt.raison;
+  l.style.maxWidth=Math.max(160,Math.min(460,(hFin-DAY_START)*PX_H-8))+'px';
   l.style.left=(rect.left+4)+'px'; l.style.top=(rect.top+rect.height-16)+'px'; l.style.display='block';
 }
 // Annuler une découpe (C6) : recolle la famille via POST /api/production/bdt/:id/recoller, après confirmation.
@@ -3199,14 +3490,16 @@ function affOpsForSlot(procId, shift){ var aff=AFFECTATIONS[currentDate]||{}; va
 // Libellés, horaires et couleurs : SHIFTS (src/shared.ts), injecté dans SHIFTS_MAP — seule source.
 var PLAN_CRENEAUX=['matin','journee','apmidi','soir'];
 // [id, libellé, couleur (bordure, fond), horaires, couleur de TEXTE foncée et lisible (PRES_SHIFTS, presences.ts couleurTexteCreneau)]
-function planCreneaux(){ return PLAN_CRENEAUX.map(function(k){ var s=SHIFTS_MAP[k]||{label:k,color:'#64748b',start:0,end:0}; var p=(typeof PRES_SHIFTS!=='undefined'&&PRES_SHIFTS&&PRES_SHIFTS[k])?PRES_SHIFTS[k]:null; return [k, s.label, s.color, (s.start%24)+'h-'+(s.end%24)+'h', p?p[1]:'#334155']; }); }
+// Lot G : [5] = fermé ce jour-là, [6] = niveau de cadence (un seul site). Horaires = cadence du site (activité du poste ;
+// 'all' / both = les deux sites) au jour affiché (currentDate) ; repli SHIFTS si la cadence est illisible.
+function planCreneaux(activite){ return PLAN_CRENEAUX.map(function(k){ var s=SHIFTS_MAP[k]||{label:k,color:'#64748b',start:0,end:0}; var p=(typeof PRES_SHIFTS!=='undefined'&&PRES_SHIFTS&&PRES_SHIFTS[k])?PRES_SHIFTS[k]:null; var hc=cadHorairesCreneau(activite,currentDate,k); return [k, s.label, s.color, hc.texte, p?p[1]:'#334155', !hc.ouvert, hc.niveau]; }); }
 // 4 sous-cases (Matin / Journée / Après-midi / Soirée) à insérer DANS la case process du Gantt
 function procSlotsMiniHTML(proc){
-  var SLOTS=planCreneaux();
+  var SLOTS=planCreneaux(proc&&proc.activite);
   return '<div style="display:flex;gap:3px;margin-top:5px;">'+SLOTS.map(function(sl){
     var chips=affOpsForSlot(proc.id,sl[0]).map(function(opId){ var o=OPS_PRESENCE.find(function(x){return String(x.id)===String(opId);})||OPERATEURS.find(function(x){return String(x.id)===String(opId);}); var nm=o?o.nom:opId;
       return '<span style="display:inline-flex;align-items:center;gap:2px;background:'+sl[2]+'1a;color:'+sl[4]+';border-radius:999px;padding:0 4px;font-size:.54rem;font-weight:700;margin:1px;line-height:1.5;">'+nm+' <i class="fas fa-times" style="cursor:pointer;opacity:.7;" onclick="event.stopPropagation();retirerAffectation(\\''+opId+'\\',\\''+proc.id+'\\',\\''+sl[0]+'\\')"></i></span>'; }).join('');
-    return '<div class="proc-slot" ondragover="event.preventDefault();this.classList.add(\\'drag-over\\')" ondragleave="this.classList.remove(\\'drag-over\\')" ondrop="procDrop(event,\\''+proc.id+'\\',\\''+sl[0]+'\\')" onclick="slotClick(event,\\''+proc.id+'\\',\\''+sl[0]+'\\')" title="'+sl[1]+' '+sl[3]+'" style="flex:1;min-width:0;border:1px dashed #e2e8f0;border-top:2px solid '+sl[2]+';border-radius:5px;padding:2px 3px;min-height:30px;background:#fafafa;cursor:pointer;">'
+    return '<div class="proc-slot" ondragover="event.preventDefault();this.classList.add(\\'drag-over\\')" ondragleave="this.classList.remove(\\'drag-over\\')" ondrop="procDrop(event,\\''+proc.id+'\\',\\''+sl[0]+'\\')" onclick="slotClick(event,\\''+proc.id+'\\',\\''+sl[0]+'\\')" title="'+sl[1]+' '+sl[3]+(sl[5]?' · fermé ce jour'+(sl[6]?' (cadence '+cadLibNiveau(sl[6])+')':''):'')+'" style="flex:1;min-width:0;border:1px dashed #e2e8f0;border-top:2px solid '+(sl[5]?'#cbd5e1':sl[2])+';border-radius:5px;padding:2px 3px;min-height:30px;background:'+(sl[5]?'repeating-linear-gradient(45deg,#f1f5f9 0 4px,#fafafa 4px 8px)':'#fafafa')+';cursor:pointer;'+(sl[5]?'opacity:.6;':'')+'">'
       +'<div style="font-size:.5rem;font-weight:800;color:'+sl[4]+';text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+sl[1]+'</div>'
       +'<div style="line-height:1.3;">'+(chips||'<span style="font-size:.5rem;color:#d1d5db;">—</span>')+'</div></div>';
   }).join('')+'</div>';
@@ -3225,7 +3518,7 @@ function buildOperatorsByShift(){
       : '<i class="fas fa-spinner fa-spin" style="margin-right:5px;"></i>Chargement des présences du jour…')+'</div>';
     return;
   }
-  var COLS=planCreneaux().concat([['absent','Absent','#ef4444','','#b91c1c']]);
+  var COLS=planCreneaux(filtAct).concat([['absent','Absent','#ef4444','','#b91c1c',false,null]]);
   var aff=AFFECTATIONS[currentDate]||{};
   var byCol={matin:[],journee:[],apmidi:[],soir:[],absent:[]};
   OPS_PRESENCE.forEach(function(o){ if(filtAct!=='all'&&o.activite!==filtAct) return; var c=opShiftCol(o.id); (byCol[c]=byCol[c]||[]).push(o); });
@@ -3242,7 +3535,8 @@ function buildOperatorsByShift(){
   box.innerHTML='<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;">'+COLS.map(function(c){
     var list=(byCol[c[0]]||[]).slice().sort(function(a,b){return String(a.nom).localeCompare(String(b.nom));});
     return '<div style="background:#f8fafc;border-radius:9px;padding:7px;border-top:3px solid '+c[2]+';min-height:60px;">'
-      +'<div style="font-size:.66rem;font-weight:800;text-transform:uppercase;color:'+c[4]+';margin-bottom:6px;text-align:center;">'+c[1]+' <span style="color:#cbd5e1;">'+list.length+'</span></div>'
+      +'<div style="font-size:.66rem;font-weight:800;text-transform:uppercase;color:'+c[4]+';margin-bottom:'+(c[3]?'1px':'6px')+';text-align:center;">'+c[1]+' <span style="color:#cbd5e1;">'+list.length+'</span></div>'
+      +(c[3]?'<div style="font-size:.56rem;font-weight:600;color:'+(c[5]?'#dc2626':'#94a3b8')+';margin-bottom:6px;text-align:center;" title="Horaires selon la cadence usine du jour">'+presEsc(c[3])+'</div>':'')
       +(list.map(function(o){return cardOf(o,c[0]);}).join('')||'<div style="font-size:.6rem;color:#d1d5db;text-align:center;padding:6px;">—</div>')+'</div>';
   }).join('')+'</div>';
 }
@@ -3274,7 +3568,8 @@ function setAffaireFilter(v){ filtAffaire=(v||'').trim(); var b=document.getElem
 function clearAffaireFilter(){ var i=document.getElementById('affSearch'); if(i) i.value=''; setAffaireFilter(''); }
 // Ordre file d'attente : échéance client au plus tôt, puis lot, puis ordre de gamme (seq). C'est un TRI d'affichage,
 // pas le chemin critique : celui-ci (réglage de l'étape précédente) est calculé par le moteur cc… plus bas.
-function pendSort(a,b){ var da=a.dateEcheance||'9999-12-31', db=b.dateEcheance||'9999-12-31'; if(da!==db) return da<db?-1:1; var ka=lotKey(a), kb=lotKey(b); if(ka!==kb) return ka<kb?-1:1; var sa=(a.seq==null?9999:a.seq), sb=(b.seq==null?9999:b.seq); if(sa!==sb) return sa-sb; return String(a.id).localeCompare(String(b.id),undefined,{numeric:true}); }
+// Lot G : les BDT REMIS en goulotte par un déplacement passent en tête (le plus récent d abord), avant l échéance (poste_oas.ts comparerGoulotte).
+function pendSort(a,b){ var rg=ppComparerRemis(a.remisGoulotteLe,b.remisGoulotteLe); if(rg) return rg; var da=a.dateEcheance||'9999-12-31', db=b.dateEcheance||'9999-12-31'; if(da!==db) return da<db?-1:1; var ka=lotKey(a), kb=lotKey(b); if(ka!==kb) return ka<kb?-1:1; var sa=(a.seq==null?9999:a.seq), sb=(b.seq==null?9999:b.seq); if(sa!==sb) return sa-sb; return String(a.id).localeCompare(String(b.id),undefined,{numeric:true}); }
 // Surbrillance de tous les BDT d'un même lot dans le planning (pour repérer le précédent)
 function highlightLot(key){ var bars=document.querySelectorAll('#ganttBody .bdt-bar'); for(var i=0;i<bars.length;i++){ var el=bars[i]; if(el.dataset.lot===key){ el.style.outline='3px solid #facc15'; el.style.outlineOffset='1px'; el.style.zIndex='25'; el.style.opacity='1'; } else { el.style.opacity='0.28'; } } }
 function clearHighlight(){ var bars=document.querySelectorAll('#ganttBody .bdt-bar'); for(var i=0;i<bars.length;i++){ var el=bars[i]; el.style.outline=''; el.style.outlineOffset=''; el.style.zIndex=''; if(!filtAffaire) el.style.opacity=''; } if(filtAffaire) buildGantt(); }
@@ -3361,10 +3656,10 @@ function updateFocusBanner(){
 function focusBdtLot(bdtId){ var b=BDTS.find(function(x){return x.id===bdtId;}); if(!b) return; focusLot=(focusLot===bdtId)?null:bdtId; updateFocusBanner(); buildGantt(); }
 // Arrivee depuis un lien « Voir au planning » (?focusBdt=...) : on se place sur le jour du BDT,
 // ou on le selectionne dans la goulotte s'il n'est pas encore programme.
-window.addEventListener('load',function(){ try{ var fb=new URLSearchParams(location.search).get('focusBdt'); if(!fb) return; var b=BDTS.find(function(x){return String(x.id)===String(fb);}); if(!b) return; if(enGoulotte(b)){ selectPendBdt(b.id); return; } if(b.datePrevue&&b.datePrevue!==currentDate){ currentDate=b.datePrevue; var pd=document.getElementById('planDate'); if(pd) pd.value=currentDate; buildAll(); } focusBdtLot(b.id); }catch(e){} });
+window.addEventListener('load',function(){ try{ var fb=new URLSearchParams(location.search).get('focusBdt'); if(!fb) return; var b=BDTS.find(function(x){return String(x.id)===String(fb);}); if(!b) return; if(enGoulotte(b)){ selectPendBdt(b.id); return; } var jv=planJourVue(b); if(b.datePrevue&&jv!==currentDate){ currentDate=jv; var pd=document.getElementById('planDate'); if(pd) pd.value=currentDate; buildAll(); } focusBdtLot(b.id); }catch(e){} });
 function clearFocusLot(){ focusLot=null; updateFocusBanner(); buildGantt(); }
 // Guide visuel de dépôt (ligne + heure cible) pendant le glisser — et, BDT sélectionné au clic, au survol d une ligne
-function showDropGuide(lane,e){ var rect=lane.getBoundingClientRect(); var t=snapTime(lane,e); var g=document.getElementById('dropGuide'); if(!g){ g=document.createElement('div'); g.id='dropGuide'; g.style.cssText='position:fixed;width:2px;background:#f59e0b;z-index:60;pointer-events:none;box-shadow:0 0 8px #f59e0b;'; document.body.appendChild(g); } var px=rect.left+(t-DAY_START)*PX_H; g.style.left=px+'px'; g.style.top=rect.top+'px'; g.style.height=rect.height+'px'; g.style.display='block'; var lbl=document.getElementById('dropGuideLbl'); if(!lbl){ lbl=document.createElement('div'); lbl.id='dropGuideLbl'; lbl.style.cssText='position:fixed;background:#f59e0b;color:white;font-size:.62rem;font-weight:800;padding:1px 6px;border-radius:4px;z-index:61;pointer-events:none;white-space:nowrap;'; document.body.appendChild(lbl); } lbl.textContent=fmtHour(t); lbl.style.left=(px+4)+'px'; lbl.style.top=(rect.top-16)+'px'; lbl.style.display='block'; if(dragId||selBdtId) ccMontrerZone(lane); }
+function showDropGuide(lane,e){ var rect=lane.getBoundingClientRect(); var t=snapTime(lane,e); var g=document.getElementById('dropGuide'); if(!g){ g=document.createElement('div'); g.id='dropGuide'; g.style.cssText='position:fixed;width:2px;background:#f59e0b;z-index:60;pointer-events:none;box-shadow:0 0 8px #f59e0b;'; document.body.appendChild(g); } var px=rect.left+(t-DAY_START)*PX_H; g.style.left=px+'px'; g.style.top=rect.top+'px'; g.style.height=rect.height+'px'; g.style.display='block'; var lbl=document.getElementById('dropGuideLbl'); if(!lbl){ lbl=document.createElement('div'); lbl.id='dropGuideLbl'; lbl.style.cssText='position:fixed;background:#f59e0b;color:white;font-size:.62rem;font-weight:800;padding:1px 6px;border-radius:4px;z-index:61;pointer-events:none;white-space:nowrap;'; document.body.appendChild(lbl); } lbl.textContent=PLAN_AXE.cadence?planFmtAxe(t):fmtHour(t); lbl.style.background='#f59e0b'; g.style.background='#f59e0b'; if(PLAN_AXE.cadence&&(dragId||selBdtId)){ var bG=BDTS.find(function(z){ return z.id===(dragId||selBdtId); }); var poG=planPosteDeLane(lane); var pG=planPoseDepuisAxe(t); if(bG){ var rG=ccRowBdt(bG); rG.date_prevue=pG.date; rG.debut=pG.heure; if(poG&&poG.activite&&poG.activite!=='both') rG.activite=poG.activite; if(plHeureFermee(rG,'')){ lbl.textContent+=' · fermé'; lbl.style.background='#dc2626'; g.style.background='#dc2626'; } } } lbl.style.left=(px+4)+'px'; lbl.style.top=(rect.top-16)+'px'; lbl.style.display='block'; if(dragId||selBdtId) ccMontrerZone(lane); }
 function hideDropGuide(){ var g=document.getElementById('dropGuide'); if(g) g.style.display='none'; var l=document.getElementById('dropGuideLbl'); if(l) l.style.display='none'; ccCacherZone(); _ccDrag=null; }
 // Heure de DÉBUT visée sur une ligne du planning = position du BORD GAUCHE de ce qui est déplacé (pointeur − decal),
 // arrondie au quart d heure et bornée pour que le BDT tienne dans la journée (la borne est elle aussi au quart d heure :
@@ -3374,7 +3669,9 @@ function hideDropGuide(){ var g=document.getElementById('dropGuide'); if(g) g.st
 //     ⚠ Avant le 16/09/2026, l image était la carte entière (≈ 330 px = 6,6 h) : saisie en son milieu, le BDT tombait
 //     3 h 30 APRÈS le bord gauche que l utilisateur alignait (« calé bien après le réglage du précédent ») ;
 //   · pose au clic (BDT sélectionné puis clic sur une ligne) : l heure cliquée (avant : l endroit cliqué était ignoré).
-function heureSurLane(lane,clientX,decal,bdtId){ var rect=lane.getBoundingClientRect(); var t=DAY_START+(Number(clientX)-rect.left-(Number(decal)||0))/PX_H; t=Math.round(t/SNAP)*SNAP; var b=bdtId?BDTS.find(function(z){return z.id===bdtId;}):null; var dur=Number(b&&b.duree); if(!isFinite(dur)||dur<=0) dur=1; var tMax=DAY_START+Math.max(0,Math.floor((TOTAL_H-dur)/SNAP+1e-9))*SNAP; if(t>tMax) t=tMax; if(t<DAY_START) t=DAY_START; return t; }
+// Lot G · G5 (cadence lisible) : bornée à la plage OUVERTE du jour sur la ligne (site du poste) ; une barre plus longue que ce
+// qui reste ouvert n est plus ramenée en arrière : elle se prolonge en heures ouvrées et le planning signale le débordement.
+function heureSurLane(lane,clientX,decal,bdtId){ var rect=lane.getBoundingClientRect(); var t=DAY_START+(Number(clientX)-rect.left-(Number(decal)||0))/PX_H; t=Math.round(t/SNAP)*SNAP; if(PLAN_AXE.cadence){ var bo=planBornesDepot(lane); if(t>bo[1]) t=bo[1]; if(t<bo[0]) t=bo[0]; return t; } var b=bdtId?BDTS.find(function(z){return z.id===bdtId;}):null; var dur=Number(b&&b.duree); if(!isFinite(dur)||dur<=0) dur=1; var tMax=DAY_START+Math.max(0,Math.floor((TOTAL_H-dur)/SNAP+1e-9))*SNAP; if(t>tMax) t=tMax; if(t<DAY_START) t=DAY_START; return t; }
 function snapTime(lane,e){ return dragId?heureSurLane(lane,e.clientX,_grabDX,dragId):heureSurLane(lane,e.clientX,0,selBdtId); }
 // Image glissée d une carte de la goulotte : mini-barre À L ÉCHELLE du planning (réglage hachuré en tête), bord gauche
 // sous le pointeur — là où le trait orange affiche l heure visée. Hors écran, elle ne sert qu à setDragImage.
@@ -3417,8 +3714,11 @@ function setAct(a){ filtAct=a; var ids=['all','Seem','Semrac']; ids.forEach(func
 function setType(t){ filtType=t; var ids=['all','machine','manuel']; ids.forEach(function(x){ var el=document.getElementById('ft-'+x); if(el) el.classList.toggle('active',x===t); }); buildAll(); }
 function isAbsent(opId,date){ return !!(ABSENCES_MAP[opId]&&ABSENCES_MAP[opId].dates&&ABSENCES_MAP[opId].dates.indexOf(date)>=0); }
 function buildHoursHdr(){
+  planMajAxe();
   var hdr=document.getElementById('hoursHdr'); if(!hdr) return;
   hdr.innerHTML=''; hdr.style.cssText='width:'+LANE_W+'px;position:relative;height:34px;';
+  // Lot G · G5 : heures où aucun des deux sites ne travaille, grisées dans l en-tête (le détail par site est sur chaque ligne).
+  planFermesAxe('both').forEach(function(z){ var fz=document.createElement('div'); fz.className='hours-ferme'; fz.title='Fermé (aucun site ouvert)'; fz.style.cssText='position:absolute;top:0;bottom:0;left:'+((z[0]-DAY_START)*PX_H)+'px;width:'+((z[1]-z[0])*PX_H)+'px;background:repeating-linear-gradient(135deg,rgba(148,163,184,.28) 0 5px,rgba(148,163,184,.08) 5px 10px);pointer-events:none;'; hdr.appendChild(fz); });
   // Chaque libellé est CENTRÉ SUR SON HEURE (petit trait en bas = trait de la grille) : avant le 16/09/2026, la case
   // « 8h » couvrait 8h → 9h et son texte tombait sur 8h30 — viser le libellé posait le BDT 30 min trop tard.
   for(var h=DAY_START;h<=DAY_END;h++){
@@ -3426,7 +3726,7 @@ function buildHoursHdr(){
     if(h===DAY_START){ gauche=x; aligne='left'; } else if(h===DAY_END){ gauche=x-PX_H; aligne='right'; }
     var el=document.createElement('div'); el.className='hours-lbl'; el.dataset.h=h;
     el.style.cssText='position:absolute;left:'+gauche+'px;width:'+PX_H+'px;text-align:'+aligne+';padding:7px 3px;box-sizing:border-box;font-size:.6rem;'+(h%2===0?'font-weight:700;color:#94a3b8;':'color:#64748b;');
-    el.textContent=h+'h'; hdr.appendChild(el);
+    el.textContent=(h%24)+'h'; if(h>=24){ el.title='lendemain'; el.style.color='#c4b5fd'; } hdr.appendChild(el);
     var tk=document.createElement('div'); tk.style.cssText='position:absolute;left:'+x+'px;bottom:0;height:6px;border-left:1px solid '+(h%2===0?'#94a3b8':'#475569')+';pointer-events:none;'; hdr.appendChild(tk);
   }
 }
@@ -3474,6 +3774,7 @@ function dropBdtOnPoste(bdtId,posteId,debut){
 }
 function buildGantt(){
   _ccDrag=null;   // au plus tôt du BDT glissé / sélectionné : recalculé après toute reconstruction (une pose a pu le changer)
+  if(planMajAxe()) buildHoursHdr();   // lot G · G5 : axe du jour (date, cadence, barres posées) ; en-tête resynchronisé s il change
   var body=document.getElementById('ganttBody'); if(!body) return; body.innerHTML='';
   var _focusSet=focusLot?etapePostesSet(focusLot):null;
   var postes=(typeof POSTES_JS!=='undefined'?POSTES_JS:[]).filter(function(po){ return po.statut!=='inactif' && !isOasPoste(po) && (filtAct==='all'||po.activite===filtAct||po.activite==='both') && (!_focusSet||_focusSet[String(po.id)]); }).slice().sort(function(a,b){ return (Number(a.ordre)||100)-(Number(b.ordre)||100); });
@@ -3489,6 +3790,11 @@ function buildGantt(){
     var lane=document.createElement('div'); lane.className='gantt-lane';
     lane.style.cssText='position:relative;min-height:68px;width:'+LANE_W+'px;'; lane.dataset.posteid=poste.id;
     for(var h=0;h<=TOTAL_H;h++){ var t=document.createElement('div'); t.className='gantt-tick'+(h%2===0?' major':''); t.style.left=(h*PX_H)+'px'; lane.appendChild(t); }
+    // Lot G · G5 : heures fermées pour le SITE du poste (aucune équipe ouverte) grisées ; journée entièrement fermée dite.
+    var fermes=planFermesAxe(poste.activite);
+    fermes.forEach(function(z){ var fz=document.createElement('div'); fz.className='plan-ferme'; fz.title='Fermé : aucune équipe '+(poste.activite==='Seem'||poste.activite==='Semrac'?poste.activite+' ':'')+'ouverte (dépôt refusé)'; fz.style.cssText='position:absolute;top:0;bottom:0;left:'+((z[0]-DAY_START)*PX_H)+'px;width:'+((z[1]-z[0])*PX_H)+'px;background:repeating-linear-gradient(135deg,rgba(100,116,139,.16) 0 6px,rgba(100,116,139,.05) 6px 12px);pointer-events:none;z-index:1;'; lane.appendChild(fz); });
+    if(PLAN_AXE.cadence&&DAY_END>24&&DAY_START<24){ var mn=document.createElement('div'); mn.className='plan-minuit'; mn.title='Minuit : lendemain'; mn.style.cssText='position:absolute;top:0;bottom:0;left:'+((24-DAY_START)*PX_H)+'px;border-left:2px dashed #c4b5fd;pointer-events:none;z-index:1;'; lane.appendChild(mn); }
+    if(PLAN_AXE.cadence&&fermes.length===1&&fermes[0][0]<=DAY_START+1e-9&&fermes[0][1]>=DAY_END-1e-9&&bdtsP.length===0){ var fj=document.createElement('div'); fj.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.68rem;color:#94a3b8;font-weight:700;pointer-events:none;z-index:1;'; fj.innerHTML='<i class="fas fa-moon" style="margin-right:5px;"></i>Fermé ce jour (cadence usine)'; lane.appendChild(fj); }
     bdtsP.forEach(function(bdt){ lane.appendChild(makeBdtBar(bdt)); });
     lane.addEventListener('dragover',function(e){ e.preventDefault(); lane.classList.add('drag-over'); showDropGuide(lane,e); });
     lane.addEventListener('dragleave',function(){ lane.classList.remove('drag-over'); hideDropGuide(); });
@@ -3497,12 +3803,17 @@ function buildGantt(){
     lane.addEventListener('mousemove',function(e){ if(selBdtId&&!dragId) showDropGuide(lane,e); });
     lane.addEventListener('mouseleave',function(){ if(selBdtId&&!dragId) hideDropGuide(); });
     lane.addEventListener('click',function(e){ if(selBdtId){ var t=heureSurLane(lane,e.clientX,0,selBdtId); hideDropGuide(); dropBdtOnPoste(selBdtId,poste.id,t); selBdtId=null; } });
-    if(bdtsP.length===0){ var em=document.createElement('div'); em.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.68rem;color:#d1d5db;pointer-events:none;'; em.innerHTML='<i class="fas fa-inbox" style="margin-right:4px;"></i>Aucun BDT — glissez un BDT ici'; lane.appendChild(em); }
+    if(bdtsP.length===0&&!(PLAN_AXE.cadence&&fermes.length===1&&fermes[0][0]<=DAY_START+1e-9&&fermes[0][1]>=DAY_END-1e-9)){ var em=document.createElement('div'); em.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.68rem;color:#d1d5db;pointer-events:none;'; em.innerHTML='<i class="fas fa-inbox" style="margin-right:4px;"></i>Aucun BDT — glissez un BDT ici'; if(PLAN_AXE.cadence){ var grandE=null; planOuvertsAxe(poste.activite).forEach(function(iv){ if(!grandE||iv[1]-iv[0]>grandE[1]-grandE[0]) grandE=iv; }); if(grandE){ em.style.left=((grandE[0]-DAY_START)*PX_H)+'px'; em.style.right='auto'; em.style.width=((grandE[1]-grandE[0])*PX_H)+'px'; } } lane.appendChild(em); }
     row.appendChild(info); row.appendChild(lane); body.appendChild(row);
   });
 }
 function makeBdtBar(bdt){
-  var startOff=Math.max(0,bdt.debut-DAY_START); var w=Math.max(bdt.duree*PX_H-4,30); var l=startOff*PX_H+2;
+  // Lot G · G5 (cadence) : début repéré sur l axe du jour (nuit après minuit = au-delà de 24 h) ; la barre garde une largeur =
+  // durée (choix V1), coupée au bord de l axe ; fin en heures ouvrées plus tardive (fermeture traversée) → icône « pause ».
+  var rel=PLAN_AXE.cadence?(planAbsBdt(bdt)-PLAN_AXE.j*24):bdt.debut;
+  var startOff=Math.max(0,rel-DAY_START); var w=Math.max(bdt.duree*PX_H-4,30); var l=startOff*PX_H+2;
+  var fo=planFinOuvree(bdt), coupe=false;
+  if(PLAN_AXE.cadence){ var wMax=Math.max(30,(DAY_END-DAY_START-startOff)*PX_H-4); if(w>wMax){ w=wMax; coupe=true; } }
   var color=bdtColor(bdt);
   var lotCol=lotColorOf(bdt);
   var canDrag=(bdt.statut==='programme'||bdt.statut==='affecte');
@@ -3521,8 +3832,16 @@ function makeBdtBar(bdt){
   var OMBRE='text-shadow:0 0 2px rgba(0,0,0,.6);';   // lisible aussi sur la partie hachurée
   el.innerHTML=(rglW?'<div class="bdt-rgl" title="Réglage '+ccFmtNb(tps.R)+' h (fixe, une seule fois)" style="position:absolute;left:0;top:0;bottom:0;width:'+rglW+'px;background:repeating-linear-gradient(135deg,rgba(15,23,42,.3) 0,rgba(15,23,42,.3) 3px,transparent 3px,transparent 6px);border-right:2px solid rgba(15,23,42,.85);pointer-events:none;"></div>':'')
     +(viol?'<span class="bdt-viol" title="'+ccEsc(viol)+'" style="position:absolute;top:2px;right:3px;z-index:3;background:#dc2626;color:white;border-radius:999px;font-size:.52rem;line-height:1;padding:2px 4px;box-shadow:0 0 0 1.5px white;"><i class="fas fa-link-slash"></i></span>':'')
-    +'<div style="position:relative;font-size:.58rem;font-weight:800;opacity:.9;'+OMBRE+'">'+oxyBox(bdt.oxydation)+bdt.id+'</div><div style="position:relative;font-size:.62rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+OMBRE+'">'+bdt.operation+'</div><div style="position:relative;font-size:.58rem;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+OMBRE+'">'+fmtHour(bdt.debut)+' · '+(tps.R!=null?ccFmtNb(tps.R)+' + '+ccFmtNb(tps.V)+' h':bdt.duree+'h')+' · '+bdt.client+'</div>';
+    +'<div style="position:relative;font-size:.58rem;font-weight:800;opacity:.9;'+OMBRE+'">'+oxyBox(bdt.oxydation)+bdt.id+ppBadgeOasBarre(bdt)+'</div><div style="position:relative;font-size:.62rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+OMBRE+'">'+bdt.operation+'</div><div style="position:relative;font-size:.58rem;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+OMBRE+'">'+fmtHour(bdt.debut)+' · '+(tps.R!=null?ccFmtNb(tps.R)+' + '+ccFmtNb(tps.V)+' h':bdt.duree+'h')+' · '+bdt.client+'</div>';
   if(viol) el.style.boxShadow='0 0 0 2px #dc2626';
+  if(fo&&(fo.deborde||fo.ferme||coupe)){
+    // Icône (revue du 16/09/2026) : lune = posé sur une heure fermée ; pause = la fin en heures ouvrées tombe APRÈS début + durée
+    // (fermeture traversée) ; flèche = barre seulement coupée au bord de la vue, travail continu (aucune fermeture).
+    var tDeb=(fo.ferme?'Posé sur une heure fermée de la cadence usine. ':'')+(fo.deborde?'Déborde sur une fermeture : fin prévue ':(coupe?'Se poursuit après la fin de la vue du jour : fin prévue ':'Fin prévue : '))+planFmtPos(fo.fin)+' (heures ouvrées)';
+    var icoDeb=fo.ferme?'fa-moon':(fo.deborde?'fa-pause':'fa-arrow-right'), fondDeb=fo.ferme?'#b91c1c':(fo.deborde?'#7c3aed':'#0f766e');
+    el.innerHTML+='<span class="bdt-deborde" data-deborde="'+(fo.ferme?'ferme':(fo.deborde?'fermeture':'suite'))+'" title="'+ccEsc(tDeb)+'" style="position:absolute;bottom:2px;right:3px;z-index:3;background:'+fondDeb+';color:white;border-radius:999px;font-size:.5rem;line-height:1;padding:2px 4px;box-shadow:0 0 0 1.5px white;"><i class="fas '+icoDeb+'"></i></span>';
+    if(fo.deborde||coupe) el.style.borderRight='3px dashed rgba(255,255,255,.9)';
+  }
   if(canDrag){
     el.addEventListener('dragstart',function(e){ dragId=bdt.id; _grabDX=e.clientX-el.getBoundingClientRect().left; if(e.dataTransfer){ e.dataTransfer.setData('text/plain',bdt.id); e.dataTransfer.effectAllowed='move'; } highlightLot(lotKey(bdt)); });
     el.addEventListener('dragend',function(){ clearHighlight(); hideDropGuide(); dragId=null; _grabDX=0; });
@@ -3572,7 +3891,7 @@ function confirmRecu(){
   fetch('/api/production/bdt/'+encodeURIComponent(recuBdtId)+'/recu',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({matricule:matricule,pin:pin})})
     .then(function(r){return r.json();}).then(function(j){
       if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Réception refusée (matricule / PIN incorrect ?).'); return; }
-      bdt.statut='recu'; if(j.data&&j.data.debut_reel) bdt.debutReel=j.data.debut_reel; if(j.operateur_id) bdt.operateurId=j.operateur_id;
+      bdt.statut='recu'; if(j.data&&j.data.debut_reel) bdt.debutReel=j.data.debut_reel; if(j.data&&j.data.recu_le) bdt.recuLe=j.data.recu_le; if(j.operateur_id) bdt.operateurId=j.operateur_id;
       closeModal('recuModal'); buildAll();
       pushNotif('ok','fa-play','BDT <strong>'+recuBdtId+'</strong> réceptionné par <strong>'+(j.operateur||matricule)+'</strong>.'); recuBdtId=null;
     }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
@@ -3619,30 +3938,71 @@ function confirmerSoldage(){
     }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); })
     .then(function(){ if(btn){ btn.disabled=false; btn.removeAttribute('aria-busy'); } });
 }
-function affectBDT(bdtId,procId,debut){
+// opts (lot G) : { deprog: [id…] successeurs dont la remise en goulotte est confirmée, noteCale: message de calage à garder,
+//   jour: jour calendaire de la pose déjà résolu (renvoi après confirmation) }
+// debut (lot G · G5) : heure d AXE du jour affiché — au-delà de 24 h (nuit), la pose part le lendemain calendaire.
+function affectBDT(bdtId,procId,debut,opts){
+  opts=opts||{};
   var bdt=BDTS.find(function(b){return b.id===bdtId;}); if(!bdt) return;
   var proc=PROCESS.find(function(p){return p.id===procId;}); if(!proc) return;
   if(bdt.statut==='solde'||bdt.statut==='recu'){ pushNotif('err','fa-ban','BDT déjà '+(bdt.statut==='solde'?'soldé':'reçu')+' : il ne se replanifie plus.'); return; }
   if(!(proc.activite==='both'||proc.activite===bdt.activite)){ pushNotif('err','fa-ban','Incompatibilité activité : process '+proc.nom+' ('+proc.activite+') ≠ BDT '+bdt.activite); return; }
   var hasD=(debut!=null&&!isNaN(debut)); if(hasD) debut=Math.round(debut*100)/100;
-  // CHEMIN CRITIQUE : même contrôle que le serveur (src/gamme.ts controleEnchainement). Jour antérieur à l au plus
+  var jourPose=opts.jour||currentDate;
+  if(hasD&&!opts.jour&&PLAN_AXE.cadence&&(debut>=24||debut<0)){ var kJ=Math.floor(debut/24); jourPose=ccIsoJour(ccJour(currentDate)+kJ); debut=Math.round((debut-24*kJ)*100)/100; }
+  // Activité écrite par le serveur à la pose (process d un seul site) : elle décide du site de cadence des contrôles.
+  var actPose=(proc.activite&&proc.activite!=='both')?proc.activite:null;
+  // CHEMIN CRITIQUE : même contrôle que le serveur (src/gamme.ts controleEnchainement). Jour de planning antérieur à l au plus
   // tôt → refusé sans appel ; même jour trop tôt (ou sans heure) → calé à l au plus tôt, et on le dit.
   // Sans heure (pose au clic) : le BDT garde la sienne, sinon il prend l heure où le planning l affiche — comme le serveur.
-  var cib=ccRowBdt(bdt); cib.process_id=procId; cib.statut='programme'; cib.date_prevue=currentDate; if(hasD) cib.debut=debut; else if(cib.debut==null) cib.debut=CC_HEURE_DEFAUT;
+  var cib=ccRowBdt(bdt); cib.process_id=procId; cib.statut='programme'; cib.date_prevue=jourPose; if(actPose) cib.activite=actPose; if(hasD) cib.debut=debut; else if(cib.debut==null) cib.debut=CC_HEURE_DEFAUT;
   var ctl=ccControle(cib,ccOpsDuLot(bdt.cleLot));
   if(ctl.etat==='refus'){ pushNotif('err','fa-route',ccEsc(ctl.message),9000); return; }
   var noteCale=null;
-  if(ctl.etat==='cale'){ debut=ctl.cale_a; hasD=true; noteCale=ctl.message; }
-  var body={process_id:procId, date_prevue:currentDate}; if(hasD) body.debut=debut;
+  if(ctl.etat==='cale'){ debut=ctl.cale_a; hasD=true; noteCale=ctl.message; if(ctl.cale_date) jourPose=ctl.cale_date; }
+  if(!noteCale&&opts.noteCale) noteCale=opts.noteCale;
+  // G5 (lot G) : position finale (calage compris) sur une heure FERMÉE de la cadence du site → refusée sans appel (serveur : 409).
+  var cibF=ccRowBdt(bdt); cibF.process_id=procId; cibF.statut='programme'; cibF.date_prevue=jourPose; if(actPose) cibF.activite=actPose; cibF.debut=hasD?debut:(cibF.debut==null?CC_HEURE_DEFAUT:cibF.debut);
+  var ferme=plHeureFermee(cibF,ppNomPosteDuProcess(procId));
+  if(ferme){ pushNotif('err','fa-business-time',ccEsc(ferme.message),9000); return; }
+  // G3 (lot G) : un BDT du MÊME process occupe déjà le poste sur cet intervalle → refusé sans appel, barre en conflit montrée
+  // (le serveur refuse aussi : 409). Process différents : autorisé.
+  var cibP=ccRowBdt(bdt); cibP.process_id=procId; cibP.statut='programme'; cibP.date_prevue=jourPose; if(actPose) cibP.activite=actPose; cibP.debut=hasD?debut:(cibP.debut==null?CC_HEURE_DEFAUT:cibP.debut);
+  var chev=ppChevauchements(cibP,BDTS.map(ccRowBdt),ppNomPosteDuProcess(procId));
+  if(chev.length){ pushNotif('err','fa-layer-group',ccEsc(chev[0].message),9000); ppMontrerConflit(chev); return; }
+  // G4 (lot G) : étapes suivantes déjà posées que ce déplacement rendrait incohérentes → message préventif AVANT d envoyer ;
+  // confirmé : renvoi avec la liste (le serveur déplace puis les remet en goulotte) ; annulé : rien ne bouge.
+  // Étapes REÇUES rendues incohérentes : jamais retirées, mais le déplacement le dit avant d envoyer (revue du 16/09/2026).
+  var planG4=ppPlanRemiseGoulotte(ccRowBdt(bdt),cibP,ccOpsDuLot(bdt.cleLot)), succG4=planG4.retirer, sigG4=planG4.signaler;
+  var confirmes=Array.isArray(opts.deprog)?opts.deprog.map(String):[];
+  var aConfirmer=succG4.concat(sigG4);
+  if(aConfirmer.length&&!aConfirmer.every(function(s){ return confirmes.indexOf(String(s.id))>=0; })){
+    ppConfirmerRemise(bdtId,succG4,sigG4).then(function(oui){ if(oui) affectBDT(bdtId,procId,hasD?debut:undefined,{deprog:ppUnionIds(confirmes,aConfirmer),noteCale:noteCale,jour:jourPose}); });
+    return;
+  }
+  var body={process_id:procId, date_prevue:jourPose}; if(hasD) body.debut=debut;
+  if(confirmes.length) body.deprogrammer_successeurs=confirmes;
   fetch('/api/production/bdt/'+encodeURIComponent(bdtId)+'/affecter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
     .then(function(r){ return r.json().catch(function(){ return {ok:false,error:'Réponse inattendue du serveur (HTTP '+r.status+').'}; }); }).then(function(j){
-      if(!j||!j.ok){ pushNotif('err','fa-ban',ccEsc((j&&j.error)||'Affectation échouée.'),(j&&j.au_plus_tot)?9000:5000); return; }
+      // G4 : le serveur a vu d autres successeurs à remettre en goulotte (planning périmé) → même message préventif, puis renvoi.
+      if(j&&!j.ok&&Array.isArray(j.successeurs_a_deprogrammer)&&j.successeurs_a_deprogrammer.length){
+        var ls=j.successeurs_a_deprogrammer, lsR=Array.isArray(j.successeurs_recus_signales)?j.successeurs_recus_signales:[];
+        ppConfirmerRemise(bdtId,ls,lsR).then(function(oui){ if(oui) affectBDT(bdtId,procId,hasD?debut:undefined,{deprog:ppUnionIds(confirmes,ls.concat(lsR)),noteCale:noteCale,jour:jourPose}); });
+        return;
+      }
+      if(j&&!j.ok&&Array.isArray(j.chevauchement)) ppMontrerConflit(j.chevauchement);
+      if(!j||!j.ok){ pushNotif('err','fa-ban',ccEsc((j&&j.error)||'Affectation échouée.'),(j&&(j.au_plus_tot||j.chevauchement))?9000:5000); return; }
       // Le serveur fait foi : l heure RÉELLEMENT écrite (calage, heure par défaut, arrondi d une colonne entière) est celle affichée.
       if(j.cale_a!=null&&isFinite(Number(j.cale_a))){ debut=Number(j.cale_a); hasD=true; noteCale=j.avertissement||noteCale; }
       else if(j.avertissement) noteCale=j.avertissement;
+      if(j.cale_date&&/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String(j.cale_date))) jourPose=String(j.cale_date);
       if(j.data&&j.data.debut!=null&&j.data.debut!==''&&isFinite(Number(j.data.debut))){ debut=Number(j.data.debut); hasD=true; }
-      var wasPending=(bdt.process==='pending'); bdt.process=procId; bdt.machineId=proc.machine_id||null; bdt.datePrevue=currentDate; if(hasD){ bdt.debut=debut; bdt.sansHeure=false; } if(bdt.statut==='a_programmer'||bdt.statut==='pending'||!bdt.statut) bdt.statut='programme';
-      focusLot=null; updateFocusBanner(); buildAll(); pushNotif('ok','fa-check-circle','BDT <strong>'+bdtId+'</strong> '+(wasPending?'affecté au process':'déplacé sur')+' <strong>'+proc.nom+'</strong>'+(hasD?' à '+fmtHour(debut):'')+'.');
+      if(j.data&&j.data.date_prevue&&/^[0-9]{4}-[0-9]{2}-[0-9]{2}/.test(String(j.data.date_prevue))) jourPose=String(j.data.date_prevue).slice(0,10);
+      var wasPending=(bdt.process==='pending'); bdt.process=procId; bdt.machineId=proc.machine_id||null; bdt.datePrevue=jourPose; if(actPose) bdt.activiteBrute=actPose; if(hasD){ bdt.debut=debut; bdt.sansHeure=false; } if(bdt.statut==='a_programmer'||bdt.statut==='pending'||!bdt.statut) bdt.statut='programme';
+      // G4 : reposé, il n est plus « remis en goulotte » ; les successeurs remis par le serveur repartent en tête de la goulotte.
+      bdt.remisGoulotteLe=null;
+      ppAppliquerRemise(j);
+      focusLot=null; updateFocusBanner(); buildAll(); pushNotif('ok','fa-check-circle','BDT <strong>'+bdtId+'</strong> '+(wasPending?'affecté au process':'déplacé sur')+' <strong>'+proc.nom+'</strong>'+(hasD?' à '+fmtHour(debut):'')+(jourPose!==currentDate?' le '+ccJJMM(jourPose):'')+'.');
       if(noteCale) pushNotif('warn','fa-route',ccEsc(noteCale),8000);
       var succ=Array.isArray(j.successeurs_en_violation)?j.successeurs_en_violation:[];
       if(succ.length) pushNotif('warn','fa-link-slash',ccEsc(succ.length+' étape'+(succ.length>1?'s':'')+' suivante'+(succ.length>1?'s':'')+' à revoir (rien n’a été décalé) : '+succ.map(function(x){ return x.message; }).join(' · ')),12000);
@@ -3734,6 +4094,7 @@ function buildPending(){
         +'<div style="font-size:.6rem;margin-top:3px;display:flex;gap:5px;flex-wrap:wrap;align-items:center;">'
           +'<span style="background:'+col+'22;color:'+col+';font-weight:700;border-radius:999px;padding:1px 7px;"><i class="fas fa-layer-group" style="margin-right:3px;"></i>'+lotLabel+'</span>'
           +ccPastilleMorceau(b)
+          +ppBadgeRemis(b)+ppBadgeOas(b)
           +(b.numAffaire?'<span style="color:#94a3b8;">Aff. '+b.numAffaire+'</span>':'')
           +(b.seq!=null?'<span style="color:#94a3b8;">Op.'+b.seq+'</span>':'')
           +(b.dateEcheance?'<span style="color:#ef4444;font-weight:600;"><i class="fas fa-flag-checkered" style="margin-right:3px;"></i>'+b.dateEcheance+'</span>':'')
@@ -3761,9 +4122,15 @@ function showTT(e,bdt){ var proc=PROCESS.find(function(p){return p.id===bdt.proc
   var tps=ccTemps(bdt), apt=ccAptBdt(bdt), viol=CC_VIOL[bdt.id];
   var lignesTemps='<div><span style="opacity:.6;">Réglage : </span>'+(tps.R==null?'<span style="color:#fcd34d;">non renseigné</span>':ccFmtNb(tps.R)+' h <span style="opacity:.6;">(fixe, une seule fois)</span>')+'</div>'
     +'<div><span style="opacity:.6;">Réalisation : </span>'+(tps.R==null?'—':ccFmtNb(tps.V)+' h')+'</div>'
+    +(bdt.oasApres?'<div style="color:#67e8f9;font-weight:700;"><i class="fas fa-atom" style="margin-right:4px;"></i>'+ccEsc(ppLibelleOas(bdt.oasSuivant))+' <span style="opacity:.7;font-weight:400;">(lot entier à l’OAS au soldage)</span></div>':'')
     +(bdt.nbMorceaux>=2?'<div><span style="opacity:.6;">Morceau : </span>M'+bdt.rangMorceau+' · '+bdt.posMorceau+'/'+bdt.nbMorceaux+'</div>':'')
     +(apt.regle!=='aucune'?'<div><span style="opacity:.6;">Au plus tôt : </span>'+(apt.date?ccJJMM(apt.date)+' '+ccFmtH(apt.heure)+' <span style="opacity:.6;">· '+ccEsc(apt.raison)+'</span>':ccEsc(apt.raison))+'</div>':'')
     +(viol?'<div style="color:#fca5a5;font-weight:700;"><i class="fas fa-link-slash" style="margin-right:4px;"></i>'+ccEsc(viol)+'</div>':'');
+  // Lot G · G5 : fin prévue en heures ouvrées de la cadence du site (débordement sur une fermeture, pose sur une heure fermée).
+  var foT=planFinOuvree(bdt);
+  if(foT) lignesTemps+='<div><span style="opacity:.6;">Fin prévue : </span>'+planFmtPos(foT.fin)+' <span style="opacity:.6;">(heures ouvrées)</span></div>'
+    +(foT.deborde?'<div style="color:#c4b5fd;font-weight:700;"><i class="fas fa-pause" style="margin-right:4px;"></i>Déborde sur une fermeture</div>':'')
+    +(foT.ferme?'<div style="color:#fca5a5;font-weight:700;"><i class="fas fa-moon" style="margin-right:4px;"></i>Posé sur une heure fermée de la cadence</div>':'');
   tt.innerHTML='<div style="font-weight:700;font-size:.85rem;margin-bottom:4px;">'+bdt.id+'</div><div style="color:#93c5fd;font-size:.72rem;margin-bottom:8px;">'+bdt.operation+' · '+bdt.activite+'</div><div style="font-size:.72rem;line-height:1.6;"><div><span style="opacity:.6;">Client : </span>'+bdt.client+'</div><div><span style="opacity:.6;">Pièce : </span>'+bdt.piece+'</div><div><span style="opacity:.6;">Durée : </span>'+bdt.tempsAlloue+'h</div>'+lignesTemps+'<div><span style="opacity:.6;">Process : </span>'+(proc?proc.nom:'—')+'</div><div><span style="opacity:.6;">Statut : </span><strong style="color:'+bdtColor(bdt)+';">'+bdtStatutLabel(bdt)+'</strong></div>'+(bdt.oxydation?'<div><span style="opacity:.6;">Oxydation : </span>'+oxyBox(bdt.oxydation)+(bdt.oxydation==='noire'?'noire (carré noir)':'incolore (carré blanc)')+'</div>':'')+'<div style="margin-top:4px;color:#fde68a;font-size:.65rem;">Double-clic : recevoir (matricule + PIN), puis sortie matière · Clic droit : menu</div></div>'; moveTT(e); }
 function moveTT(e){ var tt=document.getElementById('ganttTT'); if(tt){tt.style.left=(e.clientX+16)+'px'; tt.style.top=(e.clientY+10)+'px';} }
 function hideTT(){ var tt=document.getElementById('ganttTT'); if(tt) tt.style.display='none'; }
@@ -3786,7 +4153,12 @@ function createBDT(){
   var pr=null; if(procId!=='pending'){ pr=PROCESS.find(function(p){return p.id===procId;}); payload.process_id=procId; if(pr&&pr.machine_id) payload.machine_id=pr.machine_id; }
   fetch('/api/production/bdts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json();}).then(function(j){
-      if(!j||!j.ok){ pushNotif('err','fa-exclamation-circle','Création échouée : '+((j&&j.error)||'')); return; }
+      // G3 (revue du 16/09/2026) : posé en même temps qu un BDT du même process depuis un autre écran → créé, mais laissé en goulotte.
+      if(j&&!j.ok&&j.cree_en_goulotte&&j.data&&j.data.id){
+        BDTS.push({id:j.data.id,op:'',process:'pending',client:client,piece:piece,operation:op,duree:duree,debut:debut,sansHeure:true,priorite:prio,statut:'a_programmer',resultat:null,activite:act,machineId:null,tempsAlloue:duree,debutReel:null,finReel:null,datePrevue:null,reglage:(payload.temps_reglage!=null?payload.temps_reglage:null)});
+        closeModal('bdtModal'); buildAll(); pushNotif('warn','fa-layer-group',ccEsc(j.error),10000); if(Array.isArray(j.chevauchement)) ppMontrerConflit(j.chevauchement); return;
+      }
+      if(!j||!j.ok){ pushNotif('err','fa-exclamation-circle','Création échouée : '+ccEsc((j&&j.error)||'')); if(j&&Array.isArray(j.chevauchement)) ppMontrerConflit(j.chevauchement); return; }
       var nid=(j.data&&j.data.id)||('BDT-'+(900+BDTS.length+1));
       BDTS.push({id:nid,op:'',process:procId,client:client,piece:piece,operation:op,duree:duree,debut:debut,priorite:prio,statut:statut,resultat:null,activite:act,machineId:(pr&&pr.machine_id)||null,tempsAlloue:duree,debutReel:null,finReel:null,reglage:(payload.temps_reglage!=null?payload.temps_reglage:null)});
       closeModal('bdtModal'); buildAll(); pushNotif('ok','fa-plus-circle','BDT <strong>'+nid+'</strong> créé.');
@@ -3921,12 +4293,17 @@ function presBuild(){
       var sc=connu?PRES_SHIFTS[st]:['#f8fafc','#94a3b8',st||'—',''];
       var verrou=g.rh||!g.charge;
       var attente=!!PRES_EN_COURS[presKey(o.id,iso)];
+      // Lot G : horaires du créneau selon la cadence du site de l'opérateur ce jour-là ; créneau enregistré mais fermé
+      // depuis (cadence changée) → bordure rouge pointillée ; jour sans aucun créneau ouvert → case estompée.
+      var hc=(connu&&st!=='absent')?cadHorairesCreneau(o.activite,iso,st):null;
+      var fermeCad=!!(hc&&!hc.ouvert);
+      var calOp=cadCalendrier(o.activite), jourFerme=!!(calOp&&!CAD.plageOuverteCalendrier(calOp,iso));
       var titre=g.rh?('Absence RH ('+(g.type||'')+')')
         :(!g.charge?'Présences de cette semaine non chargées'
-        :((st?(sc[2]+(sc[3]?' '+sc[3]:'')):'Non programmé')+(attente?' · enregistrement en cours':'')+' · cliquer pour choisir'));
+        :((st?(sc[2]+(hc?' '+hc.texte:'')):'Non programmé')+(fermeCad?' · ⚠ créneau fermé en cadence '+cadLibNiveau(hc.niveau)+' ce jour':'')+(!st&&jourFerme?' · jour fermé (cadence)':'')+(attente?' · enregistrement en cours':'')+' · cliquer pour choisir'));
       var txt=g.rh?('<i class="fas fa-lock" style="margin-right:3px;font-size:.6rem;"></i>'+presEsc(sc[2]))
-        :(!g.charge?(PRES_CHARGEMENT[presLundi(iso)]==='encours'?'…':'?'):presEsc(st?sc[2]:'—'));
-      html+='<td style="padding:4px;text-align:center;"><button type="button" '+(verrou?'disabled ':'')+'data-pres-op="'+presEsc(o.id)+'" data-pres-date="'+iso+'" title="'+presEsc(titre)+'" style="width:84px;padding:6px 4px;border-radius:7px;border:1px solid '+(connu?sc[1]+'40':'#e2e8f0')+';background:'+sc[0]+';color:'+sc[1]+';font-size:.68rem;font-weight:700;cursor:'+(verrou?'not-allowed':'pointer')+';'+(attente?'opacity:.65;':'')+'">'+txt+'</button></td>';
+        :(!g.charge?(PRES_CHARGEMENT[presLundi(iso)]==='encours'?'…':'?'):presEsc(st?sc[2]:(jourFerme?'fermé':'—')));
+      html+='<td style="padding:4px;text-align:center;"><button type="button" '+(verrou?'disabled ':'')+'data-pres-op="'+presEsc(o.id)+'" data-pres-date="'+iso+'" title="'+presEsc(titre)+'" style="width:84px;padding:6px 4px;border-radius:7px;border:1px '+(fermeCad?'dashed #dc2626':'solid '+(connu?sc[1]+'40':'#e2e8f0'))+';background:'+sc[0]+';color:'+(!st&&jourFerme?'#cbd5e1':sc[1])+';font-size:.68rem;font-weight:700;cursor:'+(verrou?'not-allowed':'pointer')+';'+(attente?'opacity:.65;':'')+'">'+txt+'</button></td>';
     });
     html+='</tr>';
   });
@@ -3965,12 +4342,24 @@ function presMenuTouche(e){
   }
 }
 function presMenuDefile(e){ var m=document.getElementById('presMenu'); if(m&&!(e&&e.target&&m.contains(e.target))) presFermerMenu(); }
-// Entrées du menu pour une case dont la valeur actuelle est « cur » : [valeur, libellé, horaires, fond, texte, actif]
-function presChoixMenu(cur){
+// Entrées du menu pour une case dont la valeur actuelle est « cur » : [valeur, libellé, horaires, fond, texte, actif, fermé, niveau]
+// Lot G : horaires selon la cadence du site de l'opérateur ce jour-là ; un créneau fermé est grisé et non cliquable
+// (le serveur le refuse aussi : « créneau fermé en cadence X ce jour »).
+function presChoixMenu(cur,op,date){
+  var o=op!=null?presOp(op):null;
   return PRES_ORDRE.concat(['']).map(function(k){
     var sc=k?PRES_SHIFTS[k]:null;
-    return [k, sc?sc[2]:'Effacer', sc?sc[3]:'', sc?sc[0]:'', sc?sc[1]:'#64748b', (cur||'')===k];
+    var hc=(k&&k!=='absent'&&o)?cadHorairesCreneau(o.activite,date,k):null;
+    var ferme=!!(hc&&!hc.ouvert);
+    return [k, sc?sc[2]:'Effacer', ferme?('fermé · cadence '+cadLibNiveau(hc.niveau)):(hc?hc.texte:(sc?sc[3]:'')), sc?sc[0]:'', sc?sc[1]:'#64748b', (cur||'')===k, ferme, hc?hc.niveau:null];
   });
+}
+// Créneau fermé pour cet opérateur ce jour-là ? { ferme, niveau }
+function presCreneauFerme(op,date,k){
+  if(!k||k==='absent') return {ferme:false,niveau:null};
+  var o=presOp(op); if(!o) return {ferme:false,niveau:null};
+  var hc=cadHorairesCreneau(o.activite,date,k);
+  return {ferme:!hc.ouvert,niveau:hc.niveau};
 }
 function presOuvrirMenu(btn,op,date){
   presFermerMenu();
@@ -3979,8 +4368,9 @@ function presOuvrirMenu(btn,op,date){
   var m=document.createElement('div'); m.id='presMenu'; m.setAttribute('role','menu');
   m.style.cssText='position:fixed;z-index:700;background:white;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 12px 32px rgba(15,23,42,.18);padding:5px;min-width:200px;';
   var h='<div style="padding:5px 8px 6px;font-size:.66rem;color:#64748b;font-weight:700;border-bottom:1px solid #f1f5f9;margin-bottom:3px;">'+presEsc(o?o.nom:op)+' · '+presEsc(presDateFr(date,{weekday:'short',day:'2-digit',month:'2-digit'}))+'</div>';
-  presChoixMenu(g.shift).forEach(function(c){
-    h+='<button type="button" role="menuitem" class="pres-choix" data-pres-choix="'+c[0]+'"'+(c[5]?' disabled':'')+' style="display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:none;border-radius:7px;background:'+(c[5]?'#f1f5f9':'white')+';cursor:'+(c[5]?'default':'pointer')+';font-size:.76rem;font-weight:700;text-align:left;">'
+  presChoixMenu(g.shift,op,date).forEach(function(c){
+    var off=c[5]||c[6];
+    h+='<button type="button" role="menuitem" class="pres-choix" data-pres-choix="'+c[0]+'"'+(off?' disabled':'')+(c[6]?' title="Créneau fermé en cadence '+presEsc(cadLibNiveau(c[7]))+' ce jour"':'')+' style="display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:none;border-radius:7px;background:'+(c[5]?'#f1f5f9':'white')+';cursor:'+(off?'default':'pointer')+';font-size:.76rem;font-weight:700;text-align:left;'+(c[6]&&!c[5]?'opacity:.5;':'')+'">'
       +(c[0]?'<span style="width:12px;height:12px;border-radius:3px;flex-shrink:0;background:'+c[3]+';border:1px solid '+c[4]+';"></span>':'<i class="fas fa-eraser" style="width:12px;color:#94a3b8;"></i>')
       +'<span style="color:'+c[4]+';">'+presEsc(c[1])+'</span>'
       +'<span style="margin-left:auto;font-size:.64rem;color:#94a3b8;font-weight:600;">'+presEsc(c[2])+'</span>'
@@ -4012,6 +4402,8 @@ function presChoisir(op,date,k){
   var g=presGet(op,date); if(g.rh||!g.charge) return;
   if((g.shift||'')===(k||'')) return;
   var o=presOp(op);
+  var cf=presCreneauFerme(op,date,k);
+  if(cf.ferme){ pushNotif('err','fa-ban','Créneau « '+presEsc(PRES_SHIFTS[k]?PRES_SHIFTS[k][2]:k)+' » fermé en cadence '+presEsc(cadLibNiveau(cf.niveau))+' ce jour ('+presEsc(presDateFr(date,{weekday:'long',day:'2-digit',month:'2-digit'}))+').',7000); return; }
   var p=presEcrire(op,date,k||'',o);
   presRafraichir();
   return p.then(function(res){
@@ -4128,7 +4520,7 @@ function applyPresWeek(){
   var days=presDays();
   var ndays=(jours==='ouvres')?5:7;
   // « Effacer » = vrai DELETE (avant : enregistrait « absent ») ; chaque réponse est LUE (avant : succès affiché d'office).
-  var ecritures=[], dejaAJour=0;
+  var ecritures=[], dejaAJour=0, fermes=0;
   picks.forEach(function(opId){
     var opObj=presOp(opId);
     if(!opObj) return;
@@ -4136,12 +4528,14 @@ function applyPresWeek(){
       var g=presGet(opId,days[i]);
       if(g.rh) continue;                                   // Ne pas écraser une absence RH
       if((g.shift||'')===shift){ dejaAJour++; continue; }  // rien à envoyer
+      if(presCreneauFerme(opId,days[i],shift).ferme){ fermes++; continue; }   // lot G : créneau fermé ce jour-là (cadence du site)
       ecritures.push(presEcrire(opId,days[i],shift,opObj));
     }
   });
   closePresWeekModal();
   presRafraichir();
-  if(!ecritures.length){ pushNotif('info','fa-calendar-week','Rien à changer : ces cases avaient déjà cette valeur.',4500); return; }
+  if(fermes) pushNotif('warn','fa-business-time',fermes+' case'+(fermes>1?'s':'')+' non programmée'+(fermes>1?'s':'')+' : créneau fermé ce jour-là dans la cadence du site (Process Ateliers › Cadence usine).',7000);
+  if(!ecritures.length){ if(!fermes) pushNotif('info','fa-calendar-week','Rien à changer : ces cases avaient déjà cette valeur.',4500); return; }
   Promise.all(ecritures).then(function(res){
     presRafraichir();
     var n=res.length, ko=res.filter(function(x){ return !x.ok; });
@@ -4435,11 +4829,20 @@ function ccDispoBst(b){
   if(apt.regle==='inconnu'||!apt.date) return '<div title="'+ccEsc(apt.raison)+'" style="font-size:.58rem;color:#94a3b8;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;"><i class="fas fa-route" style="margin-right:3px;"></i>Dispo : '+ccEsc(apt.raison)+'</div>';
   return '<div title="'+ccEsc(apt.raison)+'" style="font-size:.6rem;color:#0f766e;font-weight:700;margin-top:3px;"><i class="fas fa-route" style="margin-right:3px;"></i>Dispo le '+ccJJMM(apt.date)+'</div>';
 }
-function bstAssignDay(bstId, fournId, dayIso){
+function bstAssignDay(bstId, fournId, dayIso, opts){
+  opts=opts||{};
   var b=BST_DATA.find(function(x){return x.id===bstId;}); if(!b) return;
   // CHEMIN CRITIQUE : contrôle au jour, identique au serveur (/api/production/bst/:id/affecter-st → 409).
   var ctlB=ccControle(Object.assign({}, b, {sous_traitant_id:fournId, date_envoi:dayIso, date_debut:dayIso}), ccOpsDuLot(ccCleLot(b)));
   if(ctlB.etat==='refus'){ pushNotif('err','fa-route',ccEsc(ctlB.message),9000); return; }
+  // G4 (lot G) : BDT suivants déjà posés que ce BST déplacé rendrait incohérents → message préventif avant d envoyer.
+  var planB4=ppPlanRemiseGoulotte(b,Object.assign({}, b, {sous_traitant_id:fournId, date_envoi:dayIso, date_debut:dayIso, duree_days:(b.duree_days||5)}),ccOpsDuLot(ccCleLot(b)));
+  var succB4=planB4.retirer, sigB4=planB4.signaler, aConfB=succB4.concat(sigB4);
+  var confB=Array.isArray(opts.deprog)?opts.deprog.map(String):[];
+  if(aConfB.length&&!aConfB.every(function(s){ return confB.indexOf(String(s.id))>=0; })){
+    ppConfirmerRemise(bstId,succB4,sigB4).then(function(oui){ if(oui) bstAssignDay(bstId,fournId,dayIso,{deprog:ppUnionIds(confB,aConfB)}); });
+    return;
+  }
   var prev={sous_traitant_id:b.sous_traitant_id, date_envoi:b.date_envoi, date_debut:b.date_debut, statut:b.statut, bc_id:b.bc_id};
   b.sous_traitant_id=fournId; b.date_envoi=dayIso; b.date_debut=dayIso;
   // Affecter un BST = en attente d'envoi (le statut sera piloté ensuite par le BC ST).
@@ -4449,15 +4852,23 @@ function bstAssignDay(bstId, fournId, dayIso){
   // Affectation : crée/relie automatiquement le BC sous-traitant (apparaît dans Expéditions).
   fetch('/api/production/bst/'+encodeURIComponent(bstId)+'/affecter-st', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({sous_traitant_id:fournId, day:dayIso, duree_days:b.duree_days||5})
+    body:JSON.stringify(Object.assign({sous_traitant_id:fournId, day:dayIso, duree_days:b.duree_days||5}, confB.length?{deprogrammer_successeurs:confB}:{}))
   }).then(function(r){return r.json();}).then(function(j){
+    if(j&&!j.ok&&Array.isArray(j.successeurs_a_deprogrammer)&&j.successeurs_a_deprogrammer.length){
+      Object.assign(b, prev); bstBuildBody(); bstBuildPending(); bstBuildKpis();
+      var lsB=j.successeurs_a_deprogrammer, lsBR=Array.isArray(j.successeurs_recus_signales)?j.successeurs_recus_signales:[];
+      ppConfirmerRemise(bstId,lsB,lsBR).then(function(oui){ if(oui) bstAssignDay(bstId,fournId,dayIso,{deprog:ppUnionIds(confB,lsB.concat(lsBR))}); });
+      return;
+    }
     if(!j||!j.ok){
       Object.assign(b, prev); bstBuildBody(); bstBuildPending(); bstBuildKpis();
       pushNotif('err','fa-ban',ccEsc((j&&j.error)||'Affectation BST échouée.'),(j&&j.au_plus_tot)?9000:5000);
       return;
     }
     if(j.bc_id) b.bc_id=j.bc_id;
+    ppAppliquerRemise(j);   // G4 : BDT suivants remis en goulotte par le serveur
     ccMajViolations(); bstBuildBody(); bstBuildPending(); ccRenderCarte(); buildGantt(); buildPending();
+    if(j.avertissement) pushNotif('warn','fa-rotate-left',ccEsc(j.avertissement),10000);
     pushNotif('ok','fa-check-circle','BST <strong>'+bstId+'</strong> affecté au '+dayIso+'. BC <strong>'+(j.bc_id||'')+'</strong> créé (en attente d\\'envoi).',6000);
     var succB=Array.isArray(j.successeurs_en_violation)?j.successeurs_en_violation:[];
     if(succB.length) pushNotif('warn','fa-link-slash',ccEsc(succB.length+' étape'+(succB.length>1?'s':'')+' suivante'+(succB.length>1?'s':'')+' à revoir (rien n’a été décalé) : '+succB.map(function(x){ return x.message; }).join(' · ')),12000);

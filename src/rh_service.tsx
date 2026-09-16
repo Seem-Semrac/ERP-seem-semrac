@@ -4,6 +4,7 @@
 // ══════════════════════════════════════════════════════════════
 import { escX, layout, demandeAchatModal, validationCheckbox, buildValDirMap, valDirBadge } from './shared'
 import { CRENEAUX, libelleCreneau } from './presences'
+import { horairesCreneauSite, heuresPresence, siteCadence, estCreneau, LIBELLES_NIVEAU, type DonneesCadence } from './cadence'
 import type { Employe, Certification, CompetenceOperateur, Pointage } from './types'
 
 const sjX = (v: any) => JSON.stringify(v).replace(/</g, '\\u003c')
@@ -188,7 +189,8 @@ function roleBadge(role: string, entite?: string) {
   return `<span style="background:#ede9fe;color:#5b21b6;border-radius:6px;padding:2px 8px;font-size:.66rem;font-weight:700;">${RH_ROLE_LABELS[r] || r}</span>`
 }
 function panelEmployes(emps: Employe[], vdMap: Record<string, any> = {}) {
-  // Libellés des 4 créneaux tirés de SHIFTS (src/shared.ts) : « Soirée 22h-6h » (et non plus « Nuit »)
+  // Libellés des 4 créneaux tirés de SHIFTS (src/shared.ts) : « Matin », « Soirée »… Sans horaires depuis le lot G
+  // (16/09/2026) : ils dépendent de la cadence du site et du jour (Production › Process Ateliers › Cadence usine).
   const shiftLabel: Record<string,string> = Object.fromEntries(CRENEAUX.map(k => [k, libelleCreneau(k)]))
   const isOpRole = (r: string) => r === 'operateur' || r === 'oas'   // l'OAS est un opérateur (présence/planning)
   const opsSeem = emps.filter(e => isOpRole((e as any).role) && e.activite === 'Seem')
@@ -200,7 +202,7 @@ function panelEmployes(emps: Employe[], vdMap: Record<string, any> = {}) {
       <td ${TD}>${roleBadge(e.role, e.activite)}</td>
       <td ${TD}>${escX(e.poste ?? '—')}</td>
       <td ${TD}><span style="background:#f1f5f9;border-radius:6px;padding:2px 8px;font-size:.72rem;font-weight:600;">${escX(e.type_contrat ?? 'CDI')}</span></td>
-      <td ${TD}><span style="font-size:.72rem;color:#6b7280;">${escX(shiftLabel[e.shift_id ?? ''] ?? e.shift_id ?? '—')}</span></td>
+      <td ${TD}><span style="font-size:.72rem;color:#6b7280;" title="Horaires selon la cadence usine du site et du jour (Production › Process Ateliers › Cadence usine)">${escX(shiftLabel[e.shift_id ?? ''] ?? e.shift_id ?? '—')}</span></td>
       <td ${TD} style="text-align:center;">${e.has_pin ? '<i class="fas fa-key" style="color:#16a34a;" title="Identifiant ERP actif"></i>' : '<i class="fas fa-key" style="color:#cbd5e1;" title="Pas de code PIN"></i>'}</td>
       <td ${TD}><div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;"><span style="background:${e.statut==='actif'?'#dcfce7':'#fee2e2'};color:${e.statut==='actif'?'#16a34a':'#b91c1c'};border-radius:999px;padding:2px 10px;font-size:.68rem;font-weight:700;">${e.statut}</span>${valDirBadge(vdMap,'salaries',e.id)}</div></td>
       <td ${TD} style="text-align:center;white-space:nowrap;">
@@ -814,7 +816,7 @@ export function pageRHEmployes(dbEmps?: Employe[], dbOrphans?: any[], canWriteRH
           <div id="f_entite_wrap"><label style="${FLBL}">Activité (opérateur)</label><select id="f_entite" style="${FINP}"><option>Seem</option><option>Semrac</option></select></div>
           <div><label style="${FLBL}">Poste</label><input id="f_poste" type="text" placeholder="Ex : Usinage CN" style="${FINP}"/></div>
           <div><label style="${FLBL}">Contrat</label><select id="f_contrat" style="${FINP}"><option value="CDI">CDI</option><option value="CDD">CDD</option><option value="apprenti">Apprenti</option><option value="interim">Intérim</option><option value="stagiaire">Stage</option></select></div>
-          <div><label style="${FLBL}">Shift</label><select id="f_shift" style="${FINP}">${CRENEAUX.map(k => `<option value="${k}">${escX(libelleCreneau(k))}</option>`).join('')}</select></div>
+          <div><label style="${FLBL}" title="Créneau habituel. Ses horaires dépendent de la cadence usine du site et du jour (Production › Process Ateliers › Cadence usine).">Shift <i class="fas fa-business-time" style="color:#0d9488;"></i></label><select id="f_shift" style="${FINP}">${CRENEAUX.map(k => `<option value="${k}">${escX(libelleCreneau(k))}</option>`).join('')}</select></div>
           <div><label style="${FLBL}">Date d'entrée</label><input id="f_date" type="date" style="${FINP}"/></div>
           <div><label style="${FLBL}">Taux horaire chargé (€/h) ${canWriteRH ? '<span title="Confidentiel — maintenir le clic pour révéler" style="color:#94a3b8;"><i class="fas fa-lock"></i></span>' : ''}</label>${canWriteRH
             ? `<input id="f_taux" type="password" step="0.01" autocomplete="off" onmousedown="rhTauxReveal()" onmouseup="rhTauxMask()" onmouseleave="rhTauxMask()" ontouchstart="rhTauxReveal()" ontouchend="rhTauxMask()" style="${FINP}" placeholder="•••"/><div style="font-size:.6rem;color:#94a3b8;margin-top:2px;">Masqué — <strong>maintenez le clic</strong> pour révéler / éditer.</div>`
@@ -1128,8 +1130,9 @@ function rhFilterMatrice(act,el){
   // Segmented control : bouton actif = fond blanc + ombre
   document.querySelectorAll('#matf-group .matf-btn').forEach(function(b){ b.style.background='transparent'; b.style.color='#64748b'; b.style.boxShadow='none'; b.setAttribute('data-on','0'); });
   if(el){ el.style.background='#fff'; el.style.color='#4338ca'; el.style.boxShadow='0 1px 3px rgba(0,0,0,.1)'; el.setAttribute('data-on','1'); }
-  // « les deux » (both) reste visible quel que soit le site choisi
-  var show=function(a){ return act==='tous' || a===act || a==='both'; };
+  // « les deux » (both) reste visible quel que soit le site choisi ; les process OAS aussi (lot G, 16/09/2026 : la migration
+  // 014 / cloud-12 les passe de both / Seem à « OAS » — sans cela ils disparaissaient des filtres Seem et Semrac)
+  var show=function(a){ return act==='tous' || a===act || a==='both' || a==='OAS'; };
   // Colonnes = en-tête (th) ET toutes les cellules niveau de la colonne (sinon le tableau se désaligne)
   document.querySelectorAll('.matrix-col, .matrix-cell-col').forEach(function(c){ c.style.display=show(c.dataset.act)?'':'none'; });
   // Lignes = process filtrés par activité
@@ -1174,33 +1177,54 @@ if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded
 }
 
 // ─── PAGE GESTION DES TEMPS ───────────────────────────────────
-export function pageRHTemps(dbPts?: Pointage[], dbEmps?: any[], dbConges?: any[], dbPresences?: any[]): string {
+export function pageRHTemps(dbPts?: Pointage[], dbEmps?: any[], dbConges?: any[], dbPresences?: any[], dbCadence?: DonneesCadence | null): string {
   const empsT: any[] = dbEmps ?? []
   const congesT: any[] = dbConges ?? []
   const presT: any[] = dbPresences ?? []
   // Noms = source de vérité RH (salariés). Index id → nom complet.
   const empNameById: Record<string, string> = {}
-  empsT.forEach((e: any) => { empNameById[String(e.id)] = `${e.prenom ?? ''} ${e.nom ?? ''}`.trim() || String(e.id) })
+  const empSiteById: Record<string, string> = {}
+  empsT.forEach((e: any) => { empNameById[String(e.id)] = `${e.prenom ?? ''} ${e.nom ?? ''}`.trim() || String(e.id); empSiteById[String(e.id)] = String(e.activite ?? '') })
   // Pas de badgeuse temps réel : à défaut de pointages réels, on dérive les temps depuis
   // la PRÉSENCE saisie (gestion des temps) → vrais noms RH, plus aucune donnée démo.
+  // Lot G (16/09/2026) : arrivée, départ, pause et heures = horaires du créneau dans la CADENCE du site de l'opérateur CE
+  // JOUR-LÀ (src/cadence.ts). Repli sur les horaires par défaut ci-dessous si la cadence est illisible (cloud sans cloud-12),
+  // si l'opérateur n'est d'aucun site de cadence, ou si le créneau enregistré est fermé ce jour-là (signalé).
   const SHIFT_HMS: Record<string, { a: string; d: string; h: number }> = {
     matin:   { a: '06:00', d: '14:00', h: 7.5 },
     apmidi:  { a: '14:00', d: '22:00', h: 7.5 },
     journee: { a: '07:00', d: '17:00', h: 9.5 },
     soir:    { a: '22:00', d: '06:00', h: 7.5 },
   }
+  const horairesPresence = (p: any): { a: string; d: string; h: number; pause: number; source: string } => {
+    const site = siteCadence(empSiteById[String(p.operateur_id)] || p.activite)
+    if (dbCadence && site && estCreneau(p.shift)) {
+      const r = horairesCreneauSite(dbCadence, site, String(p.date_presence).slice(0, 10), p.shift)
+      if (r.horaires) {
+        const pa = r.horaires.parties
+        // Heures = amplitude − pause (celle de la Journée, sinon 30 min forfaitaires au-delà de 6 h : règle d'avant le lot G,
+        // gardée en attendant la décision RH — src/cadence.ts heuresPresence).
+        const hp = heuresPresence(r.horaires)
+        return { a: pa[0].debut, d: pa[pa.length - 1].fin, h: hp.heures, pause: hp.pauseMin, source: 'Planning présence · cadence ' + LIBELLES_NIVEAU[r.niveau] }
+      }
+      const sh = SHIFT_HMS[p.shift] || SHIFT_HMS.journee
+      return { a: sh.a, d: sh.d, h: sh.h, pause: 30, source: 'Planning présence · ⚠ créneau fermé en cadence ' + LIBELLES_NIVEAU[r.niveau] + ' ce jour (horaires par défaut)' }
+    }
+    const sh = SHIFT_HMS[p.shift] || SHIFT_HMS.journee
+    return { a: sh.a, d: sh.d, h: sh.h, pause: 30, source: 'Planning présence' + (dbCadence ? '' : ' · horaires par défaut') }
+  }
   const ptsFromPresence: any[] = presT
     .filter((p: any) => p.shift && p.shift !== 'absent')
     .map((p: any) => {
-      const sh = SHIFT_HMS[p.shift] || SHIFT_HMS.journee
+      const sh = horairesPresence(p)
       return {
         id: 'PRES-' + p.operateur_id + '-' + p.date_presence,
         employe_id: p.operateur_id,
         employe_nom: empNameById[String(p.operateur_id)] || p.operateur_nom || String(p.operateur_id),
         date_pointage: p.date_presence,
-        heure_arrivee: sh.a, heure_depart: sh.d, pause_min: 30,
+        heure_arrivee: sh.a, heure_depart: sh.d, pause_min: sh.pause,
         heures_travaillees: sh.h,
-        type: 'présence', statut: 'valide', valide_par: 'Planning présence',
+        type: 'présence', statut: 'valide', valide_par: sh.source,
       }
     })
   const pts: any[] = (dbPts && dbPts.length > 0) ? dbPts : ptsFromPresence

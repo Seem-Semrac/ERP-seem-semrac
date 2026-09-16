@@ -60,11 +60,14 @@
           <li>une <b>mini-barre</b> en deux parties — le <b>réglage</b> hachuré violet, puis la <b>réalisation</b> bleue — avec « <b>Réglage 0,5 h · Réalisation 3,5 h</b> » (ou « réglage non renseigné » en orange quand il est inconnu) ;</li>
           <li>une pastille <b>« M2 · 2/3 »</b> sur un morceau de BDT découpé ;</li>
           <li>une ligne <b>« au plus tôt : 15/09 8h30 · après le réglage de … »</b> quand l'étape précédente du lot impose une heure de départ ;</li>
-          <li>le bouton <b>ciseaux</b> pour découper le BDT — c'est le <b>seul</b> endroit où l'on découpe — et, sur chaque morceau d'un BDT découpé, le bouton <b>« Annuler la découpe »</b> (flèche de retour, orange).</li>
+          <li>le bouton <b>ciseaux</b> pour découper le BDT — c'est le <b>seul</b> endroit où l'on découpe — et, sur chaque morceau d'un BDT découpé, le bouton <b>« Annuler la découpe »</b> (flèche de retour, orange) ;</li>
+          <li>un badge rouge <span class="b b-crit">Remis en goulotte</span> sur un BDT que l'ERP a <b>déprogrammé</b> parce qu'une étape précédente du lot a été déplacée : ces cartes passent <b>en tête</b> de la goulotte, la plus récente d'abord (voir « Déplacer une étape » plus bas) ;</li>
+          <li>un badge cyan <span class="b" style="background:#cffafe;color:#0e7490">→ OAS : Desoxydation › Oxydation Incolore</span> sur le BDT <b>qui précède un passage à l'OAS</b> : au soldage de ce BDT, le lot part entier au traitement de surface (voir « Le badge → OAS » plus bas).</li>
         </ul>
         On peut aussi y <em>redéposer</em> une barre du planning pour la déprogrammer. Un BDT <b>n'apparaît sur le planning qu'une fois programmé</b> : tant qu'il est « à programmer », il reste dans la goulotte.</li>
       <li><b>Carte « Enchaînements à revoir »</b> (rouge, affichée seulement s'il y en a) : les étapes déjà posées <b>avant leur au plus tôt</b> — avant la fin du réglage de l'étape précédente, avant la fin complète d'une étape suivie d'une OAS ou d'un envoi en sous-traitance, ou avant le retour d'une sous-traitance. Rien n'est décalé automatiquement : un clic sur une ligne ouvre l'étape sur son planning.</li>
-      <li><b>Le Gantt</b> : lignes = postes de travail (avec le nombre de process et de machines du poste), colonnes = heures de 5&nbsp;h à 23&nbsp;h. Chaque barre BDT est colorée selon son statut et porte un liseré gauche à la <b>couleur de son lot</b> — la même couleur que sur le planning BST, pour suivre un lot d'un planning à l'autre. En tête de barre, un segment <b>hachuré</b> représente le <b>temps de réglage</b> ; un trait sombre marque sa fin, qui est le repère du chemin critique. La 3ᵉ ligne de la barre dit « <b>8h · 0,5 + 3,5 h</b> · client » (heure de début · réglage + réalisation). Une pastille rouge (maillon brisé) signale une barre posée avant son au plus tôt. Dans la colonne de gauche, chaque poste offre quatre sous-cases <b>Matin / Journée / Après-midi / Soirée</b> qui reçoivent les opérateurs affectés.</li>
+      <li><b>Bandeau « Cadence usine du … »</b> juste au-dessus du Gantt : la cadence de chaque site ce jour-là et la plage ouverte, par exemple « Cadence usine du jeudi 17/09 : <b>Moyen (Seem) · Bas (Semrac)</b> · plage ouverte 04:30 → 05:30 (+1j) », suivie de la légende des hachures et des icônes (voir « Le planning suit la cadence usine » plus bas).</li>
+      <li><b>Le Gantt</b> : lignes = postes de travail (avec le nombre de process et de machines du poste), colonnes = les <b>heures de la journée d'atelier</b> : de la première équipe du jour jusqu'à la première équipe du lendemain (par exemple de 5&nbsp;h à 5&nbsp;h le lendemain quand la Soirée travaille, un trait marque minuit). Les heures où <b>aucune équipe du site du poste</b> ne travaille sont <b>hachurées en gris</b>. Chaque barre BDT est colorée selon son statut et porte un liseré gauche à la <b>couleur de son lot</b> — la même couleur que sur le planning BST, pour suivre un lot d'un planning à l'autre. En tête de barre, un segment <b>hachuré</b> représente le <b>temps de réglage</b> ; un trait sombre marque sa fin, qui est le repère du chemin critique. La 3ᵉ ligne de la barre dit « <b>8h · 0,5 + 3,5 h</b> · client » (heure de début · réglage + réalisation). Une pastille rouge (maillon brisé) signale une barre posée avant son au plus tôt. Le BDT qui précède l'OAS porte le badge <b>« → OAS : … »</b> sur sa barre. Dans la colonne de gauche, chaque poste offre quatre sous-cases <b>Matin / Journée / Après-midi / Soirée</b> qui reçoivent les opérateurs affectés.</li>
       <li><b>« Affectation des ressources aux postes »</b> : les opérateurs du jour classés en cinq colonnes (Matin, Journée, Après-midi, Soirée, Absent). On glisse une carte — ou on la sélectionne au clic — vers une sous-case de créneau d'un poste du planning.</li>
     </ul>
     <p>Couleurs des barres et statuts d'un BDT :
@@ -83,9 +86,9 @@
     <p><b>Programmer un BDT sur un poste :</b></p>
     <ol class="steps">
       <li>Choisissez la date en haut à gauche (le planning affiche les BDT prévus ce jour-là).</li>
-      <li>Prenez une carte dans la goulotte <b>« BDT à classer »</b> et glissez-la sur la ligne du poste : un guide vertical orange indique l'heure de dépôt (arrondie au quart d'heure). Si l'étape précédente du lot impose une heure de départ, une <b>zone rouge hachurée</b> couvre la partie de la journée où l'on ne peut pas encore commencer, avec « au plus tôt 9h30 · après le réglage de … ». Vous pouvez aussi <em>cliquer</em> la carte puis cliquer le poste : le BDT garde alors son heure s'il en avait une, sinon il est posé à <b>6&nbsp;h</b>, l'heure où le planning l'affiche.</li>
-      <li>L'ERP vérifie qu'un process du poste est compatible (même activité Seem/Semrac que le BDT) ; sinon le dépôt est refusé avec un message. Il applique ensuite le <b>chemin critique</b> (détail ci-dessous) : posé trop tôt le bon jour, le BDT est <b>calé</b> à l'heure au plus tôt et un message orange « Calé à 9h30 (chemin critique) » le dit ; posé un jour <b>antérieur</b> au jour au plus tôt, il est <b>refusé</b>. Si c'est bon, le BDT passe <span class="b b-info">programmé</span> à la date et l'heure retenues.</li>
-      <li>Pour déplacer un BDT déjà programmé, glissez sa barre sur un autre poste ou un autre horaire. Si ce déplacement rend invalides les étapes suivantes déjà posées, un message les liste (« 1 étape suivante à revoir ») : elles ne sont <b>jamais décalées automatiquement</b> et apparaissent dans la carte « Enchaînements à revoir ». Pour remettre un BDT en attente : clic droit → <b>« Déprogrammer (retour en attente) »</b>, ou glissez la barre dans la goulotte. Un BDT déjà reçu ne se déplace et ne se déprogramme plus.</li>
+      <li>Prenez une carte dans la goulotte <b>« BDT à classer »</b> et glissez-la sur la ligne du poste : un guide vertical orange indique l'heure de dépôt (arrondie au quart d'heure). Le dépôt se fait dans les <b>heures ouvertes</b> du poste : sur une zone hachurée (pause, nuit ou jour non travaillés), le guide passe au rouge « · fermé » et le BDT n'est pas posé. Si l'étape précédente du lot impose une heure de départ, une <b>zone rouge hachurée</b> couvre la partie de la journée où l'on ne peut pas encore commencer, avec « au plus tôt 9h30 · après le réglage de … ». Vous pouvez aussi <em>cliquer</em> la carte puis cliquer le poste : le BDT garde alors son heure s'il en avait une, sinon il est posé à <b>6&nbsp;h</b>, l'heure où le planning l'affiche.</li>
+      <li>L'ERP vérifie qu'un process du poste est compatible (même activité Seem/Semrac que le BDT) ; sinon le dépôt est refusé avec un message. Il applique ensuite le <b>chemin critique</b> (détail ci-dessous) : posé trop tôt le bon jour, le BDT est <b>calé</b> à l'heure au plus tôt et un message orange « Calé à 9h30 (chemin critique) » le dit ; posé un jour <b>antérieur</b> au jour au plus tôt, il est <b>refusé</b>. Puis il refuse une pose sur une <b>heure fermée</b> (« Le poste Usinage Stama est fermé à cette heure (samedi 19/09 à 10h) en cadence Moyen (Seem) : posez le BDT sur un créneau ouvert — prochain : lundi 21/09 à 5h30. ») et une pose qui <b>chevauche un BDT du même process</b> sur le poste (voir plus bas). Si c'est bon, le BDT passe <span class="b b-info">programmé</span> à la date et l'heure retenues.</li>
+      <li>Pour déplacer un BDT déjà programmé, glissez sa barre sur un autre poste ou un autre horaire. Si ce déplacement rend <b>incohérentes</b> des étapes suivantes déjà posées, une fenêtre <b>« Remettre en goulotte »</b> les liste <b>avant</b> d'enregistrer : confirmez pour déplacer le BDT et renvoyer ces étapes en tête de la goulotte, ou annulez (rien ne bouge). Elles ne sont <b>jamais décalées</b> automatiquement : on les reprogramme soi-même. Pour remettre un BDT en attente : clic droit → <b>« Déprogrammer (retour en attente) »</b>, ou glissez la barre dans la goulotte. Un BDT déjà reçu ne se déplace et ne se déprogramme plus.</li>
     </ol>
     <p><b>Réceptionner puis solder un BDT (signature au matricule + PIN) :</b></p>
     <ol class="steps">
@@ -170,6 +173,48 @@
     </ol>
     <div class="note"><b>Bon à savoir — les étapes sous-traitées :</b> la gamme d'un lot mélange des opérations faites à l'atelier (BDT) et des opérations confiées à un prestataire (BST/BDS). Si l'étape d'avant ou d'après est <b>sous-traitée</b>, elle est nommée dans le bandeau sous la forme <b>« ST &lt;nom du sous-traitant&gt; »</b> — mais elle n'ajoute évidemment <b>aucune ligne</b> au planning des postes, puisqu'elle ne se fait pas dans l'atelier. Le comptage des étapes (« etape 2/4 ») tient bien compte des deux, internes et sous-traitées.</div>
 
+    <h3>Le planning suit la cadence usine</h3>
+    <p>Les horaires de l'usine ne sont plus fixes : ils dépendent de la <b>cadence</b> de chaque site (<b>Bas</b>, <b>Moyen</b> ou <b>Haut</b>), réglée dans <b>Process Ateliers › Cadence usine</b> (section 5). Le planning d'un jour montre donc les heures réellement travaillées ce jour-là, <b>site par site</b>.</p>
+    <ul class="points">
+      <li><b>Axe du jour</b> : il commence à la première équipe du jour (4h30, 5h30…) et va jusqu'à la première équipe du lendemain. La <b>nuit</b> appartient au jour où la Soirée commence : un BDT posé à 2&nbsp;h du matin se voit sur le planning de la <b>veille</b>, à droite du trait de minuit (l'en-tête affiche « 0h … 5h »). Quand vous posez un BDT après minuit, il est enregistré au <b>lendemain</b> ; le message de confirmation le précise (« à 1h30 le 18/09 »).</li>
+      <li><b>Hachures grises</b> sur une ligne = aucune équipe du <b>site du poste</b> ne travaille à cette heure (un poste « Seem &amp; Semrac » n'est hachuré que si aucun des deux sites ne travaille). Dans l'en-tête, seules les heures où aucun site ne travaille sont hachurées. Une journée entièrement fermée (dimanche, samedi en Moyen…) garde une grille de 5&nbsp;h à 23&nbsp;h toute hachurée, avec « Fermé ce jour (cadence usine) ».</li>
+      <li><b>Poser sur une heure fermée est refusé</b>, à l'écran comme par le serveur, avec le prochain créneau ouvert. Les pauses d'une Journée ne sont pas hachurées si une autre équipe (Matin, Après-midi) travaille à ce moment-là.</li>
+      <li><b>Chemin critique en heures ouvrées</b> : le réglage d'une étape ne « consomme » que des heures travaillées de son site. Exemple en cadence Bas : une étape posée le jeudi à 12h45 avec 1&nbsp;h de réglage (le Matin finit à 13h15, le vendredi est fermé) fait 30&nbsp;min de réglage le jeudi et 30&nbsp;min le lundi à partir de 5h30 : l'étape suivante démarre au plus tôt le <b>lundi à 6&nbsp;h</b>. Le dimanche est toujours sauté, le samedi seulement s'il est travaillé.</li>
+      <li><b>Une barre garde sa durée</b> (1&nbsp;h = 1&nbsp;h de largeur). Si le travail traverse une fermeture (pause non couverte, nuit, week-end), la barre porte l'icône <b>pause</b> et son bord droit est en pointillés : la <b>fin prévue</b> en heures ouvrées est dans l'info-bulle. Une <b>flèche</b> indique une barre qui se poursuit après la fin de la vue du jour ; une <b>lune</b>, un BDT posé sur une heure fermée (ancienne donnée, à déplacer).</li>
+      <li>L'axe s'élargit si un BDT déjà posé tombe hors des heures ouvertes : <b>aucun BDT ne disparaît</b> du planning.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/production-planning-cadence.png" alt="Planning un jeudi avec Seem en cadence Moyen et Semrac en cadence Bas : bandeau de cadence, heures fermées hachurées sur les postes Semrac, badge Remis en goulotte et badge OAS" loading="lazy">
+      <figcaption><b>Le planning suit la cadence</b> — exemple d'un jeudi où Seem est en Moyen et Semrac en Bas : le bandeau donne les cadences et la plage ouverte ; sur les postes Semrac, tout est hachuré après 13h15 (fin du Matin en Bas). La barre de 11&nbsp;h déborde sur cette fermeture (icône pause en bas à droite). La barre de 9&nbsp;h porte le badge « → OAS : Desoxydation › Oxydation Incolore » ; dans la goulotte, la carte « Remis en goulotte » est placée en tête.</figcaption>
+    </figure>
+    <div class="note"><b>Base en ligne pas encore mise à jour :</b> si le bandeau affiche « Horaires par défaut du planning (5h → 23h) : Cadence usine indisponible… jouez cloud-12 », le planning garde l'ancienne grille de 5&nbsp;h à 23&nbsp;h, sans heure fermée. Si un dépôt répond « Lecture de la cadence usine impossible… », la base ne répond pas : réessayez, rien n'a été enregistré.</div>
+
+    <h3>Deux BDT du même process ne se chevauchent pas sur un poste</h3>
+    <p>Sur un même poste, deux BDT de <b>process différents</b> peuvent se chevaucher (deux machines, deux personnes). Deux BDT du <b>même process</b>, non : l'ERP refuse la pose et souligne la barre déjà en place, avec « <b>Le poste Usinage Stama porte déjà un BDT du même process (BDT-…) de 08:00 à 11:00 : décalez la pose ou choisissez un autre process du poste.</b> ». Les heures comptées sont les heures ouvrées. Un BDT reçu occupe toujours le poste ; un BDT soldé le libère. Les morceaux d'un BDT découpé portent le même process : ils s'enchaînent, ils ne se superposent pas.</p>
+    <p>Si deux personnes posent en même temps des BDT du même process qui se chevauchent, la seconde pose est annulée (« posé en même temps depuis un autre écran : pose annulée ») : rechargez le planning.</p>
+
+    <h3>Déplacer une étape : les étapes suivantes incohérentes reviennent dans la goulotte</h3>
+    <p>Quand vous déplacez une étape d'un lot (glisser, clic, planning BST), l'ERP vérifie les étapes <b>suivantes</b> déjà posées. Celles que le déplacement rend incohérentes (elles démarreraient avant la fin du réglage, avant la fin complète d'une étape suivie d'une OAS…) sont listées dans une fenêtre <b>avant</b> tout enregistrement :</p>
+    <ol class="steps">
+      <li>La fenêtre <b>« Remettre en goulotte »</b> dit : « Déplacer BDT-… remettra dans la goulotte l'étape suivante : · BDT-… — posé le 22/09 à 8h30 : au plus tôt le 22/09 à 9h29 (après le réglage de …). Elle sera déprogrammée et placée en tête de la goulotte, à reprogrammer. »</li>
+      <li><b>« Déplacer et remettre en goulotte »</b> : le BDT est déplacé, puis les étapes listées sont déprogrammées. Elles reviennent <b>en tête de la goulotte</b> avec le badge <span class="b b-crit">Remis en goulotte</span> (l'info-bulle donne la date) et un message « Remis en goulotte : BDT-… » confirme.</li>
+      <li><b>« Annuler »</b> : rien ne bouge.</li>
+      <li>Reprogrammez ensuite les étapes remises en goulotte : le badge disparaît dès qu'elles sont reposées.</li>
+    </ol>
+    <ul class="points">
+      <li>La vérification suit toute la suite du lot : si l'étape remise en goulotte en rendait une autre incohérente, celle-ci est listée aussi.</li>
+      <li>Une étape <b>déjà reçue</b> (commencée à l'atelier) n'est <b>jamais</b> déprogrammée : elle est seulement signalée dans la fenêtre (« Étape déjà reçue », bouton « Déplacer quand même ») et dans le message final.</li>
+      <li>Une étape qui était déjà incohérente avant le déplacement n'est pas retirée : elle reste dans la carte « Enchaînements à revoir ».</li>
+      <li>Si quelqu'un a modifié le planning entre-temps, la fenêtre peut se rouvrir avec une liste mise à jour. Un message « Non remis en goulotte (toujours signalés) » veut dire que l'étape a changé entre-temps : rechargez et corrigez-la à la main.</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/form-production-remise-goulotte.png" alt="Fenêtre Remettre en goulotte avant le déplacement d'un BDT" loading="lazy">
+      <figcaption><b>Message préventif</b> — déplacer le Poinçonnage de 8&nbsp;h à 9&nbsp;h rendrait le Contrôle posé à 8h30 incohérent (au plus tôt 9h29, après le réglage de 0,48&nbsp;h) : la fenêtre le dit avant d'enregistrer ; « Déplacer et remettre en goulotte » ou « Annuler ».</figcaption>
+    </figure>
+
+    <h3>Le badge « → OAS »</h3>
+    <p>Aucun BDT n'est créé pour une étape de traitement de surface : l'OAS n'a pas de goulotte. Pour savoir qu'un lot part à l'OAS après une étape, le BDT <b>qui précède</b> porte un badge cyan <b>« → OAS : &lt;process&gt; »</b> (le ou les process OAS suivants de la gamme, par exemple « → OAS : Desoxydation › Oxydation Incolore »), sur sa carte de goulotte et sur sa barre. Si la gamme ne permet pas de le retrouver, le badge affiche seulement « → OAS ». Le service OAS voit ces lots arriver dans sa liste <b>« Lots à venir »</b>, avec la fin prévue de ce BDT.</p>
+
     <h3>Chemin critique : l'étape suivante démarre après le réglage de la précédente</h3>
     <p>Deux étapes qui se suivent dans la gamme d'un lot <b>peuvent se chevaucher</b>, mais l'étape d'après ne peut commencer qu'une fois le <b>réglage</b> de l'étape d'avant terminé. L'ERP calcule pour chaque étape son <b>au plus tôt</b> — un jour et une heure — et l'applique quand vous posez un BDT ou planifiez un BST. <b>Programmer n'est pas produire</b> : rien n'est retiré du planning et rien n'est jamais décalé tout seul.</p>
     <div class="tbl"><table>
@@ -179,16 +224,16 @@
         <tr><td>Étape précédente sans réglage, ou réglage non renseigné</td><td>Son début (le réglage inconnu compte pour 0, et c'est dit).</td></tr>
         <tr><td>Étape précédente découpée</td><td>Le morceau qui porte le réglage fait foi. S'il est encore dans la goulotte, l'étape suivante ne démarre pas avant le début du plus tôt des morceaux déjà posés.</td></tr>
         <tr><td>Étape précédente posée <b>sans heure</b> (posée au clic)</td><td>Comptée à 6&nbsp;h, l'heure où le planning l'affiche.</td></tr>
-        <tr><td>Étape précédente déjà <b>reçue</b></td><td>Son heure de début réelle.</td></tr>
+        <tr><td>Étape précédente déjà <b>reçue</b></td><td>Son heure de début réelle, au jour où elle a été reçue (une réception après minuit compte le lendemain).</td></tr>
         <tr><td>Étape précédente <b>soldée</b>, ou dans la goulotte</td><td>Aucune contrainte (la goulotte donne une simple information « étape précédente non programmée »).</td></tr>
         <tr><td>Passage à l'<b>OAS</b> entre les deux, ou étape suivante <b>sous-traitée</b></td><td>La <b>fin complète</b> de l'étape précédente (un lot passe entier à l'OAS, un carton ne part pas à moitié).</td></tr>
-        <tr><td>Étape précédente <b>sous-traitée</b></td><td>Le jour de retour (retour effectif, sinon date d'envoi + durée), à 5&nbsp;h.</td></tr>
+        <tr><td>Étape précédente <b>sous-traitée</b></td><td>Le jour de retour, à la <b>première équipe</b> du jour (retour effectif, sinon date d'envoi + durée).</td></tr>
         <tr><td>Morceaux d'une même étape</td><td>Un morceau sans réglage démarre après le réglage du morceau qui le porte.</td></tr>
       </tbody>
     </table></div>
     <ul class="points">
-      <li>Le planning compte en <b>heures de grille</b>, de 5&nbsp;h à 23&nbsp;h : un réglage qui dépasse 23&nbsp;h reprend le lendemain à 5&nbsp;h. Les week-ends ne sont pas exclus.</li>
-      <li>Posé <b>trop tôt le bon jour</b> : le BDT est calé à l'au plus tôt. Posé <b>un jour avant</b> : refus « Au plus tôt le 15/09 à 8h30 (après le réglage de …) : posez … ce jour-là ou après. »</li>
+      <li>Le planning compte en <b>heures ouvrées</b> de la cadence du site : un réglage qui dépasse la fin des équipes reprend à la prochaine heure travaillée (le lendemain, ou le lundi) ; le dimanche est toujours sauté, le samedi selon la cadence. Sans cadence (base pas encore mise à jour), il compte de 5&nbsp;h à 23&nbsp;h, week-ends compris.</li>
+      <li>Posé <b>trop tôt le bon jour</b> : le BDT est calé à l'au plus tôt (éventuellement dans la nuit du même jour de planning, donc au lendemain calendaire). Posé <b>un jour avant</b> : refus « Au plus tôt le 15/09 à 8h30 (après le réglage de …) : posez … ce jour-là ou après. »</li>
       <li>La barre de réglage hachurée et son trait de fin servent de repère : l'étape suivante se place après ce trait.</li>
     </ul>
     <figure class="shot">
@@ -260,7 +305,8 @@
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
       <li><b>Matière et préparation technique</b> : un BDT dont la matière n'est pas réceptionnée ou dont la préparation technique n'est pas terminée <b>reste programmable</b> ; il est seulement signalé dans la carte « Ordres de travail programmables, mais pas encore lançables » (voir en tête de section).</li>
-      <li>Les process de traitement de surface (OAS, oxydation, Surtec…) n'apparaissent <b>jamais</b> dans ce planning : ils se pilotent dans le service OAS.</li>
+      <li>Les process de traitement de surface (OAS, oxydation, Surtec…) n'apparaissent <b>jamais</b> dans ce planning : ils se pilotent dans le service OAS. Le BDT qui les précède porte le badge « → OAS ».</li>
+      <li><b>Horaires</b> : le planning suit la cadence usine du jour affiché (bandeau au-dessus du Gantt) ; poser sur une heure hachurée est refusé. Deux BDT du même process ne se chevauchent pas sur un poste ; déplacer une étape peut remettre en goulotte les étapes suivantes (après confirmation).</li>
       <li>La goulotte trie par échéance client, puis par lot et rang dans la gamme : traitez-la de haut en bas. Ce tri n'est pas le chemin critique — celui-ci est contrôlé à la pose de chaque BDT.</li>
       <li>Le <b>jour et l'heure</b> d'un BDT ne se posent que par le planning (glisser-déposer ou clic) : c'est là que s'applique le chemin critique.</li>
       <li><b>Viser la bonne heure</b> : quand vous glissez une carte de la goulotte, le curseur porte une <b>mini-barre à l'échelle</b> dont le <b>bord gauche</b> marque le début du BDT, sous le <b>trait orange</b> qui affiche l'heure (arrondie au quart d'heure). Vous pouvez aussi <b>cliquer la carte</b>, puis <b>cliquer la ligne du poste à l'heure voulue</b> : le BDT est posé à l'heure cliquée. La zone rouge montre l'heure <b>au plus tôt</b> ; posé avant, le BDT est calé automatiquement.</li>
@@ -338,20 +384,24 @@
     <h3>Ce que vous voyez</h3>
     <p>Deux vues, commutées par les deux boutons du haut :</p>
     <ul class="points">
-      <li><b>Planning de présence</b> : une grille opérateurs × 7 jours de la semaine, avec navigation ‹ › entre semaines et filtres Tous / Seem / Semrac. Chaque cellule est colorée : <span class="b b-info">Matin</span> (6h-14h), <span class="b b-ok">Journée</span> (7h-17h), <span class="b" style="background:#ede9fe;color:#6d28d9">Après-midi</span> (14h-22h), <span class="b" style="background:#e2e8f0;color:#0f172a">Soirée</span> (22h-6h), <span class="b b-crit">Absent</span> (rouge), <span class="b b-mut">Non programmé</span> (gris). À côté des flèches, une roue de chargement indique qu'une semaine est en cours de lecture, et un bouton <b>« Réessayer »</b> apparaît si la lecture a échoué.</li>
+      <li><b>Planning de présence</b> : une grille opérateurs × 7 jours de la semaine, avec navigation ‹ › entre semaines et filtres Tous / Seem / Semrac. Chaque cellule est colorée : <span class="b b-info">Matin</span>, <span class="b b-ok">Journée</span>, <span class="b" style="background:#ede9fe;color:#6d28d9">Après-midi</span>, <span class="b" style="background:#e2e8f0;color:#0f172a">Soirée</span>, <span class="b b-crit">Absent</span> (rouge), <span class="b b-mut">Non programmé</span> (gris). Les <b>horaires</b> ne sont plus fixes : ils dépendent de la <b>cadence usine</b> du site de l'opérateur <b>et du jour</b> (Process Ateliers › Cadence usine) ; ils s'affichent dans l'info-bulle de la case et dans le menu. Une case d'un jour où <b>aucun créneau n'est ouvert</b> (dimanche, samedi hors cadence Haut…) affiche <b>« fermé »</b> ; une case en <b>pointillés rouges</b> porte un créneau enregistré avant un changement de cadence qui l'a fermé. À côté des flèches, une roue de chargement indique qu'une semaine est en cours de lecture, et un bouton <b>« Réessayer »</b> apparaît si la lecture a échoué.</li>
       <li><b>Demandes de congés à traiter</b> : la liste des demandes des opérateurs (type, dates, heures/jours, motif) avec les boutons <b>Approuver</b> et refuser (✕).</li>
     </ul>
     <figure class="shot">
       <img src="../../assets/production-presence.png" alt="Capture du planning de présence hebdomadaire" loading="lazy">
       <figcaption><b>Présence opérateurs</b> — la grille hebdomadaire : un clic sur une case ouvre le menu des créneaux ; les cases verrouillées (cadenas) sont des absences RH.</figcaption>
     </figure>
+    <figure class="shot">
+      <img src="../../assets/production-presence-cadence.png" alt="Menu d'une case du vendredi : Matin 04:50-13:15, Journée 07:30-12:00, Après-midi et Soirée grisés fermé cadence Moyen" loading="lazy">
+      <figcaption><b>Créneaux selon la cadence</b> — menu d'une case du vendredi en cadence Moyen : Matin 04:50-13:15 et Journée 07:30-12:00 sont ouverts ; Après-midi et Soirée sont <b>grisés « fermé · cadence Moyen »</b>. Samedi et dimanche affichent « fermé ».</figcaption>
+    </figure>
 
     <h3>Pas à pas</h3>
     <ol class="steps">
-      <li><b>Programmer un jour</b> : cliquez la cellule de l'opérateur — un petit menu s'ouvre : <b>Matin · Journée · Après-midi · Soirée · Absent · Effacer</b> (le créneau en place est coché). Choisissez : la case change tout de suite et <b>un seul</b> enregistrement part. S'il échoue, la case revient à la dernière valeur enregistrée et un message rouge donne la raison. <b>« Effacer »</b> vide vraiment la case (« Non programmé »).</li>
+      <li><b>Programmer un jour</b> : cliquez la cellule de l'opérateur — un petit menu s'ouvre : <b>Matin · Journée · Après-midi · Soirée · Absent · Effacer</b> (le créneau en place est coché). Chaque créneau affiche ses horaires du jour pour le site de l'opérateur ; un créneau <b>fermé</b> ce jour-là est grisé (« fermé · cadence Moyen ») et ne se choisit pas. Choisissez : la case change tout de suite et <b>un seul</b> enregistrement part. S'il échoue, la case revient à la dernière valeur enregistrée et un message rouge donne la raison. <b>« Effacer »</b> vide vraiment la case (« Non programmé »).</li>
       <li>Au clavier : Entrée sur une case ouvre le menu, flèches haut/bas pour choisir, Entrée pour valider, Échap (ou Tab) pour refermer — le curseur revient sur la case.</li>
       <li><b>Changer de semaine</b> : ‹ › relit les présences de la semaine affichée. Tant qu'une semaine n'a jamais été lue, ses cases sont <b>verrouillées</b> (« … » pendant la lecture, « ? » si elle a échoué) : on ne peut pas écraser une présence qu'on ne voit pas. Une semaine déjà lue reste modifiable même si une relecture échoue.</li>
-      <li><b>Programmer une semaine entière</b> : bouton orange <b>« Programmer la semaine »</b> → choisissez le créneau à appliquer (ou « Effacer »), les jours (Lun → Ven ou Lun → Dim), cochez les opérateurs (boutons rapides : Tout cocher / Seem / Semrac) puis <b>« Appliquer à la semaine »</b>. Les jours en absence RH ne sont pas touchés. Le message final compte les cases enregistrées et, s'il y en a, les échecs (ces cases reviennent à leur valeur).</li>
+      <li><b>Programmer une semaine entière</b> : bouton orange <b>« Programmer la semaine »</b> → choisissez le créneau à appliquer (ou « Effacer »), les jours (Lun → Ven ou Lun → Dim), cochez les opérateurs (boutons rapides : Tout cocher / Seem / Semrac) puis <b>« Appliquer à la semaine »</b>. Les jours en absence RH ne sont pas touchés, ni les jours où le créneau est <b>fermé</b> dans la cadence du site (« N cases non programmées : créneau fermé ce jour-là dans la cadence du site »). Le message final compte les cases enregistrées et, s'il y en a, les échecs (ces cases reviennent à leur valeur).</li>
       <li><b>Traiter un congé</b> : vue « Demandes de congés » → <b>Approuver</b> pose l'absence sur le planning de présence, renvoie au pool les BDT de l'opérateur sur la période <em>et</em> décompte les heures du solde de congés ; ✕ refuse la demande. Les deux boutons se grisent pendant l'enregistrement. Si un de ces effets n'a pas pu se faire (solde non décompté, BDT non renvoyés…), un message orange le dit.</li>
     </ol>
 
@@ -360,7 +410,9 @@
       <li>Les absences RH (congés validés, maladie) arrivent automatiquement et sont <b>verrouillées</b> ici (icône cadenas) — elles se gèrent côté RH.</li>
       <li>La Production ne traite que les congés des <b>opérateurs</b> ; les autres demandes restent à la RH ou à la Direction. <b>Personne ne valide son propre congé</b> : un chef d'équipe qui a les droits de Production voit sa propre demande refusée (« Un congé ne se valide pas soi-même »). Un congé déjà traité (double clic, autre écran) est refusé sans rien décompter une seconde fois.</li>
       <li>La présence saisie ici détermine la colonne (Matin / Journée / Après-midi / Soirée) des opérateurs dans le bloc « Affectation des ressources aux postes » du planning (section 1), et le calcul de capacité du Dashboard Programmation.</li>
-      <li>La <b>Soirée</b> garde ses horaires de nuit (22h-6h) ; le planning, qui va de 5&nbsp;h à 23&nbsp;h, n'en montre que le début.</li>
+      <li><b>Horaires = cadence usine</b> du site de l'opérateur, jour par jour : par exemple en Moyen, Matin 05:30-13:15, Après-midi 13:15-21:00, Soirée 21:00-05:30 (finit le lendemain), Journée 07:30-12:00 puis 12:45-16:00 — et le vendredi, Matin 04:50-13:15 et Journée 07:30-12:00 seulement. Un créneau fermé ce jour-là est <b>refusé</b> : « Créneau « Matin » fermé en cadence Moyen ce jour (samedi 19/09/2026, site Seem) : choisissez un créneau ouvert ou changez la cadence ». « Absent » est toujours possible.</li>
+      <li>Changer la cadence d'un site ne modifie pas les présences déjà saisies : un créneau devenu fermé reste affiché en pointillés rouges, à corriger à la main. Ces horaires servent aussi à <b>RH › Gestion des temps</b> (arrivée, départ, heures).</li>
+      <li>Sans cadence (base pas encore mise à jour), les horaires par défaut s'appliquent (Matin 6h-14h, Journée 7h-17h, Après-midi 14h-22h, Soirée 22h-6h) et aucun créneau n'est refusé.</li>
     </ul>
     <div class="astuce"><b>Astuce :</b> programmez la semaine type en une fois avec « Programmer la semaine », puis corrigez les exceptions cellule par cellule.</div>
   </section>
@@ -406,11 +458,11 @@
     <ul class="points">
       <li><b>4 tuiles KPI</b> : Machines actives, En maintenance, Arrêtées, <b>OPEX réel conso. (YTD)</b> (consommables sortis sur les machines depuis le 1<sup>er</sup> janvier).</li>
       <li>Sous le titre, un badge orange <span class="b b-warn">N process machine : taux à saisir</span> tant que des process machine actifs n'ont pas de taux.</li>
-      <li>Deux volets commutés par les boutons <b>« Postes &amp; Process »</b> (par défaut) et <b>« Machines »</b>.</li>
+      <li>Trois volets commutés par les boutons <b>« Postes &amp; Process »</b> (par défaut), <b>« Machines »</b> et <b>« Cadence usine »</b> (horaires de l'usine, voir plus bas).</li>
     </ul>
     <figure class="shot">
       <img src="../../assets/production-process.png" alt="Capture de l'onglet Process Ateliers" loading="lazy">
-      <figcaption><b>Process Ateliers</b> — les tuiles KPI du parc et la bascule entre les volets « Postes &amp; Process » et « Machines ».</figcaption>
+      <figcaption><b>Process Ateliers</b> — les tuiles KPI du parc et la bascule entre les volets « Postes &amp; Process », « Machines » et « Cadence usine ».</figcaption>
     </figure>
 
     <h3>Volet « Postes &amp; Process »</h3>
@@ -473,6 +525,44 @@
     </figure>
     <div class="note"><b>Disparu :</b> le champ « Coût machine (€/h) » (défaut 35) n'existe plus. Le coût horaire de fonctionnement se saisit désormais sur le <b>process</b> machine, pas sur la machine.</div>
 
+    <h3>Volet « Cadence usine »</h3>
+    <p>Les horaires de l'usine dépendent de la <b>cadence</b> de chaque site — <b>Bas</b>, <b>Moyen</b> ou <b>Haut</b> — et chaque cadence a son <b>modèle d'horaires</b> (jour par jour, créneau par créneau). La cadence se change <b>à tout moment</b>, site par site. Elle pilote la présence des opérateurs, le planning (heures ouvertes, chemin critique) et RH › Gestion des temps. Le <b>dimanche est toujours fermé</b> ; le samedi suit la cadence.</p>
+    <ul class="points">
+      <li><b>Une carte par site</b> (Seem, Semrac) : cadence en vigueur (badge Bas / Moyen / Haut), « En vigueur depuis le … (décidé le … par …) », motif, et la <b>semaine type</b> : pour chaque jour, l'heure de la première équipe et de la fin de la dernière (« +1j » quand elle finit le lendemain), ou « fermé ». Un encadré <b>« Changement prévu »</b> annonce une cadence qui s'appliquera plus tard.</li>
+      <li><b>Modèles d'horaires</b> : pastilles Bas / Moyen / Haut (les sites dans ce niveau sont indiqués), puis un tableau Lundi → Samedi × Matin, Après-midi, Soirée, Journée (1) et Journée (2, après la pause). Chaque case a une heure de début et une heure de fin ; la <b>croix</b> ferme le créneau ce jour-là ; « +1j » signale un créneau qui finit le lendemain (Soirée 21:00 → 05:30). Le dimanche est affiché « Fermé (toujours) ».</li>
+      <li><b>Historique des changements de cadence</b> : À partir du · Décidé le · Site · Cadence · Par · Motif (un changement futur est marqué « prévu »).</li>
+    </ul>
+    <figure class="shot">
+      <img src="../../assets/production-cadence.png" alt="Volet Cadence usine : cartes Seem et Semrac, modèles d'horaires Moyen et historique" loading="lazy">
+      <figcaption><b>Cadence usine</b> — Seem et Semrac en Moyen (amorce), avec sur Semrac un <b>changement prévu</b> vers Bas à partir du jeudi (exemple) ; le tableau des modèles du niveau Moyen (le vendredi : Matin 04:50-13:15 et Journée 07:30-12:00 seulement ; samedi fermé) ; l'historique en bas.</figcaption>
+    </figure>
+    <p><b>Changer la cadence d'un site :</b></p>
+    <ol class="steps">
+      <li>Sur la carte du site, cliquez <b>« Changer la cadence »</b>.</li>
+      <li><b>À partir du</b> : le jour où la nouvelle cadence commence — <b>demain</b> par défaut. La fenêtre rappelle la cadence du site à cette date ; ce niveau est grisé.</li>
+      <li>Choisissez <b>Bas</b>, <b>Moyen</b> ou <b>Haut</b> : l'aperçu de la <b>semaine type</b> s'affiche. Ajoutez un <b>motif</b> si vous le souhaitez (« pic de charge », « baisse d'activité »…).</li>
+      <li>Cliquez <b>« Passer Seem en cadence Haut à partir du 17/09/2026 »</b>. Le changement est enregistré dans l'historique ; présence, planning et temps sont recalculés tout de suite.</li>
+      <li><b>Aujourd'hui ou une date passée</b> : un avertissement orange prévient que toute la journée passe dans la nouvelle cadence, <b>heures déjà travaillées comprises</b> ; une confirmation est demandée. Recul de 62 jours au plus, 400 jours d'avance au plus.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/form-production-cadence.png" alt="Fenêtre Cadence de Seem : date d'effet, niveaux, aperçu de la semaine type et motif" loading="lazy">
+      <figcaption><b>Changer la cadence</b> — Seem, actuellement en Moyen (grisé), passe en Haut à partir du lendemain : l'aperçu montre la semaine type Haut (samedi matin 05:30-12:00, dimanche fermé) ; motif facultatif.</figcaption>
+    </figure>
+    <p><b>Modifier un modèle d'horaires :</b></p>
+    <ol class="steps">
+      <li>Choisissez le niveau (pastille <b>Bas</b>, <b>Moyen</b> ou <b>Haut</b>).</li>
+      <li>Changez les heures d'une case (format HH:MM) ou cliquez la <b>croix</b> pour fermer le créneau ce jour-là ; pour rouvrir un créneau fermé, saisissez ses deux heures. Les cases modifiées sont surlignées en jaune.</li>
+      <li><b>« Enregistrer »</b> n'envoie que les cases modifiées ; <b>« Annuler les modifications »</b> les abandonne. Vos saisies non enregistrées sont conservées si vous changez de volet et revenez.</li>
+    </ol>
+    <ul class="points">
+      <li>Refusé, avec un message : une heure mal écrite, un début égal à la fin, un créneau de plus de 16&nbsp;h, une Journée dont la 2ᵉ partie est ouverte sans la 1ʳᵉ ou commence avant sa fin, une partie de Journée qui passe minuit, un dimanche ouvert, un <b>créneau du samedi qui finit le lendemain</b> (le dimanche est fermé : terminez-le au plus tard à 23:55).</li>
+      <li>Si quelqu'un a modifié les mêmes cases ou la cadence entre-temps : « … a été modifié entre-temps : rechargez la page » (bouton <b>« Relire »</b>).</li>
+      <li>Un modèle modifié s'applique à <b>tous les sites dans ce niveau</b>, et aussi aux dates passées (les modèles ne sont pas historisés : RH › Gestion des temps recalcule les mois passés avec les horaires actuels).</li>
+      <li><b>Modèles de départ</b> (16/09/2026) — <b>Bas</b> : lundi → mercredi Matin 05:30-13:15, Après-midi 13:15-21:00, Soirée 21:00-05:30, Journée 07:30-12:00 + 12:45-16:00 ; jeudi Matin 04:30-13:15 et Journée 07:30-12:30 ; vendredi, samedi fermés. <b>Moyen</b> : lundi → jeudi comme Bas ; vendredi Matin 04:50-13:15 et Journée 07:30-12:00 ; samedi fermé. <b>Haut</b> : lundi → vendredi trois équipes et Journée 07:30-12:00 + 12:45-16:45 ; samedi Matin 05:30-12:00. ⚠ Haut jeudi et vendredi : Après-midi et Soirée reprennent les horaires du lundi (à vérifier).</li>
+    </ul>
+    <div class="warn"><b>Réservé à l'écriture Production :</b> changer la cadence ou un modèle d'horaires exige le droit d'écrire sur la Production ; un lecteur voit l'écran, mais l'enregistrement est refusé (« Modifier la cadence usine ou ses modèles d'horaires est réservé à l'écriture Production. »).</div>
+    <div class="note"><b>Base en ligne pas encore mise à jour :</b> le volet affiche « Cadence usine indisponible … jouez cloud-12 » et n'enregistre rien ; les horaires par défaut s'appliquent partout.</div>
+
     <h3>Comment se calcule le coût d'une étape</h3>
     <p>Chaque étape de gamme (nomenclature du Bureau d'Études) a quatre temps. Chacun est payé <b>en homme</b>, <b>en machine</b>, ou les deux :</p>
     <div class="tbl"><table>
@@ -505,7 +595,7 @@
       <li><b>Taux de départ</b> : à la mise en place, chaque process machine a reçu l'ancien coût horaire de sa machine — <b>souvent 35 €/h, l'ancienne valeur par défaut</b>. Vérifiez-les un par un.</li>
       <li>Le <b>temps homme</b> vaut le <b>taux horaire chargé</b> de la fiche salarié (service RH). Sans taux chargé renseigné, il compte 0 € et les écrans affichent « coût chargé RH à renseigner ».</li>
       <li><b>OPEX réel</b> d'une machine = somme des sorties stock « consommable » déclarées sur ses BDT (quantité × prix d'achat HT), en temps réel. L'OPEX d'un <b>poste</b> = somme de ses machines + consommables tirés directement au poste. Ces montants restent en euros ; ils ne se convertissent jamais en €/h.</li>
-      <li>Un poste ou process <b>OAS</b> n'apparaît pas au planning ; ses process alimentent les types de bain de l'onglet OAS.</li>
+      <li>Un poste ou process <b>OAS</b> n'apparaît pas au planning ; ses process alimentent les types de bain de l'onglet OAS. Depuis le 16/09/2026, les process de la machine OAS (Surtec 650, Désoxydation, Oxydation noire, Oxydation incolore, Lavage) sont de <b>type OAS</b> avec l'activité « OAS », sans taux horaire machine (un traitement de surface est chiffré au prix, pas au temps). Ils restent proposés dans les gammes des deux sites.</li>
       <li>Supprimer une machine <b>détache</b> ses process : ils restent des process machine, avec leur taux, à rattacher à une autre machine (la confirmation indique combien).</li>
       <li>Le graphique « Évolution OPEX mensuel » affiché sous le parc machines n'est pas encore relié aux données réelles : ne vous y fiez pas.</li>
     </ul>

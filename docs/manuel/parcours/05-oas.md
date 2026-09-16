@@ -16,6 +16,8 @@ L'écran d'accueil du service, avec ses onglets Lots & Balancelles, Relevés eau
 
 ![Écran d'accueil du service OAS](../../assets/oas.png)
 
+**Voir venir les lots.** L'OAS n'a ni bon de travail ni goulotte : c'est le BDT **qui précède** le traitement, au planning de production, qui annonce le lot (badge « → OAS : … »). Dès que ce BDT est **programmé** ou **reçu**, le lot apparaît en tête de l'onglet Lots & Balancelles, dans **« Lots à venir »** : affaire, pièce, quantité, **process OAS suivant**, BDT précédent, **fin prévue** (en heures travaillées de la cadence usine) et statut du BDT, triés par fin prévue. Quand ce BDT est soldé, le lot passe dans « Lots arrivés à l'OAS » : c'est là que commence l'étape 1.
+
 ## Étape 1 — Charger une balancelle et la plonger dans le bain
 
 **⬅️ Avant :** Un lot est arrivé à l'OAS depuis la production (sa gamme prévoit un traitement de surface). Vous avez devant vous les pièces à traiter et une fiche de lot qui indique le type de traitement attendu.

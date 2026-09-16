@@ -2,6 +2,168 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-16 — Lot G : cadence usine par site, planning en heures ouvrées, chevauchement du même process, remise en goulotte, process OAS
+
+*« Horaires : modèles d'horaires de l'usine par cadence (Bas / Moyen / Haut), à adapter selon la cadence choisie. Cadence
+par site, modifiable à tout moment. Le dimanche est sauté, le samedi selon la cadence. »* — *« les 5 process de la machine
+OAS : les marquer OAS et ils doivent être rattachés au service de l'OAS (il faudra arbitrer […] une manière de savoir que le
+process d'après dans le planning est de l'OAS sans avoir besoin qu'un BDT soit mis dans une goulotte OAS, sachant qu'il n'y
+en a pas) »*
+
+**Réponses de l'utilisateur** (elles font foi)
+1. PV de réception : une ligne « Reliquat annoncé » reste possible dans un PV **Conforme** (comportement du lot F conservé) :
+   la mention « à trancher » est retirée de la documentation.
+2. Les 5 process de la machine OAS (Surtec 650, Désoxydation, Oxydation noire, Oxydation incolore, Lavage) sont **marqués
+   OAS** et rattachés au service OAS. Choix pour « savoir que le process d'après est de l'OAS » : **badge « → OAS :
+   <process> »** sur la carte et la barre du BDT qui précède, et liste **« Lots à venir »** dans le service OAS.
+3. **Modèles d'horaires par cadence** (Bas / Moyen / Haut), **cadence par site** (Seem, Semrac), modifiable à tout moment ;
+   **dimanche sauté**, samedi selon la cadence ; le **planning s'adapte** (créneaux ouverts du jour, heures fermées grisées,
+   chemin critique et reports qui sautent heures et jours fermés).
+4. Chevauchement sur un même poste : **autorisé si les process sont différents, refusé si c'est le même process**.
+5. Un déplacement qui rend l'étape suivante incohérente la **remet en première position dans la goulotte**
+   (déprogrammée), avec un **message préventif** avant de valider.
+
+**Modèles d'horaires fournis** (amorcés par la migration, modifiables à l'écran ; Journée = deux parties, avant / après la
+pause ; Soirée 21:00-05:30 = finit le lendemain, rattachée au jour où elle commence)
+
+| Cadence | Jours | Matin | Après-midi | Soirée | Journée |
+|---|---|---|---|---|---|
+| **Bas** | lun, mar, mer | 05:30-13:15 | 13:15-21:00 | 21:00-05:30 | 07:30-12:00 + 12:45-16:00 |
+| | jeu | 04:30-13:15 | — | — | 07:30-12:30 |
+| | ven, sam, dim | fermé | fermé | fermé | fermé |
+| **Moyen** | lun → jeu | 05:30-13:15 | 13:15-21:00 | 21:00-05:30 | 07:30-12:00 + 12:45-16:00 |
+| | ven | 04:50-13:15 | — | — | 07:30-12:00 |
+| | sam, dim | fermé | fermé | fermé | fermé |
+| **Haut** | lun → ven | 05:30-13:15 | 13:15-21:00 | 21:00-05:30 | 07:30-12:00 + 12:45-16:45 |
+| | sam | 05:30-12:00 | — | — | — |
+| | dim | fermé | fermé | fermé | fermé |
+
+⚠ **Point signalé — Haut, jeudi et vendredi** : le copier-coller fourni donnait « 05:30-13:15 » pour l'Après-midi et la
+Soirée de ces deux jours. L'utilisateur a confirmé que les trois équipes travaillent : ils sont **amorcés avec les horaires
+du lundi** (13:15-21:00 et 21:00-05:30). **À vérifier à l'écran** (Production › Process Ateliers › Cadence usine › Haut).
+Les deux sites démarrent en **Moyen** (amorce) : à ajuster dès la mise en ligne.
+
+**Ce qui change**
+- **Production › Process Ateliers › « Cadence usine »** (3ᵉ volet, `src/cadence_ui.ts`) : une carte par site (cadence en
+  vigueur, semaine type, « Changement prévu »), **« Changer la cadence »** avec **date d'effet** (demain par défaut ;
+  aujourd'hui ou passé = avertissement + confirmation, heures déjà travaillées recalculées), tableau des **modèles
+  d'horaires** éditable par niveau (croix = créneau fermé, « +1j », seules les cases modifiées partent, écriture
+  conditionnelle), **historique** (À partir du / Décidé le / Par / Motif). Écriture réservée à l'**écriture Production**.
+- **Créneaux** : `SHIFTS` ne garde que libellés et couleurs ; les horaires viennent de la cadence du **site et du jour**.
+  **Présence** : horaires dans le menu et l'info-bulle, créneau fermé **grisé et refusé** (409 serveur « Créneau « Matin »
+  fermé en cadence Moyen ce jour (samedi 19/09/2026, site Seem) … »), case « fermé », pointillés rouges pour un créneau
+  fermé depuis, « Programmer la semaine » saute les jours fermés. **Planning d'affectation** : horaires par colonne,
+  sous-cases fermées grisées. **RH › Gestion des temps** : arrivée, départ, pause et heures selon la cadence (Matin
+  05:30-13:15 = 7,25 h). **RH › Employés** : « Shift » sans horaires. **RH › Compétences** : process OAS visibles avec les
+  filtres Seem / Semrac. **BE** : process OAS proposés dans les gammes des deux sites.
+- **Planning BDT en heures ouvrées** (G5, `src/gamme.ts` horloge `tempsPlanning`, `src/planning_cadence.ts`) : axe du jour
+  = première équipe du jour → première équipe du lendemain (la nuit appartient à la veille, trait de minuit, pose après
+  minuit enregistrée au lendemain), **heures fermées hachurées** par ligne selon le site du poste, bandeau « Cadence usine du
+  … », **dépôt refusé sur une heure fermée** (client et serveur : 409 `heure_fermee` + prochain créneau ouvert), **chemin
+  critique en heures ouvrées** (réglage consommé sur le temps ouvert du site, report au prochain instant ouvert, dimanche
+  sauté, samedi selon la cadence, calage possible dans la nuit : `cale_date`), barres de largeur = durée avec icônes
+  **pause** (fermeture traversée), **flèche** (suite après la vue), **lune** (posée sur une heure fermée).
+- **Même process, même poste** (G3, `src/poste_oas.ts`) : **409** « Le poste X porte déjà un BDT du même process (BDT-…) de
+  hh:mm à hh:mm … » à la pose, au PATCH et à la création posée ; process différents autorisés ; barre en conflit soulignée ;
+  **course** entre deux écrans rattrapée après écriture (annulation conditionnelle).
+- **Remise en goulotte** (G4) : avant d'envoyer, fenêtre **« Remettre en goulotte »** listant les étapes suivantes déjà
+  posées qui deviendraient incohérentes (propagation dans toute la suite du lot) ; confirmé : déplacement **puis**
+  déprogrammation conditionnelle, `remis_goulotte_le`, cartes **en tête** de la goulotte avec le badge **« Remis en
+  goulotte »** ; annulé : rien ne bouge. Étapes **reçues** jamais retirées, seulement signalées. S'applique aussi à la
+  planification d'un BST (avant création du BC) et au PATCH.
+- **Process OAS** (G2) : migration → `est_oas = true`, `activite = 'OAS'`, poste de la machine, taux machine vidé (garde-fou
+  si le critère est ambigu) ; badge **« → OAS : Desoxydation › Oxydation Incolore »** sur le BDT `oas_apres` (process OAS
+  suivants de la gamme, repli « → OAS ») ; **OAS › Lots & Balancelles › « Lots à venir »** : lots dont l'étape précédente est
+  programmée ou reçue, process OAS suivant, **fin prévue en heures ouvrées**, statut, tri par fin prévue.
+- **Réception / soldage d'un BDT** : `recu_le` (instant daté de la réception : un BDT reçu après minuit n'est plus placé 24 h
+  trop tôt) ; soldage d'une équipe de nuit (fin avant début) = +24 h.
+
+**Choix faits et points à valider**
+1. **Date d'effet** d'un changement de cadence : lendemain par défaut ; aujourd'hui ou passé avec confirmation ; 62 jours de
+   recul, 400 d'avance au plus.
+2. **Samedi sans nuit** : un créneau du samedi ne peut pas finir le lendemain (saisie refusée, contrainte `NOT VALID`, moteur
+   coupé à 24:00).
+3. **Pause RH** : pause de la Journée, sinon 30 min au-delà de 6 h (règle d'avant le lot G) — à faire trancher par la RH
+   (`heuresPresence`, `src/cadence.ts`).
+4. **Barre qui traverse une fermeture (V1)** : largeur = durée, débordement signalé (icône pause, fin prévue dans
+   l'info-bulle), ni allongée ni coupée.
+5. Une **pose ou un calage de nuit** écrit `date_prevue` = lendemain calendaire : les écrans hors planning (RH, OF, tableaux de
+   bord) voient ce jour-là.
+6. Les **morceaux `-Mk`** d'un BDT découpé (même process) ne peuvent plus se chevaucher sur le poste.
+7. **Modèles d'horaires non historisés** : les modifier change aussi les calculs du passé (RH › Temps, chemin critique, fin
+   prévue OAS) ; la cadence de chaque site, elle, est historisée.
+8. Chevauchement « même process » = même `process_id` ; G4 ne retire que les étapes qui **deviennent** incohérentes.
+
+**Défauts corrigés en route** (revue adverse du lot : 18 signalements, 17 défauts distincts, tous corrigés) — remise en goulotte
+qui ne se propageait pas au-delà de l'étape suivante ; date réelle d'un BDT reçu après minuit perdue (`recu_le`) ; changement de
+cadence sans date d'effet (appliqué à toute la journée en cours) ; étape reçue rendue incohérente passée sous silence ; Soirée du
+samedi travaillant le dimanche ; pause RH non déduite ; historique relu à chaque calcul (index par site) ; déprogrammation qui
+écrasait une correction faite entre-temps (condition sur `debut` et `updated_at`) ; deux poses simultanées du même process qui
+passaient toutes les deux (contrôle après écriture) ; saisies de modèles perdues au redessin ; lecture plafonnée à 1 000 lignes
+(pagination) ; confirmations G4 qui bouclaient (accords cumulés) ; bandeau du planning figé après un changement de cadence ;
+icône « pause » trompeuse (flèche pour une barre seulement coupée) ; tests qui sautaient la partie Docker en silence.
+
+**Vérifications** : `tsc --noEmit` 0 erreur · harnais toutes pages 60 PASS / 0 FAIL / 1 SKIP · harnais des routes 20 PASS ·
+règles pures et parité client/serveur : `test_cadence.ts` 150, `test_oas_poste.ts` 141 (3 946 comparaisons), `test_planning_cadence.ts`
+187 (9 452), `test_chemin.ts` du lot C 215 (4 630) · routes : `e2e_cadence.mjs` 51 (tables absentes puis vraies tables) ·
+Playwright : `ui_cadence.mjs` 35, `ui_planning_cadence.mjs` 33 · **Docker réel** : `e2e_revue.mjs` 14 (dont course G3 sur 4 poses
+simultanées et 1 007 lignes d'historique), `http_docker.mjs` 9 (image reconstruite, `AUTH_ENFORCE=on`) · migration **014**
+passée, rejouée sans effet (`INSERT 0 0`), contraintes et droits vérifiés (pas d'UPDATE sur `cadence_site`, pas de DELETE sur
+`horaires_modeles`), `cloud-12` refuse la base Docker, bloc de `schema.sql` identique ; `erp-docker.sh maj` : 14 migrations à jour
+· jeux `-TEST-` supprimés et **relus à 0** (`cadence_site` revenue à ses 2 lignes d'amorce) · phase documentation : voir la fin de
+cette entrée.
+
+**Scripts à jouer**
+- **Docker / VM** : `~/erp/docker/scripts/erp-docker.sh maj` applique **014** (déjà fait sur le Docker local : la version finale
+  de 014, complétée après son premier passage par `cadence_site.effet`, `bons_de_travail.recu_le` et la contrainte du samedi, y a
+  été rejouée à la main en `supabase_admin` et son empreinte mise à jour dans `_erp_migrations` ; aucun autre environnement
+  n'avait 014). Données OAS modifiées sur le Docker local : Desoxydation, Lavage, Oxydation Noire, Oxydation Incolore, Surtec 650.
+- **Cloud (Studio Supabase EN LIGNE, SQL Editor — jamais celui du Docker)** : `docker/db/cloud/cloud-12-cadence-usine.sql`,
+  **avant** de déployer le code. ⚠ Il **modifie des données** (process OAS) : le jouer d'abord entre `begin;` et `rollback;` et
+  lire l'onglet Messages (un NOTICE par process modifié ; WARNING « critère AMBIGU » = rien modifié, marquage à la main). Tant
+  qu'il n'est pas joué : écran Cadence usine « jouez cloud-12 », horaires par défaut partout, planning sur la grille 5 h–23 h,
+  aucun refus lié à la cadence, remise en goulotte sans placement en tête.
+- **Après la mise en ligne** (runbook, « Mise en service du lot G ») : **vérifier la cadence de chaque site** (amorce Moyen),
+  relire les modèles (Haut jeudi/vendredi), contrôler les process OAS, prévenir l'atelier (créneaux et heures fermés refusés,
+  chevauchement du même process, remise en goulotte, poses de nuit au lendemain) et la RH (heures recalculées, règle de pause) ;
+  `npm run build` puis déploiement (`erp-deploy`).
+
+**Limites connues** : deux changements de cadence simultanés passent tous les deux (la dernière ligne l'emporte) ; contrôle G3
+après écriture fondé sur `updated_at` (horloges de deux isolats Cloudflare), sans contrainte en base ; `POST
+/api/planning/affectation-poste` ne refuse pas un créneau fermé (grisé seulement) ; présence enregistrée avant un changement de
+cadence sur un créneau devenu fermé : signalée, jamais effacée ; `PATCH /bdts/:id` qui change `process_id` / `activite` d'un BDT
+posé ne contrôle pas l'heure fermée, le recollage d'une découpe ne passe pas par G3 ; G4 non appliqué à `POST /bdts` créé posé, à
+`PATCH /api/production/bds/:id` et à `POST /api/production/bst/affecter` ; poste « both » hachuré sur l'union des sites alors que le
+refus suit le site du BDT ; BDT reçus avant `recu_le` : jour déduit par heuristique (écart > 12 h), travail de plus de 24 h
+sous-estimé au soldage ; carte « Enchaînements à revoir » : BDT reçus toujours ignorés ; `computeLotsOAS` regroupe par `lot_id`
+seulement ; `src/affectation.tsx` (page redirigée) garde sa copie de SHIFTS ; hub `/manuels` (`src/manuels.tsx`) : résumés non
+modifiés ; ancien test `lotc/test_presences.mjs` périmé (libellés sans horaires). Poste de développement : Docker Desktop ne
+démarrait plus (sockets périmés) — `%LOCALAPPDATA%\Docker\run` et `%LOCALAPPDATA%\docker-secrets-engine` renommés (`*.old-*`, à
+supprimer plus tard).
+
+- Fichiers : `src/cadence.ts`, `src/cadence_db.ts`, `src/cadence_ui.ts`, `src/planning_cadence.ts`, `src/poste_oas.ts` (nouveaux),
+  `src/gamme.ts`, `src/index.tsx`, `src/prod.tsx`, `src/oas.tsx`, `src/rh_service.tsx`, `src/presences.ts`, `src/be.tsx`,
+  `src/queries.ts` · Migration DB : **oui** (`docker/db/migrations/014-cadence-usine.sql` ; cloud : `cloud-12` ; bloc en fin de
+  `docker/db/seed/schema.sql` ; ligne dans `docker/db/cloud/README.md`).
+- Doc mise à jour : `technique/06-modules/production.md` (section « Lot G » : G1 à G5, décisions, limites ; annotations lot C),
+  `oas.md` (Lots à venir), `rh.md` (horaires selon la cadence), `expeditions.md` (reliquat en Conforme **tranché**), blocs générés
+  via le manifeste de `gen_module_fiches.mjs`, `03-base-de-donnees.md` et `03b-tables-reference.md` (014), `04-auth-rbac.md`
+  (écriture Production revérifiée), `05-conventions-code.md` (helpers cadence et horloge du planning), `07-api-reference.md`
+  (contrats « Lot G », référence régénérée), `02-exploitation-runbook.md` (`cloud-12`, mise en service, 14 incidents) ; manuels HTML
+  Production (planning selon la cadence, chevauchement, remise en goulotte, badge OAS, présence, volet Cadence usine), OAS (Lots à
+  venir), RH (Shift, Gestion des temps, Compétences), Expéditions, index (+ `src/manuels_contenu.ts`) ; manuels Markdown Production,
+  OAS, RH, Expéditions ; formulaires Production (présence, **Changer la cadence**, **Modèles d'horaires**, **Remettre en goulotte**)
+  et RH (Shift), index des formulaires ; parcours 04 / 05 / 11 ; fiches de poste production / OAS / RH (`gen_fiches_poste.mjs`) ;
+  cerveau · Outillage : `capture_screens.mjs` (`production-cadence`, `production-planning-cadence`, `production-presence-cadence`,
+  `oas-lots-a-venir` — planning et cadence simulés **dans le navigateur**, aucune écriture), `capture_forms.mjs`
+  (`form-production-cadence`, `form-production-remise-goulotte`).
+- Captures (stack Docker, identifiants de secours lus dans `docker/.env` sans être affichés) : nouvelles `production-cadence`,
+  `production-planning-cadence`, `production-presence-cadence`, `form-production-cadence`, `form-production-remise-goulotte`,
+  `oas-lots-a-venir` ; refaites `production-service`, `production-gantt-reglage`, `production-process`, `production-postes`,
+  `production-machines`, `production-presence`, `oas` (Lots à venir avec un jeu `-TEST-DOCG-` posé par la vraie route `/affecter`,
+  supprimé et relu à 0), `rh-employes`.
+- Vérifications de la phase documentation : `gen_api_ref.mjs` OK (399 routes, 50 familles ; 4 routes `/api/production/cadence…` entrées) · `gen_module_fiches.mjs --verifier` 0 écart · `gen_fiches_poste.mjs` (3 fiches changées) · `npm run build` OK (`src/manuels_contenu.ts` régénéré, 14 images copiées, `dist/_worker.js` 5,01 Mo) · `tsc --noEmit` 0 erreur · harnais 60 PASS / 0 FAIL / 1 SKIP · `lint_docs` 158 images · 191 liens · 0 cassé · `audit_manuels.mjs` sur le Docker 0 grave (« attention » = captures antérieures au code d'autres onglets, sans changement visible du lot) · base Docker relue après les captures : 0 ligne `-TEST-`, `cadence_site` à ses 2 lignes d'amorce, aucun modèle d'horaires modifié.
+
 ## 2026-09-16 — Planning : calage après le réglage du BDT précédent corrigé · Stock : Gestion en 2ᵉ onglet
 
 ### Planning (Production)

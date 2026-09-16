@@ -113,10 +113,24 @@ const MANIFEST = [
   { file: 'production-process',    path: '/production/service', clicks: ['#ptab-machines'], wait: 800 },
   { file: 'production-dash-prog',  path: '/production/service', clicks: ['#ptab-dash-prog'], wait: 1200, fullPage: true },
   { file: 'production-dash-prod',  path: '/production/service', clicks: ['#ptab-dash-prod'], wait: 1200, fullPage: true },
+  // Lot G (16/09/2026) — cadence usine. Tout est fait DANS LE NAVIGATEUR (aucune écriture en base) :
+  //   · un changement PRÉVU « Semrac en cadence Bas à partir du jeudi suivant » est ajouté aux données de la page (CADENCE_PAGE),
+  //     pour montrer la carte « Changement prévu » et, sur le planning, les heures fermées d'un site en Bas à côté d'un site en Moyen ;
+  //   · planning : 3 BDT de LOT-2026-0001-01 (jeu Docker) posés ce jeudi-là sur les trois premiers postes
+  //     Semrac, dont un « → OAS » et un qui déborde sur la fermeture de 13h15, et un BDT de la goulotte marqué « Remis en goulotte ».
+  { file: 'production-cadence',    path: '/production/service', clicks: ['#ptab-machines'], wait: 900, fullPage: true,
+    eval: "(function(){ var d=(typeof cadDonnees==='function')?cadDonnees():null; if(d&&!CAD.changementsPrevusCadence(d.cadences,'Semrac').length){ var j=CAD.isoPlusJours(cadAujourdhui(),1); while(CAD.jourSemaineIso(j)!==4) j=CAD.isoPlusJours(j,1); d.cadences.push({id:'exemple-doc',site:'Semrac',niveau:'bas',depuis:new Date().toISOString(),effet:j,par:'Exemple (documentation)',motif:'Exemple : baisse de charge'}); } volShow('cad'); if(typeof cadNotifierChangement==='function') cadNotifierChangement(); })()" },
+  { file: 'production-planning-cadence', path: '/production/service', wait: 1200,
+    eval: "(function(){ var d=(typeof cadDonnees==='function')?cadDonnees():null; if(!d) return; var j=CAD.isoPlusJours(cadAujourdhui(),1); while(CAD.jourSemaineIso(j)!==4) j=CAD.isoPlusJours(j,1); if(!CAD.changementsPrevusCadence(d.cadences,'Semrac').length) d.cadences.push({id:'exemple-doc',site:'Semrac',niveau:'bas',depuis:new Date().toISOString(),effet:j,par:'Exemple (documentation)',motif:'Exemple : baisse de charge'}); var pose=function(id,pid,h,x){ var b=BDTS.find(function(z){ return z.id===id; }); if(!b) return; b.process=pid; b.statut='programme'; b.datePrevue=j; b.debut=h; b.sansHeure=false; if(x) for(var k in x) b[k]=x[k]; }; pose('BDT-2026-0001-01-01','PROC-2026-016',6); pose('BDT-2026-0001-01-02','proc-m7',9,{oasApres:true,oasSuivant:['Desoxydation','Oxydation Incolore'],duree:3,tempsAlloue:3,reglage:0.5}); pose('BDT-2026-0001-01-04','proc-man-r2',11); var r=BDTS.find(function(z){ return z.id==='BDT-2026-0001-01-03'; }); if(r) r.remisGoulotteLe=new Date().toISOString(); currentDate=j; var pd=document.getElementById('planDate'); if(pd) pd.value=j; focusLot=null; CC_HORLOGE_MEMO=null; cadNotifierChangement(); var z=document.getElementById('pendingDropZone'); if(z) z.scrollIntoView({block:'start'}); })()" },
+  //   Présence : menu d'une case du VENDREDI (en Moyen, Après-midi et Soirée sont fermés ce jour-là : grisés « fermé · cadence Moyen »).
+  { file: 'production-presence-cadence', path: '/production/service', clicks: ['#ptab-presence'], wait: 1500,
+    eval: "setTimeout(function(){ var b=[].slice.call(document.getElementById('presGrid').querySelectorAll('button[data-pres-op][data-pres-date]')).filter(function(x){ return !x.disabled && new Date(x.getAttribute('data-pres-date')+'T00:00:00Z').getUTCDay()===5; })[0]; if(b) b.click(); },600);" },
   // OAS (ids générés par tabId() — accents tronqués, ne pas « corriger »)
   { file: 'oas-eau',               path: '/oas/service', clicks: ['#oastab-relev-consommation-eau'], wait: 700 },
   { file: 'oas-bains',             path: '/oas/service', clicks: ['#oastab-relev-s-p-riodiques-bains'], wait: 700 },
   { file: 'oas-dashboard',         path: '/oas/service', clicks: ['#oastab-dashboard-oas'], wait: 1200, fullPage: true },
+  // Lot G (16/09/2026) : « Lots à venir » — lots dont l'étape qui précède l'OAS est programmée ou reçue au planning (vide sans données)
+  { file: 'oas-lots-a-venir',      path: '/oas/service', wait: 700 },   // la section est en tête de l'onglet (visible sans défilement)
   // Qualité (compléments)
   { file: 'qualite-derogations',   path: '/qualite/service', clicks: ['#qual-tab-derogations'], wait: 600 },
   { file: 'qualite-capabilite',    path: '/qualite/service', clicks: ['#qual-tab-capabilite'], wait: 800 },

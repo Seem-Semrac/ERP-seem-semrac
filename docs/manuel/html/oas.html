@@ -43,16 +43,24 @@
     <p class="tab-but"><b>À quoi ça sert.</b> L'OAS est une « porte de lot » : l'étape n'a pas de bon de travail propre. Dès que le bon de travail (BDT) <b>précédant</b> l'étape OAS est soldé en Production, le lot apparaît <b>automatiquement</b> dans cet onglet — vous n'avez rien à créer. Vous y composez ensuite les <b>balancelles</b> (une balancelle = une session de traitement pouvant mélanger plusieurs références de plusieurs lots), puis vous les clôturez avec un autocontrôle. Quand 100 % des pièces d'un lot sont traitées, le lot bascule automatiquement vers son étape suivante.</p>
 
     <h3>Ce que vous voyez</h3>
-    <p>L'écran empile trois tableaux, avec en haut à droite le bouton <b>« Nouvelle balancelle »</b> :</p>
+    <p>L'écran empile quatre tableaux, avec en haut à droite le bouton <b>« Nouvelle balancelle »</b> :</p>
     <ul class="points">
+      <li><b>Lots à venir</b> (depuis le 16/09/2026) — les lots qui <b>vont arriver</b> à l'OAS : l'étape qui précède le traitement est déjà <b>programmée</b> ou <b>en cours</b> au planning de production. Colonnes : Lot / affaire · Client · Pièce · Quantité · <b>Process OAS suivant</b> (par exemple <span class="b" style="background:#cffafe;color:#0e7490">Desoxydation</span> <span class="b" style="background:#cffafe;color:#0e7490">Oxydation Incolore</span>, ou « OAS (process non retrouvé) » si la gamme ne le dit pas) · BDT précédent (et son opération) · <b>Fin prévue</b> de ce BDT (« aujourd'hui 18:05 », « 17/09/2026 11:00 ») · Statut du BDT (<span class="b b-info">Programmé</span> ou <span class="b b-warn">Reçu</span>). Triés par fin prévue : le lot le plus proche en tête. Le compteur à côté du titre donne le nombre de lots annoncés.</li>
       <li><b>Lots arrivés à l'OAS</b> — colonnes : Lot · Client · Pièce · Pièces traitées (traitées / total) · Progression OAS (barre de progression en %) · Statut · Étape suivante (le BDT qui suivra) · Action. Chaque ligne porte un bouton <b>« Balancelle »</b> qui ouvre le formulaire avec le lot déjà présélectionné. Statuts : <span class="b b-info">En OAS</span> tant que le traitement est en cours, <span class="b b-ok">Terminé</span> à 100 %.</li>
       <li><b>Balancelles (sessions OAS)</b> — colonnes : Session · Lot(s) / Réf · Qté · Charge surface (jauge en % de la limite de 550 000 mm²) · Bain · Entrée · Sortie · Durée · Statut · Résultat · Action. Statuts : <span class="b b-info">En cours</span>, <span class="b b-ok">Terminé</span>, <span class="b b-mut">Annulé</span> ; résultat : <span class="b b-ok">Conforme</span> ou <span class="b b-crit">Non conforme</span>. Une balancelle en cours porte le bouton <b>« Clore + autocontrôle »</b>. Un champ de recherche filtre la liste par <b>n° d'affaire, n° de lot ou n° de session</b>.</li>
       <li><b>Lots OAS terminés</b> — colonnes : Lot · Client · Pièce · Pièces traitées · Statut OAS (badge <span class="b b-ok">✓ 100% OAS</span>) · Bascule vers (le BDT suivant du lot, activé automatiquement).</li>
     </ul>
     <figure class="shot">
       <img src="../../assets/oas.png" alt="Capture de l'onglet Lots &amp; Balancelles du service OAS" loading="lazy">
-      <figcaption><b>Lots &amp; Balancelles</b> — en haut les lots arrivés à l'OAS avec leur barre de progression, au milieu les balancelles avec la jauge de charge surface, en bas les lots terminés qui basculent vers l'étape suivante.</figcaption>
+      <figcaption><b>Lots &amp; Balancelles</b> — en haut les <b>lots à venir</b> (ici un BDT reçu qui finit aujourd'hui à 18:05 et un BDT programmé qui finit le 17/09 à 11:00, suivi de Desoxydation puis Oxydation Incolore), puis les lots arrivés à l'OAS avec leur barre de progression, les balancelles avec la jauge de charge surface, et les lots terminés qui basculent vers l'étape suivante (jeu de test).</figcaption>
     </figure>
+    <h3>Anticiper l'arrivée des lots : « Lots à venir »</h3>
+    <p>L'OAS n'a pas de goulotte : aucune étape de traitement de surface ne crée de bon de travail. C'est le BDT <b>qui précède</b> l'OAS dans la gamme qui annonce le lot — au planning de production, il porte le badge <b>« → OAS : … »</b>.</p>
+    <ul class="points">
+      <li>Un lot apparaît dans « Lots à venir » dès que ce BDT est <b>posé</b> au planning (programmé) ou <b>reçu</b> par un opérateur ; il en sort quand le BDT est <b>soldé</b> (il passe alors dans « Lots arrivés à l'OAS »), ou s'il est remis dans la goulotte de la Production.</li>
+      <li><b>Fin prévue</b> = début du BDT (heure réelle s'il est reçu) + sa durée, comptée en <b>heures ouvrées</b> de la cadence usine du site : une pause, une nuit ou un week-end non travaillés repoussent la fin. Pour un BDT découpé en morceaux, c'est la fin du dernier morceau posé ; des morceaux encore dans la goulotte sont signalés à part (« 1 morceau encore en goulotte (non compté) »).</li>
+      <li>La fin prévue bouge avec le planning : rechargez la page pour la voir à jour. « non calculable » = BDT sans heure ou sans créneau ouvert.</li>
+    </ul>
 
     <h3>Pas à pas — créer une balancelle</h3>
     <ol class="steps">
@@ -98,6 +106,7 @@
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
       <li>La limite de charge d'une balancelle est de <b>550 000 mm²</b> de surface totale : l'enregistrement est refusé au-delà, quelle que soit la jauge affichée.</li>
+      <li><b>Process OAS</b> : les process de la machine OAS (Surtec 650, Désoxydation, Oxydation noire, Oxydation incolore, Lavage) sont de type OAS depuis le 16/09/2026 ; ils alimentent les types de traitement de la balancelle et le badge « → OAS » du planning de production.</li>
       <li>La <b>progression OAS d'un lot</b> est calculée sur les quantités posées en balancelles : elle passe à « Terminé » à 100 %, et le lot bascule alors automatiquement vers son étape suivante (colonne « Bascule vers »).</li>
       <li>La surface unitaire proposée vient de la <b>nomenclature</b> de la pièce (Bureau Études). Vérifiez-la avant d'enregistrer : une surface fausse fausse la jauge de charge.</li>
       <li>La clôture exige le <b>matricule + PIN</b> de l'opérateur : c'est la signature de l'autocontrôle sur le PV envoyé à la Qualité.</li>
