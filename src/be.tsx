@@ -2,7 +2,7 @@
 // BUREAU D'ÉTUDES – ERP Seem Semrac v2.0
 // Nomenclatures · Analyse DT · Prépa technique · Dashboard
 // ══════════════════════════════════════════════════════════════
-import { escX, layout, pageHeader, serviceHeader, bulkToolbar, bulkSelectAssets } from './shared'
+import { escX, layout, pageHeader, serviceHeader, bulkToolbar, bulkSelectAssets, PRIX_VALIDITE_JOURS, composantsDe } from './shared'
 import type { DemandeTravaux, Commande, Nomenclature, Offre } from './types'
 
 const sjX = (v: any) => JSON.stringify(v).replace(/</g, '\\u003c')
@@ -261,6 +261,8 @@ export const pageServiceBE = (
     fournisseur_id: p.fournisseur_id, reference: p.reference, designation: p.designation,
     prix: p.prix, date_prix: p.date_prix, categorie: p.categorie, conditionnement: p.conditionnement,
   }))
+  // Validité d'un prix catalogue : constante UNIQUE de shared.ts (lot H0) — libellé dérivé pour les infobulles
+  const PRIX_VALIDITE_LIB = `${Math.round(PRIX_VALIDITE_JOURS / 30.44)} mois`
   // ── Versionnage par indice (A, B, C…) ──
   // version_groupe regroupe toutes les révisions d'un même produit ; on n'affiche dans la liste
   // que la révision la plus récente (indice max), les autres restent récupérables via la liste déroulante.
@@ -291,7 +293,8 @@ export const pageServiceBE = (
     const createOpt = `<option value="__new__:${latest.id}">➕ Créer indice ${nextChar}…</option>`
     return `<select onchange="nomChangerIndice(this.value)" title="Choisir une révision ou créer l'indice suivant (l'ancien est conservé)" style="font-weight:800;font-family:monospace;color:${couleur};background:${couleur}10;border:1.5px solid ${couleur}44;border-radius:6px;padding:3px 6px;cursor:pointer;font-size:.74rem;">${opts}${createOpt}</select>`
   }
-  const composantsCount = (n:any) => Array.isArray(n?.composants) ? n.composants.length : 0
+  // Lecture tolérante (lot H0) : `composants` arrive en tableau (jsonb) OU en chaîne JSON (colonne TEXT du schéma Docker)
+  const composantsCount = (n:any) => composantsDe(n?.composants).length
   // Entité Seem / Semrac
   const nomEntite = (n:any) => (n.entite === 'Semrac' ? 'Semrac' : 'Seem')
   const entiteBadge = (n:any) => nomEntite(n) === 'Semrac'
@@ -788,17 +791,20 @@ export const pageServiceBE = (
                 <div style="font-size:.72rem;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;flex:1;"><i class="fas fa-layer-group" style="color:#0ea5e9;margin-right:6px;"></i>Matière (tôle)</div>
                 <button onclick="nomAddMatiere()" style="padding:5px 12px;background:linear-gradient(135deg,#0ea5e9,#0369a1);color:white;border:none;border-radius:7px;cursor:pointer;font-size:.75rem;font-weight:700;display:flex;align-items:center;gap:5px;"><i class="fas fa-plus"></i>Ajouter matière</button>
               </div>
-              <div style="font-size:.64rem;color:#94a3b8;margin-bottom:10px;">Fournisseur « matière » + réf catalogue → prix tôle <strong>auto si &lt; 6 mois</strong>, sinon « Demande de prix ». Prix tôle ÷ Pc/tôle = prix matière / pièce.</div>
-              <div style="display:grid;grid-template-columns:130px 1fr 150px 104px 56px 64px 24px;gap:4px;margin-bottom:4px;padding:0 2px;">
-                <span style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Réf. matière</span>
-                <span style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Désignation</span>
-                <span style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Fournisseur</span>
-                <span style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Prix tôle</span>
-                <span style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Pc/tôle</span>
-                <span style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">€/pièce</span>
+              <div style="font-size:.64rem;color:#94a3b8;margin-bottom:10px;">Fournisseur « matière » + réf catalogue → prix tôle <strong>auto si &lt; ${PRIX_VALIDITE_LIB}</strong> ; au-delà le prix reste affiché en orange (« périmé ») avec la demande de prix conseillée. Demande de prix possible à tout moment sur chaque ligne. Prix tôle ÷ Pc/tôle = prix matière / pièce.</div>
+              <!-- Filet lot H0 : en-tête et lignes partagent la même grille (.nom-mat-grid) et défilent ensemble -->
+              <div class="nom-grid-scroll">
+              <div class="nom-mat-grid nom-grid-head">
+                <span title="Réf. matière" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Réf. matière</span>
+                <span title="Désignation" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Désignation</span>
+                <span title="Fournisseur" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Fournisseur</span>
+                <span title="Prix tôle" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Prix tôle</span>
+                <span title="Pièces par tôle" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Pc/tôle</span>
+                <span title="Prix matière par pièce" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">€/pièce</span>
                 <span></span>
               </div>
               <div id="nom-matieres-list"></div>
+              </div>
               <div style="margin-top:8px;display:flex;justify-content:flex-end;padding-top:8px;border-top:1.5px solid #f1f5f9;">
                 <span style="font-size:.78rem;font-weight:800;color:#374151;">Total matière / pièce : <span id="nom-total-matiere" style="color:#0ea5e9;">0,00 €</span></span>
               </div>
@@ -811,17 +817,20 @@ export const pageServiceBE = (
                 <button onclick="nomAddAccessoire()" style="padding:5px 12px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:white;border:none;border-radius:7px;cursor:pointer;font-size:.75rem;font-weight:700;display:flex;align-items:center;gap:5px;"><i class="fas fa-plus"></i>Ajouter accessoire</button>
               </div>
               <div style="font-size:.64rem;color:#94a3b8;margin-bottom:10px;">(Prix paquet ÷ quantité par paquet) × nombre par pièce = prix accessoire / pièce.</div>
-              <div style="display:grid;grid-template-columns:120px 1fr 110px 72px 62px 60px 78px 26px;gap:4px;margin-bottom:4px;padding:0 2px;">
-                <span style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Réf catalogue</span>
-                <span style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Désignation</span>
-                <span style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Fournisseur</span>
-                <span style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Prix paquet</span>
-                <span style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Qté/paq</span>
-                <span style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Nb/pc</span>
-                <span style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">€/pièce</span>
+              <!-- Filet lot H0 : en-tête et lignes partagent la même grille (.nom-acc-grid) et défilent ensemble -->
+              <div class="nom-grid-scroll">
+              <div class="nom-acc-grid nom-grid-head">
+                <span title="Réf catalogue" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Réf catalogue</span>
+                <span title="Désignation" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Désignation</span>
+                <span title="Fournisseur" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Fournisseur</span>
+                <span title="Prix paquet" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Prix paquet</span>
+                <span title="Quantité par paquet" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Qté/paq</span>
+                <span title="Nombre par pièce" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Nb/pc</span>
+                <span title="Prix accessoire par pièce" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">€/pièce</span>
                 <span></span>
               </div>
               <div id="nom-accessoires-list"></div>
+              </div>
               <div style="margin-top:8px;display:flex;justify-content:flex-end;padding-top:8px;border-top:1.5px solid #f1f5f9;">
                 <span style="font-size:.78rem;font-weight:800;color:#374151;">Total accessoires / pièce : <span id="nom-total-accessoire" style="color:#8b5cf6;">0,00 €</span></span>
               </div>
@@ -1319,9 +1328,11 @@ export const pageServiceBE = (
   const refRows = REFS_STOCK.map((r: any) => {
     const grp = famGroup(r.famille || ''); const act = r.activite || 'both'
     const prix = r.prix != null ? Number(r.prix).toFixed(2) + ' €' : '—'
-    // Prix « à re-demander » = absent, ou daté de plus de 6 mois (183 j)
+    // Prix « à re-demander » = absent, ou daté de plus de PRIX_VALIDITE_JOURS (6 mois) — constante de shared.ts
     const _dd = r.derniere_date ? Date.parse(r.derniere_date) : NaN
-    const needsRfq = (r.prix == null) || isNaN(_dd) || (Date.now() - _dd) >= 183 * 86400000
+    const needsRfq = (r.prix == null) || isNaN(_dd) || (Date.now() - _dd) >= PRIX_VALIDITE_JOURS * 86400000
+    // Demande de prix possible À TOUT MOMENT (lot H0) ; aspect « conseillé » (orange) seulement si prix absent ou périmé
+    const rfqBtn = `<button onclick="beRfqForRef('${refJs(r.reference)}','${refJs(r.designation)}','${grp}')" title="${needsRfq ? `Prix absent ou daté de plus de ${PRIX_VALIDITE_LIB} — demande de prix conseillée` : `Prix de moins de ${PRIX_VALIDITE_LIB} — vous pouvez tout de même redemander un prix`}" style="${needsRfq ? 'background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;' : 'background:#f8fafc;color:#475569;border:1px solid #e2e8f0;'}border-radius:6px;padding:4px 9px;font-size:.68rem;font-weight:700;cursor:pointer;margin-left:5px;"><i class="fas fa-file-invoice-dollar" style="margin-right:4px;"></i>Demande de prix</button>`
     return `<tr data-cat="${grp}" data-act="${refEsc(act)}" style="border-bottom:1px solid #f1f5f9;">
       <td style="padding:7px 10px;font-weight:700;color:#4338ca;font-size:.78rem;">${refEsc(r.reference)}</td>
       <td style="padding:7px 10px;font-size:.78rem;color:#374151;">${refEsc(r.designation)}</td>
@@ -1329,7 +1340,7 @@ export const pageServiceBE = (
       <td style="padding:7px 10px;"><span style="background:${act === 'Seem' ? '#dbeafe' : act === 'Semrac' ? '#fce7f3' : '#f1f5f9'};color:${act === 'Seem' ? '#1d4ed8' : act === 'Semrac' ? '#9d174d' : '#475569'};border-radius:6px;padding:1px 8px;font-size:.64rem;font-weight:700;">${refEsc(act)}</span></td>
       <td style="padding:7px 10px;font-size:.76rem;color:#64748b;">${refEsc(r.fournisseur_nom || '—')}</td>
       <td style="padding:7px 10px;text-align:right;font-weight:800;color:#0f766e;font-size:.8rem;">${prix}</td>
-      <td style="padding:7px 10px;text-align:center;white-space:nowrap;"><button onclick="beEditCatalog('${refJs(r.id)}','${refJs(r.fournisseur_id||'')}','${refJs(r.reference)}','${refJs(r.designation)}','${grp}','${refJs(act)}')" title="Modifier cette référence" style="background:#ecfdf5;color:#047857;border:none;border-radius:6px;padding:4px 9px;font-size:.68rem;font-weight:700;cursor:pointer;margin-right:5px;"><i class="fas fa-pen" style="margin-right:4px;"></i>Éditer</button><button onclick="refEvol('${refEsc(r.reference)}',this)" data-desig="${refEsc(r.designation)}" style="background:#eef2ff;color:#4338ca;border:none;border-radius:6px;padding:4px 9px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-chart-line" style="margin-right:4px;"></i>Évolution</button>${needsRfq ? `<button onclick="beRfqForRef('${refJs(r.reference)}','${refJs(r.designation)}','${grp}')" title="Prix absent ou daté de plus de 6 mois — lancer une demande de prix" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:6px;padding:4px 9px;font-size:.68rem;font-weight:700;cursor:pointer;margin-left:5px;"><i class="fas fa-file-invoice-dollar" style="margin-right:4px;"></i>Demande de prix</button>` : ''}</td>
+      <td style="padding:7px 10px;text-align:center;white-space:nowrap;"><button onclick="beEditCatalog('${refJs(r.id)}','${refJs(r.fournisseur_id||'')}','${refJs(r.reference)}','${refJs(r.designation)}','${grp}','${refJs(act)}')" title="Modifier cette référence" style="background:#ecfdf5;color:#047857;border:none;border-radius:6px;padding:4px 9px;font-size:.68rem;font-weight:700;cursor:pointer;margin-right:5px;"><i class="fas fa-pen" style="margin-right:4px;"></i>Éditer</button><button onclick="refEvol('${refEsc(r.reference)}',this)" data-desig="${refEsc(r.designation)}" style="background:#eef2ff;color:#4338ca;border:none;border-radius:6px;padding:4px 9px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-chart-line" style="margin-right:4px;"></i>Évolution</button>${rfqBtn}</td>
     </tr>`
   }).join('')
   const catPill = (cat: string, lbl: string) => `<button onclick="refSetCat('${cat}')" id="refcat-${cat}" class="ref-pill" style="border:1.5px solid #e2e8f0;background:white;color:#475569;border-radius:999px;padding:5px 13px;font-size:.74rem;font-weight:700;cursor:pointer;">${lbl}</button>`
@@ -1471,7 +1482,19 @@ export const pageServiceBE = (
   </div>
 
   <style>
-  .nom-f-row{display:grid;grid-template-columns:130px 1fr 90px 70px 70px 110px 28px;gap:4px;margin-bottom:4px;align-items:center;}
+  /* Compartiments Matière / Accessoires (filet lot H0, 17/09/2026) : UNE grille par compartiment, partagée par
+     l'en-tête et les lignes (JS nomRenderMatieres / nomRenderAccessoires). La piste Désignation a un minimum FIXE
+     (minmax(30px,1fr)) : avec « 1fr » seul, le libellé d'en-tête et le champ de la ligne imposaient des minimums
+     différents et décalaient toutes les colonnes suivantes. Le conteneur défile horizontalement : la croix de
+     suppression reste dans la carte et cliquable quand la colonne est trop étroite. Le vrai gabarit viendra au lot suivant. */
+  .nom-mat-grid{display:grid;grid-template-columns:130px minmax(30px,1fr) 150px 104px 56px 64px 24px;gap:4px;align-items:center;}
+  .nom-acc-grid{display:grid;grid-template-columns:130px minmax(30px,1fr) 150px 92px 58px 54px 70px 24px;gap:4px;align-items:center;}
+  .nom-grid-head{margin-bottom:4px;}
+  .nom-grid-head > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .nom-grid-scroll{overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;padding-bottom:2px;}
+  .nom-prix-cell{display:flex;align-items:center;justify-content:flex-end;gap:3px;min-width:0;}
+  .nom-prix-val{flex:1 1 auto;min-width:0;text-align:right;font-size:.76rem;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 0;}
+  .nom-rfq-ico{flex:0 0 auto;width:22px;height:22px;border-radius:6px;cursor:pointer;font-size:.66rem;padding:0;line-height:1;}
   .nom-f-inp{border:1.5px solid #e2e8f0;border-radius:6px;padding:5px 8px;font-size:.76rem;background:#f8fafc;outline:none;width:100%;min-width:0;text-overflow:ellipsis;box-sizing:border-box;}
   #nom-etapes-list > div, #nom-matieres-list > div, #nom-accessoires-list > div{min-width:0;}
   #nom-etapes-list > div > *, #nom-matieres-list > div > *, #nom-accessoires-list > div > *{min-width:0;}
@@ -1753,7 +1776,12 @@ export const pageServiceBE = (
   async function nomCreerNouvelIndice(){
     if(!nomCurrentId){ pushNotif('err','fa-exclamation-triangle','Enregistrez d\\'abord la nomenclature avant d\\'incrémenter l\\'indice.'); return; }
     if (nomTauxIllisibles()) return;
-    var payload = nomCollectPayload(nomCurrentStatut || 'en_cours');
+    // Lot H0 : une révision NAÎT en cours (comme depuis la liste), jamais « valide » par recopie du statut courant.
+    // La validation repasse par « Enregistrer et valider » (événement « validation » + instantané au journal EN 9100).
+    var payload = nomCollectPayload('en_cours');
+    payload.statut = 'en_cours';
+    // La révision est une INSERTION (pas de composants existants à protéger) : le drapeau n'est pas une colonne.
+    delete payload.vider_composants;
     if(!payload.num_nom){ pushNotif('err','fa-exclamation-triangle','Le N° de nomenclature (réf. pièce) est obligatoire.'); return; }
     if(!await appConfirm('Créer la révision '+nomNextIndice(nomCurrentIndice)+' ? L\\'indice '+nomCurrentIndice+' actuel sera conservé.')) return;
     try{
@@ -1793,6 +1821,48 @@ ${BE_ETAPE_COUT_JS}
   var NOM_STANDARDS = ${sjX(NOMS_STD.map((n:any)=>({id:n.id,num_nom:n.num_nom,code_ref_produit:n.code_ref_produit,description:n.description,prix_revient_unitaire:n.prix_revient_unitaire||0})))};
   // Toutes les révisions (toutes versions confondues) indexées par id → pour récupérer/ouvrir une révision
   var NOM_BY_ID = ${sjX(Object.fromEntries((NOMS as any[]).map(n => [String(n.id), n])))};
+  // Lot H0 : lecture TOLÉRANTE des composants d'une mère — tableau (jsonb) OU chaîne JSON (colonne TEXT du schéma
+  // Docker). Miroir client de composantsDe (shared.ts). Renvoie toujours un tableau.
+  function nomComposantsDe(v){
+    if (Array.isArray(v)) return v;
+    if (typeof v === 'string') { var s = v.trim(); if (!s) return []; try { var p = JSON.parse(s); return Array.isArray(p) ? p : []; } catch(e) { return []; } }
+    return [];
+  }
+  // Lot H0 : fiche FRAÎCHE à l'ouverture. Les boutons de la liste embarquent l'objet du rendu serveur : rouvrir juste
+  // après un enregistrement montrait l'ancienne version (et la réenregistrer l'écrasait). On relit donc la fiche par
+  // GET /api/nomenclature/:id ; repli sur NOM_BY_ID (tenu à jour par nomSave), puis sur l'objet sérialisé.
+  function nomFicheFraiche(nom){
+    var id = (nom && nom.id != null) ? String(nom.id) : '';
+    var repli = (id && NOM_BY_ID[id]) ? NOM_BY_ID[id] : nom;
+    if (!id) return Promise.resolve(repli);
+    var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
+    var minuteur = ctrl ? setTimeout(function(){ try { ctrl.abort(); } catch(e) {} }, 6000) : null;
+    var opts = { cache: 'no-store', headers: { 'Accept': 'application/json' } };
+    if (ctrl) opts.signal = ctrl.signal;
+    return fetch('/api/nomenclature/' + encodeURIComponent(id), opts)
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        var f = (j && j.ok) ? (j.data || j.nomenclature || null) : null;
+        if (f && typeof f === 'object' && String(f.id) === id) { NOM_BY_ID[id] = f; return f; }
+        return repli;
+      })
+      .catch(function(){ return repli; })
+      .then(function(res){ if (minuteur) clearTimeout(minuteur); return res; });
+  }
+  // Lot H0 : après un enregistrement réussi, l'instantané local reprend ce qui vient d'être écrit (repli de nomFicheFraiche).
+  function nomMajInstantane(payload, data){
+    var id = String((data && data.id) || (payload && payload.id) || ''); if (!id) return;
+    var maj = Object.assign({}, NOM_BY_ID[id] || {});
+    Object.keys(payload || {}).forEach(function(k){
+      if (k === 'fournitures' || k === 'vider_composants' || k === 'temps_reglage_total_min' || k === 'temps_unitaire_total_min') return;
+      maj[k] = payload[k];
+    });
+    maj.id = (data && data.id) || payload.id;
+    if (data && data.statut) maj.statut = data.statut;
+    if (data && data.indice) maj.indice = data.indice;
+    if (data && data.num_nom) maj.num_nom = data.num_nom;
+    NOM_BY_ID[id] = maj;
+  }
   // Ouvrir une révision choisie dans la liste déroulante d'indice
   function nomSelectVersion(id){ var n = NOM_BY_ID[String(id)]; if(n) nomOpenForm(n); }
   // onchange du sélecteur d'indice : ouvrir une révision OU créer l'indice suivant (option « __new__:<id> »)
@@ -1834,6 +1904,10 @@ ${BE_ETAPE_COUT_JS}
   }
   // Composants de la mère en cours d'édition : [{nom_id, num_nom, code, prix, qte}]
   var nomComposants = [];
+  // Lot H0 : garde-fou contre l'écrasement des composants. Une liste VIDE n'est envoyée que si l'utilisateur a
+  // explicitement retiré / changé des composants (drapeau vider_composants) ; sinon la clé est omise et la base garde les siens.
+  var nomComposantsModifies = false;
+  var nomTypeCharge = 'standard';   // type de la fiche à l'ouverture (mère → standard = retrait explicite des composants)
 
   // Bascule le type de nomenclature (standard / mère)
   function nomSetType(t) {
@@ -1862,7 +1936,7 @@ ${BE_ETAPE_COUT_JS}
     nomComposants.push({ nom_id:'', num_nom:'', code:'', prix:0, qte:1 });
     nomRenderComposants();
   }
-  function nomRemoveComposant(i) { nomComposants.splice(i,1); nomRenderComposants(); nomCalcTotaux(); }
+  function nomRemoveComposant(i) { nomComposants.splice(i,1); nomComposantsModifies = true; nomRenderComposants(); nomCalcTotaux(); }
   function nomComposantTotal() {
     return nomComposants.reduce(function(s,c){ return s + ((parseFloat(c.prix)||0) * (parseFloat(c.qte)||0)); }, 0);
   }
@@ -1891,6 +1965,7 @@ ${BE_ETAPE_COUT_JS}
   }
   function nomComposantPick(i, id) {
     var s = NOM_STANDARDS.find(function(x){ return String(x.id) === String(id); });
+    nomComposantsModifies = true;
     nomComposants[i].nom_id = id;
     nomComposants[i].num_nom = s ? (s.num_nom||'') : '';
     nomComposants[i].code = s ? (s.code_ref_produit||'') : '';
@@ -1912,6 +1987,7 @@ ${BE_ETAPE_COUT_JS}
   }
 
   function nomNewForm() {
+    nomOuvertureJeton++; nomOuvertureCible = null;   // relecture H0 : une ouverture encore en vol ne remplacera pas ce formulaire
     nomCurrentId = null;
     GED_DOCS = []; gedRefreshUi(); gedRenderAll();   // GED : nouvelle nomenclature → zones masquées jusqu'à enregistrement
     nomJournalLoad();                                 // journal : rien avant le premier enregistrement
@@ -1940,6 +2016,8 @@ ${BE_ETAPE_COUT_JS}
     document.getElementById('nom-f-notes').value = '';
     // Type → standard par défaut ; composants vidés
     nomComposants = [];
+    nomComposantsModifies = false;
+    nomTypeCharge = 'standard';
     nomSetType('standard');
     document.getElementById('nom-form-title').textContent = 'Nouvelle nomenclature';
     document.getElementById('nom-form-statut-badge').innerHTML = '';
@@ -1968,10 +2046,25 @@ ${BE_ETAPE_COUT_JS}
   }
 
   // Ouverture verrouillée : une nomenclature existante ne peut être éditée que par une personne à la fois.
+  // Relecture H0 : l'ouverture est asynchrone (relecture jusqu'à 6 s). Chaque ouverture / nouvelle fiche / fermeture prend
+  // un jeton : une réponse arrivée après coup (autre fiche ouverte entre-temps) est ignorée, et son verrou relâché.
+  var nomOuvertureJeton = 0;
+  var nomOuvertureCible = null;
   function nomOpenForm(nom) {
+    var jeton = ++nomOuvertureJeton;
+    nomOuvertureCible = (nom && nom.id) ? String(nom.id) : null;
     if (nom && nom.id) {
       ErpLock.acquire('nomenclature:' + nom.id, {
-        onOk: function(){ nomOpenFormReal(nom); },
+        // Lot H0 : on ouvre la fiche relue en base (repli : instantané local, puis objet de la liste)
+        onOk: function(){ nomFicheFraiche(nom).then(function(f){
+          if (jeton !== nomOuvertureJeton) {
+            var fv = document.getElementById('nom-form-view');
+            var affichee = !!(fv && fv.style.display !== 'none' && String(nomCurrentId || '') === String(nom.id));
+            if (String(nom.id) !== String(nomOuvertureCible || '') && !affichee) ErpLock.release('nomenclature:' + nom.id);
+            return;
+          }
+          nomOpenFormReal(f || nom);
+        }); },
         onBlocked: function(by){ pushNotif('err','fa-lock','Nomenclature en cours d\\'édition par ' + by + ' — patientez qu\\'il ait terminé (la liste se met à jour en direct).', 7000); },
         onLost: function(by){ pushNotif('err','fa-lock', (by || 'Quelqu\\'un d\\'autre') + ' a pris la main sur cette nomenclature — enregistrez prudemment.', 7000); }
       });
@@ -2014,9 +2107,12 @@ ${BE_ETAPE_COUT_JS}
     document.getElementById('nom-f-notes').value = nom.notes || '';
     // Type standard / mère + composants (pour une mère)
     var nt = (nom.type_nom === 'mere') ? 'mere' : 'standard';
-    nomComposants = (nt === 'mere' && Array.isArray(nom.composants))
-      ? nom.composants.map(function(c){ return { nom_id:c.nom_id||'', num_nom:c.num_nom||'', code:c.code||'', prix:c.prix||0, qte:c.qte!=null?c.qte:1 }; })
+    // Lot H0 : lecture tolérante (tableau ou chaîne JSON) — sinon une mère rouverte perdait ses composants
+    nomComposants = (nt === 'mere')
+      ? nomComposantsDe(nom.composants).filter(function(c){ return c && typeof c === 'object'; }).map(function(c){ return { nom_id:c.nom_id||'', num_nom:c.num_nom||'', code:c.code||'', prix:c.prix||0, qte:c.qte!=null?c.qte:1 }; })
       : [];
+    nomComposantsModifies = false;
+    nomTypeCharge = nt;
     nomSetType(nt);
     document.getElementById('nom-form-title').textContent = nom.num_nom || 'Nomenclature';
     nomRenderMatieres();
@@ -2031,9 +2127,11 @@ ${BE_ETAPE_COUT_JS}
 
   // Charge les fournitures d'une nomenclature et les éclate en matières / accessoires
   function nomLoadFournitures(id) {
+    var jeton = nomOuvertureJeton;   // relecture H0 : fournitures d'une fiche quittée entre-temps → ignorées
     fetch('/api/nomenclature/' + encodeURIComponent(id) + '/fournitures')
       .then(function(r){ return r.json(); })
       .then(function(j){
+        if (jeton !== nomOuvertureJeton || String(nomCurrentId || '') !== String(id)) return;
         if (!j || !j.ok || !Array.isArray(j.fournitures)) return;
         nomMatieres = []; nomAccessoires = [];
         // Résout l'id fournisseur depuis le nom enregistré → re-sélectionne la liste déroulante
@@ -2056,6 +2154,7 @@ ${BE_ETAPE_COUT_JS}
   }
 
   function nomCloseForm() {
+    nomOuvertureJeton++; nomOuvertureCible = null;   // relecture H0 : une ouverture encore en vol ne rouvrira pas le formulaire
     if (nomCurrentId) ErpLock.release('nomenclature:' + nomCurrentId);   // relâche le verrou d'édition
     document.getElementById('nom-form-view').style.display = 'none';
     document.getElementById('nom-list-view').style.display = 'block';
@@ -2085,8 +2184,80 @@ ${BE_ETAPE_COUT_JS}
       if(j && j.ok && j.sig && j.sig!==NOM_SIG){ NOM_SIG=j.sig; if(window.pushNotif)pushNotif('info','fa-sync','Nomenclatures mises à jour — actualisation…',2500); setTimeout(function(){softReload();},900); }
     }).catch(function(){});
   }, 7000);
-  // Prix « frais » = daté de moins de 6 mois ET non nul (au-delà -> nouvelle demande de prix)
-  function nomPrixFrais(datePrix, prix){ if(prix==null||prix==='') return false; if(!datePrix) return false; var t=Date.parse(datePrix); if(isNaN(t)) return false; return (Date.now()-t) < (183*86400000); }
+  // Prix « frais » = daté de moins de PRIX_VALIDITE_JOURS (6 mois, constante de shared.ts) ET non nul (au-delà -> demande de prix conseillée)
+  var NOM_PRIX_VALIDITE_JOURS = ${JSON.stringify(PRIX_VALIDITE_JOURS)};
+  var NOM_PRIX_VALIDITE_LIB = ${sjX(PRIX_VALIDITE_LIB)};
+  function nomPrixFrais(datePrix, prix){ if(prix==null||prix==='') return false; if(!((parseFloat(prix)||0) > 0)) return false; if(!datePrix) return false; var t=Date.parse(datePrix); if(isNaN(t)) return false; return (Date.now()-t) < (NOM_PRIX_VALIDITE_JOURS*86400000); }
+  // Lot H0 : une demande peut viser une ligne dont le prix est DÉJÀ frais. Elle n'est « répondue » que par un prix daté
+  // du jour de la demande ou après ; sinon l'attente disparaîtrait aussitôt (le prix frais existant la solderait).
+  // Relecture H0 : date_prix n'est qu'un JOUR — un prix déjà daté du jour de la demande la soldait aussitôt (« redemander »
+  // n'affichait jamais l'attente). Une demande connue du serveur (_rfqId) n'est répondue qu'une fois VALIDÉE par les Achats
+  // (statut « cloturee », constaté par nomRfqVerifier) ; la règle de date ne reste qu'en repli (demande sans identifiant).
+  function nomRfqRepondue(item, datePrix){ if(!item || !item._rfqAt) return true; if(item._rfqClos) return true; if(item._rfqId) return false; var t=Date.parse(datePrix); if(isNaN(t)) return false; return t >= Math.floor(item._rfqAt/86400000)*86400000; }
+  // Relecture H0 : le catalogue local (NOM_PRODUITS, rendu serveur) suit un prix reçu, sinon le rendu suivant le jugeait périmé.
+  function nomMajProduitLocal(l, cat){
+    if (!l || l.fournisseur_id == null || !l.reference) return;
+    var p = NOM_PRODUITS.find(function(x){ return String(x.fournisseur_id)===String(l.fournisseur_id) && String(x.reference)===String(l.reference); });
+    if (p) { p.prix = l.prix; p.date_prix = l.date_prix; if (!p.designation) p.designation = l.designation || ''; if (!p.categorie && l.categorie) p.categorie = l.categorie; return; }
+    NOM_PRODUITS.push({ fournisseur_id: l.fournisseur_id, reference: l.reference, designation: l.designation || '', prix: l.prix, date_prix: l.date_prix, categorie: l.categorie || cat, conditionnement: l.conditionnement });
+  }
+  // Relecture H0 : vérifie la réponse à la demande de prix d'une ligne (matière ou accessoire).
+  //  1) demande connue (_rfqId) : attend sa VALIDATION par les Achats ; 2) relit le prix au catalogue (fournisseur de la
+  //  ligne, sinon toutes les lignes chiffrées de la réf / de la désignation) ; 3) met à jour NOM_PRODUITS ;
+  //  fini(etat, ligne, n) : 'attente' | 'recu' (une seule réponse) | 'choix' (plusieurs fournisseurs) | 'sans_prix' (validée sans prix récent)
+  function nomRfqVerifier(item, cat, fini){
+    var statut = (item._rfqId && !item._rfqClos)
+      ? fetch('/api/demandes-prix/'+encodeURIComponent(item._rfqId), { cache:'no-store' }).then(function(r){ return r.json(); }).then(function(j){ if (j && j.ok && j.demande && j.demande.statut === 'cloturee') item._rfqClos = true; })
+      : Promise.resolve();
+    return statut.then(function(){
+      if (item._rfqId && !item._rfqClos) { fini('attente', null, 0); return; }
+      var q = 'fournisseur='+encodeURIComponent(item.source_id||'')+'&reference='+encodeURIComponent(item.ref||'')+(item.ref ? '' : '&designation='+encodeURIComponent(item.designation||''));
+      return fetch('/api/produit-prix?'+q, { cache:'no-store' }).then(function(r){ return r.json(); }).then(function(j){
+        var lignes = (j && j.ok && Array.isArray(j.lignes)) ? j.lignes : [];
+        var ok = lignes.filter(function(l){ return nomPrixFrais(l.date_prix, l.prix) && nomRfqRepondue(item, l.date_prix); });
+        ok.forEach(function(l){ nomMajProduitLocal(l, cat); });
+        if (!ok.length) { fini(item._rfqClos ? 'sans_prix' : 'attente', null, 0); return; }
+        if (ok.length > 1) { fini('choix', null, ok.length); return; }
+        fini('recu', ok[0], 1);
+      });
+    }).catch(function(){});
+  }
+  // Applique le résultat de nomRfqVerifier à une ligne ; bruit = clic explicite (message « pas encore de réponse »).
+  function nomRfqAppliquer(item, etat, l, n, champPrix, rendre, bruit){
+    if (!item.rfq_pending) return;   // demande abandonnée entre-temps (réf / fournisseur changés par l'utilisateur)
+    if (etat === 'attente') { if (bruit) beNotif('ok','fa-clock','Pas encore de réponse validée par les Achats pour cette ligne.'); return; }
+    item.rfq_pending = false; item._rfqAt = null;
+    if (etat === 'recu') {
+      if (!item.source_id) { item.source_id = l.fournisseur_id; var f = nomFournById(l.fournisseur_id); item.fournisseur = f ? (f.nom||'') : (l.fournisseur_nom||''); }
+      if (!item.ref && l.reference) item.ref = l.reference;
+      if (!item.designation && l.designation) item.designation = l.designation;
+      item[champPrix] = parseFloat(l.prix)||0; item._prixStatus = 'fresh';
+      rendre(); nomCalcTotaux();
+      beNotif('ok','fa-check','Prix reçu : '+(parseFloat(l.prix)||0).toFixed(2)+' € — coûts recalculés.');
+      return;
+    }
+    rendre(); nomCalcTotaux();
+    if (etat === 'choix') beNotif('info','fa-hand-pointer', n+' fournisseurs ont un prix récent pour cette ligne : choisissez le fournisseur pour reprendre son prix.');
+    else beNotif('warn','fa-exclamation-circle','Demande de prix validée, mais sans prix récent pour cette ligne (prix actuel conservé).');
+  }
+  // Lot H0 : cellule « prix » d'une ligne matière / accessoire. Le prix chargé n'est JAMAIS remis à 0 au rendu :
+  //  - frais    : prix (couleur du compartiment) + bouton discret « redemander un prix » (disponible à tout moment) ;
+  //  - périmé   : prix gardé en ORANGE (plus de 6 mois, fournisseur non résolu ou réf absente du catalogue) + bouton conseillé ;
+  //  - absent   : bouton « demande de prix » conseillé (orange) ;
+  //  - en cours : prix éventuel + « vérifier la réponse ».
+  function nomPrixCellHtml(statut, prix, couleur, aIdentite, fnRfq, fnCheck, i){
+    var p = parseFloat(prix) || 0;
+    var val = p.toFixed(2) + ' €';
+    var orange = 'background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;';
+    if (statut === 'pending') {
+      if (p > 0) return '<div class="nom-prix-cell"><span class="nom-prix-val" style="color:#92400e;" title="Demande de prix envoyée — prix actuel conservé">'+val+'</span><button type="button" class="nom-rfq-ico" onclick="'+fnCheck+'('+i+')" title="Demande envoyée — vérifier la réponse" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;"><i class="fas fa-hourglass-half"></i></button></div>';
+      return '<button type="button" onclick="'+fnCheck+'('+i+')" title="Demande envoyée — vérifier la réponse" style="font-size:.62rem;font-weight:700;border:none;border-radius:6px;padding:5px 3px;background:#fef3c7;color:#92400e;cursor:pointer;line-height:1.1;"><i class="fas fa-hourglass-half"></i> vérifier</button>';
+    }
+    if (!aIdentite) return '<div style="text-align:right;color:#cbd5e1;padding:5px 4px;">—</div>';
+    if (statut === 'fresh') return '<div class="nom-prix-cell"><span class="nom-prix-val" style="color:'+couleur+';" title="Prix catalogue de moins de '+NOM_PRIX_VALIDITE_LIB+'">'+val+'</span><button type="button" class="nom-rfq-ico" onclick="'+fnRfq+'('+i+')" title="Prix de moins de '+NOM_PRIX_VALIDITE_LIB+' — redemander un prix aux Achats quand même" style="background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;"><i class="fas fa-file-invoice-dollar"></i></button></div>';
+    if (p > 0) return '<div class="nom-prix-cell"><span class="nom-prix-val" style="color:#c2410c;" title="Prix périmé : plus de '+NOM_PRIX_VALIDITE_LIB+', ou non vérifiable au catalogue (fournisseur ou référence introuvable). Valeur conservée — demande de prix conseillée.">'+val+'</span><button type="button" class="nom-rfq-ico" onclick="'+fnRfq+'('+i+')" title="Prix périmé — demande de prix conseillée" style="'+orange+'"><i class="fas fa-file-invoice-dollar"></i></button></div>';
+    return '<button type="button" onclick="'+fnRfq+'('+i+')" title="Aucun prix — demande de prix conseillée" style="font-size:.58rem;font-weight:700;border-radius:6px;padding:4px 3px;cursor:pointer;line-height:1.05;'+orange+'"><i class="fas fa-file-invoice-dollar"></i> demande<br>de prix</button>';
+  }
   function nomMatProds(sid){ return NOM_PRODUITS.filter(function(p){ return String(p.fournisseur_id)===String(sid) && p.categorie==='matiere_premiere'; }); }
   function nomMatProdByRef(sid, ref){ return nomMatProds(sid).find(function(p){ return String(p.reference)===String(ref); }) || null; }
   function nomMatProdByDes(sid, des){ return nomMatProds(sid).find(function(p){ return String(p.designation||'').trim()===String(des||'').trim(); }) || null; }
@@ -2153,8 +2324,10 @@ ${BE_ETAPE_COUT_JS}
   else document.addEventListener('DOMContentLoaded', function(){ nomRenderMatieres(); nomRenderAccessoires(); });
 
   // ── Matière (§4) : RÉF/désignation d'abord → fournisseur(s) possibles → prix ──
+  // Lot H0 : un prix appartient à (réf, fournisseur). Il n'est remis à 0 que si l'UTILISATEUR change cette identité ;
+  // le rendu, lui, ne l'efface jamais (nomMatiereApplyPrix).
   function nomMatiereSetRef(i, ref){
-    var m=nomMatieres[i]; m.ref=ref; m.rfq_pending=false;
+    var m=nomMatieres[i]; if(String(ref||'')!==String(m.ref||'')) m.prix_tole=0; m.ref=ref; m.rfq_pending=false;
     var p=nomMatProdByRefAny(ref); if(p && !m.designation) m.designation=p.designation||'';
     var sups=nomMatSuppliersForRef(ref);
     if(sups.length===1){ m.source_id=sups[0].id; m.fournisseur=sups[0].nom; }
@@ -2162,52 +2335,55 @@ ${BE_ETAPE_COUT_JS}
     nomMatiereApplyPrix(m); nomRenderMatieres(); nomCalcTotaux();
   }
   function nomMatiereSetDes(i, des){
-    var m=nomMatieres[i]; m.designation=des; m.rfq_pending=false;
+    var m=nomMatieres[i]; if(!m.ref && String(des||'')!==String(m.designation||'')) m.prix_tole=0; m.designation=des; m.rfq_pending=false;
     var p=nomMatProdByDesAny(des);
     if(p){ if(!m.ref) m.ref=p.reference||''; var sups=nomMatSuppliersForRef(p.reference); if(sups.length===1){ m.source_id=sups[0].id; m.fournisseur=sups[0].nom; } }
     nomMatiereApplyPrix(m); nomRenderMatieres(); nomCalcTotaux();
   }
   function nomMatiereSetFourn(i, fId){
     var f=nomFournById(fId); var m=nomMatieres[i];
+    if(String(fId||'')!==String(m.source_id||'')) m.prix_tole=0;
     m.source_id=fId; m.fournisseur=f?f.nom:''; m.rfq_pending=false;
     nomMatiereApplyPrix(m); nomRenderMatieres(); nomCalcTotaux();
   }
-  // §3 : prix tôle = prix catalogue si < 6 mois ; sinon 0 et statut pour proposer une demande de prix
+  // §3 : prix tôle = prix catalogue si < 6 mois. Lot H0 : sinon le prix CHARGÉ / ENREGISTRÉ est GARDÉ (jamais remis à 0
+  // au rendu), statut « stale » (orange, demande de prix conseillée) : prix de plus de 6 mois, fournisseur non résolu,
+  // ou réf absente du catalogue. Aucun prix n'est inventé : sans prix frais ni prix enregistré, la ligne reste à 0 (« none »).
   function nomMatiereApplyPrix(m){
-    m._prixStatus = 'none'; m._prixDate = null;
-    if(!m.source_id || !(m.ref || m.designation)){ if(m.rfq_pending) m._prixStatus='pending'; m.prix_tole = 0; return; }
-    var p = m.ref ? nomMatProdByRef(m.source_id, m.ref) : nomMatProdByDes(m.source_id, m.designation);
-    if(p){ m._prixDate = p.date_prix; if(!m.designation) m.designation = p.designation||''; if(!m.ref && p.reference) m.ref = p.reference;
-      if(nomPrixFrais(p.date_prix, p.prix)){ m.prix_tole = parseFloat(p.prix)||0; m._prixStatus='fresh'; m.rfq_pending=false; return; }
+    m._prixDate = null;
+    var aPrix = (parseFloat(m.prix_tole)||0) > 0;
+    if(m.source_id && (m.ref || m.designation)){
+      var p = m.ref ? nomMatProdByRef(m.source_id, m.ref) : nomMatProdByDes(m.source_id, m.designation);
+      if(p){ m._prixDate = p.date_prix; if(!m.designation) m.designation = p.designation||''; if(!m.ref && p.reference) m.ref = p.reference;
+        if(nomPrixFrais(p.date_prix, p.prix)){ m.prix_tole = parseFloat(p.prix)||0;
+          if(m.rfq_pending && !nomRfqRepondue(m, p.date_prix)){ m._prixStatus='pending'; return; }
+          m._prixStatus='fresh'; m.rfq_pending=false; m._rfqAt=null; return; }
+      }
     }
-    m.prix_tole = 0; m._prixStatus = m.rfq_pending ? 'pending' : 'stale';
+    m._prixStatus = m.rfq_pending ? 'pending' : (aPrix ? 'stale' : 'none');
   }
   // §3 cas 2 : créer une demande de prix pour cette ligne (réf + désignation + quantité de la ligne)
   function nomMatiereRFQ(i){
     var m = nomMatieres[i];
-    if(!m.source_id || !(m.ref || m.designation)){ beNotif('err','fa-exclamation-circle','Choisissez un fournisseur et une référence/désignation.'); return; }
+    // Lot H0 : demande possible à tout moment, même sans fournisseur choisi (la demande ne porte que la réf / désignation)
+    if(!(m.ref || m.designation)){ beNotif('err','fa-exclamation-circle','Choisissez une référence ou une désignation.'); return; }
     var nref = (document.querySelector('#nom-f-ref,#nom-f-designation,#nom-f-piece,#nom-f-nom,#nom-f-libelle')||{}).value || '';
     var payload = { origine:'nomenclature', dt_ref:nref||null, demandeur:'BE',
       lignes:[{ reference:m.ref||null, designation:m.designation||m.ref||'Matière', quantite_estimee:(parseFloat(m.nb_par_tole)||null), categorie:'matiere_premiere' }] };
     fetch('/api/demandes-prix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
-      .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ m.rfq_pending=true; m._rfqNum=j.numero; nomMatiereApplyPrix(m); nomRenderMatieres(); beNotif('ok','fa-paper-plane','Demande de prix '+j.numero+' envoyée aux Achats.'); } else beNotif('err','fa-ban','Échec de la demande.'); })
+      .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ m.rfq_pending=true; m._rfqAt=Date.now(); m._rfqNum=j.numero; m._rfqId=j.id||null; m._rfqClos=false; nomMatiereApplyPrix(m); nomRenderMatieres(); beNotif('ok','fa-paper-plane','Demande de prix '+j.numero+' envoyée aux Achats.'); } else beNotif('err','fa-ban','Échec de la demande.'); })
       .catch(function(){ beNotif('err','fa-exclamation-circle','Erreur réseau.'); });
   }
   // §5 : vérifier si la réponse RFQ est arrivée → MAJ prix + recalcul
   function nomMatiereCheckPrix(i){
     var m = nomMatieres[i]; if(!m.ref && !m.designation) return;
-    fetch('/api/produit-prix?fournisseur='+encodeURIComponent(m.source_id||'')+'&reference='+encodeURIComponent(m.ref||''))
-      .then(function(r){return r.json();}).then(function(j){
-        if(j&&j.ok && nomPrixFrais(j.date_prix, j.prix)){ m.prix_tole=parseFloat(j.prix)||0; m.rfq_pending=false; m._prixStatus='fresh'; if(j.designation&&!m.designation)m.designation=j.designation; nomRenderMatieres(); nomCalcTotaux(); beNotif('ok','fa-check','Prix reçu : '+(parseFloat(j.prix)||0).toFixed(2)+' € — coûts recalculés.'); }
-        else beNotif('ok','fa-clock','Pas encore de réponse pour cette référence.');
-      }).catch(function(){});
+    nomRfqVerifier(m, 'matiere_premiere', function(etat, l, n){ nomRfqAppliquer(m, etat, l, n, 'prix_tole', nomRenderMatieres, true); });
   }
   // §5 : au retour sur l'onglet, rafraîchit automatiquement les lignes en attente
   if(!window.__nomMatFocusBound){ window.__nomMatFocusBound=true; window.addEventListener('focus', function(){
     if(!Array.isArray(nomMatieres)) return;
     nomMatieres.forEach(function(m){ if(!(m.rfq_pending && (m.ref||m.designation))) return;
-      fetch('/api/produit-prix?fournisseur='+encodeURIComponent(m.source_id||'')+'&reference='+encodeURIComponent(m.ref||''))
-        .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok && nomPrixFrais(j.date_prix, j.prix)){ m.prix_tole=parseFloat(j.prix)||0; m.rfq_pending=false; m._prixStatus='fresh'; nomRenderMatieres(); nomCalcTotaux(); } }).catch(function(){});
+      nomRfqVerifier(m, 'matiere_premiere', function(etat, l, n){ nomRfqAppliquer(m, etat, l, n, 'prix_tole', nomRenderMatieres, false); });
     });
   }); }
   function nomMatierePrixPiece(m){ var n=parseFloat(m.nb_par_tole)||0; return n>0 ? ((parseFloat(m.prix_tole)||0)/n) : 0; }
@@ -2221,13 +2397,10 @@ ${BE_ETAPE_COUT_JS}
       var refDl='matdl-ref-'+i, desDl='matdl-des-'+i, seenR={}, seenD={};
       var refOpts = all.filter(function(p){ if(!p.reference||seenR[p.reference])return false; seenR[p.reference]=1; return true; }).map(function(p){ return '<option value="'+(p.reference||'').replace(/"/g,'&quot;')+'">'+(p.designation||'').replace(/"/g,'&quot;')+'</option>'; }).join('');
       var desOpts = all.filter(function(p){ var d=(p.designation||'').trim(); if(!d||seenD[d])return false; seenD[d]=1; return true; }).map(function(p){ return '<option value="'+(p.designation||'').replace(/"/g,'&quot;')+'">'+(p.reference||'').replace(/"/g,'&quot;')+'</option>'; }).join('');
-      var priceCell;
-      if(m._prixStatus==='fresh'){ priceCell='<div title="Prix catalogue de moins de 3 mois" style="text-align:right;font-size:.78rem;font-weight:800;color:#0ea5e9;padding:5px 4px;">'+(parseFloat(m.prix_tole)||0).toFixed(2)+' €</div>'; }
-      else if(m._prixStatus==='pending'){ priceCell='<button onclick="nomMatiereCheckPrix('+i+')" title="Demande envoyée — vérifier la réponse" style="font-size:.62rem;font-weight:700;border:none;border-radius:6px;padding:5px 3px;background:#fef3c7;color:#92400e;cursor:pointer;line-height:1.1;"><i class="fas fa-hourglass-half"></i> vérifier</button>'; }
-      else if(m.source_id && (m.ref||m.designation)){ priceCell='<button onclick="nomMatiereRFQ('+i+')" title="Aucun prix récent — demander un prix aux Achats" style="font-size:.58rem;font-weight:700;border:none;border-radius:6px;padding:4px 3px;background:#dbeafe;color:#1d4ed8;cursor:pointer;line-height:1.05;"><i class="fas fa-file-invoice-dollar"></i> demande<br>de prix</button>'; }
-      else { priceCell='<div style="text-align:right;color:#cbd5e1;padding:5px 4px;">—</div>'; }
+      // Lot H0 : prix jamais effacé au rendu ; demande de prix disponible sur chaque ligne (orange si prix périmé ou absent)
+      var priceCell = nomPrixCellHtml(m._prixStatus, m.prix_tole, '#0ea5e9', !!(m.ref||m.designation), 'nomMatiereRFQ', 'nomMatiereCheckPrix', i);
       return '<div style="margin-bottom:4px;">'
-        + '<div style="display:grid;grid-template-columns:130px 1fr 150px 104px 56px 64px 24px;gap:4px;align-items:center;">'
+        + '<div class="nom-mat-grid">'
         + '<input class="nom-f-inp" list="'+refDl+'" placeholder="Réf. matière" value="'+(m.ref||'').replace(/"/g,'&quot;')+'" onchange="nomMatiereSetRef('+i+',this.value)"/>'
         + '<input class="nom-f-inp" list="'+desDl+'" placeholder="Désignation" value="'+(m.designation||'').replace(/"/g,'&quot;')+'" onchange="nomMatiereSetDes('+i+',this.value)"/>'
         + nomMatFournSelect(i, m)
@@ -2270,9 +2443,11 @@ ${BE_ETAPE_COUT_JS}
     var opts = list.map(function(f){ return '<option value="'+f.id+'"'+(String(a.source_id)===String(f.id)?' selected':'')+'>'+String(f.nom||'?').replace(/</g,'&lt;')+'</option>'; }).join('');
     return '<select class="nom-f-inp" onchange="nomAccSetFourn('+i+',this.value)"><option value="">'+(sups.length?'— Fournisseur —':'— Fournisseur (à chiffrer) —')+'</option>'+opts+'</select>';
   }
-  function nomAccApplyProd(a, p){ if(!p) return; if(!a.designation) a.designation = p.designation||''; if(!a.ref && p.reference) a.ref = p.reference; if(p.prix!=null) a.prix_paquet = parseFloat(p.prix)||a.prix_paquet||0; if(p.conditionnement!=null && parseFloat(p.conditionnement)>0) a.qte_paquet = parseFloat(p.conditionnement); }
+  // Lot H0 : seul un prix catalogue FRAIS remplace le prix de la ligne (un prix périmé n'écrase ni n'invente rien :
+  // la ligne garde son prix, affiché orange). Le prix n'est remis à 0 que si l'utilisateur change la réf / le fournisseur.
+  function nomAccApplyProd(a, p){ if(!p) return; if(!a.designation) a.designation = p.designation||''; if(!a.ref && p.reference) a.ref = p.reference; if(p.prix!=null && nomPrixFrais(p.date_prix, p.prix)) a.prix_paquet = parseFloat(p.prix)||a.prix_paquet||0; if(p.conditionnement!=null && parseFloat(p.conditionnement)>0) a.qte_paquet = parseFloat(p.conditionnement); }
   function nomAccSetRef(i, ref){
-    var a = nomAccessoires[i]; a.ref = ref;
+    var a = nomAccessoires[i]; if(String(ref||'')!==String(a.ref||'')) a.prix_paquet = 0; a.ref = ref;
     var sups = nomAccSuppliersForRef(ref);
     if(sups.length===1){ a.source_id = sups[0].id; a.fournisseur = sups[0].nom; }   // une seule source → auto-sélection
     var p = a.source_id ? nomAccProds(a.source_id).find(function(x){ return String(x.reference)===String(ref); }) : nomAccProdByRefAny(ref);
@@ -2280,24 +2455,28 @@ ${BE_ETAPE_COUT_JS}
     nomRenderAccessoires(); nomCalcTotaux();
   }
   function nomAccSetDes(i, des){
-    var a = nomAccessoires[i]; a.designation = des;
+    var a = nomAccessoires[i]; if(!a.ref && String(des||'')!==String(a.designation||'')) a.prix_paquet = 0; a.designation = des;
     if(!a.ref){ var p = nomAccProdByDesAny(des); if(p){ a.ref = p.reference||''; var sups=nomAccSuppliersForRef(a.ref); if(sups.length===1){ a.source_id=sups[0].id; a.fournisseur=sups[0].nom; } nomAccApplyProd(a, p); } }
     nomRenderAccessoires(); nomCalcTotaux();
   }
   function nomAccSetFourn(i, fId){
-    var a = nomAccessoires[i]; var f = nomFournById(fId); a.source_id = fId; a.fournisseur = f ? f.nom : '';
+    var a = nomAccessoires[i]; var f = nomFournById(fId); if(String(fId||'')!==String(a.source_id||'')) a.prix_paquet = 0; a.source_id = fId; a.fournisseur = f ? f.nom : '';
     if(a.ref){ var p = nomAccProds(fId).find(function(x){ return String(x.reference)===String(a.ref); }); nomAccApplyProd(a, p); }
     nomRenderAccessoires(); nomCalcTotaux();
   }
   function nomAccPrixPiece(a){ var q=parseFloat(a.qte_paquet)||0; return q>0 ? (((parseFloat(a.prix_paquet)||0)/q)*(parseFloat(a.nb_par_piece)||0)) : 0; }
-  // Prix accessoire = prix CATALOGUE si < 6 mois ; sinon 0 + statut → bouton « demande de prix » (PAS de saisie manuelle du prix)
+  // Prix accessoire = prix CATALOGUE si < 6 mois (PAS de saisie manuelle du prix). Lot H0 : sinon le prix CHARGÉ /
+  // ENREGISTRÉ est GARDÉ (jamais remis à 0 au rendu) avec le statut « stale » (orange, demande de prix conseillée) ;
+  // sans aucun prix, statut « none » (demande de prix conseillée).
   function nomAccApplyPrixStatus(a){
-    a._prixStatus='none';
-    if(!(a.ref||a.designation)){ if(a.rfq_pending) a._prixStatus='pending'; return; }
+    var aPrix = (parseFloat(a.prix_paquet)||0) > 0;
+    if(!(a.ref||a.designation)){ a._prixStatus = a.rfq_pending ? 'pending' : (aPrix ? 'stale' : 'none'); return; }
     var p = a.source_id ? nomAccProds(a.source_id).find(function(x){ return String(x.reference)===String(a.ref); }) : nomAccProdByRefAny(a.ref);
     if(!p && a.designation) p = nomAccProdByDesAny(a.designation);
-    if(p && nomPrixFrais(p.date_prix, p.prix)){ a.prix_paquet=parseFloat(p.prix)||0; a._prixStatus='fresh'; a.rfq_pending=false; return; }
-    a.prix_paquet=0; a._prixStatus = a.rfq_pending ? 'pending' : ((a.source_id && (a.ref||a.designation)) ? 'stale' : 'none');
+    if(p && nomPrixFrais(p.date_prix, p.prix)){ a.prix_paquet=parseFloat(p.prix)||0;
+      if(a.rfq_pending && !nomRfqRepondue(a, p.date_prix)){ a._prixStatus='pending'; return; }
+      a._prixStatus='fresh'; a.rfq_pending=false; a._rfqAt=null; return; }
+    a._prixStatus = a.rfq_pending ? 'pending' : (aPrix ? 'stale' : 'none');
   }
   function nomAccRFQ(i){
     var a = nomAccessoires[i];
@@ -2306,16 +2485,12 @@ ${BE_ETAPE_COUT_JS}
     var payload = { origine:'nomenclature', dt_ref:nref||null, demandeur:'BE',
       lignes:[{ reference:a.ref||null, designation:a.designation||a.ref||'Accessoire', quantite_estimee:(parseFloat(a.nb_par_piece)||null), categorie:'accessoire' }] };
     fetch('/api/demandes-prix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
-      .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ a.rfq_pending=true; a._rfqNum=j.numero; nomRenderAccessoires(); beNotif('ok','fa-paper-plane','Demande de prix '+j.numero+' envoyée aux Achats.'); } else beNotif('err','fa-ban','Échec de la demande.'); })
+      .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ a.rfq_pending=true; a._rfqAt=Date.now(); a._rfqNum=j.numero; a._rfqId=j.id||null; a._rfqClos=false; nomRenderAccessoires(); beNotif('ok','fa-paper-plane','Demande de prix '+j.numero+' envoyée aux Achats.'); } else beNotif('err','fa-ban','Échec de la demande.'); })
       .catch(function(){ beNotif('err','fa-exclamation-circle','Erreur réseau.'); });
   }
   function nomAccRFQCheck(i){
     var a = nomAccessoires[i]; if(!a.ref && !a.designation) return;
-    fetch('/api/produit-prix?fournisseur='+encodeURIComponent(a.source_id||'')+'&reference='+encodeURIComponent(a.ref||''))
-      .then(function(r){return r.json();}).then(function(j){
-        if(j&&j.ok && nomPrixFrais(j.date_prix, j.prix)){ a.prix_paquet=parseFloat(j.prix)||0; a.rfq_pending=false; a._prixStatus='fresh'; if(j.designation&&!a.designation)a.designation=j.designation; nomRenderAccessoires(); nomCalcTotaux(); beNotif('ok','fa-check','Prix reçu : '+(parseFloat(j.prix)||0).toFixed(2)+' € — coûts recalculés.'); }
-        else beNotif('ok','fa-clock','Pas encore de réponse pour cette référence.');
-      }).catch(function(){});
+    nomRfqVerifier(a, 'accessoire', function(etat, l, n){ nomRfqAppliquer(a, etat, l, n, 'prix_paquet', nomRenderAccessoires, true); });
   }
   function nomRenderAccessoires(){
     var c = document.getElementById('nom-accessoires-list'); if(!c) return;
@@ -2327,13 +2502,10 @@ ${BE_ETAPE_COUT_JS}
       var refDl='accdl-ref-'+i, desDl='accdl-des-'+i, seenR={}, seenD={};
       var refOpts = all.filter(function(p){ if(!p.reference||seenR[p.reference])return false; seenR[p.reference]=1; return true; }).map(function(p){ return '<option value="'+(p.reference||'').replace(/"/g,'&quot;')+'">'+(p.designation||'').replace(/"/g,'&quot;')+'</option>'; }).join('');
       var desOpts = all.filter(function(p){ var d=(p.designation||'').trim(); if(!d||seenD[d])return false; seenD[d]=1; return true; }).map(function(p){ return '<option value="'+(p.designation||'').replace(/"/g,'&quot;')+'">'+(p.reference||'').replace(/"/g,'&quot;')+'</option>'; }).join('');
-      var priceCell;
-      if(a._prixStatus==='fresh'){ priceCell='<div title="Prix catalogue de moins de 6 mois" style="text-align:right;font-size:.78rem;font-weight:800;color:#0ea5e9;padding:5px 4px;">'+(parseFloat(a.prix_paquet)||0).toFixed(2)+' €</div>'; }
-      else if(a._prixStatus==='pending'){ priceCell='<button onclick="nomAccRFQCheck('+i+')" title="Demande envoyée — vérifier la réponse" style="font-size:.62rem;font-weight:700;border:none;border-radius:6px;padding:5px 3px;background:#fef3c7;color:#92400e;cursor:pointer;line-height:1.1;"><i class="fas fa-hourglass-half"></i> vérifier</button>'; }
-      else if(a.source_id && (a.ref||a.designation)){ priceCell='<button onclick="nomAccRFQ('+i+')" title="Aucun prix récent au catalogue — demander un prix aux Achats" style="font-size:.58rem;font-weight:700;border:none;border-radius:6px;padding:4px 3px;background:#dbeafe;color:#1d4ed8;cursor:pointer;line-height:1.05;"><i class="fas fa-file-invoice-dollar"></i> demande<br>de prix</button>'; }
-      else { priceCell='<div style="text-align:right;color:#cbd5e1;padding:5px 4px;">—</div>'; }
+      // Lot H0 : prix jamais effacé au rendu ; demande de prix disponible sur chaque ligne (orange si prix périmé ou absent)
+      var priceCell = nomPrixCellHtml(a._prixStatus, a.prix_paquet, '#8b5cf6', !!(a.ref||a.designation), 'nomAccRFQ', 'nomAccRFQCheck', i);
       return '<div style="margin-bottom:4px;">'
-        + '<div style="display:grid;grid-template-columns:130px 1fr 150px 92px 58px 54px 70px 24px;gap:4px;align-items:center;">'
+        + '<div class="nom-acc-grid">'
         + '<input class="nom-f-inp" list="'+refDl+'" placeholder="Réf. (ou nouvelle)" value="'+(a.ref||'').replace(/"/g,'&quot;')+'" onchange="nomAccSetRef('+i+',this.value)"/>'
         + '<input class="nom-f-inp" list="'+desDl+'" placeholder="Désignation" value="'+(a.designation||'').replace(/"/g,'&quot;')+'" onchange="nomAccSetDes('+i+',this.value)"/>'
         + nomAccFournSelect(i, a)
@@ -2880,7 +3052,7 @@ ${BE_ETAPE_COUT_JS}
     var isMere = (nType === 'mere');
     var composantsTot = nomComposantTotal();
     var prixRevientUnit = isMere ? composantsTot : (totalFourn + etapesTotal);
-    return {
+    var payload = {
       id:               nomCurrentId,
       indice:           nomCurrentIndice,
       version_groupe:   nomCurrentGroupe,
@@ -2894,7 +3066,7 @@ ${BE_ETAPE_COUT_JS}
       type_nom:         nType,
       parent_id:        null,
       qte_par_mere:     null,
-      composants:       isMere ? nomComposants.filter(function(c){return c.nom_id;}).map(function(c){ return { nom_id:c.nom_id, num_nom:c.num_nom, code:c.code, prix:c.prix, qte:parseFloat(c.qte)||1 }; }) : null,
+      composants:       null,   // posé plus bas par nomComposantsPourEnvoi (lot H0)
       masse_kg:         (function(){ var g=parseFloat(document.getElementById('nom-f-masse')?.value); return (!isNaN(g) && g>0) ? +(g/1000).toFixed(6) : null; })(),  // saisie en g → stock en kg
       dimensions:       document.getElementById('nom-f-dims')?.value || null,
       surface_totale_dm2: (function(){ var v=parseFloat(document.getElementById('nom-f-surface')?.value); return (!isNaN(v) && v>0) ? +(v/10000).toFixed(6) : null; })(),
@@ -2927,6 +3099,31 @@ ${BE_ETAPE_COUT_JS}
         })
       )
     };
+    // Lot H0 : composants — jamais une liste vide qui écraserait ceux de la base sans action explicite
+    var envoi = nomComposantsPourEnvoi(isMere);
+    if (envoi.omettre) {
+      // Relecture H0 : composants gardés en base → leur coût aussi (sinon prix_revient_unitaire = 0 écrasait la mère)
+      delete payload.composants;
+      delete payload.prix_revient_unitaire; delete payload.prix_mo_unitaire; delete payload.cout_machine_unitaire;
+    }
+    else payload.composants = envoi.composants;
+    if (envoi.vider) payload.vider_composants = true;
+    return payload;
+  }
+  // Lot H0 : décide ce qui part dans « composants ».
+  //  - mère avec au moins un composant choisi → la liste ;
+  //  - mère sans composant : [] + vider_composants si l'utilisateur a retiré / changé des composants (fiche existante),
+  //    [] pour une fiche jamais enregistrée ou qui n'était pas une mère à l'ouverture, sinon clé OMISE avec les champs de
+  //    coût (la base garde ses composants ET leur coût : lecture ratée, instantané périmé) ;
+  //  - standard : null ; + vider_composants si la fiche était une mère à l'ouverture (bascule explicite du type).
+  function nomComposantsPourEnvoi(isMere){
+    if (!isMere) return (nomCurrentId && nomTypeCharge === 'mere') ? { composants: null, vider: true } : { composants: null };
+    var liste = nomComposants.filter(function(c){ return c && c.nom_id; }).map(function(c){ return { nom_id:c.nom_id, num_nom:c.num_nom, code:c.code, prix:c.prix, qte:parseFloat(c.qte)||1 }; });
+    if (liste.length) return { composants: liste };
+    if (!nomCurrentId) return { composants: [] };
+    if (nomTypeCharge !== 'mere') return { composants: [] };   // standard devenu mère : aucune liste en base à protéger
+    if (nomComposantsModifies) return { composants: [], vider: true };
+    return { omettre: true };
   }
 
   // Étapes enregistrées : copies INFORMATIVES des taux du jour (taux_mo_h = coût chargé RH du site,
@@ -2976,6 +3173,11 @@ ${BE_ETAPE_COUT_JS}
         // c'est lui qui choisit le message, le badge et les enregistrements suivants.
         nomCurrentStatut = data.statut || statutEffectif;
         if (statut !== 'valide' && nomCurrentStatut === 'valide') dejaValidee = true;
+        // Lot H0 : l'instantané local suit l'enregistrement (une réouverture sans rechargement ne montre plus l'ancienne version)
+        nomMajInstantane(payload, data);
+        // Les composants envoyés sont désormais ceux de la base : un prochain enregistrement repart de cet état.
+        nomComposantsModifies = false;
+        nomTypeCharge = (payload.type_nom === 'mere') ? 'mere' : 'standard';
         if (statut === 'valide') {
           pushNotif('ok','fa-check-circle', (num ? num+' — ' : '') + 'Nomenclature validée — elle rejoint la liste des nomenclatures faites.', 4500);
           // Journal EN 9100 en échec : on laisse le temps de LIRE l'avertissement avant de quitter la page.

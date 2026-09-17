@@ -2,9 +2,9 @@
 
 > **Fichier généré** par `node scripts_doc/gen_api_ref.mjs` — ne pas éditer à la main, **sauf** le bloc
 > « Contrats détaillés » (entre les marqueurs `manuel:contrats`), conservé d'une génération à l'autre.
-> Source : `src/index.tsx` (399 routes). Les numéros de ligne sont indicatifs (au moment de la génération).
+> Source : `src/index.tsx` (400 routes). Les numéros de ligne sont indicatifs (au moment de la génération).
 
-## Routes API (266)
+## Routes API (267)
 
 | Famille | Routes |
 |---|---|
@@ -16,8 +16,8 @@
 | `api/rh` | 11 |
 | `api/offre` | 9 |
 | `api/expeditions` | 9 |
+| `api/nomenclature` | 9 |
 | `api/demandes-prix` | 8 |
-| `api/nomenclature` | 8 |
 | `api/maintenance` | 7 |
 | `api/plans` | 6 |
 | `api/dt` | 5 |
@@ -63,522 +63,654 @@
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| PATCH | `/api/production/bds/:id` | L7122 |
-| POST | `/api/production/bds/:id/envoyer` | L7185 |
-| POST | `/api/production/bds/:id/retour` | L7187 |
-| POST | `/api/production/bdt/:id/affecter` | L7689 |
-| POST | `/api/production/bdt/:id/deprogrammer` | L7808 |
-| POST | `/api/production/bdt/:id/recoller` | L8084 |
-| POST | `/api/production/bdt/:id/recu` | L8247 |
-| POST | `/api/production/bdt/:id/separer` | L7832 |
-| POST | `/api/production/bdt/:id/solder` | L8319 |
-| GET | `/api/production/bdt/:id/temps` | L8020 |
-| POST | `/api/production/bdt/reglage/reconstituer` | L8190 |
-| POST | `/api/production/bdts` | L7053 |
-| PATCH | `/api/production/bdts/:id` | L6969 |
-| POST | `/api/production/bst/:id/affecter-st` | L8561 |
-| POST | `/api/production/bst/affecter` | L8504 |
-| GET | `/api/production/cadence` | L8775 |
-| GET | `/api/production/cadence/calendrier` | L8791 |
-| POST | `/api/production/cadence/modeles` | L8832 |
-| POST | `/api/production/cadence/site` | L8811 |
-| POST | `/api/production/conge/:id/valider` | L11734 |
-| POST | `/api/production/demande-achat-operateur` | L2304 |
-| POST | `/api/production/machine` | L8635 |
-| DELETE | `/api/production/machine/:id` | L8742 |
-| PATCH | `/api/production/machine/:id` | L8710 |
-| POST | `/api/production/machine/:id/panne` | L11109 |
-| POST | `/api/production/machine/:id/reparer` | L11116 |
-| POST | `/api/production/machine/reorder` | L7488 |
-| POST | `/api/production/nc` | L2342 |
-| POST | `/api/production/non-conformites` | L7189 |
-| POST | `/api/production/poste` | L7499 |
-| DELETE | `/api/production/poste/:id` | L7520 |
-| PATCH | `/api/production/poste/:id` | L7511 |
-| POST | `/api/production/poste/reorder` | L7532 |
-| DELETE | `/api/production/presence` | L8915 |
-| GET | `/api/production/presence` | L8870 |
-| POST | `/api/production/presence` | L8881 |
-| POST | `/api/production/process` | L7428 |
-| DELETE | `/api/production/process/:id` | L7473 |
-| PATCH | `/api/production/process/:id` | L7452 |
-| POST | `/api/production/process/reorder` | L7481 |
-| POST | `/api/production/sortie-matiere` | L9196 |
+| PATCH | `/api/production/bds/:id` | L7345 |
+| POST | `/api/production/bds/:id/envoyer` | L7408 |
+| POST | `/api/production/bds/:id/retour` | L7410 |
+| POST | `/api/production/bdt/:id/affecter` | L7912 |
+| POST | `/api/production/bdt/:id/deprogrammer` | L8031 |
+| POST | `/api/production/bdt/:id/recoller` | L8307 |
+| POST | `/api/production/bdt/:id/recu` | L8470 |
+| POST | `/api/production/bdt/:id/separer` | L8055 |
+| POST | `/api/production/bdt/:id/solder` | L8542 |
+| GET | `/api/production/bdt/:id/temps` | L8243 |
+| POST | `/api/production/bdt/reglage/reconstituer` | L8413 |
+| POST | `/api/production/bdts` | L7276 |
+| PATCH | `/api/production/bdts/:id` | L7192 |
+| POST | `/api/production/bst/:id/affecter-st` | L8784 |
+| POST | `/api/production/bst/affecter` | L8727 |
+| GET | `/api/production/cadence` | L8998 |
+| GET | `/api/production/cadence/calendrier` | L9014 |
+| POST | `/api/production/cadence/modeles` | L9055 |
+| POST | `/api/production/cadence/site` | L9034 |
+| POST | `/api/production/conge/:id/valider` | L11978 |
+| POST | `/api/production/demande-achat-operateur` | L2305 |
+| POST | `/api/production/machine` | L8858 |
+| DELETE | `/api/production/machine/:id` | L8965 |
+| PATCH | `/api/production/machine/:id` | L8933 |
+| POST | `/api/production/machine/:id/panne` | L11353 |
+| POST | `/api/production/machine/:id/reparer` | L11360 |
+| POST | `/api/production/machine/reorder` | L7711 |
+| POST | `/api/production/nc` | L2343 |
+| POST | `/api/production/non-conformites` | L7412 |
+| POST | `/api/production/poste` | L7722 |
+| DELETE | `/api/production/poste/:id` | L7743 |
+| PATCH | `/api/production/poste/:id` | L7734 |
+| POST | `/api/production/poste/reorder` | L7755 |
+| DELETE | `/api/production/presence` | L9138 |
+| GET | `/api/production/presence` | L9093 |
+| POST | `/api/production/presence` | L9104 |
+| POST | `/api/production/process` | L7651 |
+| DELETE | `/api/production/process/:id` | L7696 |
+| PATCH | `/api/production/process/:id` | L7675 |
+| POST | `/api/production/process/reorder` | L7704 |
+| POST | `/api/production/sortie-matiere` | L9419 |
 
 ### api/qualite
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/qualite/capabilite` | L10244 |
-| DELETE | `/api/qualite/capabilite/:id` | L10273 |
-| POST | `/api/qualite/derogation` | L9740 |
-| PATCH | `/api/qualite/derogation/:id` | L9754 |
-| POST | `/api/qualite/derogation/:id/traiter-refus` | L12054 |
-| POST | `/api/qualite/ecme` | L10081 |
-| DELETE | `/api/qualite/ecme/:id` | L10120 |
-| PATCH | `/api/qualite/ecme/:id` | L10093 |
-| POST | `/api/qualite/ecme/:id/etalonner` | L10107 |
-| GET | `/api/qualite/ecme/:id/fiche-vie.pdf` | L10169 |
-| POST | `/api/qualite/ecme/:id/verification` | L10126 |
-| DELETE | `/api/qualite/ecme/verification/:vid` | L10163 |
-| PATCH | `/api/qualite/ecme/verification/:vid` | L10155 |
-| POST | `/api/qualite/lot/:id/liberer` | L7270 |
-| POST | `/api/qualite/nc/:id/quarantaine` | L12110 |
-| POST | `/api/qualite/nc/:id/traiter-retour` | L11994 |
-| PATCH | `/api/qualite/non-conformites/:id` | L11971 |
-| POST | `/api/qualite/perissable` | L9595 |
-| DELETE | `/api/qualite/perissable/:id` | L9609 |
-| PATCH | `/api/qualite/perissable/:id` | L9603 |
-| POST | `/api/qualite/perissable/:id/sortie` | L9615 |
-| POST | `/api/qualite/plan-controle` | L9634 |
-| DELETE | `/api/qualite/plan-controle/:id` | L9652 |
-| PATCH | `/api/qualite/plan-controle/:id` | L9643 |
-| POST | `/api/qualite/quarantaine/:id/decision-fournisseur` | L12218 |
-| POST | `/api/qualite/quarantaine/:id/statuer` | L12129 |
-| POST | `/api/qualite/rapports-8d` | L11927 |
-| PATCH | `/api/qualite/rapports-8d/:id` | L11952 |
+| POST | `/api/qualite/capabilite` | L10488 |
+| DELETE | `/api/qualite/capabilite/:id` | L10517 |
+| POST | `/api/qualite/derogation` | L9984 |
+| PATCH | `/api/qualite/derogation/:id` | L9998 |
+| POST | `/api/qualite/derogation/:id/traiter-refus` | L12298 |
+| POST | `/api/qualite/ecme` | L10325 |
+| DELETE | `/api/qualite/ecme/:id` | L10364 |
+| PATCH | `/api/qualite/ecme/:id` | L10337 |
+| POST | `/api/qualite/ecme/:id/etalonner` | L10351 |
+| GET | `/api/qualite/ecme/:id/fiche-vie.pdf` | L10413 |
+| POST | `/api/qualite/ecme/:id/verification` | L10370 |
+| DELETE | `/api/qualite/ecme/verification/:vid` | L10407 |
+| PATCH | `/api/qualite/ecme/verification/:vid` | L10399 |
+| POST | `/api/qualite/lot/:id/liberer` | L7493 |
+| POST | `/api/qualite/nc/:id/quarantaine` | L12354 |
+| POST | `/api/qualite/nc/:id/traiter-retour` | L12238 |
+| PATCH | `/api/qualite/non-conformites/:id` | L12215 |
+| POST | `/api/qualite/perissable` | L9839 |
+| DELETE | `/api/qualite/perissable/:id` | L9853 |
+| PATCH | `/api/qualite/perissable/:id` | L9847 |
+| POST | `/api/qualite/perissable/:id/sortie` | L9859 |
+| POST | `/api/qualite/plan-controle` | L9878 |
+| DELETE | `/api/qualite/plan-controle/:id` | L9896 |
+| PATCH | `/api/qualite/plan-controle/:id` | L9887 |
+| POST | `/api/qualite/quarantaine/:id/decision-fournisseur` | L12462 |
+| POST | `/api/qualite/quarantaine/:id/statuer` | L12373 |
+| POST | `/api/qualite/rapports-8d` | L12171 |
+| PATCH | `/api/qualite/rapports-8d/:id` | L12196 |
 
 ### api/achats
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/achats/avoirs-fournisseurs` | L1864 |
-| POST | `/api/achats/avoirs-fournisseurs/:id/annuler` | L1964 |
-| POST | `/api/achats/avoirs-fournisseurs/:id/imputer` | L1924 |
-| POST | `/api/achats/avoirs-fournisseurs/:id/recu` | L1899 |
-| POST | `/api/achats/bc` | L2662 |
-| POST | `/api/achats/bc/:id/certificat-matiere` | L4550 |
-| POST | `/api/achats/da` | L2226 |
-| PATCH | `/api/achats/da/:id` | L2463 |
-| POST | `/api/achats/da/:id/defusionner` | L2599 |
-| POST | `/api/achats/da/:id/editer` | L2482 |
-| POST | `/api/achats/da/:id/masquer` | L2513 |
-| POST | `/api/achats/da/:id/soumettre` | L2708 |
-| POST | `/api/achats/da/fusionner` | L2540 |
-| POST | `/api/achats/da/regrouper` | L2630 |
-| POST | `/api/achats/fournisseur` | L2097 |
-| POST | `/api/achats/sous-traitant` | L2119 |
+| POST | `/api/achats/avoirs-fournisseurs` | L1865 |
+| POST | `/api/achats/avoirs-fournisseurs/:id/annuler` | L1965 |
+| POST | `/api/achats/avoirs-fournisseurs/:id/imputer` | L1925 |
+| POST | `/api/achats/avoirs-fournisseurs/:id/recu` | L1900 |
+| POST | `/api/achats/bc` | L2663 |
+| POST | `/api/achats/bc/:id/certificat-matiere` | L4615 |
+| POST | `/api/achats/da` | L2227 |
+| PATCH | `/api/achats/da/:id` | L2464 |
+| POST | `/api/achats/da/:id/defusionner` | L2600 |
+| POST | `/api/achats/da/:id/editer` | L2483 |
+| POST | `/api/achats/da/:id/masquer` | L2514 |
+| POST | `/api/achats/da/:id/soumettre` | L2709 |
+| POST | `/api/achats/da/fusionner` | L2541 |
+| POST | `/api/achats/da/regrouper` | L2631 |
+| POST | `/api/achats/fournisseur` | L2098 |
+| POST | `/api/achats/sous-traitant` | L2120 |
 
 ### api/audit
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/audit/constat-to-nc` | L9709 |
-| POST | `/api/audit/fai` | L9705 |
-| DELETE | `/api/audit/fai/:id` | L9707 |
-| PATCH | `/api/audit/fai/:id` | L9706 |
-| POST | `/api/audit/grille` | L9697 |
-| DELETE | `/api/audit/grille/:id` | L9699 |
-| PATCH | `/api/audit/grille/:id` | L9698 |
-| GET | `/api/audit/grille/:id/vierge.pdf` | L4514 |
-| POST | `/api/audit/programme` | L9670 |
-| DELETE | `/api/audit/programme/:id` | L9682 |
-| PATCH | `/api/audit/programme/:id` | L9676 |
-| GET | `/api/audit/programme/:id/rapport.pdf` | L4484 |
-| POST | `/api/audit/programme/reconduire` | L9688 |
-| POST | `/api/audit/question` | L9701 |
-| DELETE | `/api/audit/question/:id` | L9703 |
-| PATCH | `/api/audit/question/:id` | L9702 |
+| POST | `/api/audit/constat-to-nc` | L9953 |
+| POST | `/api/audit/fai` | L9949 |
+| DELETE | `/api/audit/fai/:id` | L9951 |
+| PATCH | `/api/audit/fai/:id` | L9950 |
+| POST | `/api/audit/grille` | L9941 |
+| DELETE | `/api/audit/grille/:id` | L9943 |
+| PATCH | `/api/audit/grille/:id` | L9942 |
+| GET | `/api/audit/grille/:id/vierge.pdf` | L4579 |
+| POST | `/api/audit/programme` | L9914 |
+| DELETE | `/api/audit/programme/:id` | L9926 |
+| PATCH | `/api/audit/programme/:id` | L9920 |
+| GET | `/api/audit/programme/:id/rapport.pdf` | L4549 |
+| POST | `/api/audit/programme/reconduire` | L9932 |
+| POST | `/api/audit/question` | L9945 |
+| DELETE | `/api/audit/question/:id` | L9947 |
+| PATCH | `/api/audit/question/:id` | L9946 |
 
 ### api/stock
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| PATCH | `/api/stock/:id/emplacement` | L10911 |
-| GET | `/api/stock/:id/emplacement/historique` | L10942 |
-| PATCH | `/api/stock/:id/seuils` | L10461 |
-| POST | `/api/stock/ajustement` | L10763 |
-| POST | `/api/stock/entree` | L10687 |
-| GET | `/api/stock/mise-en-stock` | L10489 |
-| POST | `/api/stock/mise-en-stock/:id/accepter` | L10499 |
-| POST | `/api/stock/mise-en-stock/:id/annuler` | L10665 |
-| POST | `/api/stock/sortie` | L10703 |
-| GET | `/api/stock/types-objet` | L10798 |
-| POST | `/api/stock/types-objet` | L10804 |
-| PATCH | `/api/stock/types-objet/:code` | L10818 |
-| GET | `/api/stock/zones` | L10845 |
-| POST | `/api/stock/zones` | L10852 |
-| PATCH | `/api/stock/zones/:id` | L10875 |
+| PATCH | `/api/stock/:id/emplacement` | L11155 |
+| GET | `/api/stock/:id/emplacement/historique` | L11186 |
+| PATCH | `/api/stock/:id/seuils` | L10705 |
+| POST | `/api/stock/ajustement` | L11007 |
+| POST | `/api/stock/entree` | L10931 |
+| GET | `/api/stock/mise-en-stock` | L10733 |
+| POST | `/api/stock/mise-en-stock/:id/accepter` | L10743 |
+| POST | `/api/stock/mise-en-stock/:id/annuler` | L10909 |
+| POST | `/api/stock/sortie` | L10947 |
+| GET | `/api/stock/types-objet` | L11042 |
+| POST | `/api/stock/types-objet` | L11048 |
+| PATCH | `/api/stock/types-objet/:code` | L11062 |
+| GET | `/api/stock/zones` | L11089 |
+| POST | `/api/stock/zones` | L11096 |
+| PATCH | `/api/stock/zones/:id` | L11119 |
 
 ### api/rh
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/rh/certification` | L11569 |
-| DELETE | `/api/rh/certification/:id` | L11599 |
-| PATCH | `/api/rh/certification/:id` | L11589 |
-| POST | `/api/rh/competence` | L11330 |
-| POST | `/api/rh/conge` | L11607 |
-| POST | `/api/rh/conge/:id/valider` | L11715 |
-| GET | `/api/rh/export-silae` | L11469 |
-| POST | `/api/rh/pointage` | L11785 |
-| POST | `/api/rh/salarie` | L11414 |
-| DELETE | `/api/rh/salarie/:id` | L11552 |
-| PATCH | `/api/rh/salarie/:id` | L11502 |
+| POST | `/api/rh/certification` | L11813 |
+| DELETE | `/api/rh/certification/:id` | L11843 |
+| PATCH | `/api/rh/certification/:id` | L11833 |
+| POST | `/api/rh/competence` | L11574 |
+| POST | `/api/rh/conge` | L11851 |
+| POST | `/api/rh/conge/:id/valider` | L11959 |
+| GET | `/api/rh/export-silae` | L11713 |
+| POST | `/api/rh/pointage` | L12029 |
+| POST | `/api/rh/salarie` | L11658 |
+| DELETE | `/api/rh/salarie/:id` | L11796 |
+| PATCH | `/api/rh/salarie/:id` | L11746 |
 
 ### api/offre
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| DELETE | `/api/offre/:id` | L1361 |
-| PATCH | `/api/offre/:id` | L1284 |
-| POST | `/api/offre/:id/accepter` | L1199 |
-| GET | `/api/offre/:id/devis` | L869 |
-| POST | `/api/offre/:id/envoyer` | L841 |
-| POST | `/api/offre/:id/negocier` | L916 |
-| POST | `/api/offre/:id/pricing` | L1310 |
-| POST | `/api/offre/:id/refuser` | L907 |
-| POST | `/api/offre/:id/valider` | L859 |
+| DELETE | `/api/offre/:id` | L1362 |
+| PATCH | `/api/offre/:id` | L1285 |
+| POST | `/api/offre/:id/accepter` | L1200 |
+| GET | `/api/offre/:id/devis` | L870 |
+| POST | `/api/offre/:id/envoyer` | L842 |
+| POST | `/api/offre/:id/negocier` | L917 |
+| POST | `/api/offre/:id/pricing` | L1311 |
+| POST | `/api/offre/:id/refuser` | L908 |
+| POST | `/api/offre/:id/valider` | L860 |
 
 ### api/expeditions
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/expeditions/bc/:id/date-arrivee` | L3529 |
-| POST | `/api/expeditions/bc/:id/pv` | L3559 |
-| POST | `/api/expeditions/bc/:id/receptionner` | L3267 |
-| POST | `/api/expeditions/bds/:id/envoyer` | L7184 |
-| POST | `/api/expeditions/bds/:id/retour` | L7186 |
-| POST | `/api/expeditions/bl-partiel` | L3902 |
-| POST | `/api/expeditions/bl/:id/reception-infos` | L3384 |
-| POST | `/api/expeditions/retour-client/:ncId/receptionner` | L3414 |
-| POST | `/api/expeditions/retour-fournisseur/:qid/expedie` | L3883 |
-
-### api/demandes-prix
-
-| Méthode | Chemin | index.tsx |
-|---|---|---|
-| POST | `/api/demandes-prix` | L4342 |
-| DELETE | `/api/demandes-prix/:id` | L4643 |
-| GET | `/api/demandes-prix/:id` | L4579 |
-| POST | `/api/demandes-prix/:id/envoyer` | L4587 |
-| GET | `/api/demandes-prix/:id/pdf` | L4434 |
-| POST | `/api/demandes-prix/:id/reponses` | L4594 |
-| POST | `/api/demandes-prix/:id/valider` | L4614 |
-| POST | `/api/demandes-prix/grouped` | L4372 |
+| POST | `/api/expeditions/bc/:id/date-arrivee` | L3530 |
+| POST | `/api/expeditions/bc/:id/pv` | L3560 |
+| POST | `/api/expeditions/bc/:id/receptionner` | L3268 |
+| POST | `/api/expeditions/bds/:id/envoyer` | L7407 |
+| POST | `/api/expeditions/bds/:id/retour` | L7409 |
+| POST | `/api/expeditions/bl-partiel` | L3903 |
+| POST | `/api/expeditions/bl/:id/reception-infos` | L3385 |
+| POST | `/api/expeditions/retour-client/:ncId/receptionner` | L3415 |
+| POST | `/api/expeditions/retour-fournisseur/:qid/expedie` | L3884 |
 
 ### api/nomenclature
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/nomenclature` | L5321 |
-| DELETE | `/api/nomenclature/:id` | L5560 |
-| PUT | `/api/nomenclature/:id` | L5404 |
-| GET | `/api/nomenclature/:id/fournitures` | L4692 |
-| GET | `/api/nomenclature/:id/journal` | L4676 |
-| POST | `/api/nomenclature/:id/nouvel-indice` | L5516 |
-| POST | `/api/nomenclature/:id/prepa-validee` | L13158 |
-| POST | `/api/nomenclature/:id/programmes` | L5485 |
+| POST | `/api/nomenclature` | L5513 |
+| DELETE | `/api/nomenclature/:id` | L5783 |
+| GET | `/api/nomenclature/:id` | L4787 |
+| PUT | `/api/nomenclature/:id` | L5597 |
+| GET | `/api/nomenclature/:id/fournitures` | L4813 |
+| GET | `/api/nomenclature/:id/journal` | L4797 |
+| POST | `/api/nomenclature/:id/nouvel-indice` | L5725 |
+| POST | `/api/nomenclature/:id/prepa-validee` | L13402 |
+| POST | `/api/nomenclature/:id/programmes` | L5694 |
+
+### api/demandes-prix
+
+| Méthode | Chemin | index.tsx |
+|---|---|---|
+| POST | `/api/demandes-prix` | L4407 |
+| DELETE | `/api/demandes-prix/:id` | L4751 |
+| GET | `/api/demandes-prix/:id` | L4644 |
+| POST | `/api/demandes-prix/:id/envoyer` | L4652 |
+| GET | `/api/demandes-prix/:id/pdf` | L4499 |
+| POST | `/api/demandes-prix/:id/reponses` | L4659 |
+| POST | `/api/demandes-prix/:id/valider` | L4679 |
+| POST | `/api/demandes-prix/grouped` | L4437 |
 
 ### api/maintenance
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/maintenance/om` | L11122 |
-| PATCH | `/api/maintenance/om/:id` | L11188 |
-| POST | `/api/maintenance/om/:id/cloturer` | L11200 |
-| POST | `/api/maintenance/piece` | L11217 |
-| DELETE | `/api/maintenance/piece/:id` | L11246 |
-| PATCH | `/api/maintenance/piece/:id` | L11234 |
-| POST | `/api/maintenance/preventif/generer` | L11184 |
+| POST | `/api/maintenance/om` | L11366 |
+| PATCH | `/api/maintenance/om/:id` | L11432 |
+| POST | `/api/maintenance/om/:id/cloturer` | L11444 |
+| POST | `/api/maintenance/piece` | L11461 |
+| DELETE | `/api/maintenance/piece/:id` | L11490 |
+| PATCH | `/api/maintenance/piece/:id` | L11478 |
+| POST | `/api/maintenance/preventif/generer` | L11428 |
 
 ### api/plans
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/plans` | L5129 |
-| PATCH | `/api/plans/:id` | L5137 |
-| GET | `/api/plans/:id/marqueurs` | L5145 |
-| POST | `/api/plans/:id/marqueurs` | L5148 |
-| POST | `/api/plans/entity` | L5174 |
-| DELETE | `/api/plans/marqueur/:id` | L5166 |
+| POST | `/api/plans` | L5314 |
+| PATCH | `/api/plans/:id` | L5322 |
+| GET | `/api/plans/:id/marqueurs` | L5330 |
+| POST | `/api/plans/:id/marqueurs` | L5333 |
+| POST | `/api/plans/entity` | L5359 |
+| DELETE | `/api/plans/marqueur/:id` | L5351 |
 
 ### api/dt
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/dt` | L725 |
-| GET | `/api/dt/:id` | L697 |
-| PUT | `/api/dt/:id` | L767 |
-| POST | `/api/dt/:id/analyse` | L1469 |
-| POST | `/api/dt/:id/valider` | L1444 |
+| POST | `/api/dt` | L726 |
+| GET | `/api/dt/:id` | L698 |
+| PUT | `/api/dt/:id` | L768 |
+| POST | `/api/dt/:id/analyse` | L1470 |
+| POST | `/api/dt/:id/valider` | L1445 |
 
 ### api/be
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/be/analyse-dt/:id` | L4702 |
-| POST | `/api/be/analyse-dt/:id/etapes-libres` | L4888 |
-| POST | `/api/be/analyse-dt/:id/generer-bdt` | L4931 |
-| GET | `/api/be/noms-signature` | L2858 |
-| GET | `/api/be/refs` | L4668 |
+| GET | `/api/be/analyse-dt/:id` | L4823 |
+| POST | `/api/be/analyse-dt/:id/etapes-libres` | L5009 |
+| POST | `/api/be/analyse-dt/:id/generer-bdt` | L5052 |
+| GET | `/api/be/noms-signature` | L2859 |
+| GET | `/api/be/refs` | L4776 |
 
 ### api/produits-fournisseurs
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/produits-fournisseurs` | L4281 |
-| DELETE | `/api/produits-fournisseurs/:id` | L4335 |
-| PUT | `/api/produits-fournisseurs/:id` | L4306 |
-| POST | `/api/produits-fournisseurs/purge` | L4656 |
-| GET | `/api/produits-fournisseurs/sans-prix` | L4650 |
+| POST | `/api/produits-fournisseurs` | L4289 |
+| DELETE | `/api/produits-fournisseurs/:id` | L4400 |
+| PUT | `/api/produits-fournisseurs/:id` | L4355 |
+| POST | `/api/produits-fournisseurs/purge` | L4764 |
+| GET | `/api/produits-fournisseurs/sans-prix` | L4758 |
 
 ### api/ged
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| DELETE | `/api/ged/:id` | L5082 |
-| GET | `/api/ged/file/:id` | L5063 |
-| GET | `/api/ged/nomenclature/:id` | L5049 |
-| GET | `/api/ged/ref/:ref` | L5053 |
-| POST | `/api/ged/upload` | L5006 |
+| DELETE | `/api/ged/:id` | L5267 |
+| GET | `/api/ged/file/:id` | L5235 |
+| GET | `/api/ged/nomenclature/:id` | L5205 |
+| GET | `/api/ged/ref/:ref` | L5209 |
+| POST | `/api/ged/upload` | L5162 |
 
 ### api/oas
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/oas/balancelle` | L9018 |
-| PATCH | `/api/oas/balancelle/:id` | L9184 |
-| POST | `/api/oas/balancelle/:id/cloturer` | L8431 |
-| POST | `/api/oas/releve-bain` | L9120 |
-| POST | `/api/oas/releve-eau` | L9071 |
+| POST | `/api/oas/balancelle` | L9241 |
+| PATCH | `/api/oas/balancelle/:id` | L9407 |
+| POST | `/api/oas/balancelle/:id/cloturer` | L8654 |
+| POST | `/api/oas/releve-bain` | L9343 |
+| POST | `/api/oas/releve-eau` | L9294 |
 
 ### api/clients
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/clients` | L664 |
-| DELETE | `/api/clients/:id` | L682 |
-| PATCH | `/api/clients/:id` | L672 |
-| GET | `/api/clients/search` | L642 |
+| POST | `/api/clients` | L665 |
+| DELETE | `/api/clients/:id` | L683 |
+| PATCH | `/api/clients/:id` | L673 |
+| GET | `/api/clients/search` | L643 |
 
 ### api/locks
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/locks/acquire` | L2807 |
-| POST | `/api/locks/heartbeat` | L2827 |
-| POST | `/api/locks/release` | L2839 |
-| GET | `/api/locks/status` | L2848 |
+| POST | `/api/locks/acquire` | L2808 |
+| POST | `/api/locks/heartbeat` | L2828 |
+| POST | `/api/locks/release` | L2840 |
+| GET | `/api/locks/status` | L2849 |
 
 ### api/bc
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/bc/:id/accuse` | L4530 |
-| POST | `/api/bc/:id/date-arrivee` | L3530 |
-| GET | `/api/bc/:id/pdf` | L4457 |
-| POST | `/api/bc/:id/relance` | L4538 |
+| POST | `/api/bc/:id/accuse` | L4595 |
+| POST | `/api/bc/:id/date-arrivee` | L3531 |
+| GET | `/api/bc/:id/pdf` | L4522 |
+| POST | `/api/bc/:id/relance` | L4603 |
 
 ### api/interlocuteurs
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/interlocuteurs` | L8969 |
-| POST | `/api/interlocuteurs` | L8977 |
-| DELETE | `/api/interlocuteurs/:id` | L9009 |
-| PATCH | `/api/interlocuteurs/:id` | L8997 |
+| GET | `/api/interlocuteurs` | L9192 |
+| POST | `/api/interlocuteurs` | L9200 |
+| DELETE | `/api/interlocuteurs/:id` | L9232 |
+| PATCH | `/api/interlocuteurs/:id` | L9220 |
 
 ### api/securite
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| DELETE | `/api/securite/` | L9898 |
-| PATCH | `/api/securite/` | L9891 |
-| POST | `/api/securite/` | L9884 |
-| POST | `/api/securite/duer/cloner-annee` | L9916 |
+| DELETE | `/api/securite/` | L10142 |
+| PATCH | `/api/securite/` | L10135 |
+| POST | `/api/securite/` | L10128 |
+| POST | `/api/securite/duer/cloner-annee` | L10160 |
 
 ### api/references-clients
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/references-clients` | L806 |
-| POST | `/api/references-clients` | L815 |
-| DELETE | `/api/references-clients/:id` | L829 |
+| GET | `/api/references-clients` | L807 |
+| POST | `/api/references-clients` | L816 |
+| DELETE | `/api/references-clients/:id` | L830 |
 
 ### api/credits
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/credits` | L1370 |
-| DELETE | `/api/credits/:id` | L1434 |
-| PATCH | `/api/credits/:id` | L1413 |
+| POST | `/api/credits` | L1371 |
+| DELETE | `/api/credits/:id` | L1435 |
+| PATCH | `/api/credits/:id` | L1414 |
 
 ### api/export
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/export/clients.xlsx` | L7345 |
-| GET | `/api/export/fournisseurs.xlsx` | L7314 |
-| GET | `/api/export/seirich.xlsx` | L7367 |
+| GET | `/api/export/clients.xlsx` | L7568 |
+| GET | `/api/export/fournisseurs.xlsx` | L7537 |
+| GET | `/api/export/seirich.xlsx` | L7590 |
 
 ### api/environnement
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/environnement/diagnostic-iso/init` | L10038 |
-| POST | `/api/environnement/diagnostic-iso26000/init` | L10052 |
-| POST | `/api/environnement/perissables-expires/declarer` | L9943 |
+| POST | `/api/environnement/diagnostic-iso/init` | L10282 |
+| POST | `/api/environnement/diagnostic-iso26000/init` | L10296 |
+| POST | `/api/environnement/perissables-expires/declarer` | L10187 |
 
 ### api/direction
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/direction/jalon-traite` | L12959 |
-| POST | `/api/direction/scan-alertes` | L12762 |
-| GET | `/api/direction/source` | L12992 |
+| POST | `/api/direction/jalon-traite` | L13203 |
+| POST | `/api/direction/scan-alertes` | L13006 |
+| GET | `/api/direction/source` | L13236 |
 
 ### api/quarantaine
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/quarantaine/:id/liberer` | L1262 |
-| POST | `/api/quarantaine/:id/rejeter` | L1272 |
+| POST | `/api/quarantaine/:id/liberer` | L1263 |
+| POST | `/api/quarantaine/:id/rejeter` | L1273 |
 
 ### api/fournisseurs
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| DELETE | `/api/fournisseurs/:id` | L2047 |
-| PATCH | `/api/fournisseurs/:id` | L2011 |
+| DELETE | `/api/fournisseurs/:id` | L2048 |
+| PATCH | `/api/fournisseurs/:id` | L2012 |
 
 ### api/sous-traitants
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| DELETE | `/api/sous-traitants/:id` | L2052 |
-| PATCH | `/api/sous-traitants/:id` | L2028 |
+| DELETE | `/api/sous-traitants/:id` | L2053 |
+| PATCH | `/api/sous-traitants/:id` | L2029 |
 
 ### api/factures
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| PATCH | `/api/factures/:id` | L4006 |
-| POST | `/api/factures/:id/valider-paiement` | L4055 |
+| PATCH | `/api/factures/:id` | L4007 |
+| POST | `/api/factures/:id/valider-paiement` | L4056 |
 
 ### api/factures-fournisseur
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/factures-fournisseur` | L4070 |
-| PATCH | `/api/factures-fournisseur/:id` | L4110 |
+| POST | `/api/factures-fournisseur` | L4071 |
+| PATCH | `/api/factures-fournisseur/:id` | L4111 |
 
 ### api/planning
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| DELETE | `/api/planning/affectation-poste` | L8953 |
-| POST | `/api/planning/affectation-poste` | L8929 |
+| DELETE | `/api/planning/affectation-poste` | L9176 |
+| POST | `/api/planning/affectation-poste` | L9152 |
 
 ### api/controles
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/controles/cote` | L10280 |
-| DELETE | `/api/controles/cote/:id` | L10305 |
+| POST | `/api/controles/cote` | L10524 |
+| DELETE | `/api/controles/cote/:id` | L10549 |
 
 ### api/validations
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/validations` | L12910 |
-| POST | `/api/validations/:id/decision` | L12925 |
+| POST | `/api/validations` | L13154 |
+| POST | `/api/validations/:id/decision` | L13169 |
 
 ### api/kpi-objectifs
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/kpi-objectifs` | L13117 |
-| DELETE | `/api/kpi-objectifs/:id` | L13129 |
+| POST | `/api/kpi-objectifs` | L13361 |
+| DELETE | `/api/kpi-objectifs/:id` | L13373 |
 
 ### api/login
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/login` | L264 |
+| POST | `/api/login` | L265 |
 
 ### api/version
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/version` | L302 |
+| GET | `/api/version` | L303 |
 
 ### api/me
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/me` | L315 |
+| GET | `/api/me` | L316 |
 
 ### api/contact
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/contact` | L573 |
+| POST | `/api/contact` | L574 |
 
 ### api/catalogue-fournisseurs
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/catalogue-fournisseurs` | L2060 |
+| GET | `/api/catalogue-fournisseurs` | L2061 |
 
 ### api/commandes
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/commandes/:id/generer-da` | L4156 |
+| POST | `/api/commandes/:id/generer-da` | L4157 |
 
 ### api/produit-prix
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/produit-prix` | L4259 |
+| GET | `/api/produit-prix` | L4260 |
 
 ### api/ref-prix
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/ref-prix/:reference` | L4269 |
+| GET | `/api/ref-prix/:reference` | L4277 |
 
 ### api/atex
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/atex/:id/drpce.pdf` | L9973 |
+| GET | `/api/atex/:id/drpce.pdf` | L10217 |
 
 ### api/commande
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/commande/:id/detail` | L11042 |
+| GET | `/api/commande/:id/detail` | L11286 |
 
 ### api/compta
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/api/compta/export-fec` | L11486 |
+| GET | `/api/compta/export-fec` | L11730 |
 
 ### api/pointage
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/pointage/demande-conge` | L11630 |
+| POST | `/api/pointage/demande-conge` | L11874 |
 
 ### api/commandes-p
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/commandes-p/:id/lancer` | L12428 |
+| POST | `/api/commandes-p/:id/lancer` | L12672 |
 
 ### api/prepa-technique
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| POST | `/api/prepa-technique/:id/statut` | L13203 |
+| POST | `/api/prepa-technique/:id/statut` | L13447 |
 
 <!-- manuel:contrats -->
 ## Contrats détaillés (écrits à la main)
 
 Bloc conservé par `gen_api_ref.mjs` : les tableaux ci-dessus sont régénérés, ce bloc ne l'est pas.
+
+### Lot H0 (17/09/2026) — mères, nouvel indice, catalogue fournisseur, demandes de prix, GED, génération des BDT
+
+Familles **`nomenclature`**, **`produits-fournisseurs`**, **`produit-prix`**, **`demandes-prix`**, **`be`**, **`ged`** — **aucune
+nouvelle famille** (la route ajoutée appartient à `nomenclature`, déjà mappée sur le service BE). Migrations Docker **015** / **016**,
+**aucun script cloud** (voir `03-base-de-donnees.md`). Règles et écrans : `06-modules/be.md` (section « Lot H0 »). Constante
+commune : `PRIX_VALIDITE_JOURS = 183` (`src/shared.ts`) = un prix catalogue est « frais » pendant 6 mois ; lecture tolérante
+des composants : `composantsDe(fiche | valeur)` rend **toujours un tableau** (tableau tel quel, chaîne JSON d'un tableau
+parsée, sinon `[]`).
+
+#### `GET /api/nomenclature/:id` (nouvelle)
+Lecture = lecture BE (famille `nomenclature`, comme la liste). `Cache-Control: no-store`. Sert au formulaire BE à relire la
+fiche **en base** à chaque ouverture (l'instantané sérialisé dans la page devenait périmé après un enregistrement).
+
+| Réponse | Cas |
+|---|---|
+| **200** `{ok:true, nomenclature:{…toutes les colonnes…, composants: [...]}}` | `composants` **toujours un tableau**, que la colonne soit `text` ou `jsonb` |
+| **404** `{ok:false, error:'Nomenclature introuvable (supprimée entre-temps ?)'}` | fiche absente |
+| **500** `{ok:false, error:'Lecture de la nomenclature impossible : …'}` | lecture en échec (jamais confondue avec « absente ») |
+
+#### `POST /api/nomenclature` et `PUT /api/nomenclature/:id` (changées)
+- `vider_composants` est retiré du corps (ce n'est pas une colonne) ; `composants`, s'il est présent, est converti en tableau.
+- **PUT — garde-fou composants** : fiche en base avec **au moins un** composant + liste envoyée **vide** + pas de
+  `vider_composants: true` ⇒ **409** `{ok:false, code:'composants_vides', error:'Enregistrement refusé : cette nomenclature compte N
+  composant(s) en base et la liste envoyée est vide. Rouvrez la fiche pour recharger ses composants ; pour les retirer tous
+  volontairement, confirmez le retrait.', composants_en_base: N}`. Rien n'est écrit.
+- **PUT — clé `composants` omise sur une mère** (fiche `type_nom = 'mere'` qui reste mère) : `prix_revient_unitaire`,
+  `prix_mo_unitaire` et `cout_machine_unitaire` du corps sont **ignorés** (la base garde ses composants, donc le coût qui en
+  découle). Le formulaire omet la clé quand sa liste locale est vide sans action de l'utilisateur.
+- Les autres règles (statut validé conservé, journal EN 9100, 503 si l'état « avant » est illisible) sont inchangées.
+- Effet de bord commun (`syncFournituresToCatalogue`) : **n'écrit plus jamais** une ligne existante du catalogue. Un couple
+  fournisseur + référence absent est **inséré sans prix** (`prix: null`, `statut: 'en_attente_prix'`, `source_prix: 'be'`,
+  catégorie `accessoire` ou `matiere_premiere`, activité = site de la fiche) ; un échec est journalisé côté serveur
+  (`[nomenclature → catalogue] …`) sans bloquer l'enregistrement.
+
+#### `POST /api/nomenclature/:id/nouvel-indice` (changée)
+- La révision naît **toujours `en_cours`**, `valide_par` et `date_validation` à `null`, **quel que soit** le corps : `statut`,
+  `valide_par`, `date_validation`, `vider_composants`, `devalider` et `motif` sont retirés du corps (avant : une révision créée
+  depuis une fiche validée naissait `valide`, devenait l'indice validé le plus haut — donc la gamme de production des nouvelles
+  commandes — sans événement `validation` au journal). Elle se valide ensuite par `PUT`.
+- `composants` = ceux du corps s'ils sont fournis, sinon ceux de la base, **toujours en tableau**.
+- Mère sans clé `composants` : les trois champs de coût du corps sont ignorés (même règle que le PUT).
+- Journal EN 9100 inchangé : `nouvel_indice` sur l'ancienne fiche, `creation` sur la révision.
+
+#### `POST /api/produits-fournisseurs` (changée)
+Corps inchangé (`reference` et `designation` obligatoires). Prix illisible ⇒ **400** « Prix illisible : « … » ».
+- **Couple fournisseur + référence déjà au catalogue** : mise à jour **partielle**. Écrits : `designation`, `fournisseur_nom`
+  (si connu), `unite` et `delai_jours` s'ils sont fournis et non vides, le **prix seulement s'il est > 0** (avec `date_prix` du
+  jour, `source_prix` = corps ou `manuel`, `statut: 'actif'`). **`categorie` et `activite` ne sont jamais réécrites** sur une
+  ligne existante, sauf si elles sont vides en base (les formulaires envoient toujours une valeur par défaut : re-déclarer un
+  accessoire pour lui donner un prix le reclassait en matière). Pour les changer : `PUT`.
+  Réponse **200** `{ok:true, produit, existant:true, champs_mis_a_jour:[…], champs_ignores:['categorie'|'activite']}`.
+- **Couple absent** : insertion **si absent** (`insertProduitFournisseurSiAbsent`, plus d'upsert complet) ; prix ≤ 0 ou vide ⇒
+  ligne `en_attente_prix`. Réponse **200** `{ok:true, produit, existant:false}`. Si le couple est créé **entre la lecture et
+  l'écriture** (course avec une validation de demande de prix), la ligne est relue et reçoit le même patch partiel (réponse
+  `existant:true`) : une ligne chiffrée n'est plus écrasée sans prix.
+- Erreurs : **500** « Lecture du catalogue impossible, rien n'a été écrit : … » · **400** « Mise à jour de la référence existante
+  impossible : … » / « Déclaration de la référence impossible : … » · **409** « La référence vient d'être créée par ailleurs et
+  n'a pas pu être relue : … Réessayez. »
+
+#### `PUT /api/produits-fournisseurs/:id` (changée)
+- Patch **partiel** : `categorie`, `activite`, `unite`, `fournisseur_id` (+ `fournisseur_nom`) et `delai_jours` ne sont écrits que
+  s'ils sont fournis **et non vides**. ⚠ Conséquence assumée : on ne peut plus **vider** un délai ni **détacher** une référence de
+  son fournisseur en envoyant une valeur vide (la modale BE envoyait `fournisseur_id: null` quand sa liste ne retrouvait pas le
+  fournisseur, ce qui détachait la référence).
+- Prix : touché seulement s'il est > 0 **et différent** du prix en base (relu par `getProduitFournisseurParId`). Un prix
+  **inchangé** ne « rajeunit » pas la ligne : `date_prix`, `source_prix` (ex. `rfq`) et `statut` restent. Prix modifié : date
+  du jour, `source_prix: 'manuel'`, `statut: 'actif'`.
+- Erreurs : **400** prix illisible · **500** lecture de la ligne impossible (rien écrit) · **404** « Référence catalogue
+  introuvable (supprimée entre-temps ?) » · **409** « Cette référence existe déjà chez ce fournisseur : modifiez la ligne
+  existante. » (23505) · **400** autre échec d'écriture.
+
+#### `GET /api/produit-prix` (élargie)
+Paramètres : `fournisseur` (optionnel), `reference` **ou** `designation` (une ligne de nomenclature peut n'avoir qu'une
+désignation) — les deux absents ⇒ **400** `reference ou designation requise`. Réponse **200** : champs historiques
+(`prix`, `date_prix`, `designation`, `reference`, `fournisseur_id`, `fournisseur_nom` = la ligne chiffrée la plus récente) **+
+`lignes[]`** = **toutes** les lignes chiffrées (prix > 0) correspondantes, avec `fournisseur_id`, `fournisseur_nom`, `reference`,
+`designation`, `prix`, `date_prix`, `categorie`, `conditionnement`. Le formulaire BE : une seule ligne fraîche ⇒ il reprend son
+fournisseur ; plusieurs ⇒ il demande de choisir le fournisseur.
+
+#### `POST /api/demandes-prix/:id/valider` (changée)
+Corps inchangé (`retenus[]`). Chaque `{ error }` Supabase est lu (supabase-js ne lève jamais : les anciens `.catch` étaient
+morts et un prix non écrit était compté « mis à jour »).
+- Demande introuvable ou illisible ⇒ **404** « Demande de prix introuvable (ou lecture impossible) : aucun prix écrit. »
+- Par retenu (référence + prix lisible) :
+  - prix **≤ 0** ⇒ échec « prix nul ou négatif (…), non écrit » (un 0 daté du jour passait pour frais dans l'éditeur) ;
+  - ligne catalogue **existante** : seuls `prix`, `devise`, `date_prix` (jour), `source_prix: 'rfq'`, `statut: 'actif'` sont
+    écrits ; `designation`, `categorie`, `activite`, `fournisseur_nom` seulement **s'ils sont vides en base** ;
+  - ligne absente : création chiffrée (source `rfq`) ;
+  - **historique** (`ref_prix_historique`) : un point **une seule fois** par (référence, fournisseur, n° de demande, prix) —
+    lecture stricte `getRefPrixHistoriqueRfq` ; si elle échoue, rien n'est ajouté et c'est signalé en échec ;
+  - réponse fournisseur marquée `retenu: true` (échec signalé).
+- Au moins un échec ⇒ **500** `{ok:false, error:'N écriture(s) en échec, demande de prix laissée ouverte : …', echecs:[…], prix_maj}` :
+  la demande **reste ouverte** et peut être revalidée (sans doubler l'historique). Journal serveur `[RFQ] validation …`.
+- Tout écrit mais clôture impossible ⇒ **500** « Prix écrits (N) mais clôture de la demande impossible : … ». Succès ⇒ **200**
+  `{ok:true, prix_maj}` (inchangé).
+- ⚠ **Écran non branché** : `rfqValider` (`src/achats.tsx`) affiche encore « Échec de la validation. » sans `error` ni `echecs`.
+
+#### `POST /api/be/analyse-dt/:id/generer-bdt` (changée — aucun appelant client aujourd'hui)
+- Bons existants lus **strictement** et par pages (`getClesBonsStrictes('BDT' | 'BDS')`) : lecture en échec ⇒ **503**
+  « Lecture des bons existants impossible, aucun bon créé : … Réessayez. »
+- Idempotence inchangée (clé affaire | pièce | seq) ; chaque nouveau bon prend le **premier identifiant libre** à partir du numéro
+  prévu (une étape passée de sous-traitée à interne reprenait l'id d'un bon existant : 23505 à chaque relance). Sur 23505, l'id est
+  relu (`getCleBonParId`) : même clé ⇒ compté « déjà présent » (`skipped`), sinon id suivant (50 essais au plus).
+- Les compteurs n'avancent qu'après une insertion **réussie**. Échec(s) ⇒ **500** `{ok:false, error:'N bon(s) non créé(s) : … Relancer
+  la génération recrée seulement les bons manquants.', bdt, bds, skipped, sansNom, oasGates, echecs:[{bon, piece, seq, erreur}]}`.
+  Succès : **200** `{ok:true, bdt, bds, skipped, sansNom, oasGates, echecs:[]}` (+ `avertissement` cloud-9 inchangé).
+
+#### `GET /api/be/analyse-dt/:id` (seuil)
+Fraîcheur des prix matière : `PRIX_VALIDITE_JOURS` (183 j) au lieu de 92 j. Contrat inchangé par ailleurs.
+
+#### `GET /api/ged/file/:id` (changée)
+- **`Content-Disposition`** construit par `dispositionFichier(nom, 'inline')` (RFC 6266 / RFC 5987) :
+  `inline; filename="<repli ASCII>"; filename*=UTF-8''<nom exact percent-encodé>`. Repli : accents retirés, `’` → `'`, `–`/`—`
+  → `-`, `œ` → `oe`, `€` → `EUR`, guillemets et `\` supprimés, autre caractère non ASCII → `_`. Avant : le nom brut partait dans
+  l'en-tête ; sous **Node** (Docker, VM) un seul caractère > U+00FF (`’ – œ €`, fréquents dans un nom de fichier Office) levait
+  une TypeError avalée par le `catch` ⇒ **502 « Fichier injoignable »** alors que le fichier était intact. (Sous workerd /
+  Cloudflare l'en-tête était accepté : pas de 502, nom peut-être illisible à l'enregistrement.)
+- `Content-Type` = `documents.mime` (sinon celui du stockage), `Content-Length` recopié, `Cache-Control: private, max-age=300` —
+  inchangés. Contenu servi à l'identique (vérifié octet par octet).
+- Erreurs, chacune journalisée `console.error('[GED] ouverture <id> : …')` : **404** « Document introuvable » · **500** « Lien de
+  stockage indisponible pour ce document (bucket « ged » ou fichier absent du stockage). » · **502** « Stockage injoignable : le
+  service de fichiers ne répond pas. » · **502** « Fichier indisponible dans le stockage (<statut>) » · **500** « Réponse impossible
+  à construire pour ce document : … ».
+
+#### Page `GET /production/lot/:id` (rendu serveur)
+Nomenclature de la fiche lot et de l'OF imprimé = **la nomenclature validée d'indice le plus haut** (ordre de recherche inchangé :
+lien de la commande, lot, pièce, affaire). Avant : la dernière fiche **créée**, brouillon compris (indice B non relu imprimé alors
+que les BDT venaient de A). Aucune fiche validée ⇒ repli sur l'ancien choix, `console.warn('[fiche lot] …')`, drapeau
+`nomenclature_non_validee: true` et indice imprimé **« B — GAMME NON VALIDÉE (en_cours) »**. ⚠ Pas encore de bandeau à l'écran
+(`pageLotDetail`, `src/prod.tsx`).
 
 ### Lot G (16/09/2026) — cadence usine, planning en heures ouvrées, chevauchement, remise en goulotte, process OAS
 
@@ -1338,136 +1470,136 @@ réouverture retombe alors sur le taux du jour).
 
 | Méthode | Chemin | index.tsx |
 |---|---|---|
-| GET | `/production/affectation` | L6865 |
-| GET | `/production/bdt` | L9322 |
-| GET | `/production/bdt-liste` | L13146 |
-| GET | `/production/bdts-a-programmer` | L13214 |
-| GET | `/production/commande/:id` | L9260 |
-| GET | `/production/commandes` | L9251 |
-| GET | `/production/competences` | L6866 |
-| GET | `/production/dashboard-production` | L9310 |
-| GET | `/production/dashboard-programmation` | L9309 |
-| GET | `/production/fiches-suivi` | L9316 |
-| GET | `/production/gantt-bdt` | L9239 |
-| GET | `/production/gantt-bst` | L9247 |
-| GET | `/production/habilitations` | L13775 |
-| GET | `/production/horaires` | L6867 |
-| GET | `/production/lot-liste` | L13147 |
-| GET | `/production/lot/:id` | L9276 |
-| GET | `/production/lots` | L9255 |
-| GET | `/production/matricule` | L9314 |
-| GET | `/production/non-faits` | L9315 |
-| GET | `/production/operateur` | L6868 |
-| GET | `/production/ordonnancement` | L6827 |
-| GET | `/production/pilotage` | L9415 |
-| GET | `/production/planning` | L6956 |
-| GET | `/production/pointage` | L9313 |
-| GET | `/production/service` | L6871 |
-| GET | `/production/soustraitance` | L9388 |
-| GET | `/production/st-liste` | L9317 |
-| GET | `/production/suivi-st` | L9318 |
-| GET | `/commercial/affaire/:num` | L556 |
-| GET | `/commercial/avoirs` | L639 |
-| GET | `/commercial/avoirs-liste` | L13150 |
-| GET | `/commercial/client/:id` | L544 |
-| GET | `/commercial/cmd-liste` | L13142 |
-| GET | `/commercial/commande` | L1717 |
-| GET | `/commercial/commande-old` | L1714 |
-| GET | `/commercial/commandes-validees` | L631 |
-| GET | `/commercial/dt` | L1607 |
-| GET | `/commercial/dt-liste` | L635 |
-| GET | `/commercial/dt-liste` | L13140 |
-| GET | `/commercial/offre` | L610 |
-| GET | `/commercial/offre-old` | L1689 |
-| GET | `/commercial/offre/edit` | L620 |
-| GET | `/commercial/offres-liste` | L614 |
-| GET | `/commercial/offres-liste` | L13141 |
-| GET | `/commercial/references-pieces` | L13152 |
-| GET | `/commercial/rentree` | L609 |
-| GET | `/commercial/service` | L533 |
-| GET | `/dashboard` | L13046 |
-| GET | `/dashboard/achats` | L13049 |
-| GET | `/dashboard/be` | L13048 |
-| GET | `/dashboard/commercial` | L13047 |
-| GET | `/dashboard/direction` | L13057 |
-| GET | `/dashboard/environnement` | L13059 |
-| GET | `/dashboard/expedition` | L13053 |
-| GET | `/dashboard/finance` | L13060 |
-| GET | `/dashboard/fournisseurs` | L13062 |
-| GET | `/dashboard/maintenance` | L13054 |
-| GET | `/dashboard/oas` | L13058 |
-| GET | `/dashboard/production` | L13051 |
-| GET | `/dashboard/programmation` | L13050 |
-| GET | `/dashboard/qualite` | L13052 |
-| GET | `/dashboard/rh` | L13056 |
-| GET | `/dashboard/stock` | L13061 |
-| GET | `/qualite/8d` | L11867 |
-| GET | `/qualite/anomalie` | L11841 |
-| GET | `/qualite/audit-9001` | L13476 |
-| GET | `/qualite/audit-en9100` | L13535 |
-| GET | `/qualite/ecme` | L12533 |
-| GET | `/qualite/liberation` | L12509 |
-| GET | `/qualite/nc-liste` | L13144 |
-| GET | `/qualite/perishables` | L13588 |
-| GET | `/qualite/pv` | L12483 |
-| GET | `/qualite/service` | L9526 |
-| GET | `/rh/competences` | L11313 |
-| GET | `/rh/conge` | L12614 |
-| GET | `/rh/conge-liste` | L13149 |
-| GET | `/rh/employes` | L11289 |
-| GET | `/rh/habilitations` | L11305 |
-| GET | `/rh/organigramme` | L11301 |
-| GET | `/rh/pointage` | L11778 |
-| GET | `/rh/pointage` | L12643 |
-| GET | `/rh/service` | L11284 |
-| GET | `/rh/temps` | L11764 |
-| GET | `/achats/da-auto` | L9320 |
-| GET | `/achats/da-liste` | L13143 |
-| GET | `/achats/demande` | L6748 |
-| GET | `/achats/fournisseur` | L6799 |
-| GET | `/achats/fournisseur/:id` | L1989 |
-| GET | `/achats/fournisseurs-st` | L13151 |
-| GET | `/achats/reception` | L6775 |
-| GET | `/achats/service` | L1785 |
-| GET | `/achats/sous-traitant/:id` | L1999 |
-| GET | `/be/analyse` | L5606 |
-| GET | `/be/ged` | L6722 |
-| GET | `/be/preparation` | L6488 |
-| GET | `/be/references-pieces` | L13153 |
-| GET | `/be/service` | L4233 |
-| GET | `/stock` | L13657 |
-| GET | `/stock/alertes` | L13660 |
-| GET | `/stock/entrees` | L13658 |
-| GET | `/stock/service` | L10949 |
-| GET | `/stock/sorties` | L13659 |
-| GET | `/oas/balancelles` | L13263 |
-| GET | `/oas/rejets-eau` | L13351 |
-| GET | `/oas/service` | L9478 |
-| GET | `/oas/session` | L9495 |
-| GET | `/maintenance/intervention` | L12586 |
-| GET | `/maintenance/liste` | L13148 |
-| GET | `/maintenance/mtbf` | L13055 |
-| GET | `/maintenance/service` | L11049 |
-| GET | `/finances/couts` | L13668 |
-| GET | `/finances/imputations` | L13671 |
-| GET | `/finances/machines` | L13670 |
-| GET | `/finances/taux` | L13669 |
-| GET | `/expedition/bl` | L12559 |
-| GET | `/expedition/bl-liste` | L13145 |
-| GET | `/expedition/envoi-client` | L13219 |
-| GET | `/manuels` | L335 |
-| GET | `/manuels/:slug` | L339 |
-| GET | `/securite/chimique/:id` | L9871 |
-| GET | `/securite/service` | L9768 |
-| GET | `/direction/service` | L12678 |
-| GET | `/direction/validation` | L13002 |
-| GET | `/comptabilite/dashboard` | L13963 |
-| GET | `/comptabilite/factures` | L13964 |
-| GET | `/login` | L253 |
-| GET | `/logout` | L296 |
-| GET | `/` | L377 |
-| GET | `/plans/service` | L5101 |
-| GET | `/environnement/service` | L9845 |
-| GET | `/expeditions/service` | L10314 |
-| GET | `/compta/service` | L11824 |
-| GET | `/reglages/objectifs` | L13065 |
+| GET | `/production/affectation` | L7088 |
+| GET | `/production/bdt` | L9566 |
+| GET | `/production/bdt-liste` | L13390 |
+| GET | `/production/bdts-a-programmer` | L13458 |
+| GET | `/production/commande/:id` | L9483 |
+| GET | `/production/commandes` | L9474 |
+| GET | `/production/competences` | L7089 |
+| GET | `/production/dashboard-production` | L9554 |
+| GET | `/production/dashboard-programmation` | L9553 |
+| GET | `/production/fiches-suivi` | L9560 |
+| GET | `/production/gantt-bdt` | L9462 |
+| GET | `/production/gantt-bst` | L9470 |
+| GET | `/production/habilitations` | L14019 |
+| GET | `/production/horaires` | L7090 |
+| GET | `/production/lot-liste` | L13391 |
+| GET | `/production/lot/:id` | L9499 |
+| GET | `/production/lots` | L9478 |
+| GET | `/production/matricule` | L9558 |
+| GET | `/production/non-faits` | L9559 |
+| GET | `/production/operateur` | L7091 |
+| GET | `/production/ordonnancement` | L7050 |
+| GET | `/production/pilotage` | L9659 |
+| GET | `/production/planning` | L7179 |
+| GET | `/production/pointage` | L9557 |
+| GET | `/production/service` | L7094 |
+| GET | `/production/soustraitance` | L9632 |
+| GET | `/production/st-liste` | L9561 |
+| GET | `/production/suivi-st` | L9562 |
+| GET | `/commercial/affaire/:num` | L557 |
+| GET | `/commercial/avoirs` | L640 |
+| GET | `/commercial/avoirs-liste` | L13394 |
+| GET | `/commercial/client/:id` | L545 |
+| GET | `/commercial/cmd-liste` | L13386 |
+| GET | `/commercial/commande` | L1718 |
+| GET | `/commercial/commande-old` | L1715 |
+| GET | `/commercial/commandes-validees` | L632 |
+| GET | `/commercial/dt` | L1608 |
+| GET | `/commercial/dt-liste` | L636 |
+| GET | `/commercial/dt-liste` | L13384 |
+| GET | `/commercial/offre` | L611 |
+| GET | `/commercial/offre-old` | L1690 |
+| GET | `/commercial/offre/edit` | L621 |
+| GET | `/commercial/offres-liste` | L615 |
+| GET | `/commercial/offres-liste` | L13385 |
+| GET | `/commercial/references-pieces` | L13396 |
+| GET | `/commercial/rentree` | L610 |
+| GET | `/commercial/service` | L534 |
+| GET | `/dashboard` | L13290 |
+| GET | `/dashboard/achats` | L13293 |
+| GET | `/dashboard/be` | L13292 |
+| GET | `/dashboard/commercial` | L13291 |
+| GET | `/dashboard/direction` | L13301 |
+| GET | `/dashboard/environnement` | L13303 |
+| GET | `/dashboard/expedition` | L13297 |
+| GET | `/dashboard/finance` | L13304 |
+| GET | `/dashboard/fournisseurs` | L13306 |
+| GET | `/dashboard/maintenance` | L13298 |
+| GET | `/dashboard/oas` | L13302 |
+| GET | `/dashboard/production` | L13295 |
+| GET | `/dashboard/programmation` | L13294 |
+| GET | `/dashboard/qualite` | L13296 |
+| GET | `/dashboard/rh` | L13300 |
+| GET | `/dashboard/stock` | L13305 |
+| GET | `/qualite/8d` | L12111 |
+| GET | `/qualite/anomalie` | L12085 |
+| GET | `/qualite/audit-9001` | L13720 |
+| GET | `/qualite/audit-en9100` | L13779 |
+| GET | `/qualite/ecme` | L12777 |
+| GET | `/qualite/liberation` | L12753 |
+| GET | `/qualite/nc-liste` | L13388 |
+| GET | `/qualite/perishables` | L13832 |
+| GET | `/qualite/pv` | L12727 |
+| GET | `/qualite/service` | L9770 |
+| GET | `/rh/competences` | L11557 |
+| GET | `/rh/conge` | L12858 |
+| GET | `/rh/conge-liste` | L13393 |
+| GET | `/rh/employes` | L11533 |
+| GET | `/rh/habilitations` | L11549 |
+| GET | `/rh/organigramme` | L11545 |
+| GET | `/rh/pointage` | L12022 |
+| GET | `/rh/pointage` | L12887 |
+| GET | `/rh/service` | L11528 |
+| GET | `/rh/temps` | L12008 |
+| GET | `/achats/da-auto` | L9564 |
+| GET | `/achats/da-liste` | L13387 |
+| GET | `/achats/demande` | L6971 |
+| GET | `/achats/fournisseur` | L7022 |
+| GET | `/achats/fournisseur/:id` | L1990 |
+| GET | `/achats/fournisseurs-st` | L13395 |
+| GET | `/achats/reception` | L6998 |
+| GET | `/achats/service` | L1786 |
+| GET | `/achats/sous-traitant/:id` | L2000 |
+| GET | `/be/analyse` | L5829 |
+| GET | `/be/ged` | L6945 |
+| GET | `/be/preparation` | L6711 |
+| GET | `/be/references-pieces` | L13397 |
+| GET | `/be/service` | L4234 |
+| GET | `/stock` | L13901 |
+| GET | `/stock/alertes` | L13904 |
+| GET | `/stock/entrees` | L13902 |
+| GET | `/stock/service` | L11193 |
+| GET | `/stock/sorties` | L13903 |
+| GET | `/oas/balancelles` | L13507 |
+| GET | `/oas/rejets-eau` | L13595 |
+| GET | `/oas/service` | L9722 |
+| GET | `/oas/session` | L9739 |
+| GET | `/maintenance/intervention` | L12830 |
+| GET | `/maintenance/liste` | L13392 |
+| GET | `/maintenance/mtbf` | L13299 |
+| GET | `/maintenance/service` | L11293 |
+| GET | `/finances/couts` | L13912 |
+| GET | `/finances/imputations` | L13915 |
+| GET | `/finances/machines` | L13914 |
+| GET | `/finances/taux` | L13913 |
+| GET | `/expedition/bl` | L12803 |
+| GET | `/expedition/bl-liste` | L13389 |
+| GET | `/expedition/envoi-client` | L13463 |
+| GET | `/manuels` | L336 |
+| GET | `/manuels/:slug` | L340 |
+| GET | `/securite/chimique/:id` | L10115 |
+| GET | `/securite/service` | L10012 |
+| GET | `/direction/service` | L12922 |
+| GET | `/direction/validation` | L13246 |
+| GET | `/comptabilite/dashboard` | L14207 |
+| GET | `/comptabilite/factures` | L14208 |
+| GET | `/login` | L254 |
+| GET | `/logout` | L297 |
+| GET | `/` | L378 |
+| GET | `/plans/service` | L5286 |
+| GET | `/environnement/service` | L10089 |
+| GET | `/expeditions/service` | L10558 |
+| GET | `/compta/service` | L12068 |
+| GET | `/reglages/objectifs` | L13309 |

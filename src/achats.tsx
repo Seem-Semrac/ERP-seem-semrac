@@ -1909,7 +1909,7 @@ export const pageServiceAchats = (
     if(!retenus.length){ pushNotif('err','fa-exclamation-circle','Cochez au moins un prix « retenu » (avec un prix saisi).'); return; }
     fetch('/api/demandes-prix/'+id+'/reponses',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reponses:rfqCollectResponses()})})
       .then(function(){ return fetch('/api/demandes-prix/'+id+'/valider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({retenus:retenus})}); })
-      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ pushNotif('ok','fa-circle-check',(j.prix_maj||0)+' prix officiel(s) mis à jour. RFQ clôturée.',6000); rfqClose(); setTimeout(function(){softReload();},1000); } else pushNotif('err','fa-ban','Échec de la validation.'); });
+      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ pushNotif('ok','fa-circle-check',(j.prix_maj||0)+' prix officiel(s) mis à jour. RFQ clôturée.',6000); rfqClose(); setTimeout(function(){softReload();},1000); } else pushNotif('err','fa-ban',(j&&j.error)?String(j.error):'Échec de la validation.',12000); });
   }
   async function rfqDelete(){ var id=rfqId(); if(!await appConfirm('Supprimer cette demande de prix ?')) return; fetch('/api/demandes-prix/'+id,{method:'DELETE'}).then(function(r){return r.json();}).then(function(j){ if(j.ok){ pushNotif('ok','fa-trash','RFQ supprimée.'); rfqClose(); setTimeout(function(){softReload();},700); } else pushNotif('err','fa-ban','Échec.'); }); }
 

@@ -168,6 +168,41 @@ export async function upsertProduitFournisseur(payload: Record<string, any>) {
   }
   return { data, error }
 }
+// Lecture STRICTE d'un couple fournisseur + référence (lot H0, 17/09/2026) : rend l'erreur au lieu
+// de la cacher — une panne ne doit jamais être prise pour « référence absente » (puis écrasée).
+export async function getProduitFournisseurCouple(fournisseurId: string, reference: string): Promise<{ data: any | null; error: string | null }> {
+  const { data, error } = await supabase.from('produits_fournisseurs').select('*')
+    .eq('fournisseur_id', fournisseurId).eq('reference', reference).limit(1).maybeSingle()
+  return { data: data ?? null, error: error ? error.message : null }
+}
+// Insertion SI ABSENT (ON CONFLICT DO NOTHING) : une ligne catalogue existante n'est JAMAIS
+// réécrite (prix officiel, date, source, activité, désignation). `data` = null si la ligne existait.
+export async function insertProduitFournisseurSiAbsent(payload: Record<string, any>): Promise<{ data: any | null; error: any }> {
+  const { data, error } = await supabase.from('produits_fournisseurs')
+    .upsert(payload, { onConflict: 'fournisseur_id,reference', ignoreDuplicates: true }).select()
+  const ligne = Array.isArray(data) && data.length ? data[0] : null
+  if (!error && ligne && payload && payload.reference) {
+    const cat = /accessoire/i.test(String(payload.categorie || '')) ? 'accessoire' : /matiere/i.test(String(payload.categorie || '')) ? 'matiere' : (payload.categorie || null)
+    await ensureStockRowForRef(String(payload.reference), { designation: payload.designation, unite: payload.unite, categorie: cat, activite: payload.activite }).catch(() => {})
+  }
+  return { data: ligne, error }
+}
+// Lecture STRICTE d'une ligne catalogue par id (relecture lot H0) : le PUT compare le prix envoyé au prix
+// en base avant de le « rajeunir » ; une panne ne doit pas passer pour « prix changé ».
+export async function getProduitFournisseurParId(id: string): Promise<{ data: any | null; error: string | null }> {
+  const { data, error } = await supabase.from('produits_fournisseurs').select('*').eq('id', id).limit(1).maybeSingle()
+  return { data: data ?? null, error: error ? error.message : null }
+}
+// Points d'historique déjà écrits par la validation d'UNE demande de prix (source rfq, bc_num = n° de la
+// demande) pour une réf chez un fournisseur — lecture STRICTE : la revalidation d'une demande restée
+// ouverte après un échec partiel ne doit pas dupliquer la courbe « Évolution » (relecture lot H0).
+export async function getRefPrixHistoriqueRfq(reference: string, fournisseurId: string | null, numero: string | null): Promise<{ data: any[]; error: string | null }> {
+  let q = supabase.from('ref_prix_historique').select('id, prix_unitaire, date_prix').eq('reference', reference).eq('source', 'rfq')
+  q = fournisseurId ? q.eq('fournisseur_id', fournisseurId) : q.is('fournisseur_id', null)
+  q = numero ? q.eq('bc_num', numero) : q.is('bc_num', null)
+  const { data, error } = await q
+  return { data: data ?? [], error: error ? error.message : null }
+}
 export async function updateProduitFournisseur(id: string, payload: Record<string, any>) {
   const { data, error } = await supabase.from('produits_fournisseurs').update(payload).eq('id', id).select().single()
   return { data, error }
@@ -2988,6 +3023,31 @@ export async function retirerBDTRows(ids: string[]): Promise<string[]> {
 export async function createBDTRow(payload: Record<string, any>) {
   const { data, error } = await supabase.from('bons_de_travail').insert(payload).select().single()
   return { data, error }
+}
+// Clés des bons existants, lecture STRICTE et paginée (relecture lot H0) : « Générer les BDT » juge
+// l'idempotence sur (affaire | pièce | seq) et choisit un identifiant LIBRE. Une lecture en échec ne
+// doit jamais passer pour « aucun bon » (tous les bons seraient recréés en double sous d'autres ids).
+export async function getClesBonsStrictes(kind: 'BDT' | 'BDS'): Promise<{ data: { id: string; cle: string }[]; error: string | null }> {
+  const table = kind === 'BDT' ? 'bons_de_travail' : 'bons_sous_traitance'
+  const colAff = kind === 'BDT' ? 'num_affaire' : 'cmd_ref'
+  const out: { id: string; cle: string }[] = []
+  const PAGE = 1000
+  for (let from = 0; from < 1_000_000; from += PAGE) {
+    const { data, error } = await supabase.from(table).select(`id, ${colAff}, piece, seq`).order('id', { ascending: true }).range(from, from + PAGE - 1)
+    if (error) return { data: [], error: error.message }
+    for (const b of (data ?? []) as any[]) out.push({ id: String(b.id), cle: `${b[colAff]}|${b.piece}|${b.seq}` })
+    if (!data || data.length < PAGE) break
+  }
+  return { data: out, error: null }
+}
+// Un bon par id, lecture STRICTE (conflit 23505 à l'insertion : bon créé entre-temps, ou id pris par une autre étape ?)
+export async function getCleBonParId(kind: 'BDT' | 'BDS', id: string): Promise<{ data: { id: string; cle: string } | null; error: string | null }> {
+  const table = kind === 'BDT' ? 'bons_de_travail' : 'bons_sous_traitance'
+  const colAff = kind === 'BDT' ? 'num_affaire' : 'cmd_ref'
+  const { data, error } = await supabase.from(table).select(`id, ${colAff}, piece, seq`).eq('id', id).limit(1).maybeSingle()
+  if (error) return { data: null, error: error.message }
+  const b: any = data
+  return { data: b ? { id: String(b.id), cle: `${b[colAff]}|${b.piece}|${b.seq}` } : null, error: null }
 }
 
 // ─── Réglage / découpe / recollage des BDT (lot C, 14/09/2026) ─────────────────────────────────

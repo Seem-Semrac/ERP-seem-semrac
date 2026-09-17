@@ -2,6 +2,106 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-17 — Lot H0 : composants des mères, nouvel indice « en cours », prix jamais remis à 0, demande de prix à tout moment, catalogue fournisseur, ouverture GED, génération des BDT
+
+**Correctifs sans arbitrage métier.** Non traités, en attente des réponses de l'utilisateur : ligne de nomenclature sans
+fournisseur, prix moyen, retrait de `qte_paquet`, unification du catalogue, ordre et imbrication des mères, propagation d'un
+indice aux commandes en cours.
+
+**Ce qui change**
+- **Mères** : les composants ne disparaissent plus. Cause : `nomenclatures.composants` en `text` sur Docker / VM (le cloud est
+  en `jsonb`), rendu en chaîne JSON, ignoré par le formulaire, puis écrasé par `[]`. Migration Docker **015** (→ `jsonb`),
+  lecture tolérante `composantsDe()` (`src/shared.ts`) partout, **409 `composants_vides`** sur un PUT qui viderait une liste non
+  vide sans `vider_composants: true`, client qui omet la clé (et les prix de revient) quand l'utilisateur n'a pas touché aux
+  composants. Une mère qui omet `composants` garde son coût (PUT et nouvel indice).
+- **Fiche relue à chaque ouverture** : nouvelle route **`GET /api/nomenclature/:id`** (famille `nomenclature`, lecture BE,
+  `no-store`) ; `nomFicheFraiche` (repli sur l'instantané au-delà de 6 s), `nomMajInstantane` après enregistrement, jeton
+  d'ouverture (réponses tardives ignorées, verrou relâché ; fournitures tardives aussi).
+- **Nouvel indice** : la révision naît **toujours `en_cours`** (`valide_par` / `date_validation` à null), côté client et imposé
+  par le serveur — elle devenait l'indice validé le plus haut, donc la gamme des nouvelles commandes, sans trace de validation.
+- **Fiche lot / OF imprimé** (`GET /production/lot/:id`) : nomenclature **validée d'indice le plus haut** (avant : la dernière
+  créée, brouillon compris) ; repli marqué « GAMME NON VALIDÉE (statut) » sur l'indice imprimé.
+- **Prix** : seuil unique `PRIX_VALIDITE_JOURS = 183` (6 mois ; l'analyse DT était à 92 j). Le prix d'une ligne matière /
+  accessoire n'est **plus remis à 0 au rendu** : prix périmé ou introuvable au catalogue conservé **en orange** ; retour à 0
+  seulement si l'utilisateur change la référence, le fournisseur ou la désignation d'une ligne sans référence. Prix 0 jamais
+  « frais » ni écrit comme prix officiel.
+- **Demande de prix à tout moment** : bouton sur chaque ligne matière / accessoire (gris à côté d'un prix frais, orange sinon,
+  sablier « vérifier » après envoi), sans fournisseur obligatoire ; attente tenue jusqu'à la **clôture** de la demande
+  (`GET /api/demandes-prix/:id`), puis prix relu par `GET /api/produit-prix` (paramètre `designation` et liste `lignes[]`
+  ajoutés) : une réponse → prix **et** fournisseur repris, plusieurs → choix du fournisseur. BE › Références : bouton sur chaque
+  ligne (orange si prix absent ou > 6 mois).
+- **Catalogue fournisseur** : `syncFournituresToCatalogue` n'écrit plus jamais une ligne existante (insère seulement un couple
+  absent, sans prix, source `be`) ; `POST /api/produits-fournisseurs` = patch partiel sur un couple existant (catégorie et activité
+  jamais réécrites, prix seulement > 0, `existant` / `champs_mis_a_jour` / `champs_ignores`), insertion « si absent » avec reprise
+  de course ; `PUT` = patch partiel (champs non vides), prix inchangé ne rajeunit pas la ligne, 409 doublon, 404 absente.
+- **Validation d'une demande de prix** (`POST /api/demandes-prix/:id/valider`) : 404 si introuvable, chaque erreur lue, sur une
+  ligne existante seuls prix / date / source `rfq` / statut écrits, échec ⇒ **500** `echecs[]` et demande **laissée ouverte**,
+  historique écrit **une fois** par (réf, fournisseur, demande, prix).
+- **GED** (`GET /api/ged/file/:id`) : `Content-Disposition` RFC 6266 (`dispositionFichier` : repli ASCII + `filename*=UTF-8''`).
+  Un nom avec `’ – œ €` donnait **502 « Fichier injoignable »** sous Node (Docker, VM) ; erreurs désormais journalisées
+  (`[GED] ouverture …`) avec message explicite. Migration Docker **016** : bucket privé `ged` + policies `ged_*` (base neuve).
+- **`POST /api/be/analyse-dt/:id/generer-bdt`** (sans appelant client) : compteurs avancés après insertion réussie seulement,
+  bons existants lus strictement (503), premier identifiant libre (23505 à chaque relance corrigé), `echecs[]` en 500, relance
+  idempotente.
+- **Mise en page** des compartiments Matière / Accessoires : défilement horizontal `.nom-grid-scroll`, grilles communes
+  `.nom-mat-grid` / `.nom-acc-grid`, Désignation `minmax(30px,1fr)` → en-tête aligné (0 px d'écart de 1280 à 1920 px), croix
+  cliquable ; prix frais des accessoires en violet.
+
+**Défauts corrigés en route** (relecture adverse : 13 constats, tous réels, tous corrigés — sauf leur partie écran hors
+périmètre, voir « Reste à faire ») — prix de revient d'une mère écrasé à 0 quand la clé `composants` était omise ; validation de
+demande de prix non idempotente (historique doublé à la revalidation) ; « Déclarer » une référence existante la reclassait en
+matière ; `PUT` qui rajeunissait un prix inchangé ; prix reçu sans fournisseur repassé aussitôt en « périmé » ; attente de
+réponse jamais affichée (`nomRfqRepondue`) ; `generer-bdt` en 23505 à chaque relance ; drapeau `nomenclature_non_validee` lu par
+personne ; ouverture de fiche asynchrone qui écrasait un formulaire neuf ; prix 0 accepté comme prix officiel ; migration 015 qui
+réduisait ses erreurs à un NOTICE (et se journalisait) ; doublons d'historique ; course (TOCTOU) du `POST
+/api/produits-fournisseurs` qui écrasait une ligne chiffrée.
+
+**Vérifications** : `npx tsc --noEmit` 0 erreur · `npm run build` OK · harnais toutes pages 60 PASS / 0 FAIL / 1 SKIP
+(`manuels.tsx :: pageManuel`, sans rapport) · e2e Docker local **28/28** puis, après relecture, **33/33** (`scratchpad/lot-h/h0r_e2e.mjs`,
+dont Playwright sur la page BE sans erreur JS ; comptages des tables revenus à ceux de départ) · Playwright : mesures de mise en
+page à 1920 / 1600 / 1366 / 1280 px, parcours d'écriture d'une mère `-TEST-H0-MERE-…` (réouverture, enregistrement à l'identique,
+modification puis réouverture, nouvel indice intercepté, retrait volontaire, 409 sans drapeau) · GED : `côté`, `d’ensemble`, `– rév`,
+`cœur 10€ "q"` ouverts, `application/pdf` conservé, contenu identique octet par octet · 015 : table jetable (JSON invalide →
+exception, verrou → 55P03, données valides → conversion, rejeu → rien) ; 016 rejouée deux fois, exception sans schéma storage ·
+6 paires de déclarations simultanées : prix conservé · sonde **cloud en lecture seule** : `composants` déjà `jsonb` (filtre
+`composants=cs.[]` accepté, refusé en 42883 sur `text` / `numeric`) ⇒ **pas de `cloud-13`** · données `-TEST-H0` et `-TEST-H0R-`
+(5 fichiers GED, documents, catalogue, stock, nomenclatures, demande de prix, historique) supprimées et **relues à 0**, y compris
+`nomenclature_journal` et `edit_locks`.
+
+**Scripts à jouer**
+- **Docker / VM** : `~/erp/docker/scripts/erp-docker.sh maj` applique **015** et **016**. Docker local : déjà fait (journalisées
+  le 17/09/2026 ; 015 dans sa **première** version, la version finale ne change que le traitement des erreurs, colonne bien en
+  `jsonb`, bucket et 5 policies présents). Contrôler avec le **diagnostic GED** sans secret (`12-docker-installation.md`), pas avec
+  l'aperçu affiché par `maj`.
+- **Cloud** : **rien** (colonne déjà `jsonb`, bucket et policies déjà présents). `npm run build` puis déploiement (`erp-deploy`).
+
+**Reste à faire / limites connues**
+- `src/achats.tsx` `rfqValider` affiche toujours « Échec de la validation. » sans `error` ni `echecs` ; `src/prod.tsx`
+  `pageLotDetail` n'affiche pas de bandeau `nomenclature_non_validee` ; `docker/scripts/erp-docker.sh maj` lit les journaux de
+  `migrate` avant la fin du conteneur (aperçu arrêté à 012).
+- Pas de garde 409 sur `nouvel-indice` ni sur l'écrasement d'un brouillon par `POST /api/nomenclature` ; le 409 `composants_vides`
+  s'affiche en message brut (pas de fenêtre « confirmer le retrait »).
+- Règle « champs non vides » : un délai ne se vide plus, une référence ne se détache plus de son fournisseur par une valeur vide.
+- État « en attente » d'une demande de prix = drapeau du navigateur, perdu au rechargement.
+- Mise en page = filet : Désignation 30 à 34 px, défilement dès 1600 px (et à 1920 px pour les accessoires, 50 px) ; « €/pièce »
+  sur deux lignes ; code mort `nomFournSelect` / `nomRefSelect`.
+- `generer-bdt` non testé de bout en bout (aucun appelant client) ; `db/seed/storage_policies.sql` ne crée toujours pas le bucket
+  (016 le fait).
+- Manifestes des générateurs encore à « < 3 mois » : `scripts_doc/gen_module_fiches.mjs` (bloc `auto:notes` de
+  `06-modules/be.md`), `gen_manuel.mjs`, `gen_fiches_poste.mjs` — les documents ont été corrigés à la main, les régénérer tel quel
+  réintroduirait l'ancien seuil.
+- **Captures à refaire** (`erp-screenshots`) : `form-be-nomenclature.png` (cases prix, boutons de demande de prix, défilement),
+  `be-refs.png` (bouton « Demande de prix » sur chaque ligne). **`dist/`** à reconstruire au commit commun : les manuels HTML
+  modifiés sont embarqués par le `prebuild` (`src/manuels_contenu.ts`).
+
+- Fichiers : `src/shared.ts`, `src/queries.ts`, `src/index.tsx`, `src/be.tsx`, `docker/db/migrations/015-nomenclature-composants-jsonb.sql`,
+  `docker/db/migrations/016-ged-bucket-policies.sql`, `docker/db/migrations/README.md`, `docker/db/cloud/README.md`,
+  `docker/db/seed/schema.sql` · Migration DB : oui (Docker 015 / 016, aucun script cloud)
+- Doc mise à jour : `technique/06-modules/be.md`, `technique/07-api-reference.md` (régénérée + contrats « Lot H0 »),
+  `technique/03-base-de-donnees.md`, `technique/12-docker-installation.md`, `technique/02-exploitation-runbook.md`,
+  `technique/05-conventions-code.md`, `manuel/be.md`, `manuel/formulaires/be.md`, `manuel/parcours/02-be.md`, `manuel/html/be.html`,
+  `manuel/html/achats.html`, `fiches-poste/bei.md` · Captures à refaire : oui
+
 ## 2026-09-16 — Lot G : cadence usine par site, planning en heures ouvrées, chevauchement du même process, remise en goulotte, process OAS
 
 *« Horaires : modèles d'horaires de l'usine par cadence (Bas / Moyen / Haut), à adapter selon la cadence choisie. Cadence

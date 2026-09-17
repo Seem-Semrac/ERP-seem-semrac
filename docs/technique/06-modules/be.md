@@ -30,6 +30,10 @@ Nomenclatures (BOM), analyse des DT, préparation technique, références.
 Masse en g ; temps en millièmes d'heure ; réglage = coût FIXE/lot ; prix matière auto <3 mois sinon RFQ ; indices A/B/C ; drag-drop des process. Supprimer une nomenclature VALIDÉE exige un MOTIF (sinon 400 motif_requis), inscrit au journal EN 9100 avec l’auteur et la date ; sans le journal en base, la suppression d’une fiche suivie est refusée (409) plutôt que tracée nulle part.
 <!-- /auto -->
 
+> ⚠ **Seuil des prix (lot H0, 17/09/2026)** : un prix catalogue est « frais » pendant **6 mois** (`PRIX_VALIDITE_JOURS = 183`,
+> `src/shared.ts`), partout (formulaire nomenclature, BE › Références, `GET /api/be/analyse-dt/:id`). La mention « <3 mois » du
+> bloc ci-dessus vient du manifeste `scripts_doc/gen_module_fiches.mjs`, pas encore corrigé. Détail : section « Lot H0 » plus bas.
+
 Le formulaire nomenclature est en **deux colonnes** : saisie des champs à gauche (`minmax(340px, 0.78fr)`), déclaration des process et gamme à droite (`minmax(0, 1.22fr)`) — la gamme porte 10 colonnes depuis l'ajout de ROP/RGM et a besoin de la place.
 
 **Deux temps de réglage** depuis le 09/09/2026 — la gamme distingue **ROP** (réglage opérateur) et **RGM** (réglage machine). Les deux restent des **coûts fixes par lot**, jamais multipliés par la quantité. ⚠ **Depuis le 14/09/2026**, ROP compte en **homme** et RGM en **homme + machine** (avant : RGM au taux machine seul) — voir la section « Coût d'une étape » ci-dessous.
@@ -217,5 +221,122 @@ vingtaine de défauts secondaires ; la seconde a vérifié les correctifs et tro
 (dont le lanceur de migrations de la VM, un faux « réordonnancement », les références client
 modifiées par une DT sans trace, une restauration qui aurait réécrit toutes les heures du journal).
 Tous corrigés.
+
+## Lot H0 (17/09/2026) — correctifs sans arbitrage métier
+
+Correctifs seulement : **aucun** des sujets en attente de réponse de l'utilisateur n'est traité (ligne de nomenclature sans
+fournisseur, prix moyen, retrait de `qte_paquet`, unification du catalogue, ordre et imbrication des mères, propagation d'un
+indice aux commandes en cours). Contrats des routes : `07-api-reference.md`, section « Lot H0 ».
+
+### Mères : les composants ne disparaissent plus
+**Cause** : `nomenclatures.composants` était `text` dans la base Docker / VM (née de `schema.sql`, miroir d'une colonne vide) —
+le cloud, lui, est déjà en `jsonb`. PostgREST rendait une **chaîne JSON** ; le formulaire n'acceptait qu'un tableau : à la
+réouverture la mère semblait vide (total 0,00 €) et l'enregistrement suivant écrasait la base avec `[]`.
+
+| Niveau | Correctif |
+|---|---|
+| Base | migration Docker **015** : `composants` → `jsonb` (vide / NULL → `[]`, JSON valide converti tel quel, rien d'effacé ; lève une exception et se retente si la conversion est impossible). `schema.sql` en `jsonb`. **Aucun script cloud** (sonde en lecture du 17/09/2026). |
+| Lecture | `composantsDe(fiche \| valeur)` (`src/shared.ts`) rend **toujours un tableau** ; utilisé par la liste (compteur « Composants »), les routes nomenclature et, côté navigateur, `nomComposantsDe` (ouverture du formulaire). |
+| Serveur | `PUT /api/nomenclature/:id` refuse en **409 `composants_vides`** le passage d'une liste non vide en base à une liste vide sans `vider_composants: true`. Une mère qui **omet** la clé `composants` garde ses composants **et son coût** (les trois champs de prix du corps sont ignorés, au PUT comme au nouvel indice). |
+| Client | `nomComposantsPourEnvoi` (appelée par `nomCollectPayload`) : au moins un composant → la liste ; mère existante vidée **par l'utilisateur** (`nomComposantsModifies`, posé par `nomRemoveComposant` / `nomComposantPick`) → `[]` + `vider_composants: true` ; fiche jamais enregistrée ou fiche qui n'était pas une mère à l'ouverture (`nomTypeCharge`) → `[]` ; fiche existante à liste vide **sans action** → clé `composants` **omise** (et les prix de revient avec) ; mère repassée en standard → `null` + `vider_composants: true`. |
+
+⚠ Le message du 409 s'affiche tel quel (pas de fenêtre dédiée « confirmer le retrait »).
+
+### Fiche relue à chaque ouverture
+Le formulaire s'ouvrait sur l'instantané sérialisé au rendu de la page (`NOM_BY_ID`), jamais mis à jour après un enregistrement :
+rouvrir puis réenregistrer écrasait la saisie récente.
+- **`GET /api/nomenclature/:id`** (nouvelle, famille `nomenclature`, lecture BE, `no-store`) → `{ok, nomenclature}`.
+- `nomFicheFraiche` : relit la fiche **une fois le verrou pris** ; route en échec ou plus de 6 s → repli sur `NOM_BY_ID[id]`, puis
+  sur l'objet de la liste. `nomMajInstantane` (dans `nomSave`) met `NOM_BY_ID` à jour avec ce qui vient d'être écrit.
+- **Jeton d'ouverture** (`nomOuvertureJeton`, pris par `nomOpenForm`, `nomNewForm`, `nomCloseForm`) : une réponse arrivée après
+  l'ouverture d'une autre fiche (ou d'un formulaire neuf) est ignorée et le verrou de la fiche abandonnée est relâché. Même
+  protection pour `nomLoadFournitures` (des fournitures en retard remplaçaient la saisie du nouveau formulaire).
+
+### Nouvel indice : la révision naît « en cours »
+Depuis le formulaire d'une fiche validée, « Incrémenter l'indice » envoyait `statut: 'valide'` et le serveur recopiait
+`valide_par` / `date_validation` : la révision non relue devenait l'**indice validé le plus haut**, donc la gamme des nouvelles
+commandes, sans événement `validation` au journal EN 9100. Désormais le client (`nomCreerNouvelIndice`) envoie `en_cours` sans
+drapeau, et le **serveur impose** `statut: 'en_cours'`, `valide_par` et `date_validation` à `null` quel que soit le corps. Journal
+inchangé (`nouvel_indice` + `creation`). La révision se valide ensuite normalement.
+
+**Fiche lot / OF imprimé** (`GET /production/lot/:id`) : prend la **nomenclature validée d'indice le plus haut** (avant : la
+dernière fiche créée, brouillon compris). Sans fiche validée : repli sur l'ancien choix, indice imprimé suffixé **« — GAMME NON
+VALIDÉE (statut) »** et drapeau `nomenclature_non_validee` (pas encore de bandeau à l'écran, `src/prod.tsx`).
+
+### Prix : jamais remis à 0 au rendu
+**Avant** : `nomMatiereApplyPrix` / `nomAccApplyPrixStatus` remettaient le prix d'une ligne à 0 à **chaque rendu** dès que le
+prix catalogue n'était pas frais (ou que le fournisseur n'était pas retrouvé), puis l'enregistrement écrivait 0 (« X → 0 » au
+journal EN 9100). **Maintenant** :
+
+| Situation de la ligne | Prix affiché | Statut / couleur |
+|---|---|---|
+| prix catalogue **frais** (> 0 et < 6 mois, `nomPrixFrais`) | prix catalogue (remplace la valeur de la ligne) | frais — bleu ciel (matière) / violet (accessoire, auparavant bleu) |
+| prix catalogue périmé, fournisseur non retrouvé ou référence absente du catalogue, **valeur déjà sur la ligne** | valeur de la ligne **conservée** | « périmé » — orange |
+| aucun prix | — | « absent » — bouton orange |
+
+- Un prix **périmé** du catalogue ne remplit jamais une ligne vide (règle du « prix estimé » en attente d'arbitrage).
+- Le prix ne repasse à 0 que si **l'utilisateur** change la référence, le fournisseur, ou la désignation d'une ligne sans
+  référence. `nomAccApplyProd` ne reprend qu'un prix frais.
+- Un prix **0** n'est jamais « frais » (client) ni écrit comme prix officiel (validation d'une demande de prix : échec explicite).
+- Seuil unique `PRIX_VALIDITE_JOURS` (183 j) injecté dans la page (`NOM_PRIX_VALIDITE_JOURS`, libellé « 6 mois ») ; plus de 92 j
+  dans l'analyse DT ni de « 3 mois » dans `be.tsx`.
+
+### Demande de prix possible à tout moment
+- **Nomenclature** (`nomPrixCellHtml`, compartiments Matière et Accessoires) : prix frais → prix + petit bouton gris
+  « redemander un prix » ; prix périmé → prix orange + bouton orange ; pas de prix → bouton orange « demande de prix » ;
+  demande envoyée → sablier « vérifier » (prix actuel conservé à côté s'il existe).
+- **Sans fournisseur** : `nomMatiereRFQ` accepte une ligne qui n'a qu'une référence ou une désignation.
+- **Suivi de la réponse** (`nomRfqVerifier` / `nomRfqAppliquer`) : l'identifiant de la demande (`_rfqId`) est gardé sur la ligne ;
+  elle reste « en attente » tant que la demande n'est pas **clôturée** (`GET /api/demandes-prix/:id`), puis le prix est relu par
+  `GET /api/produit-prix` (fournisseur de la ligne, sinon **toutes** les lignes chiffrées de la référence ou de la désignation,
+  `lignes[]`) et le catalogue local `NOM_PRODUITS` est mis à jour. Une seule réponse fraîche → prix **et fournisseur** repris ;
+  plusieurs → message « N fournisseurs ont un prix récent… choisissez le fournisseur » ; clôturée sans prix récent → prix actuel
+  conservé. La règle de date (prix daté du jour de la demande ou après, `nomRfqRepondue`) ne sert plus que de repli. ⚠ L'état
+  « en attente » est un drapeau du navigateur, perdu au rechargement de la page.
+- **BE › Références** : bouton « Demande de prix » sur **chaque** ligne — orange si le prix manque ou a plus de 6 mois, gris sinon.
+
+### Catalogue fournisseur : plus d'écrasement
+- **`syncFournituresToCatalogue`** (enregistrement d'une nomenclature) : n'écrit **plus jamais** une ligne existante ; insère
+  seulement un couple fournisseur + référence absent, **sans prix** (`en_attente_prix`, source `be`). Avant, chaque enregistrement
+  pouvait réécrire désignation, catégorie, activité et effacer le prix d'une référence du catalogue.
+- **`POST /api/produits-fournisseurs`** (« Déclarer », modale « Entrée catalogue ») : sur un couple existant, mise à jour des seuls
+  champs fournis et non vides, prix seulement s'il est > 0, **catégorie et activité jamais réécrites** (sauf vides en base) ;
+  insertion « si absent » sinon (course avec une validation de demande de prix rattrapée).
+- **`PUT /api/produits-fournisseurs/:id`** (« Éditer ») : même règle, y compris `fournisseur_id`, `unite`, `delai_jours` ; prix
+  **inchangé** = date et source conservées. ⚠ Effet assumé : un délai ne se vide plus et une référence ne se détache plus de son
+  fournisseur en envoyant une valeur vide.
+- **`POST /api/demandes-prix/:id/valider`** : chaque erreur est lue ; sur une ligne existante, seuls prix, date, source `rfq` et
+  statut sont écrits ; un échec laisse la demande **ouverte** (500 + `echecs`) ; un point d'historique au plus par (référence,
+  fournisseur, demande, prix). ⚠ L'écran Achats (`rfqValider`, `src/achats.tsx`) affiche encore « Échec de la validation. » sans
+  le détail.
+
+### Mise en page des compartiments Matière / Accessoires
+- En-tête et lignes de chaque compartiment dans un conteneur **`.nom-grid-scroll`** à défilement horizontal ; grille commune
+  `.nom-mat-grid` / `.nom-acc-grid` (remplace la classe morte `.nom-f-row`) ; colonne Désignation `minmax(30px,1fr)` (avec `1fr`
+  seul, en-tête et ligne n'avaient pas la même largeur). Mesuré (Playwright) : écart en-tête / case **0 px** à 1920, 1600, 1366 et
+  1280 px ; croix de suppression toujours dans la carte et cliquable.
+- **Limite (filet seulement)** : la désignation ne fait que 30 à 34 px ; il faut défiler dès 1600 px, et à 1920 px pour les
+  accessoires (50 px). Le vrai gabarit est pour le lot suivant ; « €/pièce » passe encore sur deux lignes ; code mort
+  `nomFournSelect` / `nomRefSelect` non retiré.
+
+### GED : ouverture d'un document au nom accentué
+`GET /api/ged/file/:id` envoie `Content-Disposition` en double forme (repli ASCII + `filename*=UTF-8''…`, `dispositionFichier`).
+Avant, sous Node (Docker, VM), un seul caractère au-delà de U+00FF dans le nom (`’ – œ €`) donnait **502 « Fichier injoignable »**
+alors que le fichier était intact ; le lien « Ouvrir le plan » en héritait. Chaque erreur est désormais journalisée
+(`[GED] ouverture <id> : …`) avec un message explicite. Base neuve sans bucket ni policies : migration Docker **016**. Dépannage :
+`12-docker-installation.md`, section GED.
+
+### Génération des BDT depuis l'analyse DT
+`POST /api/be/analyse-dt/:id/generer-bdt` (sans appelant client aujourd'hui) : compteurs avancés seulement après une insertion
+réussie, identifiant libre suivant en cas de conflit, bons existants lus strictement (503 sinon), échecs rendus en 500 avec
+`echecs[{bon, piece, seq, erreur}]` ; une relance ne recrée que les bons manquants.
+
+### Vérifications
+`npx tsc --noEmit` 0 erreur · harnais toutes pages 60 PASS / 0 FAIL / 1 SKIP (`manuels.tsx :: pageManuel`, sans rapport) · e2e
+Docker local 28/28 (`scratchpad/lot-h/h0_e2e.mjs`) puis, après la relecture adverse (13 constats, tous réels, tous corrigés côté
+serveur et BE), 33/33 (`h0r_e2e.mjs`, dont un parcours Playwright de la page BE sans erreur JS) · Playwright mesures de mise en
+page (4 largeurs) et parcours d'écriture d'une mère `-TEST-H0-MERE-…` (réouverture, enregistrement sans modification, retrait
+volontaire, 409 sans drapeau) · migration 015 éprouvée sur table jetable (JSON invalide → exception, verrou tenu → exception
+55P03, données valides → conversion, rejeu → rien) · données `-TEST-H0` / `-TEST-H0R-` supprimées et **relues à 0**.
 ---
 > Fiche générée. Manuel utilisateur correspondant : `docs/manuel/be.md`. Voir aussi `04-auth-rbac.md`, `07-api-reference.md`.

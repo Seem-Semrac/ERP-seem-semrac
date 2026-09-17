@@ -96,6 +96,9 @@ case "$cmd" in
     # Migrations de SCHEMA : le conteneur `migrate` a tourne pendant le up ci-dessus.
     # Les DONNEES ne sont jamais touchees (toute instruction destructrice est refusee).
     echo "Schema de la base :"
+    # Le conteneur `migrate` peut encore tourner a la sortie du up : attendre sa fin (2 min max)
+    # avant de lire ses logs, sinon l'apercu s'arrete au milieu des migrations.
+    for _i in $(seq 1 60); do [ "$(docker inspect -f '{{.State.Status}}' erp-migrate 2>/dev/null || true)" = "running" ] || break; sleep 2; done
     compose logs migrate --no-log-prefix 2>/dev/null | tail -30 || echo "  (aucune sortie)"
     echo
     compose ps -a --format 'table {{.Name}}\t{{.Status}}'

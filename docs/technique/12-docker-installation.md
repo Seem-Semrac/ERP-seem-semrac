@@ -37,6 +37,12 @@ docker logs erp-migrate
 docker exec erp-db psql -U postgres -d postgres -c "table _erp_migrations"
 ```
 
+> ⚠ **Constaté le 17/09/2026** : l'aperçu affiché par `erp-docker.sh maj` (30 dernières lignes de `migrate`) peut être lu
+> **avant** la fin du conteneur — l'affichage s'est arrêté à 012 alors que 015 et 016 ont été traitées. Ne pas conclure d'après
+> cet aperçu : relire `docker logs erp-migrate` une fois le conteneur arrêté, et `_erp_migrations`. Une migration qui lève une
+> exception (ex. **015** si la table est verrouillée, **016** si le stockage n'est pas prêt) n'est pas journalisée et se
+> **retente** au démarrage suivant.
+
 ### Voir ce qu'une migration changerait, AVANT de l'appliquer
 
 `docker/db/apercu-renumerotation.sql` est un aperçu **en lecture seule** (que des `SELECT`) de l'effet des migrations 002 et 003 : pour chaque bon de commande, bon de livraison et facture proforma, il affiche le numéro actuel, le numéro d'après, et un verdict `INCHANGE` / `RENUMEROTE` / `SAISIE MANUELLE - JAMAIS TOUCHEE`. Une dernière section compte les lignes des tables concernées — ces comptages doivent être **identiques** avant et après.
@@ -277,7 +283,9 @@ Honnêtement, selon la cible :
 | `erp-app` redémarre en boucle | `logs app` : souvent une modif TS invalide (`tsx` la signalera). |
 | Ports 3000 / 8000 / 54322 déjà pris | Changer `APP_PORT` / `KONG_HTTP_PORT` dans `.env`, ou libérer le port. |
 | Pages vides / erreurs « relation does not exist » | Base non peuplée → faire l'étape **§4**. |
-| GED : upload en erreur | Bucket manquant → `erp-docker.ps1 ged-bucket`. |
+| GED : upload en erreur (« Stockage : Bucket not found » ou « …row-level security policy ») | Bucket ou policies `ged_*` manquants (base neuve). Depuis le 17/09/2026 la migration **016** les crée au démarrage : `erp-docker.sh maj`, puis vérifier (section « GED et maquette bâtiment », diagnostic). Repli manuel : `erp-docker.ps1 ged-bucket`. |
+| GED : le document est dans la liste mais ne s'ouvre pas (onglet blanc « 502 Fichier injoignable ») | Avant le correctif du 17/09/2026 : **nom de fichier** avec un caractère au-delà de Latin-1 (`’ – œ €`). Mettre à jour le code (`erp-docker.sh maj`) ; le fichier et sa ligne `documents` sont intacts, rien à reprendre. Voir « Cause 3 » plus bas. |
+| GED : « Lien de stockage indisponible… » (500), « Stockage injoignable » / « Fichier indisponible dans le stockage (…) » (502) | Détail dans `docker logs erp-app` (lignes `[GED] ouverture <id> : …`) ; diagnostic de la section GED. |
 | Studio (`:8000`) inaccessible | Non bloquant (confort). L'app fonctionne sans. Vérifier `logs studio`. |
 
 ---
@@ -358,6 +366,57 @@ MSYS_NO_PATHCONV=1 docker exec erp-db psql -U postgres -d postgres -f /tmp/sp.sq
 `/api/ged/file/:id` **redirigeait** vers l'URL signée, construite sur `SUPABASE_URL` — qui vaut `http://kong:8000` dans le conteneur. Ce nom n'est résolu **qu'à l'intérieur du réseau Docker** : le navigateur recevait une redirection vers un hôte inexistant. Aucun plan, aucun document, aucun fond de maquette ne pouvait s'afficher.
 
 → La route **sert désormais le fichier elle-même** (récupération côté serveur puis renvoi du flux) au lieu de rediriger. Cela fonctionne dans **tous** les environnements (Docker, Cloudflare, VM) et garde le fichier **derrière l'authentification de l'ERP** — auparavant l'URL signée était utilisable hors session. En-têtes posés : `Content-Type` (depuis `documents.mime`), `Content-Disposition: inline` (images et PDF s'ouvrent dans l'onglet), `Cache-Control: private, max-age=300`.
+
+### Cause 3 — nom de fichier au-delà de Latin-1 (corrigée le 17/09/2026, lot H0)
+
+**Symptôme** : le dépôt réussit, le document apparaît dans la liste (et le lien « Ouvrir le plan » sous le champ CAO), mais son
+ouverture donne un onglet blanc **« 502 Fichier injoignable »** — en localhost comme depuis un autre poste. Les noms ASCII ou
+simplement accentués (`é`, `ô`) s'ouvrent normalement.
+
+**Cause** : la route mettait le nom brut dans `Content-Disposition`. Sous **Node** (conteneur `erp-app`, donc Docker et la VM),
+l'API `Headers` exige des caractères Latin-1 : un seul caractère au-delà de U+00FF — apostrophe typographique `’`, tiret `–`,
+`œ`, `€`, très fréquents dans un nom créé sous Word ou Windows — levait une TypeError, avalée sans trace par le `catch`. (Sous
+workerd / Cloudflare l'en-tête était accepté : pas de 502 en ligne.) Rien à voir avec l'accès distant ni avec `SUPABASE_PUBLIC_URL`.
+
+→ `dispositionFichier()` (`src/index.tsx`) envoie `inline; filename="<repli ASCII>"; filename*=UTF-8''<nom exact encodé>` ;
+le navigateur affiche le nom exact. Chaque erreur est journalisée (`[GED] ouverture <id> : …`) avec un message explicite
+(404 / 500 / 502, contrat dans `07-api-reference.md`). **Aucune reprise de données** : `documents.fichier_nom` garde le nom exact.
+
+### Cause 4 — base neuve : ni bucket `ged` ni policies (migration 016, 17/09/2026)
+
+Sur une base **neuve**, le schéma `storage` est encore vide quand les scripts d'initialisation s'exécutent (ses tables sont
+créées plus tard par `storage-api`) : `storage_policies.sql` sortait sans rien faire et `install.sh` ne créait pas le bucket.
+Symptôme différent de la cause 3 : c'est le **dépôt** qui échoue (« Stockage : Bucket not found » ou « new row violates
+row-level security policy »), aucun document n'apparaît.
+
+→ Migration **`016-ged-bucket-policies.sql`** : crée le bucket **privé** `ged` s'il manque (un bucket existant n'est pas
+modifié) et remplace les 5 policies `ged_*` (contenu de `storage_policies.sql`). Si `storage.buckets` / `storage.objects`
+n'existent pas encore, elle **lève une exception** : non journalisée, elle est **retentée au démarrage suivant** (pas de
+`depends_on: storage`, volontairement). `erp-docker.sh ged-bucket` reste disponible en repli manuel.
+
+### Diagnostic GED — sans secret, lecture seule
+
+À lancer sur la VM (ou le poste) depuis `~/erp/docker` ; aucune commande n'affiche de mot de passe ni de clé
+(`psql -U postgres` dans le conteneur, sans mot de passe). Sous Git Bash, préfixer par `MSYS_NO_PATHCONV=1`.
+
+```bash
+# 1. Migrations 015 / 016 journalisées ?
+docker exec erp-db psql -U postgres -d postgres -c "select fichier, applique_le from _erp_migrations where fichier in ('015-nomenclature-composants-jsonb.sql', '016-ged-bucket-policies.sql')"
+# 2. Bucket privé ged présent ? (attendu : ged | f)
+docker exec erp-db psql -U postgres -d postgres -c "select id, public from storage.buckets where id = 'ged'"
+# 3. Policies ged_* (attendu : 5 lignes — buckets SELECT, objects SELECT / INSERT / UPDATE / DELETE)
+docker exec erp-db psql -U postgres -d postgres -c "select tablename, policyname, cmd from pg_policies where schemaname = 'storage' and policyname like 'ged%' order by 1, 2"
+# 4. Documents actifs dont le nom dépasse Latin-1 (concernés par la cause 3 avant correctif) — compte seulement
+docker exec erp-db psql -U postgres -d postgres -c "select count(*) as noms_hors_latin1 from documents d where d.actif is not false and exists (select 1 from regexp_split_to_table(d.fichier_nom, '') ch where ascii(ch) > 255)"
+# 5. Erreurs d'ouverture journalisées par l'application (depuis le correctif)
+docker logs erp-app 2>&1 | grep "\[GED\]" | tail -20
+```
+
+Lecture : 1 vide → `erp-docker.sh maj` puis `docker logs erp-migrate` (une exception 016 « storage.buckets / storage.objects
+absents » = storage-api pas encore prêt, se résout au démarrage suivant) ; 2 ou 3 vides → même chose ; 4 > 0 et code antérieur
+au 17/09/2026 → mettre à jour le code ; 5 → le message dit l'étape en échec (lien signé, stockage injoignable, statut du
+stockage, construction de la réponse). ⚠ Ne pas diffuser la sortie d'une requête qui listerait les **noms** des documents
+(potentiellement confidentiels) : la requête 4 ne rend qu'un compte.
 
 ### Les fichiers du stockage ne sont PAS copiés par le miroir de base
 

@@ -52,3 +52,10 @@ aucune table. Un objet créé par une migration appartient donc à `supabase_adm
 Contrôle des mots-clés (fait avant toute application, sur le texte sans commentaires, en minuscules) :
 une seule exception au mot-clé de vidage, la clause `before truncate on` d'un déclencheur (qui
 l'**interdit**) ; toute concaténation de chaînes littérales (`'…' || '…'`) est refusée.
+
+## Migrations propres au Docker / à la VM (sans équivalent cloud)
+
+| Fichier | Pourquoi Docker seul |
+|---|---|
+| `015-nomenclature-composants-jsonb.sql` | `nomenclatures.composants` était `text` dans `schema.sql` (miroir d'une colonne vide) ; le cloud est déjà en `jsonb`. Conversion vide/NULL → `[]`, JSON valide → cast ; rien n'est jamais effacé. **Lève une exception** (relecture H0) si la conversion ne peut pas se faire — verrou occupé plus de 5 s (55P03), droits (42501), dépendance, ou valeur non JSON (requête de diagnostic dans le message) : transaction annulée, fichier **non journalisé**, **retenté au démarrage suivant** (même modèle que 016). Avant, l'erreur n'était qu'un NOTICE et 015 était journalisé : la colonne pouvait rester en `text` pour de bon. |
+| `016-ged-bucket-policies.sql` | Docker seul, le cloud a déjà le bucket `ged` et ses policies. Crée le bucket privé `ged` (s'il manque) et les policies `ged_*` (contenu de `db/seed/storage_policies.sql`). **Lève une exception** si `storage.buckets` / `storage.objects` n'existent pas encore (storage-api pas encore passé sur une base neuve) : le fichier n'est pas journalisé et le lanceur le **retente au démarrage suivant**. Volontairement **sans** `depends_on: storage` dans `docker-compose.yml` (un `erp-storage` « unhealthy » bloquerait toutes les migrations). |

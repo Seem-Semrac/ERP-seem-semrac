@@ -1525,7 +1525,7 @@ CREATE TABLE public.nomenclatures (
     type_nom text,
     parent_id text,
     qte_par_mere text,
-    composants text,
+    composants jsonb,
     indice text,
     version_groupe text,
     entite text,

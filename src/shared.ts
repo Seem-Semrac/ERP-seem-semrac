@@ -42,6 +42,27 @@ export const badgeAnnule = (neutre = false): string =>
 
 export const escX = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 
+// ─── PRIX FOURNISSEUR : durée de validité (lot H0, 17/09/2026) ────────────────
+// Un prix catalogue (produits_fournisseurs.date_prix) est réputé frais pendant
+// 6 mois (183 jours). Au-delà, l'analyse DT et la nomenclature demandent une RFQ.
+// Constante UNIQUE : ne plus écrire 92 / 90 / 180 en dur ailleurs.
+export const PRIX_VALIDITE_JOURS = 183
+
+// ─── NOMENCLATURE MÈRE : lecture tolérante de `composants` (lot H0) ───────────
+// La colonne est jsonb dans le cloud mais a été TEXT dans le schéma Docker
+// (migration 015) : selon la base, supabase-js rend un tableau OU une chaîne JSON.
+// Toute lecture de `composants` passe par ici — renvoie TOUJOURS un tableau.
+export function composantsDe(n: any): any[] {
+  const v = (n && typeof n === 'object' && !Array.isArray(n) && 'composants' in n) ? n.composants : n
+  if (Array.isArray(v)) return v
+  if (typeof v === 'string') {
+    const s = v.trim()
+    if (!s) return []
+    try { const p = JSON.parse(s); return Array.isArray(p) ? p : [] } catch { return [] }
+  }
+  return []
+}
+
 // ─── VALIDATION DIRECTION : rebouclage vers l'enregistrement d'origine ────────
 // La décision Direction vit dans la table `validations` (statut valide/refuse/en_attente,
 // + decided_by/decided_at/commentaire, + ref_table/ref_id vers l'objet source).

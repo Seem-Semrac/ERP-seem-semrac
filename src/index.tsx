@@ -23,7 +23,7 @@ import {
   pageFournisseursST,
   pageReferencesPiecesACreer
 } from './listes'
-import { layout, pageHeader, afterBox, SIDEBAR_V2, APP_VERSION, computeNomCostForQty, etapeDecomp, etapeLibreVersEtape, construireTauxAtelier, typeProcess, seemMark, STATUT_ANNULE, estAnnule, etapeTempsMin, dureeBdtDepuisTemps, reglageBdtHeures, racineBdt, rangMorceauBdt, lireHeuresSaisie, reglageBdtDepuisGamme, planDecoupeBdt, blocagesRecollage, cibleRecollage, ajusterRecollagePartiel } from './shared'
+import { layout, pageHeader, afterBox, SIDEBAR_V2, APP_VERSION, computeNomCostForQty, etapeDecomp, etapeLibreVersEtape, construireTauxAtelier, typeProcess, seemMark, STATUT_ANNULE, estAnnule, etapeTempsMin, dureeBdtDepuisTemps, reglageBdtHeures, racineBdt, rangMorceauBdt, lireHeuresSaisie, reglageBdtDepuisGamme, planDecoupeBdt, blocagesRecollage, cibleRecollage, ajusterRecollagePartiel, PRIX_VALIDITE_JOURS, composantsDe } from './shared'
 import { brandBlockHTML, BRAND, BRAND_PRINT_CSS, SOCIETE } from './brand'
 import { buildXlsx } from './xlsx'
 import { computeRisqueChimique, computeExpositionSante, computeExpositionIncendie, computeExpositionEnv, normQuantiteChimique, SEIRICH_NIVEAUX, EXPO_PROCEDE_LBL, EXPO_FREQ_LBL, EXPO_PROT_LBL, EXPO_VOLAT_LBL, codeDechetDangereux, computeBilanGES, ISO14001_DIAGNOSTIC, ISO26000_QUESTIONS, computeEcmePV, ecmeTypeLabel as _ecmeTypeLabel, ecmeStatutLive as _ecmeStatutLive } from './qref'
@@ -144,6 +144,7 @@ import { pageServiceDirection, computeDataHealth } from './direction_service'
 import { pageRapport8D } from './rapport8d'
 // Présences opérateur (lot C · C1, 14/09/2026) : lectures strictes + règles pures
 import { getPresencesFenetre, deletePresence, getSalarieCible, getCongeCible, majCongeSiStatut, getSalarieCompletCible, lireBDTOperateurPeriode } from './queries'
+import { getProduitFournisseurCouple, insertProduitFournisseurSiAbsent, getProduitFournisseurParId, getRefPrixHistoriqueRfq, getClesBonsStrictes, getCleBonParId } from './queries'
 import { validerCorpsPresence, validerFenetre, fenetreChargementPresences, messageEchecUpsert, CRENEAUX, libelleCreneau } from './presences'
 import { validerModelesNiveau, planModeles, validerChangementCadence, decisionChangementCadence, controlePresenceCadence, calendrierCadence, segmentsDuJour, plageOuverteCalendrier, estDateIso as estDateIsoCadence, isoPlusJours as isoPlusJoursCadence, niveauDuSite, ligneCadenceDuSite, jourEffetCadence, changementsPrevusCadence, NIVEAU_DEFAUT, MSG_CLOUD12, MSG_CADENCE_RESERVE } from './cadence'
 import { lireDonneesCadence, insererCadenceSite, insererModeleHoraire, majModeleHoraireSi } from './cadence_db'
@@ -4258,11 +4259,18 @@ app.get('/be/service', async (c) => {
 // — Prix courant d'une référence chez un fournisseur (rafraîchissement live nomenclature) —
 app.get('/api/produit-prix', async (c) => {
   const fid = c.req.query('fournisseur') || ''
-  const ref = c.req.query('reference') || ''
-  if (!ref) return c.json({ ok: false, error: 'reference requise' }, 400)
+  const ref = String(c.req.query('reference') || '').trim()
+  // Relecture lot H0 : une ligne de nomenclature peut n'avoir qu'une désignation (demande de prix sans réf).
+  const des = String(c.req.query('designation') || '').trim()
+  if (!ref && !des) return c.json({ ok: false, error: 'reference ou designation requise' }, 400)
   const list = fid ? await getProduitsFournisseur(fid).catch(() => [] as any[]) : await getProduitsFournisseursAll().catch(() => [] as any[])
-  const p = (list as any[]).find((x: any) => String(x.reference) === String(ref) && (!fid || String(x.fournisseur_id) === String(fid)))
-  return c.json({ ok: true, prix: p ? p.prix : null, date_prix: p ? p.date_prix : null, designation: p ? p.designation : null })
+  const candidats = (list as any[]).filter((x: any) => (ref ? String(x.reference) === ref : String(x.designation || '').trim() === des) && (!fid || String(x.fournisseur_id) === String(fid)))
+  // Sans fournisseur, TOUTES les lignes chiffrées sont rendues (le client choisit : une seule réponse → il adopte
+  // son fournisseur, plusieurs → il demande de choisir). En tête : la plus récemment chiffrée (compatibilité).
+  const chiffres = candidats.filter((x: any) => Number(x.prix) > 0).sort((a: any, b: any) => String(b.date_prix || '').localeCompare(String(a.date_prix || '')))
+  const p = chiffres[0] || candidats[0] || null
+  const lignes = chiffres.map((x: any) => ({ fournisseur_id: x.fournisseur_id, fournisseur_nom: x.fournisseur_nom, reference: x.reference, designation: x.designation, prix: x.prix, date_prix: x.date_prix, categorie: x.categorie, conditionnement: x.conditionnement }))
+  return c.json({ ok: true, prix: p ? p.prix : null, date_prix: p ? p.date_prix : null, designation: p ? p.designation : null, reference: p ? p.reference : null, fournisseur_id: p ? p.fournisseur_id : null, fournisseur_nom: p ? p.fournisseur_nom : null, lignes })
 })
 
 // ─── Historique du prix unitaire d'une référence (pour la courbe d'évolution) ──
@@ -4289,17 +4297,58 @@ app.post('/api/produits-fournisseurs', async (c) => {
     const f = (fs as any[]).find((x: any) => String(x.id) === String(b.fournisseur_id))
     fournisseurNom = f ? f.nom : null
   }
-  const prix = (b.prix != null && b.prix !== '') ? Number(b.prix) : null
-  const { data, error } = await upsertProduitFournisseur({
+  const prixLu = (b.prix != null && b.prix !== '') ? Number(b.prix) : null
+  if (prixLu != null && !isFinite(prixLu)) return c.json({ ok: false, error: 'Prix illisible : « ' + String(b.prix) + ' »' }, 400)
+  const delaiLu = (b.delai_jours != null && b.delai_jours !== '') ? Number(b.delai_jours) : null
+  // Couple fournisseur + réf DÉJÀ au catalogue (lot H0, 17/09/2026) : l'upsert complet effaçait
+  // prix, date, source et activité dès que le formulaire les laissait vides (« Déclarer » une réf
+  // existante, modale « Entrée catalogue » du BE). On ne met plus à jour QUE les champs fournis et
+  // non vides ; le prix seulement s'il est > 0.
+  // Relecture H0 : catégorie et activité ne sont JAMAIS réécrites sur une ligne existante (sauf vides en
+  // base) — les formulaires envoient toujours une valeur par défaut (« matiere_premiere », « both ») :
+  // re-déclarer un accessoire pour lui donner un prix le reclassait en matière, hors des listes de la
+  // nomenclature. Les changer = « Éditer » la référence (PUT).
+  const nonVidePf = (v: any) => v != null && String(v).trim() !== ''
+  const majExistant = async (exData: any) => {
+    const patch: Record<string, any> = { designation, updated_at: new Date().toISOString() }
+    if (fournisseurNom) patch.fournisseur_nom = fournisseurNom
+    if (nonVidePf(b.categorie) && !nonVidePf(exData.categorie)) patch.categorie = b.categorie
+    if (nonVidePf(b.unite)) patch.unite = b.unite
+    if (nonVidePf(b.activite) && !nonVidePf(exData.activite)) patch.activite = b.activite
+    if (delaiLu != null && isFinite(delaiLu)) patch.delai_jours = delaiLu
+    if (prixLu != null && prixLu > 0) {
+      patch.prix = prixLu; patch.devise = 'EUR'; patch.date_prix = TODAY_ISO(); patch.source_prix = b.source_prix || 'manuel'; patch.statut = 'actif'
+    }
+    const maj = await updateProduitFournisseur(String(exData.id), patch)
+    if (maj.error) return c.json({ ok: false, error: 'Mise à jour de la référence existante impossible : ' + maj.error.message }, 400)
+    const ignores = ['categorie', 'activite'].filter((k) => nonVidePf(b[k]) && !(k in patch) && String(b[k]) !== String(exData[k]))
+    return c.json({ ok: true, produit: maj.data, existant: true, champs_mis_a_jour: Object.keys(patch).filter((k) => k !== 'updated_at'), champs_ignores: ignores })
+  }
+  if (b.fournisseur_id) {
+    const ex = await getProduitFournisseurCouple(String(b.fournisseur_id), reference)
+    if (ex.error) return c.json({ ok: false, error: 'Lecture du catalogue impossible, rien n\'a été écrit : ' + ex.error }, 500)
+    if (ex.data) return majExistant(ex.data)
+  }
+  const prix = (prixLu != null && prixLu > 0) ? prixLu : null
+  // Relecture H0 : insertion SI ABSENT (plus d'upsert complet). Si le couple est créé entre la lecture
+  // ci-dessus et cette écriture (ex. validation d'une demande de prix), la ligne chiffrée n'est plus
+  // écrasée sans prix : on la relit et on lui applique le même patch partiel.
+  const { data, error } = await insertProduitFournisseurSiAbsent({
     fournisseur_id: b.fournisseur_id || null, fournisseur_nom: fournisseurNom,
     reference, designation, categorie: b.categorie || 'matiere_premiere',
     prix, devise: 'EUR', unite: b.unite || 'pce',
     date_prix: prix != null ? TODAY_ISO() : null, source_prix: b.source_prix || 'manuel',
-    delai_jours: (b.delai_jours != null && b.delai_jours !== '') ? Number(b.delai_jours) : null,
+    delai_jours: (delaiLu != null && isFinite(delaiLu)) ? delaiLu : null,
     statut: prix != null ? 'actif' : 'en_attente_prix', activite: b.activite || 'both',
   })
-  if (error) return c.json({ ok: false, error: error.message }, 400)
-  return c.json({ ok: true, produit: data })
+  if (error) return c.json({ ok: false, error: 'Déclaration de la référence impossible : ' + error.message }, 400)
+  if (!data) {
+    if (!b.fournisseur_id) return c.json({ ok: false, error: 'Déclaration de la référence impossible : insertion sans retour.' }, 500)
+    const ex2 = await getProduitFournisseurCouple(String(b.fournisseur_id), reference)
+    if (ex2.error || !ex2.data) return c.json({ ok: false, error: 'La référence vient d\'être créée par ailleurs et n\'a pas pu être relue : ' + (ex2.error || 'introuvable') + '. Réessayez.' }, 409)
+    return majExistant(ex2.data)
+  }
+  return c.json({ ok: true, produit: data, existant: false })
 })
 
 // — Modifier une référence catalogue par id (édition en place depuis BE › Références) —
@@ -4315,20 +4364,36 @@ app.put('/api/produits-fournisseurs/:id', async (c) => {
     const f = (fs as any[]).find((x: any) => String(x.id) === String(b.fournisseur_id))
     if (f) fournisseurNom = f.nom
   }
-  // Patch PARTIEL : on ne met à jour que les champs réellement fournis (sinon on écraserait l'existant —
-  // ex. la fiche fournisseur n'envoie pas l'activité et ne doit pas la remettre à 'both').
+  // Patch PARTIEL : on ne met à jour que les champs réellement fournis ET non vides (sinon on écraserait
+  // l'existant — ex. la fiche fournisseur n'envoie pas l'activité et ne doit pas la remettre à 'both' ;
+  // la modale BE envoie fournisseur_id:null quand la liste n'a pas retrouvé le fournisseur, ce qui
+  // détachait la référence de son fournisseur — lot H0, 17/09/2026).
   const patch: Record<string, any> = { reference, designation, updated_at: new Date().toISOString() }
   if (b.categorie != null && b.categorie !== '') patch.categorie = b.categorie
   if (b.activite != null && b.activite !== '') patch.activite = b.activite
-  if (b.fournisseur_id !== undefined) { patch.fournisseur_id = b.fournisseur_id || null; patch.fournisseur_nom = fournisseurNom }
-  if (b.delai_jours !== undefined) patch.delai_jours = (b.delai_jours != null && b.delai_jours !== '') ? Number(b.delai_jours) : null
+  if (b.unite != null && b.unite !== '') patch.unite = b.unite
+  if (b.fournisseur_id != null && b.fournisseur_id !== '') { patch.fournisseur_id = b.fournisseur_id; if (fournisseurNom) patch.fournisseur_nom = fournisseurNom }
+  if (b.delai_jours != null && b.delai_jours !== '' && isFinite(Number(b.delai_jours))) patch.delai_jours = Number(b.delai_jours)
   // Prix optionnel : touché UNIQUEMENT si un prix positif est fourni (sinon inchangé — le prix est piloté par les RFQ).
   const prix = (b.prix != null && b.prix !== '') ? Number(b.prix) : null
-  if (prix != null && isFinite(prix) && prix > 0) {
-    patch.prix = prix; patch.date_prix = TODAY_ISO(); patch.source_prix = 'manuel'; patch.statut = 'actif'
+  if (prix != null && !isFinite(prix)) return c.json({ ok: false, error: 'Prix illisible : « ' + String(b.prix) + ' »' }, 400)
+  if (prix != null && prix > 0) {
+    // Relecture H0 : la fiche fournisseur pré-remplit le prix en base et le renvoie à chaque modification
+    // (désignation, délai…). Un prix INCHANGÉ ne se « rajeunit » pas : date, source (rfq) et statut restent.
+    const avantPf = await getProduitFournisseurParId(id)
+    if (avantPf.error) return c.json({ ok: false, error: 'Lecture de la référence impossible, rien n\'a été écrit : ' + avantPf.error }, 500)
+    if (!avantPf.data) return c.json({ ok: false, error: 'Référence catalogue introuvable (supprimée entre-temps ?)' }, 404)
+    const prixBase = Number(avantPf.data.prix)
+    const inchange = avantPf.data.prix != null && avantPf.data.prix !== '' && isFinite(prixBase) && Math.abs(prixBase - prix) < 1e-9
+    if (!inchange) { patch.prix = prix; patch.devise = 'EUR'; patch.date_prix = TODAY_ISO(); patch.source_prix = 'manuel'; patch.statut = 'actif' }
   }
   const { data, error } = await updateProduitFournisseur(id, patch)
-  if (error) return c.json({ ok: false, error: error.message }, 400)
+  if (error || !data) {
+    const code = (error as any)?.code
+    if (code === '23505') return c.json({ ok: false, error: 'Cette référence existe déjà chez ce fournisseur : modifiez la ligne existante.' }, 409)
+    if (!error || code === 'PGRST116') return c.json({ ok: false, error: 'Référence catalogue introuvable (supprimée entre-temps ?)' }, 404)
+    return c.json({ ok: false, error: 'Modification de la référence impossible : ' + error.message }, 400)
+  }
   return c.json({ ok: true, produit: data })
 })
 
@@ -4616,26 +4681,69 @@ app.post('/api/demandes-prix/:id/valider', async (c) => {
   const b = await c.req.json().catch(() => ({} as any))
   const retenus = Array.isArray(b.retenus) ? b.retenus : []
   const dp = await getDemandePrix(id).catch(() => null)
+  if (!dp) return c.json({ ok: false, error: 'Demande de prix introuvable (ou lecture impossible) : aucun prix écrit.' }, 404)
   const numero = dp?.numero || null
   let n = 0
+  // Lot H0 (17/09/2026) : supabase-js ne lève JAMAIS — les `.catch(() => {})` étaient morts et un
+  // prix non écrit était compté « mis à jour ». On lit chaque { error } et on le remonte.
+  // Sur une ligne catalogue EXISTANTE, on n'écrit que le prix (et ce qui l'accompagne) : plus
+  // d'activité remise à 'both' ni de désignation remplacée par la référence.
+  const echecs: string[] = []
+  const nonVide = (v: any) => v != null && String(v).trim() !== ''
   for (const r of retenus) {
     const reference = String(r.reference || '').trim()
     const pu = Number(r.prix_unitaire)
     if (!reference || !isFinite(pu)) continue
-    await upsertProduitFournisseur({
-      fournisseur_id: r.fournisseur_id || null, fournisseur_nom: r.fournisseur_nom || null,
-      reference, designation: r.designation || reference, categorie: r.categorie || 'matiere_premiere',
-      prix: pu, devise: 'EUR', date_prix: TODAY_ISO(), source_prix: 'rfq', statut: 'actif', activite: r.activite || 'both',
-    }).catch(() => {})
-    await createRefPrixHistorique({
-      reference, designation: r.designation || reference, categorie_ref: r.categorie || 'matiere_premiere',
-      fournisseur_id: r.fournisseur_id || null, fournisseur_nom: r.fournisseur_nom || null,
-      prix_unitaire: pu, quantite: null, date_prix: TODAY_ISO(), bc_num: numero, source: 'rfq', activite: r.activite || 'both',
-    }).catch(() => {})
-    if (r.reponse_id) await updateDemandePrixReponse(r.reponse_id, { retenu: true }).catch(() => {})
+    const quoi = reference + (r.fournisseur_nom ? ' (' + r.fournisseur_nom + ')' : '')
+    // Relecture H0 : un prix retenu nul ou négatif n'est JAMAIS écrit comme prix officiel (même règle que
+    // POST / PUT /api/produits-fournisseurs). Un 0 daté du jour passait pour « frais » dans l'éditeur de
+    // nomenclature et remplaçait le prix enregistré des lignes, puis « X → 0 » au journal EN 9100.
+    if (pu <= 0) { echecs.push(quoi + ' : prix nul ou négatif (' + String(r.prix_unitaire) + '), non écrit'); continue }
+    let ex: { data: any | null; error: string | null } = { data: null, error: null }
+    if (r.fournisseur_id) ex = await getProduitFournisseurCouple(String(r.fournisseur_id), reference)
+    if (ex.error) { echecs.push(quoi + ' : lecture du catalogue impossible — ' + ex.error); continue }
+    let ecrit: { error: any }
+    if (ex.data) {
+      const patch: Record<string, any> = { prix: pu, devise: 'EUR', date_prix: TODAY_ISO(), source_prix: 'rfq', statut: 'actif', updated_at: new Date().toISOString() }
+      if (nonVide(r.fournisseur_nom) && !nonVide(ex.data.fournisseur_nom)) patch.fournisseur_nom = r.fournisseur_nom
+      if (nonVide(r.designation) && !nonVide(ex.data.designation)) patch.designation = String(r.designation).trim()
+      if (nonVide(r.categorie) && !nonVide(ex.data.categorie)) patch.categorie = r.categorie
+      if (nonVide(r.activite) && !nonVide(ex.data.activite)) patch.activite = r.activite
+      ecrit = await updateProduitFournisseur(String(ex.data.id), patch)
+    } else {
+      ecrit = await upsertProduitFournisseur({
+        fournisseur_id: r.fournisseur_id || null, fournisseur_nom: r.fournisseur_nom || null,
+        reference, designation: nonVide(r.designation) ? String(r.designation).trim() : reference, categorie: r.categorie || 'matiere_premiere',
+        prix: pu, devise: 'EUR', date_prix: TODAY_ISO(), source_prix: 'rfq', statut: 'actif', activite: r.activite || 'both',
+      })
+    }
+    if (ecrit.error) { echecs.push(quoi + ' : prix catalogue non écrit — ' + (ecrit.error.message || String(ecrit.error))); continue }
+    // Relecture H0 : un échec laisse la demande OUVERTE et « Valider » renvoie TOUS les retenus. Le point
+    // d'historique n'est donc écrit qu'une fois par (réf, fournisseur, demande, prix) — une revalidation ne
+    // duplique plus la courbe « Évolution » (lecture stricte : dans le doute, on n'écrit pas).
+    const dejaHist = await getRefPrixHistoriqueRfq(reference, r.fournisseur_id ? String(r.fournisseur_id) : null, numero)
+    if (dejaHist.error) echecs.push(quoi + ' : prix écrit au catalogue mais historique non vérifiable (rien ajouté) — ' + dejaHist.error)
+    else if (!dejaHist.data.some((h: any) => Math.abs(Number(h.prix_unitaire) - pu) < 1e-9)) {
+      const hist = await createRefPrixHistorique({
+        reference, designation: nonVide(r.designation) ? String(r.designation).trim() : (ex.data?.designation || reference), categorie_ref: r.categorie || ex.data?.categorie || 'matiere_premiere',
+        fournisseur_id: r.fournisseur_id || null, fournisseur_nom: r.fournisseur_nom || null,
+        prix_unitaire: pu, quantite: null, date_prix: TODAY_ISO(), bc_num: numero, source: 'rfq', activite: r.activite || ex.data?.activite || 'both',
+      })
+      if (hist.error) echecs.push(quoi + ' : prix écrit au catalogue mais historique non écrit — ' + (hist.error.message || String(hist.error)))
+    }
+    if (r.reponse_id) {
+      const rep = await updateDemandePrixReponse(r.reponse_id, { retenu: true })
+      if ((rep as any)?.error) echecs.push(quoi + ' : réponse non marquée « retenue » — ' + ((rep as any).error.message || String((rep as any).error)))
+    }
     n++
   }
-  await updateDemandePrix(id, { statut: 'cloturee', date_cloture: new Date().toISOString() }).catch(() => {})
+  // Un échec laisse la demande OUVERTE : elle peut être revalidée une fois la cause levée.
+  if (echecs.length) {
+    console.error('[RFQ] validation ' + id + ' : ' + echecs.length + ' échec(s) — ' + echecs.join(' | '))
+    return c.json({ ok: false, error: echecs.length + ' écriture(s) en échec, demande de prix laissée ouverte : ' + echecs.join(' ; '), echecs, prix_maj: n }, 500)
+  }
+  const clo = await updateDemandePrix(id, { statut: 'cloturee', date_cloture: new Date().toISOString() })
+  if ((clo as any)?.error) return c.json({ ok: false, error: 'Prix écrits (' + n + ') mais clôture de la demande impossible : ' + ((clo as any).error.message || String((clo as any).error)), prix_maj: n }, 500)
   return c.json({ ok: true, prix_maj: n })
 })
 
@@ -4671,6 +4779,19 @@ app.get('/api/be/refs', async (c) => {
 })
 
 // Lecture des fournitures (matière + accessoires) d'une nomenclature pour le rechargement du formulaire BE
+// Fiche FRAÎCHE d'une nomenclature (lot H0, 17/09/2026). Les formulaires BE s'ouvraient sur
+// l'instantané sérialisé au rendu de la page, jamais mis à jour après un enregistrement : rouvrir
+// puis réenregistrer écrasait la saisie récente. Le client relit ici la version en base.
+// Même RBAC que la liste BE (famille « nomenclature » → service be, lecture).
+// Réponse : { ok, nomenclature } — `composants` TOUJOURS un tableau (colonne text ou jsonb).
+app.get('/api/nomenclature/:id', async (c) => {
+  const id = c.req.param('id')
+  const lec = await getNomenclatureStricte(id)
+  c.header('Cache-Control', 'no-store')
+  if (lec.error) return c.json({ ok: false, error: 'Lecture de la nomenclature impossible : ' + lec.error }, 500)
+  if (!lec.data) return c.json({ ok: false, error: 'Nomenclature introuvable (supprimée entre-temps ?)' }, 404)
+  return c.json({ ok: true, nomenclature: { ...lec.data, composants: composantsDe(lec.data) } })
+})
 // Journal EN 9100 d'une nomenclature (portée « fiche » ou « groupe » = toutes ses révisions).
 // Fonctionne même si la fiche a été supprimée : le journal porte lui-même son groupe.
 app.get('/api/nomenclature/:id/journal', async (c) => {
@@ -4734,7 +4855,7 @@ app.get('/api/be/analyse-dt/:id', async (c) => {
   // Carte prix par référence (pour repérer matière/accessoires à chiffrer)
   const _prixMap: Record<string, { prix: any; date: any }> = {}
   ;(produitsAll as any[]).forEach((p: any) => { const k = String(p.reference || ''); if (k && (!_prixMap[k] || String(p.date_prix || '') > String(_prixMap[k].date || ''))) _prixMap[k] = { prix: p.prix, date: p.date_prix } })
-  const _fresh = (ref: string) => { const e = _prixMap[String(ref || '')]; if (!e || e.prix == null || !e.date) return false; return (Date.now() - Date.parse(e.date)) < 92 * 86400000 }
+  const _fresh = (ref: string) => { const e = _prixMap[String(ref || '')]; if (!e || e.prix == null || !e.date) return false; return (Date.now() - Date.parse(e.date)) < PRIX_VALIDITE_JOURS * 86400000 }
   // Index stock par référence (insensible casse/espaces) → besoin vs restant vs seuil
   const _stockByRef: Record<string, any> = {}
   ;(stockAll as any[]).forEach((s: any) => { const k = String(s.reference || '').toLowerCase().trim(); if (k && !_stockByRef[k]) _stockByRef[k] = s })
@@ -4930,9 +5051,9 @@ app.post('/api/be/analyse-dt/:id/etapes-libres', async (c) => {
 //   Durée = temps fixe (réglage, inchangé) + temps variable (MO+machine) × quantité client. Idempotent.
 app.post('/api/be/analyse-dt/:id/generer-bdt', async (c) => {
   const id = c.req.param('id')
-  const [dt, noms, existingBdt, existingBds, procs, existingLots] = await Promise.all([
+  const [dt, noms, clesBdt, clesBds, procs, existingLots] = await Promise.all([
     getDemandeTravaux(id).catch(() => null), getNomenclatures().catch(() => [] as any[]),
-    getBonsDeTravail().catch(() => [] as any[]), getPlanningBDS().catch(() => [] as any[]),
+    getClesBonsStrictes('BDT'), getClesBonsStrictes('BDS'),
     getProcessAtelier().catch(() => [] as any[]), getLots().catch(() => [] as any[])
   ])
   if (!dt) return c.json({ ok: false, error: 'DT introuvable' }, 404)
@@ -4946,14 +5067,37 @@ app.post('/api/be/analyse-dt/:id/generer-bdt', async (c) => {
   const client = (dt as any).client_nom || ''
   const prio = (dt as any).priorite || 'normal'
   const san = (s: any) => String(s || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 14)
-  const bdtKey = new Set((existingBdt as any[]).map((b: any) => `${b.num_affaire}|${b.piece}|${b.seq}`))
-  const bdsKey = new Set((existingBds as any[]).map((b: any) => `${b.cmd_ref}|${b.piece}|${b.seq}`))
   const pieces = Array.isArray((dt as any).pieces_detail) ? (dt as any).pieces_detail : []
   // Garde-fou : l'analyse n'est validable (génération BDT) que si TOUTES les pièces ont une nomenclature VALIDÉE
   // (un brouillon est visible dans l'analyse mais ne lance pas la production).
   const notReady = (pieces as any[]).filter((p: any) => !p.piece_existante_a_jour && !byCode[String(p.ref_interne || '').toLowerCase().trim()])
   if (notReady.length) return c.json({ ok: false, error: `Validez toutes les nomenclatures d'abord : ${notReady.length} pièce(s) sans nomenclature validée.` }, 409)
+  // Relecture H0 : clés ET identifiants des bons existants, lus STRICTEMENT. L'idempotence se juge sur
+  // (affaire | pièce | seq) mais l'id suit un compteur par TYPE : une étape passée de sous-traitée à
+  // interne reprenait l'id d'un bon existant (23505 à chaque relance). On prend désormais l'id LIBRE
+  // suivant. Une lecture en échec refuse tout (sinon chaque bon serait recréé en double sous un autre id).
+  if (clesBdt.error || clesBds.error) return c.json({ ok: false, error: 'Lecture des bons existants impossible, aucun bon créé : ' + (clesBdt.error || clesBds.error) + '. Réessayez.' }, 503)
+  const bdtKey = new Set(clesBdt.data.map((b) => b.cle))
+  const bdsKey = new Set(clesBds.data.map((b) => b.cle))
+  const idsPris: Record<'BDT' | 'BDS', Set<string>> = { BDT: new Set(clesBdt.data.map((b) => b.id)), BDS: new Set(clesBds.data.map((b) => b.id)) }
+  // Insère un bon sous le premier id libre à partir du numéro prévu. Conflit 23505 (bon créé entre-temps) :
+  // si l'id porte la MÊME clé, le bon existe déjà (compté « déjà présent ») ; sinon on essaie l'id suivant.
+  const creerBonIdLibre = async (kind: 'BDT' | 'BDS', yr: string, zz: number, num: number, cle: string, inserer: (id: string) => Promise<{ data: any; error: any }>): Promise<{ statut: 'cree' | 'existant' | 'echec'; id: string; erreur?: string }> => {
+    let n = num, id = fmtBonId(kind, yr, aff, zz, n)
+    for (let essai = 0; essai < 50; essai++) {
+      while (idsPris[kind].has(id)) { n++; id = fmtBonId(kind, yr, aff, zz, n) }
+      const r = await inserer(id)
+      if (!r.error && r.data) { idsPris[kind].add(id); return { statut: 'cree', id } }
+      if (String(r.error?.code || '') !== '23505') return { statut: 'echec', id, erreur: r.error?.message || 'insertion sans retour' }
+      const lu = await getCleBonParId(kind, id)
+      if (lu.error) return { statut: 'echec', id, erreur: 'identifiant déjà pris, relecture impossible — ' + lu.error }
+      if (lu.data && lu.data.cle === cle) { idsPris[kind].add(id); return { statut: 'existant', id } }
+      idsPris[kind].add(id)
+    }
+    return { statut: 'echec', id, erreur: 'aucun identifiant libre trouvé' }
+  }
   let nb = 0, ns = 0, skipped = 0, sansNom = 0, oasGates = 0
+  const echecs: { bon: string; piece: string; seq: number; erreur: string }[] = []
   let pieceNum = 0
   for (const p of pieces) {
     const ref = String(p.ref_interne || '').toLowerCase().trim()
@@ -4989,17 +5133,29 @@ app.post('/api/be/analyse-dt/:id/generer-bdt', async (c) => {
       if (e.type === 'sous_traite') {
         bdsNum++
         if (bdsKey.has(k)) { skipped++; continue }
-        await createBDSRow({ id: fmtBonId('BDS', yr, aff, zz, bdsNum), cmd_ref: aff, lot_ref: lotRef, client_nom: client, piece: p.ref_interne || ref, qte, operation: op, sous_traitant_id: e.fournisseur_st_id || null, duree_days: Math.max(1, Math.ceil(dureeH / 7)), statut: 'a_planifier', seq }).catch(() => {})
+        const rBds = await creerBonIdLibre('BDS', yr, zz, bdsNum, k, (idBds) => createBDSRow({ id: idBds, cmd_ref: aff, lot_ref: lotRef, client_nom: client, piece: p.ref_interne || ref, qte, operation: op, sous_traitant_id: e.fournisseur_st_id || null, duree_days: Math.max(1, Math.ceil(dureeH / 7)), statut: 'a_planifier', seq }))
+        // Lot H0 (17/09/2026) : supabase-js ne lève jamais — le compteur n'avance qu'après une insertion RÉUSSIE.
+        if (rBds.statut === 'existant') { skipped++; continue }
+        if (rBds.statut === 'echec') { echecs.push({ bon: rBds.id, piece: String(pieceLbl), seq, erreur: rBds.erreur || 'insertion sans retour' }); continue }
+        bdsKey.add(k)
         ns++
       } else {
         bdtNum++
         if (bdtKey.has(k)) { skipped++; continue }
-        await creerBDTAvecReglage({ id: fmtBonId('BDT', yr, aff, zz, bdtNum), num_affaire: aff, cmd_ref: aff, lot_ref: lotRef, client_nom: client, piece: p.ref_interne || ref, operation: op, machine_id: e.machine_id || null, process_id: e.process_id || null, seq, duree: dureeH, temps_alloue: dureeH, temps_reglage: reglageBdtHeures(tps.reglageMin, dureeH), statut: 'a_programmer', priorite: prio, activite: act, oas_avant: oasAvant, oas_apres: oasApres }, etatReglage).catch(() => {})
+        const rBdt = await creerBonIdLibre('BDT', yr, zz, bdtNum, k, (idBdt) => creerBDTAvecReglage({ id: idBdt, num_affaire: aff, cmd_ref: aff, lot_ref: lotRef, client_nom: client, piece: p.ref_interne || ref, operation: op, machine_id: e.machine_id || null, process_id: e.process_id || null, seq, duree: dureeH, temps_alloue: dureeH, temps_reglage: reglageBdtHeures(tps.reglageMin, dureeH), statut: 'a_programmer', priorite: prio, activite: act, oas_avant: oasAvant, oas_apres: oasApres }, etatReglage))
+        if (rBdt.statut === 'existant') { skipped++; continue }
+        if (rBdt.statut === 'echec') { echecs.push({ bon: rBdt.id, piece: String(pieceLbl), seq, erreur: rBdt.erreur || 'insertion sans retour' }); continue }
+        bdtKey.add(k)
         nb++
       }
     }
   }
-  return c.json({ ok: true, bdt: nb, bds: ns, skipped, sansNom, oasGates, ...(etatReglage.sansReglage ? { avertissement: AVERT_CLOUD9 } : {}) })
+  const avert = etatReglage.sansReglage ? { avertissement: AVERT_CLOUD9 } : {}
+  if (echecs.length) {
+    console.error('[generer-bdt] ' + id + ' : ' + echecs.length + ' bon(s) non créé(s) — ' + echecs.map((x) => x.bon + ' : ' + x.erreur).join(' | '))
+    return c.json({ ok: false, error: echecs.length + ' bon(s) non créé(s) : ' + echecs.map((x) => x.bon + ' (' + x.erreur + ')').join(' ; ') + '. Relancer la génération recrée seulement les bons manquants.', bdt: nb, bds: ns, skipped, sansNom, oasGates, echecs, ...avert }, 500)
+  }
+  return c.json({ ok: true, bdt: nb, bds: ns, skipped, sansNom, oasGates, echecs: [], ...avert })
 })
 
 // ══ GED : upload / ouverture / liste / suppression de documents (plans, CAO, FAO) ══
@@ -5060,23 +5216,52 @@ app.get('/api/ged/ref/:ref', async (c) => {
 // maquette bâtiment ne s'affichait en local (l'écran paraissait cassé alors que la donnée
 // était intacte). On récupère le fichier côté serveur et on le renvoie : cela marche dans
 // TOUS les environnements et garde le fichier derrière l'authentification de l'ERP.
+// En-tête Content-Disposition conforme RFC 6266 / RFC 5987 (lot H0, 17/09/2026).
+// ⚠ Headers (Node — donc Docker et la VM) exige une ByteString : un seul caractère
+//   > U+00FF dans le nom (’ – œ €, fréquents dans un nom de fichier Office) levait
+//   une TypeError, avalée par le catch → « 502 Fichier injoignable » muet alors que
+//   le fichier était intact. On envoie donc DEUX formes :
+//   · filename="…"          repli ASCII (accents retirés, reste remplacé par _) ;
+//   · filename*=UTF-8''…    le nom exact, percent-encodé (lu par tous les navigateurs).
+function dispositionFichier(nom: any, mode: 'inline' | 'attachment' = 'inline'): string {
+  const brut = String(nom ?? '').replace(/[\r\n]+/g, ' ').trim() || 'document'
+  const ascii = brut.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u2018\u2019\u201A\u2032]/g, "'").replace(/[\u201C\u201D\u201E]/g, '')
+    .replace(/[\u2013\u2014]/g, '-').replace(/\u0153/g, 'oe').replace(/\u0152/g, 'OE').replace(/\u20AC/g, 'EUR')
+    .replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '').trim() || 'document'
+  const etoile = encodeURIComponent(brut).replace(/['()*]/g, (ch) => '%' + ch.charCodeAt(0).toString(16).toUpperCase())
+  return mode + '; filename="' + ascii + '"; filename*=UTF-8\'\'' + etoile
+}
 app.get('/api/ged/file/:id', async (c) => {
   const doc = await getDocument(c.req.param('id'))
   if (!doc || doc.actif === false) return c.text('Document introuvable', 404)
   const { url, error } = await signedGedUrl(doc.storage_path, 3600)
-  if (error || !url) return c.text('Lien indisponible', 500)
+  if (error || !url) {
+    console.error('[GED] ouverture ' + doc.id + ' : lien signé indisponible — ' + String((error as any)?.message || error || 'url vide'))
+    return c.text('Lien de stockage indisponible pour ce document (bucket « ged » ou fichier absent du stockage).', 500)
+  }
+  let amont: Response
   try {
-    const amont = await fetch(url)
-    if (!amont.ok || !amont.body) return c.text('Fichier indisponible (' + amont.status + ')', 502)
+    amont = await fetch(url)
+  } catch (err: any) {
+    console.error('[GED] ouverture ' + doc.id + ' : stockage injoignable — ' + String(err?.message || err))
+    return c.text('Stockage injoignable : le service de fichiers ne répond pas.', 502)
+  }
+  if (!amont.ok || !amont.body) {
+    console.error('[GED] ouverture ' + doc.id + ' : réponse du stockage ' + amont.status)
+    return c.text('Fichier indisponible dans le stockage (' + amont.status + ')', 502)
+  }
+  try {
     const h = new Headers()
     h.set('Content-Type', doc.mime || amont.headers.get('content-type') || 'application/octet-stream')
     const len = amont.headers.get('content-length'); if (len) h.set('Content-Length', len)
     // `inline` : les images et PDF s'affichent dans l'onglet au lieu de se télécharger.
-    h.set('Content-Disposition', 'inline; filename="' + String(doc.fichier_nom || 'document').replace(/["\r\n]/g, '') + '"')
+    h.set('Content-Disposition', dispositionFichier(doc.fichier_nom, 'inline'))
     h.set('Cache-Control', 'private, max-age=300')
     return new Response(amont.body, { status: 200, headers: h })
-  } catch {
-    return c.text('Fichier injoignable', 502)
+  } catch (err: any) {
+    console.error('[GED] ouverture ' + doc.id + ' : réponse impossible à construire — ' + String(err?.message || err))
+    return c.text('Réponse impossible à construire pour ce document : ' + String(err?.message || err), 500)
   }
 })
 app.delete('/api/ged/:id', async (c) => {
@@ -5194,31 +5379,38 @@ app.post('/api/plans/entity', async (c) => {
 })
 
 // ── Interop réf BE → catalogue fournisseur (point 9) ──
-// Chaque matière/accessoire déclarée dans une nomenclature (réf + fournisseur connu) alimente
-// automatiquement produits_fournisseurs (source 'be'). N'écrit le prix que si > 0, sinon l'entrée
-// reste « en attente de prix ». On n'upsert QUE si le fournisseur est résolu (évite les doublons à réf null).
+// Une matière/accessoire déclarée dans une nomenclature (réf + fournisseur connu) dont le couple
+// fournisseur + réf est ABSENT du catalogue y est ajoutée SANS PRIX (« en attente de prix »).
+// ⚠ Lot H0 (17/09/2026) : cette synchro NE RÉÉCRIT JAMAIS une ligne existante. L'ancien upsert complet
+//   effaçait le prix officiel (prix 0 envoyé par l'éditeur → prix null), rajeunissait date_prix
+//   (la règle des 6 mois ne se déclenchait plus), remplaçait source rfq/manuel par « be », l'activité
+//   et la désignation — à CHAQUE enregistrement de nomenclature. Le prix officiel s'écrit par la
+//   validation d'une demande de prix ou la saisie catalogue, jamais depuis la nomenclature.
+// Un échec n'empêche pas l'enregistrement de la nomenclature : il est journalisé côté serveur.
 async function syncFournituresToCatalogue(fournitures: any[], entite: string) {
   if (!Array.isArray(fournitures) || !fournitures.length) return
-  let fournisseurs: any[] = []
-  try { fournisseurs = await getFournisseurs() } catch { return }
+  const fournisseurs = await getFournisseurs()
+  if (!fournisseurs.length) return   // lecture vide ou en panne : ne rien écrire à l'aveugle
   const byNom = new Map(fournisseurs.map((f: any) => [String(f.nom || '').trim().toLowerCase(), f]))
   const activite = entite === 'Semrac' ? 'Semrac' : (entite === 'Seem' ? 'Seem' : 'both')
+  const vus = new Set<string>()
   for (const f of fournitures) {
     const reference = String(f.ref_stock || '').trim()
     const fournNom = String(f.fournisseur || '').trim()
     if (!reference || !fournNom) continue
     const fo = byNom.get(fournNom.toLowerCase())
     if (!fo?.id) continue   // fournisseur inconnu → à créer d'abord (cf. point 8), on n'écrit pas de réf orpheline
-    const prix = (f.prix_unitaire != null && Number(f.prix_unitaire) > 0) ? Number(f.prix_unitaire) : null
-    try {
-      await upsertProduitFournisseur({
-        fournisseur_id: fo.id, fournisseur_nom: fo.nom || fournNom,
-        reference, designation: String(f.designation || '').trim() || reference,
-        categorie: f.type_fourniture === 'accessoire' ? 'accessoire' : 'matiere_premiere',
-        prix, devise: 'EUR', date_prix: prix != null ? TODAY_ISO() : null,
-        source_prix: 'be', statut: prix != null ? 'actif' : 'en_attente_prix', activite,
-      })
-    } catch { /* n'échoue pas la nomenclature pour ça */ }
+    const cle = String(fo.id) + '|' + reference
+    if (vus.has(cle)) continue
+    vus.add(cle)
+    const r = await insertProduitFournisseurSiAbsent({
+      fournisseur_id: fo.id, fournisseur_nom: fo.nom || fournNom,
+      reference, designation: String(f.designation || '').trim() || reference,
+      categorie: f.type_fourniture === 'accessoire' ? 'accessoire' : 'matiere_premiere',
+      prix: null, devise: 'EUR', date_prix: null,
+      source_prix: 'be', statut: 'en_attente_prix', activite,
+    })
+    if (r.error) console.error('[nomenclature → catalogue] ' + reference + ' / ' + (fo.nom || fournNom) + ' : ' + (r.error.message || String(r.error)))
   }
 }
 
@@ -5321,7 +5513,8 @@ async function upsertRefClientTrace(c: any, payload: any, route: string, nomIdCo
 app.post('/api/nomenclature', async (c) => {
   const payload = await c.req.json()
   // strip client-side id + temps calculés côté client (non colonnes) ; etapes_production est désormais persisté (colonne jsonb)
-  const { fournitures, id: _id, temps_reglage_total_min: _tr, temps_unitaire_total_min: _tu, ...nomPayload } = payload
+  const { fournitures, id: _id, temps_reglage_total_min: _tr, temps_unitaire_total_min: _tu, vider_composants: _vc, ...nomPayload } = payload
+  if ('composants' in nomPayload) nomPayload.composants = composantsDe(nomPayload.composants)   // tableau, quel que soit le type de colonne
   // N3 : num_nom = réf. pièce saisie manuellement ; auto-génération seulement en secours si vide
   if (!nomPayload.num_nom || !String(nomPayload.num_nom).trim()) {
     const year = new Date().getFullYear()
@@ -5405,13 +5598,29 @@ app.put('/api/nomenclature/:id', async (c) => {
   const id = c.req.param('id')
   const payload = await c.req.json()
   // strip temps calculés côté client (non colonnes) ; etapes_production est persisté (colonne jsonb)
-  const { fournitures, temps_reglage_total_min: _tr, temps_unitaire_total_min: _tu, devalider: _devalider, motif: _motifPut, ...nomPayload } = payload
+  const { fournitures, temps_reglage_total_min: _tr, temps_unitaire_total_min: _tu, devalider: _devalider, motif: _motifPut, vider_composants: _viderComposants, ...nomPayload } = payload
   // L'état AVANT, lu strictement : il sert au garde-fou de validation ET au journal EN 9100.
   const lecAvant = await getNomenclatureStricte(id)
   const avant: any = lecAvant.data
   // Sans l'état avant, on ne peut ni garder le statut validé ni tracer : on refuse plutôt que
   // d'enregistrer une modification sans trace (même règle que la suppression).
   if (lecAvant.error) return c.json({ ok: false, error: 'Lecture de la nomenclature impossible : enregistrement refusé pour garantir la traçabilité EN 9100 (' + lecAvant.error + '). Réessayez.' }, 503)
+  // ⚠ GARDE-FOU COMPOSANTS (lot H0, 17/09/2026) : `composants` était TEXT dans la base Docker ;
+  //   PostgREST le rendait en chaîne, l'éditeur n'y voyait AUCUN composant, et l'enregistrement
+  //   suivant écrasait la mère avec []. Un client périmé ne doit plus pouvoir détruire la liste :
+  //   passer d'une liste NON VIDE à une liste vide exige le drapeau explicite { vider_composants: true }.
+  if ('composants' in nomPayload) {
+    const composantsEnvoyes = composantsDe(nomPayload.composants)
+    if (avant && composantsDe(avant).length > 0 && composantsEnvoyes.length === 0 && _viderComposants !== true) {
+      return c.json({ ok: false, code: 'composants_vides', error: 'Enregistrement refusé : cette nomenclature compte ' + composantsDe(avant).length + ' composant(s) en base et la liste envoyée est vide. Rouvrez la fiche pour recharger ses composants ; pour les retirer tous volontairement, confirmez le retrait.', composants_en_base: composantsDe(avant).length }, 409)
+    }
+    nomPayload.composants = composantsEnvoyes
+  } else if (avant && avant.type_nom === 'mere' && (nomPayload.type_nom == null || nomPayload.type_nom === 'mere')) {
+    // Relecture H0 : clé `composants` OMISE sur une mère (client dont la liste locale est vide sans action de
+    // l'utilisateur) → la base garde ses composants, donc aussi le coût qui en découle. Le client envoyait
+    // alors prix_revient_unitaire = 0 : la mère perdait son prix (et « X → 0 » au journal EN 9100).
+    delete nomPayload.prix_revient_unitaire; delete nomPayload.prix_mo_unitaire; delete nomPayload.cout_machine_unitaire
+  }
   // ⚠ GARDE-FOU (11/09/2026) : une nomenclature VALIDÉE ne repasse jamais « en cours »
   //   parce qu'on l'a simplement ré-enregistrée. Les deux boutons « Enregistrer » du
   //   formulaire envoyaient statut='en_cours' : corriger une nomenclature validée la
@@ -5517,7 +5726,8 @@ app.post('/api/nomenclature/:id/nouvel-indice', async (c) => {
   const id = c.req.param('id')
   const payload = await c.req.json().catch(() => ({} as any))
   const { fournitures, temps_reglage_total_min: _tr, temps_unitaire_total_min: _tu,
-          id: _id, created_at: _ca, updated_at: _ua, indice: _i, version_groupe: _vg, ...over } = payload
+          id: _id, created_at: _ca, updated_at: _ua, indice: _i, version_groupe: _vg,
+          statut: _statutDemande, valide_par: _vp, date_validation: _dv, vider_composants: _vc, devalider: _dev, motif: _mot, ...over } = payload
   const all = await getNomenclatures()
   const base: any = (all as any[]).find(n => String(n.id) === String(id))
   if (!base) return c.json({ ok: false, error: 'Nomenclature introuvable' }, 404)
@@ -5525,12 +5735,25 @@ app.post('/api/nomenclature/:id/nouvel-indice', async (c) => {
   const versions = (all as any[]).filter(n => (n.version_groupe || n.id) === groupe)
   const maxCode = versions.reduce((m, n) => Math.max(m, String(n.indice || 'A').toUpperCase().charCodeAt(0)), 64)
   const nextIndice = String.fromCharCode(maxCode + 1)
-  const { id: _bid, created_at: _bca, updated_at: _bua, ...baseFields } = base
+  const { id: _bid, created_at: _bca, updated_at: _bua, valide_par: _bvp, date_validation: _bdv, ...baseFields } = base
+  // Relecture H0 : mère sans clé `composants` → les composants de la base sont recopiés, leur coût aussi
+  // (le client envoyait prix_revient_unitaire = 0 avec une liste locale vide).
+  if (base.type_nom === 'mere' && !('composants' in over) && (over.type_nom == null || over.type_nom === 'mere')) {
+    delete over.prix_revient_unitaire; delete over.prix_mo_unitaire; delete over.cout_machine_unitaire
+  }
+  // ⚠ Lot H0 (17/09/2026) : une révision naît TOUJOURS « en cours », quel que soit le statut envoyé.
+  //   Depuis le formulaire d'une fiche validée, le client envoyait statut:'valide' et le serveur
+  //   recopiait valide_par / date_validation : une révision non relue devenait aussitôt l'indice
+  //   validé le plus haut, donc la nomenclature de production des nouvelles commandes — sans
+  //   événement « validation » ni instantané au journal. Elle se valide ensuite normalement (PUT).
   const newRow: any = {
     ...baseFields, ...over,
     version_groupe: groupe,
     indice: nextIndice,
-    statut: over.statut || 'en_cours',
+    statut: 'en_cours',
+    valide_par: null,
+    date_validation: null,
+    composants: composantsDe('composants' in over ? over.composants : base.composants),
   }
   const { data, error } = await createNomenclature(newRow)
   if (error || !data) return c.json({ ok: false, error: error?.message ?? 'Erreur création révision' })
@@ -9290,11 +9513,32 @@ app.get('/production/lot/:id', async (c) => {
   const nrm = (s: any) => String(s ?? '').trim().toLowerCase()
   const piece = nrm(lot?.piece)
   const aff = nrm((cmd as any)?.num_affaire ?? lot?.affaire_id)
+  // ⚠ Lot H0 (17/09/2026) : on ne retient JAMAIS un brouillon. getNomenclatures trie par created_at
+  //   décroissant : la fiche lot et l'OF imprimé prenaient la DERNIÈRE fiche créée pour la pièce, même
+  //   en cours (indice B non relu → gamme B sur l'OF alors que les BDT du lot viennent de A).
+  //   Règle, alignée sur generer-bdt et la cascade : la nomenclature VALIDÉE d'indice le plus haut.
+  const valides = (noms as any[]).filter((n: any) => n.statut === 'valide')
+  const plusHautIndice = (liste: any[]) => liste.reduce((best: any, n: any) => (!best || String(n.indice || 'A') > String(best.indice || 'A')) ? n : best, null as any)
   let nom: any = null
-  if ((cmd as any)?.nomenclature_id) nom = (noms as any[]).find(n => String(n.id) === String((cmd as any).nomenclature_id))
-  if (!nom) nom = (noms as any[]).find(n => String(n.lot_id ?? '') === id)
-  if (!nom && piece) nom = (noms as any[]).find(n => nrm(n.code_ref_produit) === piece || nrm(n.num_nom) === piece)
-  if (!nom && aff) nom = (noms as any[]).find(n => nrm(n.num_affaire) === aff)
+  if ((cmd as any)?.nomenclature_id) nom = valides.find(n => String(n.id) === String((cmd as any).nomenclature_id)) || null
+  if (!nom) nom = plusHautIndice(valides.filter(n => String(n.lot_id ?? '') === id))
+  if (!nom && piece) nom = plusHautIndice(valides.filter(n => nrm(n.code_ref_produit) === piece || nrm(n.num_nom) === piece))
+  if (!nom && aff) nom = plusHautIndice(valides.filter(n => nrm(n.num_affaire) === aff))
+  // Repli (ancien comportement) UNIQUEMENT si aucune fiche validée ne correspond : la fiche est
+  // marquée `nomenclature_non_validee` pour que l'écran puisse l'afficher.
+  if (!nom) {
+    let repli: any = null
+    if ((cmd as any)?.nomenclature_id) repli = (noms as any[]).find(n => String(n.id) === String((cmd as any).nomenclature_id))
+    if (!repli) repli = (noms as any[]).find(n => String(n.lot_id ?? '') === id)
+    if (!repli && piece) repli = (noms as any[]).find(n => nrm(n.code_ref_produit) === piece || nrm(n.num_nom) === piece)
+    if (!repli && aff) repli = (noms as any[]).find(n => nrm(n.num_affaire) === aff)
+    if (repli) {
+      console.warn('[fiche lot] ' + id + ' : aucune nomenclature validée pour la pièce — repli sur ' + String(repli.num_nom || repli.id) + ' ind. ' + String(repli.indice || 'A') + ' (' + String(repli.statut || 'brouillon') + ')')
+      // Relecture H0 : la fiche lot n'affiche la nomenclature QUE sur l'OF imprimé (ofData.indice). Le drapeau
+      // seul n'était lu par personne : l'indice imprimé porte donc la mention, l'OF ne passe plus pour validé.
+      nom = { ...repli, indice: String(repli.indice || 'A') + ' — GAMME NON VALIDÉE (' + String(repli.statut || 'brouillon') + ')', nomenclature_non_validee: true }
+    }
+  }
   // n° de plan : sur les pièces détaillées (commande puis DT de l'affaire)
   const pickPlan = (src: any) => {
     const ps = Array.isArray(src?.pieces_detail) ? src.pieces_detail : (Array.isArray(src?.pieces) ? src.pieces : [])

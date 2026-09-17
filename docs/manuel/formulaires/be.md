@@ -35,6 +35,8 @@
 | Quantité | nombre | Non | Combien de fois cette pièce entre dans l'assemblage. | 2 |
 
 💡 **Astuce :** Le total des composants s'affiche en bas de l'encadré et alimente le prix de revient de la mère.
+💡 **À la réouverture**, la fiche est relue en base : ses composants réapparaissent, et « Enregistrer » sans y toucher les conserve.
+⚠️ **Attention :** Pour retirer des composants, cliquez leur croix puis enregistrez. Si l'ERP répond « Enregistrement refusé : cette nomenclature compte N composant(s) en base et la liste envoyée est vide », fermez et rouvrez la fiche pour recharger ses composants.
 
 ## Éditeur de nomenclature — Matière (tôle)
 **Quand l'utiliser :** Pour indiquer la ou les matières premières (tôle) qui servent à fabriquer la pièce, et obtenir leur prix.
@@ -45,11 +47,13 @@
 | Réf. matière | recherche (liste) | Non | La référence de la tôle. Tapez ou choisissez dans la liste des matières du catalogue. | TOLE-ALU-2MM |
 | Désignation | recherche (liste) | Non | Le nom de la matière. Se remplit tout seul si vous choisissez une référence connue. | Tôle aluminium 2 mm |
 | Fournisseur | liste déroulante (fournisseurs « matière » de l'entité choisie) | Non | Le fournisseur de la tôle. Se choisit tout seul s'il n'y en a qu'un. | Métaux Services |
-| Prix tôle | nombre / bouton | Non | Le prix d'une tôle entière. S'affiche automatiquement si un prix de moins de 6 mois existe ; sinon un bouton « demande de prix » apparaît. | 48,00 € |
+| Prix tôle | nombre / bouton | Non | Le prix d'une tôle entière. Repris du catalogue s'il a moins de 6 mois (avec un petit bouton gris pour redemander un prix). Un prix plus ancien, ou introuvable au catalogue, **reste affiché en orange** avec un bouton orange de demande de prix. Sans aucun prix : bouton orange « demande de prix ». Après l'envoi : sablier « vérifier ». | 48,00 € |
 | Pc/tôle | nombre | Non | Combien de pièces on tire d'une seule tôle. Sert à répartir le prix tôle par pièce. | 12 |
 
 💡 **Astuce :** Prix tôle ÷ Pc/tôle = prix matière par pièce (affiché en €/pièce à droite).
-⚠️ **Attention :** Si aucun prix récent n'existe, cliquez « demande de prix » : la demande part au service Achats et le prix reviendra ensuite tout seul.
+⚠️ **Attention :** Si aucun prix récent n'existe, cliquez « demande de prix » : la demande part au service Achats (une référence **ou** une désignation suffit, le fournisseur n'est pas obligatoire). Le sablier « vérifier » reste affiché tant que les Achats n'ont pas validé ; cliquez-le ensuite : un seul fournisseur a répondu → son prix et son nom sont repris ; plusieurs → choisissez le fournisseur. Le sablier est perdu si vous rechargez la page.
+💡 **Prix jamais remis à 0 :** un prix déjà sur la ligne n'est effacé que si **vous** changez la référence, le fournisseur, ou la désignation d'une ligne sans référence.
+💡 **Petit écran :** si la ligne dépasse, faites défiler le compartiment horizontalement ; les titres restent alignés sur les cases.
 
 ## Éditeur de nomenclature — Accessoires
 **Quand l'utiliser :** Pour lister les fournitures achetées (visserie, joints, etc.) qui entrent dans la pièce.
@@ -62,7 +66,7 @@
 | Réf. | recherche (liste de **toutes** les réfs accessoires) | Non | La référence de l'accessoire. **On la choisit en premier** : la liste déroule toutes les réfs existantes ; on peut aussi en saisir une nouvelle. | 136290 |
 | Désignation | texte | Non | Le nom de l'accessoire. **Se remplit tout seul** dès qu'on choisit une réf du catalogue. | Ecrou CLS M3-1 |
 | Fournisseur | liste déroulante | Non | **Se choisit tout seul** selon la réf : seuls les fournisseurs qui **ont cette réf à leur catalogue** sont proposés (auto-sélection s'il n'y en a qu'un). Pour une réf nouvelle : tous les fournisseurs de l'entité. | BOSSARD |
-| Prix paquet | nombre | Non | Le prix d'un paquet/lot entier (rempli depuis le catalogue si connu). | 10,40 € |
+| Prix paquet | nombre / bouton | Non | Le prix d'un paquet/lot entier, repris du catalogue s'il a moins de 6 mois. Mêmes règles et mêmes boutons de demande de prix que le « Prix tôle » (prix ancien conservé en orange, jamais remis à 0 à l'affichage). | 10,40 € |
 | Qté/paq | nombre | Non | Le nombre d'unités dans un paquet. | 100 |
 | Nb/pc | nombre | Non | Le nombre d'accessoires nécessaires par pièce. | 4 |
 
@@ -147,11 +151,13 @@ Chaque entrée affiche l'événement (Création, Validation, Modification, Déva
 | Activité | liste déroulante (Les deux, Seem, Semrac) | Non | L'usine concernée. | Les deux |
 
 ⚠️ **Attention :** La « Référence » et la « Désignation » sont obligatoires. Sans prix, l'article reste marqué « en attente de prix ».
-💡 **En modification :** laissez le champ **Prix** vide pour ne **pas** toucher au prix existant (il reste piloté par les demandes de prix). Ne renseignez un prix ici que pour le fixer manuellement.
+💡 **En modification :** laissez le champ **Prix** vide pour ne **pas** toucher au prix existant (il reste piloté par les demandes de prix). Ne renseignez un prix ici que pour le fixer manuellement. Remettre le **même** prix ne change pas sa date.
+⚠️ **Cases vides = inchangées** (depuis le 17/09/2026) : en modification, une case vide ne change rien (fournisseur, unité, délai, catégorie, activité). On ne peut donc plus vider un délai ni retirer le fournisseur d'une référence en effaçant la case.
+💡 **Référence déjà au catalogue :** « Entrée catalogue » sur un couple fournisseur + référence qui existe déjà complète la ligne existante (pas de doublon) **sans changer sa catégorie ni son activité** — pour les changer, utilisez « Éditer ».
 
 ## Nouvelle demande de prix (RFQ)
 **Quand l'utiliser :** Pour demander au service Achats de chiffrer un ou plusieurs articles (matière, accessoire…). Un prix est à re-demander dès qu'il est **absent ou daté de plus de 6 mois**.
-**Où le trouver — 3 accès :** onglet « Nomenclatures » (matière/accessoire sans prix frais) · onglet « Analyse DT » (bouton « Demande de prix ») · onglet **« Références »** (bouton « Demande de prix » sur toute ligne de catalogue au prix absent ou périmé — la demande s'ouvre pré-remplie avec cette référence).
+**Où le trouver — 3 accès, disponibles à tout moment :** onglet « Nomenclatures » (bouton sur **chaque** ligne matière / accessoire : gris à côté d'un prix récent, orange si le prix est ancien ou absent) · onglet « Analyse DT » (bouton « Demande de prix ») · onglet **« Références »** (bouton « Demande de prix » sur **chaque** ligne de catalogue, orange si le prix est absent ou périmé — la demande s'ouvre pré-remplie avec cette référence).
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
