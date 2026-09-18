@@ -219,6 +219,14 @@ export interface Lot {
   date_debut?: string
   date_fin?: string
   created_at?: string
+  // Lot H2 (18/09/2026) — sous-lots d'une pièce mère (migration 018 / cloud-14). Absents tant que cloud-14 n'est pas
+  // joué : l'arbre se déduit alors de l'id (src/nomenclature_arbre.ts parentDuLot : LOT-…-01.02 → parent LOT-…-01).
+  lot_parent?: string | null        // id du lot parent (null = lot racine)
+  rang?: number | null              // position parmi les frères = ordre de fabrication (racine : n° ZZ de la pièce)
+  niveau?: number | null            // 0 = racine … 4
+  nomenclature_id?: string | null   // nomenclature VALIDÉE retenue au lancement de ce lot
+  qte_par_parent?: number | null    // quantité du composant par unité du parent (null = racine)
+  qte_initiale?: number | null
 }
 
 export interface BonDeTravail {

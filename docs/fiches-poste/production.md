@@ -49,34 +49,43 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 
 ![production-service](../assets/production-service.png)
 
-### 6. Déplacer une étape d’un lot
+### 6. Fabriquer une pièce mère (sous-lots)
+1. Le lot d'une **pièce mère** porte **un sous-lot par composant**, dans l'ordre de fabrication du BE (`LOT-…-01.01`, `…-01.02`), et des **sous-sous-lots** pour une sous-mère (`…-01.02.01`) : Commandes & Lots › **Lots**, en retrait sous la mère.
+2. Chaque sous-lot se programme **dès que la matière de l'affaire est en stock**, comme un lot normal ; dans la goulotte, ses cartes portent « Sous-lot 01.02 » et arrivent avant l'assemblage de la mère.
+3. Badge orange « **Sous-lots en cours** » sur l'assemblage : vigilance seulement — programmez-le, réalisez-le une fois les sous-ensembles fabriqués.
+4. Affaire lancée avant le 18/09/2026 : fiche du lot de la mère → **« Créer les sous-lots »** (aperçu, puis création ; rejouable sans doublon).
+5. On libère et on expédie le **lot de la mère**, quand tout son arbre est fini (un sous-lot ne part jamais seul).
+
+![production-lots](../assets/production-lots.png)
+
+### 7. Déplacer une étape d’un lot
 1. Glisser la barre : si des étapes suivantes déjà posées deviennent incohérentes, la fenêtre **« Remettre en goulotte »** les liste **avant** d’enregistrer.
 2. **Déplacer et remettre en goulotte** : elles reviennent en tête de la goulotte (badge « Remis en goulotte »), à reprogrammer ; **Annuler** : rien ne bouge.
 3. Une étape déjà **reçue** n’est jamais déprogrammée : elle est seulement signalée.
 
 ![form-production-remise-goulotte](../assets/form-production-remise-goulotte.png)
 
-### 7. Régler la cadence usine (horaires de l’usine)
+### 8. Régler la cadence usine (horaires de l’usine)
 1. Onglet **Process Ateliers** → **Cadence usine** : une carte par site (Seem, Semrac) avec sa cadence **Bas / Moyen / Haut** et sa semaine type.
 2. **Changer la cadence** : date « À partir du » (demain par défaut ; aujourd’hui ou le passé = confirmation), niveau, motif. Présence, planning et RH › Temps suivent aussitôt.
 3. **Modèles d’horaires** : heures HH:MM par jour et créneau, croix = fermé, « +1j » = finit le lendemain ; dimanche toujours fermé. Enregistrer n’envoie que les cases modifiées.
 
 ![production-cadence](../assets/production-cadence.png)
 
-### 8. Programmer la présence et traiter les congés des opérateurs
+### 9. Programmer la présence et traiter les congés des opérateurs
 1. Onglet **Présence opérateurs** : clic sur une case → menu **Matin / Journée / Après-midi / Soirée / Absent / Effacer** avec les **horaires du jour** selon la cadence du site (un choix = un enregistrement ; en cas d’échec la case revient à sa valeur). Un créneau **fermé** ce jour-là est grisé et refusé.
 2. « **Programmer la semaine** » pour appliquer un créneau à plusieurs opérateurs ; les jours où il est fermé sont sautés ; le message compte les échecs. Une semaine pas encore lue est verrouillée.
 3. Vue « Demandes de congés à traiter » : **Approuver** ou refuser les congés des **opérateurs** (absences posées, BDT renvoyés au pool, solde décompté) — jamais votre propre congé.
 
 ![production-presence-cadence](../assets/production-presence-cadence.png)
 
-### 9. Découper un BDT ou annuler une découpe
+### 10. Découper un BDT ou annuler une découpe
 1. Goulotte « BDT à classer » → **ciseaux** : seule la **réalisation** se découpe, le réglage reste sur le morceau 1.
 2. Sur la carte d’un morceau : **Annuler la découpe** (tant qu’aucun morceau n’est posé, reçu ou soldé) → le BDT d’origine retrouve sa durée.
 
 ![form-production-separer](../assets/form-production-separer.png)
 
-### 10. Saisir le taux horaire machine d'un process
+### 11. Saisir le taux horaire machine d'un process
 1. Onglet **Process Ateliers** → volet **Postes & Process** → déplier le poste : chaque process affiche « X €/h », « taux à saisir » ou « coût RH ».
 2. Crayon du process → **Type** (Machine / Manuel / OAS) → **Taux horaire machine (€/h HT)** → Enregistrer. Vide = « taux à saisir » (temps machine compté 0 €).
 3. Seul le process machine porte un taux : ni la machine ni le poste. Le temps homme est valorisé au coût chargé RH (fiche salarié). Taux de départ = ancien coût de la machine, souvent 35 €/h : à vérifier.

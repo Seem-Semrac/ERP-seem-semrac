@@ -12,7 +12,7 @@ En haut à droite du bandeau, deux boutons ouverts depuis **n'importe quel ongle
 - **Planning Gantt BDT** — **Le seul planning de l'atelier.** Files « BDT à classer » et « BST à planifier » **au-dessus** du Gantt, puis un Gantt par poste, puis le bloc « Affectation des ressources aux postes » (opérateurs du jour par créneau). BDT/BDS prioritaires encadrés rouge. Bouton « Agrandir le planning ».
 - **Planning Gantt BST** — Planning de la sous-traitance (vue de 21 jours). Chaque carte « BST à planifier » indique « **Dispo le …** » quand l'étape précédente du lot fixe un jour au plus tôt.
 - **Présence opérateurs** — Programmation des présences sur **4 créneaux** (Matin · Journée · Après-midi · Soirée) ou absent, par un **menu** au clic sur la case, et congés des opérateurs. Les **horaires** de chaque créneau suivent la **cadence usine** du site et du jour ; un créneau fermé ce jour-là est grisé et refusé. Pilote qui est affectable dans le planning.
-- **Commandes & Lots** — Vue des commandes à faire, découpées en lots et BDT.
+- **Commandes & Lots** — Vue des commandes à faire, découpées en lots et BDT. Le lot d'une **pièce mère** est suivi de ses **sous-lots** en retrait (un par composant, dans l'ordre de fabrication), eux-mêmes suivis de leurs sous-sous-lots (voir « Fabriquer une pièce mère » plus bas).
 - **Process Ateliers** — Référentiel des postes, machines et process. **Seul le process machine porte un coût horaire** (« Taux horaire machine »), saisi à la main ; machines et postes n'en ont plus. 3ᵉ volet **« Cadence usine »** : cadence de chaque site (Bas / Moyen / Haut) et modèles d'horaires de l'usine.
 - **Dashboards** — Programmation et production.
 
@@ -76,6 +76,33 @@ Les horaires de l'usine dépendent de la **cadence** de chaque site — **Bas**,
 ![Menu d'une case du vendredi en cadence Moyen : Après-midi et Soirée fermés](../assets/production-presence-cadence.png)
 
 > Une case **« fermé »** = aucun créneau ouvert ce jour-là (dimanche, samedi hors Haut…). Une case en **pointillés rouges** porte un créneau enregistré avant un changement de cadence qui l'a fermé : à corriger à la main.
+
+### Fabriquer une pièce mère : lot, sous-lots et sous-sous-lots
+Une **pièce mère** (assemblage) est décrite au BE par une nomenclature mère dont les composants sont rangés **dans l'ordre de fabrication, du haut vers le bas**. À l'acceptation de l'offre, l'ERP crée :
+- le **lot de la mère** (`LOT-2026-0001-01`), qui porte les étapes propres de la mère (l'assemblage) ;
+- **un sous-lot par composant**, dans cet ordre : `LOT-2026-0001-01.01` (1ᵉʳ composant), `LOT-2026-0001-01.02` (2ᵉ)… — quantité = quantité du composant × quantité du lot (arrondie à l'unité supérieure) ;
+- si un composant est lui-même une mère, **ses** composants deviennent des **sous-sous-lots** (`LOT-2026-0001-01.02.01`…), jusqu'à 5 niveaux ;
+- pour chaque sous-lot : ses **BDT / BDS** (`BDT-2026-0001-01.02-01`…), sa **préparation technique** et ses **besoins matière / accessoires** (les demandes d'achat de toute la pièce sont regroupées par référence).
+
+**Programmer** : un sous-lot se programme **comme n'importe quel lot**, dès que la **matière de l'affaire est en stock** (contrôlée et rangée) — pas d'autre condition. Dans la goulotte « BDT à classer », les cartes d'une pièce mère arrivent **dans l'ordre de fabrication** : les sous-lots d'abord, du haut vers le bas, puis l'assemblage de la mère ; chaque carte de sous-lot porte la pastille **« Sous-lot 01.02 »** (ou « Sous-sous-lot 01.02.01 »).
+
+**Vigilance, jamais blocage** : tant qu'un sous-lot n'est pas terminé, les BDT d'assemblage de la mère portent le badge orange **« Sous-lots en cours »** (carte et barre du planning) et apparaissent dans « programmables mais pas encore lançables » avec « sous-lots non terminés (1/2) : LOT-…-01.02 ». Vous pouvez **programmer** l'assemblage ; il se **réalise** une fois les sous-ensembles fabriqués.
+
+**Suivre** : onglet **Commandes & Lots › Lots** — la mère, puis ses sous-lots en retrait (pastille « n° rang », badge « n sous-lots ») ; l'avancement d'une mère couvre **toute l'arborescence** (« avec ses sous-lots · assemblage seul x % »). La fiche d'une **commande** présente ses lots dans l'ordre de fabrication, lu de haut en bas (01.01 → 01.02.01 → 01.02 → 01). La **fiche du lot** de la mère montre la section **« Sous-lots (ordre de fabrication) »**, une 2ᵉ barre « Avancement de l'arbre » et le bandeau de vigilance ; celle d'un sous-lot rappelle « Sous-lot n° 2 de LOT-… ». L'**OF imprimé** de la mère liste les « Sous-ensembles à assembler » (rang, sous-lot, pièce, quantité, état, visa) avant ses étapes.
+
+![Commandes & Lots › Lots : la pièce mère puis ses sous-lots et sous-sous-lots en retrait](../assets/production-lots.png)
+![Fiche du lot d'une pièce mère : avancement de l'arbre, vigilance et section Sous-lots](../assets/production-lot-sous-lots.png)
+
+> Un sous-lot est un **sous-ensemble interne** : il ne se libère pas et ne s'expédie pas seul. La Qualité libère — et les Expéditions livrent — le **lot de la mère**, une fois **tout son arbre** terminé.
+
+### Créer les sous-lots d'une affaire lancée avant le 18/09/2026
+Les pièces mères lancées **avant** la gestion des sous-lots n'ont qu'un lot (celui de la mère). Sur la fiche de ce lot, un bandeau jaune le signale :
+1. Ouvrir la fiche du lot de la mère (Commandes & Lots › Lots → clic sur la ligne).
+2. Bandeau « Pièce mère : N composant(s) sur N sans sous-lot… » → **« Créer les sous-lots »**.
+3. Une fenêtre liste le plan **dans l'ordre de fabrication** (« n°2 · LOT-…-01.02 — pièce × quantité (à créer) » ou « … (existe) ») → **« Créer les sous-lots »**.
+4. L'ERP crée les sous-lots, leurs BDT/BDS, les préparations techniques et les demandes d'achat manquantes (repérées `-SL01`), puis recharge la fiche : « n sous-lot(s) créé(s) · n BDT · … ». Si le stock couvre déjà les nouveaux besoins, les nouveaux BDT sont tout de suite programmables.
+
+> Rejouable sans risque : rien n'est créé deux fois. Refusé sur un lot déjà libéré, expédié, livré ou annulé ; sur un lot **terminé**, une confirmation est demandée. Un composant **sans révision validée** au BE est nommé dans le bandeau : faites-la valider, puis recommencez. Si le bandeau dit « la base doit être mise à jour (script cloud-14…) », prévenez l'administrateur.
 
 ### Voir l'étape d'un BDT (focus)
 Cliquer une carte BDT ou BST **isole son étape** : seul le poste (ou le sous-traitant) qui peut la prendre reste affiché, encadré de **l'étape précédente et de l'étape suivante** — gammes BDT et BDS confondues. Recliquer sort du focus.

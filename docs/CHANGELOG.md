@@ -2,6 +2,160 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-18 — Lot H2 : mères ordonnées (ordre de fabrication), mère dans mère, sous-lots et sous-sous-lots en production, bouton « Demande de prix », journal pleine largeur
+
+> « LE BOUTON DE DEMANDE DE PRIX DANS LA NOMENCLATURE N'A PAS ÉTÉ remis. Dans les nomenclatures mères, il faut pouvoir changer
+> l'ordre des pièces et les ordonnancer dans l'ordre qu'on veut, **l'ordre de fabrication sera toujours considéré du haut vers
+> le bas**. Lors de fabrication de nomenclatures mères envoyées en prod, **le lot pièce mère contient des sous-lots** qui sont
+> les nomenclatures filles ; si dans les nomenclatures filles il y a des nomenclatures mères, elle aura donc des
+> **sous-sous-lots**. Les lots, sous-lots et autres pourront être programmés **à partir du moment où la matière est en stock**
+> comme pour le reste. Le journal des modifications dans la nomenclature, tu peux l'étirer pour qu'il prenne **toute la
+> largeur** de l'écran. »
+
+**⚠ Scripts cloud à jouer dans Supabase Studio, dans cet ordre, AVANT le déploiement Cloudflare :
+`docker/db/cloud/cloud-13-catalogue-qte-paquet.sql` (lot H1, s'il ne l'est pas encore) PUIS
+`docker/db/cloud/cloud-14-lots-sous-lots.sql`** (équivalent de la migration Docker **018**). `cloud-14` est **purement
+additif** (5 colonnes de `lots`, un index, 3 contraintes `NOT VALID`, aucune donnée modifiée). Tant qu'il n'est pas joué,
+**rien n'est cassé** : une pièce mère est lancée **sans sous-lots**, comme avant, avec un avertissement explicite (acceptation
+de l'offre, fiche du lot) ; l'ordre des composants, la mère dans la mère et les refus de cycle / profondeur fonctionnent déjà.
+Mode opératoire : `technique/02-exploitation-runbook.md` (« Mise en service du lot H2 »).
+
+**Arbitrages retenus** (annoncés à l'utilisateur) :
+
+| # | Sujet | Décision |
+|---|---|---|
+| A1 | Ordre des composants | L'ordre du tableau `composants` = **ordre de fabrication, du haut vers le bas**. Il fixe le **rang** (1, 2, 3…), donc le **numéro du sous-lot**, l'ordre d'affichage et l'ordre de la goulotte (sous-lots dans l'ordre, puis l'assemblage de la mère). Aucune contrainte d'antériorité entre sœurs. |
+| A2 | Mère dans mère | Autorisée. **Cycle refusé** (409 `cycle_composants`). **5 niveaux au plus**, racine comprise (409 `profondeur_max`). |
+| A3 | Production | Le lot d'une pièce mère porte **un sous-lot par composant** (qté = qté composant × qté du lot parent, arrondie à l'entier supérieur), **récursivement** (sous-sous-lots). Chaque sous-lot a ses BDT/BDS (gamme de **sa** nomenclature), sa prépa et ses besoins matière / accessoires ; les étapes propres de la mère (assemblage) restent sur le lot mère. |
+| A4 | Porte | **Aucune nouvelle porte bloquante** : un lot, sous-lot ou sous-sous-lot est programmable dès que la matière est en stock, comme le reste (porte matière existante, par affaire). L'assemblage de la mère porte seulement une **vigilance** « sous-lots non terminés » (règle du 10/09 : programmer n'est pas produire). |
+| A5 | Révision d'un composant en production | Comme la pièce racine : **dernière révision VALIDÉE** de son code ; écrite sur le lot (`lots.nomenclature_id`). |
+| A6 | Bouton « Demande de prix » | Vrai bouton **libellé**, sur chaque ligne matière et accessoire, visible à toutes les largeurs ; en-tête de colonne libellé. |
+| A7 | Journal EN 9100 | Sous les deux colonnes, **toute la largeur** du formulaire. |
+| A8 | Sous-lots et expédition | Un sous-lot est **interne** : ni libéré seul, ni expédié, ni compté dans les KPI de lots. Libération et BL portent sur le lot **racine**, « fini » quand **tout l'arbre** l'est. |
+| A9 | Cloud | Sans `cloud-14` : aucune page cassée, mère lancée sans sous-lots + avertissement. |
+
+**Ce qui change**
+- **Bouton « Demande de prix »** — il existait mais n'était plus qu'une **icône grise de 26 px sans libellé**, sous un en-tête
+  vide (H0/H1) : l'utilisateur ne le voyait plus. C'est à nouveau un bouton **« Demande / de prix »** de 72 × 28 px : **bleu**
+  (prix récent), **orange** (demande conseillée), **ambre « En attente / vérifier »** (demande partie) ; colonne « Demande de
+  prix ». Grille resserrée pour tenir dans 548 px à 1280 : mesuré à 1280 / 1366 / 1600 / 1920 px — libellé entier, bouton
+  cliquable, **aucun défilement**, en-tête ↔ ligne 0 px, badge « n fourn. · min–max » non tronqué.
+- **Journal EN 9100 pleine largeur** (ratio 1,0 contre 0,60), une modification par ligne (champ à gauche, « avant → après » à
+  droite, étiquette « recalcul »), valeurs coupées à 180 caractères.
+- **Composants d'une mère = ordre de fabrication** — bloc « Composants — ordre de fabrication (du haut vers le bas) » en tête de
+  la colonne de droite (il débordait de la colonne gauche) : poignée de glisser-déposer, rang, ▲ ▼, flèches du clavier, n° de
+  sous-lot (`.01`, `.02`…), recherche à deux groupes (**standards** et **mères**, dernière révision validée), arborescence
+  dépliable d'une sous-mère, résumé « Fabrication : 1. … → 2. … → assemblage de la mère » et nombre de sous-lots / niveaux.
+  La fiche ouverte et ses ancêtres ne sont jamais proposés ; un choix trop profond est grisé.
+- **Contrôles serveur** (`src/nomenclature_arbre.ts`, module pur) **avant toute écriture** (POST, PUT, nouvel indice) :
+  **409 `cycle_composants`** et **409 `profondeur_max`** avec le chemin (« … Chemin : A › B › A. Retirez « B » des
+  composants. »), **503 `lecture_impossible`** ; un cycle que seule la production rencontrerait (révision validée ou en cours)
+  est refusé dès le BE. Composants stockés **normalisés** (`rang` 1..n, `type_nom`, `indice`) ; `GET /api/nomenclature/:id` les
+  rend dans l'ordre. **409 `composant_utilise`** : on ne supprime plus une fiche encore composant d'une mère.
+- **Journal des composants** (`diffComposants`) : ajout / retrait / quantité / révision ligne par ligne, et **une seule** entrée
+  « Ordre de fabrication des composants » (« A, B, C » → « B, A, C ») — avant, une permutation donnait un bloc JSON illisible
+  (uuid compris). Le 1ᵉʳ enregistrement d'une mère d'avant H2 (indice et type complétés) = **une** entrée « recalcul ».
+- **Sous-lots en production** — à l'acceptation d'une offre : racine **inchangée** `LOT-2026-0001-01`, puis
+  `LOT-2026-0001-01.01`, `…-01.02`, `…-01.02.01` (point + rang) ; BDT/BDS `BDT-2026-0001-01.02-01` (même `num_affaire`,
+  `matiere_ok:false`) ; une **prépa par pièce** ; des **DA agrégées par référence sur tout l'arbre**. Idempotent (rejouer ne
+  recrée rien). Réponse `cascade.sous_lots` + `cascade.avertissements`, affichés en notification orange **conservée après le
+  rechargement** ; le paiement d'une **proforma** reconstruit le même plan (panne ⇒ rien d'engagé, avertissement).
+- **« Créer les sous-lots »** (nouvelle route `POST /api/production/lot/:id/sous-lots`, bouton sur la fiche du lot racine) pour
+  les affaires lancées **avant** H2 et pour le cloud **après** `cloud-14` : aperçu, confirmation, création des sous-lots, bons,
+  prépas et DA (`-SL<ZZ>`) ; refus `lot_clos` (libéré, expédié, livré, annulé), confirmation sur un lot `lot_termine` ; un
+  sous-lot existant **garde la révision de son lancement** ; nouveaux BDT « matière OK » si le stock couvre déjà les besoins.
+- **Écrans en arbre** — Commandes & Lots › Lots, `/production/lots`, Tableau Programmation, Suivi LOT, fiche affaire 360 :
+  sous-lots en retrait, rang, avancement **de l'arbre** sur la mère ; fiche **commande** dans l'ordre de fabrication
+  (01.01 → 01.02.01 → 01.02 → 01) ; **fiche lot** : fil d'Ariane « Sous-lot n° r de … », 2ᵉ barre « Avancement de l'arbre »,
+  section « Sous-lots (ordre de fabrication) », bandeau de vigilance ; **OF** : tableau « Sous-ensembles à assembler ».
+- **Goulotte** en **ordre de fabrication** (sous-lots du haut vers le bas, puis l'assemblage), pastille « Sous-lot 01.02 »,
+  badge orange « Sous-lots en cours » sur l'assemblage (carte et barre). **Vigilance** « sous-lots non terminés (n/m) : … »
+  jointe aux autres raisons par « · » — **aucun BDT retiré, aucune pose refusée**.
+- **Racines seulement** pour la libération (409 `sous_lot_non_liberable`, 409 `arbre_non_termine`), le BL
+  (409 `sous_lot_non_expediable`), la porte « lots à libérer » et les KPI (WIP, takt, taux de NC). Les quarantaines d'un
+  sous-lot bloquent bien l'affaire.
+- **Analyse DT d'une mère** : bandeau orange « le coût affiché ne compte que les étapes propres de la mère ; ses N
+  sous-ensembles … ne sont PAS chiffrés ici » (aucun changement de calcul, voir limites).
+
+**Défauts pré-existants corrigés au passage** — libération indexée par `lot_id` seul (`prod_finie` toujours faux pour les lots
+de cascade) · `termine` réécrit sur un lot déjà libéré · `lots.updated_at` absent au cloud ⇒ le lot ne passait jamais
+« terminé » (écriture retentée sans la colonne) · besoin de DA **perdu** quand deux pièces partageaient une référence (DA en
+double refusée en silence) · clé BDS de la cascade (`cmd_ref` = `CMD-…` comparé à l'affaire : `generer-bdt` rejoué recréait les
+BDS) · blocage « matière non réceptionnée » inopérant sur la fiche affaire · Suivi LOT à 0 % en permanence · quantité vide =
+0,00 € dans l'éditeur de mère · perte du focus à chaque frappe d'une quantité · ancienne ligne de composant sans `nom_id` perdue
+à l'enregistrement.
+
+**Relecture adverse** : 22 constats, **tous réels** (quelques doublons), tous corrigés sauf le Suivi LOT (correction
+partielle) — dont : BL partiel **sous-facturé** (le prorata additionnait les quantités de tout l'arbre : 5/35 de la commande
+pour 5 mères livrées), lot resté « à faire » après le retour d'un BDS (recalcul désormais au retour), « Créer les sous-lots » sur
+un lot clos (relançait fabrication et achats), nouveaux BDT bloqués « matière non réceptionnée », collision d'id de DA avalée,
+proforma sans achats des sous-lots en cas de panne, lectures tronquées (pagination), bons d'un sous-lot existant tirés d'une
+révision plus récente, cycle entre révisions **en cours** accepté, libération d'une racine aux sous-lots non finis, page
+commande dans le mauvais ordre, tableau Lots coupé à 1280 px, bandeau trompeur et faux message vert sur la fiche lot, libellés
+du journal EN 9100 (« mère », n° + indice au lieu d'un id interne, « indice non renseigné »).
+
+**Vérifications** : `npx tsc --noEmit` 0 erreur · `node scripts_doc/test_nomenclature_arbre.mjs` **147 PASS / 0 FAIL** ·
+`node scripts_doc/test_prix_moyen.mjs` **220 PASS / 0 FAIL** · `npm run build` ✓ · harnais toutes pages **60 PASS / 0 FAIL /
+1 SKIP** (`manuels.tsx :: pageManuel`, sans rapport) · `erp-docker.sh maj` ✓ (**018** appliquée et journalisée sur le Docker
+local) · 018 / `cloud-14` testées à blanc deux fois (`begin; … rollback;`, contraintes éprouvées), garde-fou « MAUVAISE BASE »
+vérifié · e2e Docker local (serveur 72 PASS avec les colonnes / 40 sans ; vérification finale B 20, C 20, D1 7, D2 10, S 21,
+P 5 proforma, X 22 révision de lancement, G 23 et G2 6 **cloud simulé sans `cloud-14`** — colonnes renommées puis rétablies et
+relues) · navigateur : éditeur de mère 31/31 puis 77, bouton et journal aux 4 largeurs, rendu d'un arbre de lots réel 45 PASS ·
+données `-TEST-H2-` supprimées et relues (0 ligne, nombre de lignes de chaque table identique avant / après, journal EN 9100
+toujours à 0 entrée).
+
+**Scripts à jouer**
+- **Cloud** : `cloud-13` (si pas encore fait) **puis `cloud-14`** dans Supabase Studio → SQL Editor ; vérifier que la requête
+  finale rend les 5 colonnes ; **puis** `npm run build` + déploiement (`erp-deploy`).
+- **Docker / VM** : `~/erp/docker/scripts/erp-docker.sh maj` applique **018** (déjà fait sur le Docker local le 18/09/2026).
+- **Ensuite** : pour chaque affaire **déjà lancée** avec une pièce mère, fiche du lot racine → **« Créer les sous-lots »**
+  (aperçu puis création ; les DA créées portent `-SL<ZZ>` et sont à arbitrer par les Achats si une DA de même référence existe
+  déjà). Prévenir le BE (ordre = fabrication, 5 niveaux, cycle refusé), la Production (sous-lots, goulotte, vigilance), la
+  Qualité et les Expéditions (on libère et on expédie le lot racine).
+
+**Reste à faire / limites connues**
+- **Coût d'une mère dans l'offre** : l'analyse DT ne chiffre que les étapes propres de la mère ; les filles sont fabriquées et
+  achetées mais **pas chiffrées** ⇒ offre **sous-évaluée** (bandeau). Chiffrage récursif **à arbitrer**.
+- **Porte matière sans BC** : une affaire dont toute la matière est déjà en stock n'a aucun BC matière ⇒ vigilance « matière non
+  réceptionnée » permanente (sous-lots compris). À arbitrer (proposition : `matiere_ok = true` à la cascade quand aucune DA
+  matière n'est créée).
+- **Indice des composants** : la production prend la dernière révision **validée** de la fille, pas forcément celle choisie au
+  BE (tracé par `lots.nomenclature_id`, avertissement `revision_differente`) ; figer l'indice relève du lot H3 (propagation
+  d'un indice aux commandes en cours).
+- **Réordonner après lancement** : les lots gardent leur rang de création ; après une collision d'id, le rang affiché peut
+  différer du suffixe.
+- **Qualité par sous-lot** : aucun PV ni libération propres à un sous-lot (A8) — lot ultérieur si l'EN 9100 l'exige.
+- Hors périmètre, non modifié : goulotte **BST** sans tri par ordre de fabrication ; listes de lots de `prod_da_nc.ts` et
+  `annulation.ts` (sous-lots compris) ; **Suivi LOT** : 1 233 px, défilement horizontal à 1280 / 1366 px (débordait déjà) ;
+  éditeur de mère : rouvrir une **autre** mère dans la même page après un enregistrement utilise une liste d'exclusions
+  légèrement périmée (le serveur refuse avec un message clair).
+
+- Fichiers : `src/nomenclature_arbre.ts` (nouveau), `src/nomenclature_journal.ts`, `src/index.tsx`, `src/queries.ts`,
+  `src/be.tsx`, `src/prod.tsx`, `src/listes.tsx`, `src/commercial.tsx`, `src/compta_service.tsx`, `src/expeditions.tsx`,
+  `src/kpi.ts`, `src/types.ts`, `docker/db/migrations/018-lots-sous-lots.sql`, `docker/db/cloud/cloud-14-lots-sous-lots.sql`,
+  `docker/db/seed/schema.sql`, les deux `README.md` de `docker/db/`, `scripts_doc/test_nomenclature_arbre.mjs` (nouveau),
+  `scripts_doc/capture_screens.mjs` (option `suivre`, entrées `be-noms-meres`, `production-lots`, `production-lot-sous-lots`),
+  `scripts_doc/capture_forms.mjs` (`form-be-nomenclature-mere`), `scripts_doc/gen_module_fiches.mjs`,
+  `scripts_doc/gen_fiches_poste.mjs`, `scripts_doc/audit_manuels.mjs` (un id avec majuscule, `#subBtn-lots`, était lu `#sub` :
+  faux « sélecteur disparu ») · Migration DB : **oui** (Docker **018**, cloud **`cloud-14` à jouer à la main, après
+  `cloud-13`**)
+- Doc mise à jour : `technique/06-modules/{be,production,expeditions,qualite,commercial}.md`, `technique/03-base-de-donnees.md`,
+  `technique/05-conventions-code.md`, `technique/02-exploitation-runbook.md`, `technique/07-api-reference.md` (régénérée :
+  401 routes, + contrats « Lot H2 »), `manuel/{be,production,qualite,expeditions}.md`, `manuel/formulaires/be.md`,
+  `manuel/parcours/{02-be,04-production,06-qualite,08-expeditions}.md`, `manuel/html/{be,production,qualite,expeditions,commercial}.html`
+  (+ `src/manuels_contenu.ts`, régénéré par le `prebuild`), `fiches-poste/{bei,production,qualite,logistique}.md`, cerveau.
+- Captures (stack **Docker locale**, la seule base qui a 018 ; identifiants de secours lus dans `docker/.env` sans être
+  affichés ; jeu `-TEST-DOCH2-` créé en SQL + acceptation d'offre par la **vraie route**, puis supprimé et relu à 0, nombre de
+  lignes de chaque table identique avant / après) — **nouvelles** : `form-be-nomenclature-mere`, `be-noms-meres`,
+  `production-lots`, `production-lot-sous-lots` ; **refaites** : `form-be-nomenclature` (bouton libellé ; `136290` à 0,1040 €/pce
+  car 017 est jouée sur le Docker), `be-noms`, `production-commandes`. Le journal pleine largeur n'est pas capturé (journal du
+  Docker vide, et aucune entrée de test n'y est écrite).
+- Vérifications de la phase documentation : `gen_api_ref.mjs` OK (401 routes, 50 familles ; `POST /api/production/lot/:id/sous-lots`
+  entrée) · `gen_module_fiches.mjs --verifier` 0 écart · `gen_fiches_poste.mjs` (4 fiches changées) · `npm run build` OK
+  (`src/manuels_contenu.ts` régénéré, 7 images copiées, `dist/_worker.js` 5,25 Mo) · `tsc --noEmit` 0 erreur · harnais 60 PASS /
+  0 FAIL / 1 SKIP · tests purs 147 + 220 · `lint_docs` 176 images · 204 liens · 0 cassé · `audit_manuels.mjs` sur le Docker
+  0 grave (« attention » = captures antérieures au code d'autres onglets, sans changement visible du lot).
+
 ## 2026-09-17 — Lot H1 : prix moyen multi-fournisseurs, quantité par paquet au catalogue, recherche sans fournisseur, catalogue unique
 
 > « pour le moment on va aller sur le fait de faire un **prix moyen de tous les fournisseurs** pour la dite référence (et faire

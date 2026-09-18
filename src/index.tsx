@@ -148,6 +148,10 @@ import { pageRapport8D } from './rapport8d'
 // Présences opérateur (lot C · C1, 14/09/2026) : lectures strictes + règles pures
 import { getPresencesFenetre, deletePresence, getSalarieCible, getCongeCible, majCongeSiStatut, getSalarieCompletCible, lireBDTOperateurPeriode } from './queries'
 import { getProduitFournisseurCouple, insertProduitFournisseurSiAbsent, getProduitFournisseurParId, getRefPrixHistoriqueRfq, getClesBonsStrictes, getCleBonParId } from './queries'
+// Lot H2 (18/09/2026) : nomenclatures mères ordonnées, sous-lots en production.
+import { lotsArbreDispo, getLotsStrict, getLotStrict, getNomenclaturesStrictes, erreurColonneAbsente, COLS_ARBRE_LOTS, cleDeBon, lireBonsCommandeStrict, lireArbreLotStrict } from './queries'
+import { composantsOrdonnes, normaliserComposants, controlerComposants, developperArbre, resolveurProduction, planLotsArbre, attribuerIdsSousLots, estSousLot, bonIdDuLot, cleBon, opsParLot, vigilanceSousLots, vueArbreLot, lotFini, avancementArbre, parentDuLot, racineDuLot, niveauDuLot, cleNomenclature, cleComposant, revisionsRetenues, planCompletementLot, motifLotClos, lotOuRacineTermine, sousLotsNonTermines } from './nomenclature_arbre'
+import type { LotPlan, ErreurArbre, OpLot, NoeudArbre } from './nomenclature_arbre'
 // Catalogue fournisseurs (lot H1) : lectures STRICTES (une panne ≠ catalogue vide) et écritures
 // TOLÉRANTES à l'absence de la colonne `qte_paquet` (cloud tant que cloud-13 n'est pas joué).
 import { getProduitsFournisseursStrict, getProduitsFournisseursParReference, updateProduitFournisseurTolerant, insertProduitFournisseurSiAbsentTolerant, createDemandePrixReponseTolerant, updateDemandePrixReponseTolerant } from './queries'
@@ -969,8 +973,121 @@ async function creerBDTAvecReglage(payload: Record<string, any>, etat: { sansReg
   return r
 }
 
-// (c) commande → lots → BDT (interne) + BDS (sous-traité), calqué sur generer-bdt.
-async function cascadeLotsBdtBst(dt: any, cmdId: string, byCode: Record<string, any>) {
+// ══ LOT H2 (18/09/2026) : PLAN DE PRODUCTION D'UNE AFFAIRE — racines + sous-lots des pièces mères ══
+// « lors de fabrication de nomenclatures mères envoyées en prod le lot pièce mère contient des sous lots
+//   qui sont les nomenclatures filles, si dans les nomenclatures filles il y a des nomenclatures mères elle
+//   aura donc des sous sous lots. les lots sous lots et autres pourront être programmés à partir du moment
+//   où la matière est en stock comme pour le reste. »
+// Le plan est calculé UNE fois (src/nomenclature_arbre.ts : developperArbre → planLotsArbre →
+// attribuerIdsSousLots) et partagé par les lots/bons, la préparation technique et les demandes d'achat :
+// les trois voient exactement les mêmes lots. Racines INCHANGÉES (LOT-AAAA-AFF-ZZ, compteur des pièces
+// ayant une nomenclature validée) ; un sous-lot = parent + « .RR » (RR = rang du composant = ordre de
+// fabrication, du haut vers le bas de la mère), quantité = qté du composant × qté du parent (arrondi sup.).
+// AUCUNE nouvelle porte : les bons des sous-lots naissent comme les autres (matiere_ok = false, même
+// num_affaire) et s'ouvrent avec la porte matière de l'affaire (ouvrirPorteMatiere, inchangée).
+interface PlanAffaire {
+  lots: LotPlan[]                                  // pré-ordre : un parent avant ses enfants
+  avertissements: string[]
+  pieceParRacine: Record<string, any>              // id du lot racine → ligne pieces_detail de la DT
+  racineParLot: Record<string, string>             // id d'un lot du plan → id de sa racine
+  arbreDispo: boolean                              // sous-lots effectivement planifiés (colonnes cloud-14 + lots lisibles)
+  colonnesDispo: boolean                           // colonnes cloud-14 présentes : rang / niveau / nomenclature_id écrits sur TOUS les lots
+}
+const estMereAvecComposants = (nom: any): boolean => !!nom && String(nom.type_nom || '') === 'mere' && composantsOrdonnes(nom).length > 0
+// Correctif H2 : message pour l'UTILISATEUR (commercial, production) — pas de chemin de script ; l'administrateur sait quoi jouer.
+const MSG_BASE_A_METTRE_A_JOUR = 'la base doit être mise à jour (script cloud-14, à faire par l’administrateur)'
+const AVERT_CLOUD14 = (piece: string) => 'Sous-lots de la pièce mère ' + piece + ' non créés : ' + MSG_BASE_A_METTRE_A_JOUR + ' ; la mère est lancée seule.'
+// Avertissement d'arbre préfixé de la pièce mère, SAUF s'il la nomme déjà (« Composant « F3 » de « M4 » … »).
+const avertMere = (pieceLbl: string, nom: any, msg: string): string => {
+  const noms = [pieceLbl, String(nom?.num_nom || ''), String(nom?.code_ref_produit || '')].filter(Boolean)
+  return noms.some((x) => msg.includes('« ' + x + ' »')) ? msg : 'Pièce mère ' + pieceLbl + ' : ' + msg
+}
+const AVERT_ARBRE_ILLISIBLE = (piece: string, err: string) => 'Pièce mère ' + piece + ' : sous-lots non créés — état de la table des lots illisible (' + err + '). La mère est lancée seule ; « Créer les sous-lots » depuis la fiche du lot complétera l’arbre.'
+async function planProductionAffaire(dt: any, noms: any[], cmdId: string, opts: { arbreDispo: boolean; erreurArbre?: string | null; lotsLus?: { data: any[]; error: string | null } }): Promise<PlanAffaire> {
+  const byCode = _nomByCode(noms)
+  const aff = String(dt.num_affaire || dt.id)
+  const year = _yrOf(cmdId)
+  const pieces: any[] = Array.isArray(dt.pieces_detail) ? dt.pieces_detail : []
+  const refDe = (p: any) => String(p?.ref_interne || '').toLowerCase().trim()
+  const avertissements: string[] = []
+  let arbreOk = !!opts.arbreDispo
+  let erreurArbre = opts.erreurArbre || null
+  const aDesMeres = pieces.some((p) => estMereAvecComposants(refDe(p) ? byCode[refDe(p)] : null))
+  let existants: any[] = []
+  if (arbreOk && aDesMeres) {
+    // Lots existants lus STRICTEMENT : un sous-lot déjà créé est réutilisé (idempotence), jamais recréé
+    // sous un autre id parce qu'une panne aurait rendu « aucun lot ».
+    const lu = opts.lotsLus || await getLotsStrict()
+    if (lu.error) { arbreOk = false; erreurArbre = lu.error }
+    else existants = lu.data
+  }
+  const resP = resolveurProduction(noms)
+  const brut: LotPlan[] = []
+  const pieceParRacine: Record<string, any> = {}
+  let pieceNum = 0
+  for (const p of pieces) {
+    const ref = refDe(p)
+    const nom = ref ? byCode[ref] : null
+    if (!nom) continue
+    pieceNum++
+    const qte = Number(p.quantite) || 1
+    const racineId = fmtLotId(year, aff, pieceNum)
+    const pieceLbl = String(p.ref_interne || ref)
+    pieceParRacine[racineId] = p
+    if (estMereAvecComposants(nom)) {
+      if (arbreOk) {
+        const arbre = developperArbre(nom, qte, resP)
+        brut.push(...planLotsArbre(racineId, pieceNum, pieceLbl, arbre))
+        for (const e of arbre.avertissements) avertissements.push(avertMere(pieceLbl, nom, e.message))
+        continue
+      }
+      avertissements.push(erreurArbre ? AVERT_ARBRE_ILLISIBLE(pieceLbl, erreurArbre) : AVERT_CLOUD14(pieceLbl))
+    }
+    brut.push({ id: racineId, lot_parent: null, rang: pieceNum, niveau: 0, piece: pieceLbl, qte, qte_par_parent: null, nomenclature_id: nom.id != null ? String(nom.id) : null, nom })
+  }
+  const lots = (arbreOk && aDesMeres) ? attribuerIdsSousLots(brut, existants) : brut
+  const parId = new Map(lots.map((l) => [l.id, l]))
+  const racineParLot: Record<string, string> = {}
+  for (const l of lots) {
+    let x: LotPlan | undefined = l
+    for (let garde = 0; x && x.lot_parent && garde < 12; garde++) x = parId.get(x.lot_parent)
+    racineParLot[l.id] = x ? x.id : racineDuLot(l.id)
+  }
+  return { lots, avertissements, pieceParRacine, racineParLot, arbreDispo: arbreOk && aDesMeres, colonnesDispo: !!opts.arbreDispo }
+}
+// Racine d'un lot en remontant lot_parent dans `lots` (à défaut, l'id : racineDuLot ne sait lire que les ids standard).
+function racineDansLots(lotId: string, lots: any[]): string {
+  const parId = new Map((lots || []).map((l: any) => [String(l.id), l]))
+  let id = String(lotId)
+  for (let garde = 0; garde < 12; garde++) {
+    const l = parId.get(id)
+    const p = l ? parentDuLot(l) : parentDuLot(id)
+    if (!p || p === id) return id
+    id = p
+  }
+  return id
+}
+// Lecture de l'état des colonnes de sous-lots + plan, en un appel (acceptation, proforma).
+async function planDepuisBase(dt: any, cmdId: string, noms: any[]): Promise<PlanAffaire> {
+  const arbre = await lotsArbreDispo()
+  return planProductionAffaire(dt, noms, cmdId, { arbreDispo: arbre.dispo, erreurArbre: arbre.erreur })
+}
+// Payload d'une ligne `lots` du plan (les 5 colonnes cloud-14 seulement si la base les a).
+function payloadLot(l: LotPlan, cmdId: string, client: string, avecArbre: boolean): Record<string, any> {
+  const base: Record<string, any> = { id: l.id, cmd_id: cmdId, client_nom: client, piece: l.piece, qte: l.qte, qte_initiale: l.qte, statut: 'a_faire' }
+  if (!avecArbre) return base
+  return { ...base, lot_parent: l.lot_parent, rang: l.rang, niveau: l.niveau, nomenclature_id: l.nomenclature_id, qte_par_parent: l.qte_par_parent }
+}
+const sansColsArbre = (p: Record<string, any>) => { const o: Record<string, any> = { ...p }; for (const k of COLS_ARBRE_LOTS) delete o[k]; return o }
+// Étapes d'une nomenclature dans l'ordre de la gamme, avec le drapeau OAS (pas de bon, porte de lot).
+function etapesDeGamme(nom: any, oasProcIds: Set<string>): { etapes: any[]; oasFlags: boolean[] } {
+  const etapes = (Array.isArray(nom?.etapes_production) ? nom.etapes_production : []).slice().sort((a: any, b: any) => (Number(a.ordre) || 0) - (Number(b.ordre) || 0))
+  const oasFlags = etapes.map((e: any) => !!e.est_oas || !!(e.process_id && oasProcIds.has(String(e.process_id))))
+  return { etapes, oasFlags }
+}
+
+// (c) commande → lots (racines + sous-lots) → BDT (interne) + BDS (sous-traité), calqué sur generer-bdt.
+async function cascadeLotsBdtBst(dt: any, cmdId: string, plan: PlanAffaire) {
   const [existingBdt, existingBds, procs] = await Promise.all([
     getBonsDeTravail().catch(() => [] as any[]), getPlanningBDS().catch(() => [] as any[]), getProcessAtelier().catch(() => [] as any[]),
   ])
@@ -978,43 +1095,57 @@ async function cascadeLotsBdtBst(dt: any, cmdId: string, byCode: Record<string, 
   const etatReglage = { sansReglage: false }
   const oasProcIds = new Set((procs as any[]).filter((p: any) => p.est_oas).map((p: any) => String(p.id)))
   const aff = String(dt.num_affaire || dt.id), client = dt.client_nom || '', prio = dt.priorite || 'normal'
-  const bdtKey = new Set((existingBdt as any[]).map((b: any) => `${b.num_affaire}|${b.piece}|${b.seq}`))
-  const bdsKey = new Set((existingBds as any[]).map((b: any) => `${b.cmd_ref}|${b.piece}|${b.seq}`))
-  const pieces = Array.isArray(dt.pieces_detail) ? dt.pieces_detail : []
-  let lots = 0, nb = 0, ns = 0
-  const year = _yrOf(cmdId)
-  let pieceNum = 0
-  for (const p of pieces) {
-    const ref = String(p.ref_interne || '').toLowerCase().trim(), qte = Number(p.quantite) || 1
-    const nom = ref ? byCode[ref] : null
-    if (!nom) continue
-    pieceNum++
-    const act = nom.entite || dt.activite || 'Seem'
-    const lotRef = fmtLotId(year, aff, pieceNum)
-    await createLot({ id: lotRef, cmd_id: cmdId, client_nom: client, piece: p.ref_interne || ref, qte, qte_initiale: qte, statut: 'a_faire' } as any).then((r: any) => { if (r && !r.error) lots++ }).catch(() => {})
+  // Clés d'idempotence (cleBon) : racine = affaire|pièce|seq (inchangée), sous-lot = + |lot.
+  const bdtKey = new Set((existingBdt as any[]).map((b: any) => cleDeBon('BDT', b)))
+  const bdsKey = new Set((existingBds as any[]).map((b: any) => cleDeBon('BDS', b)))
+  let lots = 0, lotsExistants = 0, sousLots = 0, nb = 0, ns = 0
+  const avertissements: string[] = []
+  // Colonnes cloud-14 présentes : toute ligne `lots` (racine comprise, mère ou non) reçoit rang, niveau et
+  // nomenclature_id (la révision VALIDÉE retenue au lancement — traçabilité EN 9100).
+  let avecArbre = plan.colonnesDispo
+  const ecartes = new Set<string>()            // sous-lots non créés : ni leurs bons ni leurs descendants
+  for (const l of plan.lots) {
+    const estSL = !!l.lot_parent
+    if (estSL && (!avecArbre || ecartes.has(String(l.lot_parent)))) { ecartes.add(l.id); continue }
+    const payload = payloadLot(l, cmdId, client, avecArbre)
+    let r: any = await createLot(payload).catch((e: any) => ({ data: null, error: { message: String(e?.message || e) } }))
+    if (r?.error && avecArbre && erreurColonneAbsente(r.error)) {
+      // Base changée entre la détection et l'écriture : plus aucun sous-lot pour l'affaire ; la racine se crée quand même.
+      avecArbre = false
+      avertissements.push('Sous-lots non créés : ' + MSG_BASE_A_METTRE_A_JOUR + ' ; les pièces mères sont lancées seules.')
+      if (estSL) { ecartes.add(l.id); continue }
+      r = await createLot(sansColsArbre(payload)).catch((e: any) => ({ data: null, error: { message: String(e?.message || e) } }))
+    }
+    if (r && !r.error) { lots++; if (estSL) sousLots++ }
+    else if (String(r?.error?.code || '') === '23505') lotsExistants++
+    else if (estSL) {
+      ecartes.add(l.id)
+      avertissements.push('Sous-lot ' + l.id + ' (' + l.piece + ') non créé : ' + String(r?.error?.message || 'insertion sans retour') + ' — ses bons ne sont pas créés ; « Créer les sous-lots » depuis la fiche du lot ' + (plan.racineParLot[l.id] || racineDuLot(l.id)) + ' le reprendra.')
+      continue
+    }
+    const act = l.nom?.entite || dt.activite || 'Seem'
     let bdtNum = 0, bdsNum = 0
-    const etapes = (Array.isArray(nom.etapes_production) ? nom.etapes_production : []).slice().sort((a: any, b: any) => (Number(a.ordre) || 0) - (Number(b.ordre) || 0))
-    const oasFlags = etapes.map((e: any) => !!e.est_oas || (e.process_id && oasProcIds.has(String(e.process_id))))
+    const { etapes, oasFlags } = etapesDeGamme(l.nom, oasProcIds)
     for (let i = 0; i < etapes.length; i++) {
       const e = etapes[i], seq = Number(e.ordre) || (i + 1)
       if (oasFlags[i]) continue
       const tps = etapeTempsMin(e, txTemps)
-      const dureeH = dureeBdtDepuisTemps(tps, qte)
+      const dureeH = dureeBdtDepuisTemps(tps, l.qte)
       const op = e.nom || e.process_nom || e.operation_st || 'Process'
-      const k = `${aff}|${p.ref_interne || ref}|${seq}`
+      const k = cleBon(aff, l.piece, seq, l.id)
       const oasAvant = i > 0 && oasFlags[i - 1], oasApres = i < etapes.length - 1 && oasFlags[i + 1]
       if (e.type === 'sous_traite') {
         bdsNum++
         if (bdsKey.has(k)) continue
-        await createBDSRow({ id: fmtBonId('BDS', year, aff, pieceNum, bdsNum), cmd_ref: cmdId, lot_ref: lotRef, client_nom: client, piece: p.ref_interne || ref, qte, operation: op, sous_traitant_id: e.fournisseur_st_id || null, duree_days: Math.max(1, Math.ceil(dureeH / 7)), statut: 'a_planifier', seq }).then((r: any) => { if (r && !r.error) ns++ }).catch(() => {})
+        await createBDSRow({ id: bonIdDuLot('BDS', l.id, bdsNum), cmd_ref: cmdId, lot_ref: l.id, client_nom: client, piece: l.piece, qte: l.qte, operation: op, sous_traitant_id: e.fournisseur_st_id || null, duree_days: Math.max(1, Math.ceil(dureeH / 7)), statut: 'a_planifier', seq }).then((r: any) => { if (r && !r.error) { ns++; bdsKey.add(k) } }).catch(() => {})
       } else {
         bdtNum++
         if (bdtKey.has(k)) continue
-        await creerBDTAvecReglage({ id: fmtBonId('BDT', year, aff, pieceNum, bdtNum), num_affaire: aff, cmd_ref: cmdId, lot_ref: lotRef, client_nom: client, piece: p.ref_interne || ref, operation: op, machine_id: e.machine_id || null, process_id: e.process_id || null, seq, duree: dureeH, temps_alloue: dureeH, temps_reglage: reglageBdtHeures(tps.reglageMin, dureeH), statut: 'a_programmer', priorite: prio, activite: act, oas_avant: oasAvant, oas_apres: oasApres, matiere_ok: false }, etatReglage).then((r: any) => { if (r && !r.error) nb++ }).catch(() => {})
+        await creerBDTAvecReglage({ id: bonIdDuLot('BDT', l.id, bdtNum), num_affaire: aff, cmd_ref: cmdId, lot_ref: l.id, client_nom: client, piece: l.piece, operation: op, machine_id: e.machine_id || null, process_id: e.process_id || null, seq, duree: dureeH, temps_alloue: dureeH, temps_reglage: reglageBdtHeures(tps.reglageMin, dureeH), statut: 'a_programmer', priorite: prio, activite: act, oas_avant: oasAvant, oas_apres: oasApres, matiere_ok: false }, etatReglage).then((r: any) => { if (r && !r.error) { nb++; bdtKey.add(k) } }).catch(() => {})
       }
     }
   }
-  return { lots, bdt: nb, bds: ns, avertissement: etatReglage.sansReglage ? AVERT_CLOUD9 : null }
+  return { lots, lots_existants: lotsExistants, sous_lots: sousLots, bdt: nb, bds: ns, avertissement: etatReglage.sansReglage ? AVERT_CLOUD9 : null, avertissements }
 }
 
 // ── GOULOTTE matière + préparation technique ────────────────────────────────
@@ -1032,8 +1163,13 @@ async function cascadeLotsBdtBst(dt: any, cmdId: string, byCode: Record<string, 
 // (commande, pièce) : `lots.piece`, `preparations_techniques.piece` et `bons_de_travail.piece`
 // sont écrits depuis la MÊME expression source dans la cascade, la correspondance est exacte.
 // Repli conservateur : une préparation sans commande ni pièce bloque encore toute son affaire.
-export function bdtVigilance(bdt: any, prepRows: any[]): string | null {
-  if (bdt && bdt.matiere_ok === false) return 'matière non réceptionnée'
+// Lot H2 (18/09/2026) : 3e raison « sous-lots non terminés (n/m) : … » sur les BDT d'un lot de pièce mère
+// dont un sous-lot n'est pas fini (`arbre` = lots + opsParLot, src/nomenclature_arbre.ts) — l'assemblage
+// peut être PROGRAMMÉ, il ne peut pas encore être PRODUIT (règle du 10/09 : rien n'est retiré du planning).
+// Les raisons sont désormais TOUTES rendues, jointes par « · » (avant : la première seule).
+export function bdtVigilance(bdt: any, prepRows: any[], arbre?: { lots: any[]; ops: Record<string, OpLot[]> }): string | null {
+  const raisons: string[] = []
+  if (bdt && bdt.matiere_ok === false) raisons.push('matière non réceptionnée')
   const parLot = new Set<string>(), parAffaire = new Set<string>()
   for (const p of (prepRows || [])) {
     if (String((p as any).statut) === 'faite') continue
@@ -1042,20 +1178,26 @@ export function bdtVigilance(bdt: any, prepRows: any[]): string | null {
     else parAffaire.add(String((p as any).num_affaire || ''))
   }
   const k = String(bdt?.cmd_ref || '').trim() + '|' + String(bdt?.piece || '').toLowerCase().trim()
-  if (parLot.has(k)) return 'préparation technique en attente'
-  if (parAffaire.has(String(bdt?.num_affaire || ''))) return 'préparation technique en attente (affaire)'
-  return null
+  if (parLot.has(k)) raisons.push('préparation technique en attente')
+  else if (parAffaire.has(String(bdt?.num_affaire || ''))) raisons.push('préparation technique en attente (affaire)')
+  if (arbre) { const v = vigilanceSousLots(bdt, arbre.lots, arbre.ops); if (v) raisons.push(v) }
+  return raisons.length ? raisons.join(' · ') : null
 }
 
 // (a) prépa technique : nomenclature sans programme CN (étape machine) OU sans plan.
-async function cascadePrepaTechnique(dt: any, cmdId: string, byCode: Record<string, any>) {
+// Lot H2 : une par PIÈCE du plan (racines ET sous-lots), dédoublonnée par l'id PREP-<aff>-<pièce> (une fille
+// présente deux fois dans l'arbre = une prépa). `lots` restreint le travail (route « Créer les sous-lots »).
+async function cascadePrepaTechnique(dt: any, cmdId: string, plan: PlanAffaire, lots?: LotPlan[]) {
   const aff = String(dt.num_affaire || dt.id)
-  const pieces = Array.isArray(dt.pieces_detail) ? dt.pieces_detail : []
   let created = 0
-  for (const p of pieces) {
-    const ref = String(p.ref_interne || '').toLowerCase().trim()
-    const nom = ref ? byCode[ref] : null
+  const vus = new Set<string>()
+  for (const l of (lots || plan.lots)) {
+    const nom = l.nom
     if (!nom) continue
+    const idPrep = 'PREP-' + _sanId(aff) + '-' + _sanId(l.piece)
+    if (vus.has(idPrep)) continue
+    vus.add(idPrep)
+    const p: any = plan.pieceParRacine[plan.racineParLot[l.id] || racineDuLot(l.id)] || {}
     const etapes = Array.isArray(nom.etapes_production) ? nom.etapes_production : []
     const cncEtapes = etapes.filter((e: any) => e.type !== 'sous_traite' && (e.machine_id || /cnc|tour|frais|usin/i.test(String(e.nom || e.process_nom || ''))))
     const manqueCnc = cncEtapes.length > 0 && cncEtapes.some((e: any) => !String(e.programme || e.programme_fichier || '').trim())
@@ -1066,10 +1208,11 @@ async function cascadePrepaTechnique(dt: any, cmdId: string, byCode: Record<stri
     if (!manqueCnc && !manquePlan) continue
     // Site figé à la création, avec la MÊME formule que les BDT nés de la même cascade
     // (src/index.tsx, cascadeLotsBdtBst) : la prépa et ses BDT affichent donc toujours le même site.
-    const actPrep = p.activite || nom.entite || dt.activite || 'Seem'
+    // (Un sous-lot n'a pas de ligne de DT : son site est celui de sa nomenclature, comme ses BDT.)
+    const actPrep = (l.lot_parent ? null : p.activite) || nom.entite || dt.activite || 'Seem'
     const basePrep: any = {
-      id: 'PREP-' + _sanId(aff) + '-' + _sanId(p.ref_interne || ref), num_affaire: aff, dt_ref: dt.id, cmd_ref: cmdId,
-      code_ref_produit: nom.code_ref_produit || p.ref_interne, piece: p.ref_interne || ref,
+      id: idPrep, num_affaire: aff, dt_ref: dt.id, cmd_ref: cmdId,
+      code_ref_produit: nom.code_ref_produit || l.piece, piece: l.piece,
       type: p.piece_existante_a_jour ? 'maj' : 'nouvelle', manque_code_cnc: manqueCnc, manque_plan: manquePlan, statut: 'a_faire',
     }
     // La colonne `activite` peut ne pas exister encore (migration non appliquée) : on tente
@@ -1082,25 +1225,38 @@ async function cascadePrepaTechnique(dt: any, cmdId: string, byCode: Record<stri
 }
 
 // (b) DA du manque matière + accessoires (besoin en unités d'achat × qté vs stock).
-async function cascadeDAManques(dt: any, cmdId: string, byCode: Record<string, any>) {
+// Lot H2 : besoins CUMULÉS sur tous les lots du plan (racines et sous-lots, qté de chaque lot), PUIS une DA
+// par référence pour le manque total. Corrige au passage la perte du besoin de la 2ᵉ pièce partageant une
+// référence (même id de DA, refusé en silence, et le stock était compté deux fois).
+// `opts` (route « Créer les sous-lots ») : lots à couvrir, suffixe d'id (-SL<ZZ>) et libellé du demandeur.
+// Correctif H2 : `bilan` (facultatif) reçoit le nombre de références en MANQUE (0 = le stock couvre tout) et les DA
+// non créées. Un id déjà pris (23505 : 2ᵉ « Créer les sous-lots » sous la même racine, DA antérieure de l'affaire)
+// n'avale plus le besoin : l'id suivant libre (-2, -3…) est pris ; tout autre refus est rendu en avertissement.
+async function cascadeDAManques(dt: any, cmdId: string, plan: PlanAffaire, opts?: { lots?: LotPlan[]; suffixe?: string; demandeur?: string; bilan?: { manques: number; echecs: string[] } }) {
   const [stock, aRangerLu0] = await Promise.all([getStockReel().catch(() => [] as any[]), quantitesARangerParRef()])   // lot F : le reçu à ranger compte
   // File illisible (panne) : on relit une fois. Si elle reste illisible, les DA sont créées quand même (une DA est une
   // DEMANDE revue par les Achats, et la cascade ne se rejoue pas : une DA sautée serait perdue) mais le demandeur le dit.
   const aRangerLu = aRangerLu0.panne ? await quantitesARangerParRef() : aRangerLu0
   const aRanger = aRangerLu.parRef
-  const demandeurDA = aRangerLu.panne ? 'Acceptation offre (stock à ranger non vérifié)' : 'Acceptation offre'
+  const libDemandeur = opts?.demandeur || 'Acceptation offre'
+  const demandeurDA = aRangerLu.panne ? libDemandeur + ' (stock à ranger non vérifié)' : libDemandeur
   const stockByRef: Record<string, any> = {}
   for (const s of (stock as any[])) { const k = String(s.reference || s.id || '').toLowerCase().trim(); if (k) stockByRef[k] = s }
   const aff = String(dt.num_affaire || dt.id)
-  const pieces = Array.isArray(dt.pieces_detail) ? dt.pieces_detail : []
   let created = 0
-  for (const p of pieces) {
-    const ref = String(p.ref_interne || '').toLowerCase().trim()
-    const nom = ref ? byCode[ref] : null
-    if (!nom) continue
-    const qte = Number(p.quantite) || 1
-    let fournitures: any[] = []
-    try { fournitures = (await getFournitures(String(nom.id))) as any[] } catch {}
+  // Besoin cumulé par (catégorie, référence normalisée) — l'id de DA reste `_sanId(ref_stock || désignation)`.
+  const besoins = new Map<string, { besoin: number; isMat: boolean; f: any }>()
+  const fournParNom = new Map<string, any[]>()
+  for (const l of (opts?.lots || plan.lots)) {
+    const nom = l.nom
+    if (!nom || nom.id == null) continue
+    const qte = Number(l.qte) || 1
+    let fournitures = fournParNom.get(String(nom.id))
+    if (!fournitures) {
+      fournitures = []
+      try { fournitures = (await getFournitures(String(nom.id))) as any[] } catch {}
+      fournParNom.set(String(nom.id), fournitures)
+    }
     for (const f of fournitures) {
       const cat = String(f.categorie || '')
       if (cat !== 'matiere' && cat !== 'accessoire') continue
@@ -1115,18 +1271,34 @@ async function cascadeDAManques(dt: any, cmdId: string, byCode: Record<string, a
       //   stock compté en vis). La matière reste en TÔLES (unité d'achat connue au BE, géométrie).
       const besoin = isMat ? (npt > 0 ? Math.ceil(qte / npt) : Math.ceil(qpp * qte)) : Math.ceil(qpp * qte)
       if (besoin <= 0) continue
-      const refStock = String(f.ref_stock || '').toLowerCase().trim()
-      const st = refStock ? stockByRef[refStock] : null
-      const reste = (st ? Number(st.stock_actuel) || 0 : 0) + (refStock ? (aRanger[refStock] || 0) : 0)
-      const manque = Math.max(0, besoin - reste)
-      if (manque <= 0) continue   // le stock couvre → pas de DA
-      await createDemandeAchat({
-        id: 'DA-' + _sanId(aff) + '-' + _sanId(f.ref_stock || f.designation || 'X') + '-' + (isMat ? 'M' : 'A'),
-        demandeur: demandeurDA, type_da: isMat ? 'Matière' : 'Accessoire', article: f.designation || f.ref_stock || 'Fourniture',
+      const cleB = (isMat ? 'M|' : 'A|') + String(f.ref_stock || f.designation || 'X').toLowerCase().trim()
+      const cur = besoins.get(cleB)
+      if (cur) cur.besoin += besoin
+      else besoins.set(cleB, { besoin, isMat, f })
+    }
+  }
+  for (const { besoin, isMat, f } of besoins.values()) {
+    const refStock = String(f.ref_stock || '').toLowerCase().trim()
+    const st = refStock ? stockByRef[refStock] : null
+    const reste = (st ? Number(st.stock_actuel) || 0 : 0) + (refStock ? (aRanger[refStock] || 0) : 0)
+    const manque = Math.max(0, besoin - reste)
+    if (manque <= 0) continue   // le stock couvre → pas de DA
+    if (opts?.bilan) opts.bilan.manques++
+    const idBase = 'DA-' + _sanId(aff) + '-' + _sanId(f.ref_stock || f.designation || 'X') + '-' + (isMat ? 'M' : 'A') + (opts?.suffixe || '')
+    const article = f.designation || f.ref_stock || 'Fourniture'
+    let cree = false, erreur = ''
+    for (let n = 1; n <= 30 && !cree; n++) {
+      const r: any = await createDemandeAchat({
+        id: n === 1 ? idBase : idBase + '-' + n,
+        demandeur: demandeurDA, type_da: isMat ? 'Matière' : 'Accessoire', article,
         qte: String(manque), priorite: 'normal', statut: 'a_traiter', date_da: TODAY_ISO(), type_bc: 'fournisseur',
         visible: true, genere_par_adt: true, num_affaire: aff, cmd_ref: cmdId,
-      } as any).then((r: any) => { if (r && !r.error) created++ }).catch(() => {})
+      } as any).catch((e: any) => ({ error: { message: String(e?.message || e) } }))
+      if (r && !r.error) { cree = true; created++; break }
+      erreur = String(r?.error?.message || 'insertion sans retour')
+      if (String(r?.error?.code || '') !== '23505') break
     }
+    if (!cree && opts?.bilan) opts.bilan.echecs.push('Demande d’achat « ' + article + ' » (qté ' + String(manque) + ') NON créée : ' + erreur + ' — faites-la à la main aux Achats.')
   }
   return created
 }
@@ -1151,19 +1323,25 @@ async function _cascadeDejaFaite(aff: string): Promise<boolean> {
 }
 
 // Prépa technique + demandes d'achat. Extrait pour pouvoir être rejoué à l'encaissement.
-async function cascadeEngagementDepense(dt: any, cmdId: string, byCode: Record<string, any>) {
-  const prepa = await cascadePrepaTechnique(dt, cmdId, byCode).catch(() => 0)
-  const da = await cascadeDAManques(dt, cmdId, byCode).catch(() => 0)
-  return { prepa, da }
+// Lot H2 : travaille sur le PLAN de l'affaire (racines + sous-lots), le même que les lots et les bons.
+async function cascadeEngagementDepense(dt: any, cmdId: string, plan: PlanAffaire) {
+  const prepa = await cascadePrepaTechnique(dt, cmdId, plan).catch(() => 0)
+  const bilan = { manques: 0, echecs: [] as string[] }
+  const da = await cascadeDAManques(dt, cmdId, plan, { bilan }).catch((e: any) => { bilan.echecs.push('Demandes d’achat interrompues : ' + String(e?.message || e)); return 0 })
+  return { prepa, da, avertissements: bilan.echecs }
 }
 
 async function cascadeAcceptationOffre(off: any, cmdId: string) {
-  const out = { dt: null as any, prepa: 0, da: 0, lots: 0, bdt: 0, bds: 0, proforma: false, facture: null as any, avertissement_bdt: null as string | null }
+  // Lot H2 : + sous_lots (sous-lots créés) et avertissements (arbre non développé, composant sans révision
+  // validée, base sans cloud-14…), à afficher par l'écran d'acceptation. `avertissement_bdt` est conservé.
+  const out = { dt: null as any, prepa: 0, da: 0, lots: 0, sous_lots: 0, bdt: 0, bds: 0, proforma: false, facture: null as any, avertissement_bdt: null as string | null, avertissements: [] as string[] }
   try {
     const dt = off.dt_ref ? await getDemandeTravaux(String(off.dt_ref)).catch(() => null) : null
     if (!dt) return out
     out.dt = dt.id
-    const byCode = _nomByCode(await getNomenclatures().catch(() => [] as any[]))
+    const noms = await getNomenclatures().catch(() => [] as any[])
+    const plan = await planDepuisBase(dt, cmdId, noms as any[])
+    out.avertissements.push(...plan.avertissements)
     const proforma = estProforma(off.mode_reglement)
     out.proforma = proforma
 
@@ -1171,17 +1349,19 @@ async function cascadeAcceptationOffre(off: any, cmdId: string) {
       // On facture tout de suite, et on N'ENGAGE RIEN : ni prépa technique, ni demande d'achat.
       out.facture = await creerFactureProforma(off, cmdId).catch(() => null)
     } else {
-      const eng = await cascadeEngagementDepense(dt, cmdId, byCode)
+      const eng = await cascadeEngagementDepense(dt, cmdId, plan)
       out.prepa = eng.prepa; out.da = eng.da
+      out.avertissements.push(...eng.avertissements)
     }
 
     // Les lots et bons sont créés dans les deux cas : ils naissent avec matiere_ok = false,
     // donc ils restent hors du planning tant que la matière n'est pas réceptionnée — ce qui,
     // en proforma, suppose que les demandes d'achat aient été débloquées par le paiement.
-    const cc = await cascadeLotsBdtBst(dt, cmdId, byCode).catch(() => ({ lots: 0, bdt: 0, bds: 0, avertissement: null as string | null }))
-    out.lots = cc.lots; out.bdt = cc.bdt; out.bds = cc.bds
+    const cc = await cascadeLotsBdtBst(dt, cmdId, plan).catch((e: any) => ({ lots: 0, lots_existants: 0, sous_lots: 0, bdt: 0, bds: 0, avertissement: null as string | null, avertissements: ['Création des lots et des bons interrompue : ' + String(e?.message || e)] }))
+    out.lots = cc.lots; out.sous_lots = cc.sous_lots; out.bdt = cc.bdt; out.bds = cc.bds
     if (cc.avertissement) out.avertissement_bdt = cc.avertissement
-  } catch {}
+    out.avertissements.push(...cc.avertissements)
+  } catch (e: any) { out.avertissements.push('Cascade de production interrompue : ' + String(e?.message || e)) }
   return out
 }
 
@@ -3960,6 +4140,16 @@ app.post('/api/expeditions/bl-partiel', async (c) => {
     getNonConformites().catch(() => [] as any[]), getQuarantaines().catch(() => [] as any[]),
   ])
   const cmd = (cmds as any[]).find(x => String(x.id) === String(cmdId) || String(x.num_affaire) === String(cmdId))
+  // ── Lot H2 : un SOUS-lot (composant d'une pièce mère) est interne — il part assemblé dans son lot racine.
+  //    Refus AVANT toute écriture ; la dérogation qualité (force) ne s'applique pas ici.
+  for (const l of lignes) {
+    const lotL = (lots as any[]).find((x: any) => String(x.id) === String(l.lot_id))
+    const parent = lotL ? parentDuLot(lotL) : (estSousLot(l.lot_id) ? parentDuLot(String(l.lot_id)) : null)
+    if (parent) {
+      const racine = racineDansLots(String(l.lot_id), lots as any[])
+      return c.json({ ok: false, code: 'sous_lot_non_expediable', lot_id: String(l.lot_id), lot_racine: racine, error: 'Un sous-lot s’expédie avec son lot racine (' + racine + ').' }, 409)
+    }
+  }
   // ── Porte qualité : refus d'expédier tant qu'une NC bloquante ou une quarantaine est active sur l'affaire (dérogation via b.force=true). ──
   if (cmd && b.force !== true) {
     const aff = String(cmd.num_affaire || cmd.id)
@@ -4018,7 +4208,9 @@ app.post('/api/expeditions/bl-partiel', async (c) => {
       const cmdMontant = Number(cmd.montant ?? 0) || 0
       // ⚠ Dénominateur STABLE = qté commandée d'origine (Σ qte_initiale), JAMAIS le reste décrémenté à chaque BL
       //   (sinon sur-facturation cumulative : 2 BL de 50 sur un lot de 100 facturaient 1500 au lieu de 1000).
-      const cmdQte = (lots as any[]).filter((x: any) => String(x.cmd_id) === String(cmd.id)).reduce((s: number, x: any) => s + (Number(x.qte_initiale ?? x.qte) || 0), 0)
+      // Lot H2 : lots RACINES seulement — un sous-lot (composant d'une pièce mère) porte le même cmd_id, mais sa
+      //   quantité n'est pas une quantité commandée (5 M1 = lots 5 + 10 + 5 + 15 : on facturait 5/35 de la commande).
+      const cmdQte = (lots as any[]).filter((x: any) => String(x.cmd_id) === String(cmd.id) && !parentDuLot(x)).reduce((s: number, x: any) => s + (Number(x.qte_initiale ?? x.qte) || 0), 0)
       montantHt = (cmdMontant > 0 && cmdQte > 0) ? +(cmdMontant * (qteTotale / cmdQte)).toFixed(2) : 0
       // Plafond MONÉTAIRE (garde-fou) : Σ factures + celle-ci ≤ montant commande − avoir déjà consommé à l'acceptation.
       const avoir = Number((cmd as any).avoir_applique) || 0
@@ -4096,9 +4288,23 @@ async function debloquerProforma(facture: any) {
   if (await _cascadeDejaFaite(String(cmd.num_affaire || ''))) return null
   const dt = off.dt_ref ? await getDemandeTravaux(String(off.dt_ref)).catch(() => null) : null
   if (!dt) return null
-  const byCode = _nomByCode(await getNomenclatures().catch(() => [] as any[]))
-  const eng = await cascadeEngagementDepense(dt, cmdId, byCode)
-  return { num_affaire: cmd.num_affaire || null, prepa: eng.prepa, da: eng.da }
+  // Lot H2 : même plan qu'à l'acceptation (les sous-lots déjà créés sont relus et réutilisés).
+  // Correctif H2 : les lectures sont STRICTES. Une panne (colonnes, lots, nomenclatures illisibles) rendait un plan
+  // réduit aux racines : seule leur matière était demandée, puis _cascadeDejaFaite bloquait tout rejeu — la matière
+  // des sous-lots (créés, eux, dès l'acceptation) n'était jamais achetée. En panne : RIEN n'est engagé (le rejeu
+  // reste possible) et on le dit. Les sous-lots comptés sont ceux qui EXISTENT : un sous-lot que la base n'a pas
+  // (acceptation sans cloud-14) sera couvert par « Créer les sous-lots », qui fait ses propres demandes d'achat.
+  const nonEngage = (raison: string) => ({ num_affaire: cmd.num_affaire || null, prepa: 0, da: 0, avertissements: ['Paiement enregistré, mais la préparation technique et les demandes d’achat de l’affaire ' + String(cmd.num_affaire || cmdId) + ' n’ont PAS été lancées (' + raison + ') : rien n’a été engagé. Prévenez l’administrateur pour les relancer (repasser la facture « payée »).'] })
+  const [arbreEtat, lecNoms] = await Promise.all([lotsArbreDispo(), getNomenclaturesStrictes()])
+  if (arbreEtat.erreur) return nonEngage('état de la table des lots illisible : ' + arbreEtat.erreur)
+  if (lecNoms.error) return nonEngage('nomenclatures illisibles : ' + lecNoms.error)
+  let lotsLus: { data: any[]; error: string | null } | undefined
+  if (arbreEtat.dispo) { lotsLus = await getLotsStrict(); if (lotsLus.error) return nonEngage('lots illisibles : ' + lotsLus.error) }
+  const plan0 = await planProductionAffaire(dt, lecNoms.data, cmdId, { arbreDispo: arbreEtat.dispo, lotsLus })
+  const plan: PlanAffaire = { ...plan0, lots: plan0.lots.filter((l) => !l.lot_parent || l.existe) }
+  const eng = await cascadeEngagementDepense(dt, cmdId, plan)
+  const avertissements = [...plan.avertissements, ...eng.avertissements]
+  return { num_affaire: cmd.num_affaire || null, prepa: eng.prepa, da: eng.da, ...(avertissements.length ? { avertissements } : {}) }
 }
 
 // ─── API : validation hiérarchique du paiement d'une facture (Direction) ───
@@ -5032,7 +5238,8 @@ app.get('/api/nomenclature/:id', async (c) => {
   c.header('Cache-Control', 'no-store')
   if (lec.error) return c.json({ ok: false, error: 'Lecture de la nomenclature impossible : ' + lec.error }, 500)
   if (!lec.data) return c.json({ ok: false, error: 'Nomenclature introuvable (supprimée entre-temps ?)' }, 404)
-  return c.json({ ok: true, nomenclature: { ...lec.data, composants: composantsDe(lec.data) } })
+  // Lot H2 : composants dans l'ORDRE DE FABRICATION (rang si complet, sinon ordre du tableau), rangs 1..n.
+  return c.json({ ok: true, nomenclature: { ...lec.data, composants: composantsOrdonnes(lec.data) } })
 })
 // Journal EN 9100 d'une nomenclature (portée « fiche » ou « groupe » = toutes ses révisions).
 // Fonctionne même si la fiche a été supprimée : le journal porte lui-même son groupe.
@@ -5152,6 +5359,18 @@ app.get('/api/be/analyse-dt/:id', async (c) => {
     // Site du taux homme : celui de la nomenclature, sinon l'activité de la DT.
     const site: string | null = nom.entite ? String(nom.entite) : siteDt
     const costOpts = { taux: tx, site: siteDt }   // computeNomCostForQty prend nom.entite en priorité
+    // Lot H2 (P2) : pièce MÈRE — ses sous-ensembles (arbre de production, même résolution que la cascade :
+    // dernière révision VALIDÉE de chaque composant) seront fabriqués en sous-lots, mais le coût ci-dessous ne
+    // compte que les étapes et fournitures propres de la mère. Signalé, AUCUN changement de calcul (le
+    // chiffrage récursif est un arbitrage ouvert, contrat H2 §16.1).
+    let mere: any = null
+    if (estMereAvecComposants(nom)) {
+      const arbreM = developperArbre(nom, qte, resolveurProduction(noms as any[]))
+      const sousEns: any[] = []
+      const parcourir = (nd: NoeudArbre) => { for (const e of nd.enfants) { sousEns.push({ chemin: e.chemin.join('.'), piece: e.code, qte: e.qte, niveau: e.niveau, statut: e.nom ? 'valide' : 'non_lance' }); parcourir(e) } }
+      parcourir(arbreM.racine)
+      mere = { sous_ensembles: sousEns, cout_non_inclus: true, avertissements: arbreM.avertissements.map((e) => e.message) }
+    }
     const fournituresBase = await getFournitures(nom.id).catch(() => [] as any[])
     // ── PRIX MOYEN EN DIRECT (lot H1, spec §9) ───────────────────────────────────────────────
     // « computeNomCostForQty et l'analyse DT utilisent le prix moyen recalculé en direct depuis le
@@ -5297,7 +5516,8 @@ app.get('/api/be/analyse-dt/:id', async (c) => {
       //   `fournitures_perimees` : au moins une composante de la moyenne a plus de 6 mois (orange) ;
       //   `fournitures_sans_conditionnement` : fournisseurs chiffrés sans qté par paquet déclarée
       //     (leur prix est compté comme un prix à la pièce).
-      fournitures_incompletes: _rec.incompletes, fournitures_perimees: _rec.perimees, fournitures_sans_conditionnement: _rec.sans_conditionnement })
+      fournitures_incompletes: _rec.incompletes, fournitures_perimees: _rec.perimees, fournitures_sans_conditionnement: _rec.sans_conditionnement,
+      mere })
   }
   const totalSerie = out.reduce((s, x) => s + (x.cost ? x.cost.totalSerie : 0), 0)
   const missing = out.filter((x: any) => !x.nomenclature && !x.piece_existante_a_jour).length
@@ -5354,10 +5574,11 @@ app.post('/api/be/analyse-dt/:id/etapes-libres', async (c) => {
 //   Durée = temps fixe (réglage, inchangé) + temps variable (MO+machine) × quantité client. Idempotent.
 app.post('/api/be/analyse-dt/:id/generer-bdt', async (c) => {
   const id = c.req.param('id')
-  const [dt, noms, clesBdt, clesBds, procs, existingLots] = await Promise.all([
+  const [dt, noms, clesBdt, clesBds, procs, existingLots, arbreEtat] = await Promise.all([
     getDemandeTravaux(id).catch(() => null), getNomenclatures().catch(() => [] as any[]),
     getClesBonsStrictes('BDT'), getClesBonsStrictes('BDS'),
-    getProcessAtelier().catch(() => [] as any[]), getLots().catch(() => [] as any[])
+    getProcessAtelier().catch(() => [] as any[]), getLots().catch(() => [] as any[]),
+    lotsArbreDispo(),
   ])
   if (!dt) return c.json({ ok: false, error: 'DT introuvable' }, 404)
   // Process OAS = pas de BDT ; c'est un passage de lot (le BDT précédent soldé → lot à l'OAS).
@@ -5385,10 +5606,12 @@ app.post('/api/be/analyse-dt/:id/generer-bdt', async (c) => {
   const idsPris: Record<'BDT' | 'BDS', Set<string>> = { BDT: new Set(clesBdt.data.map((b) => b.id)), BDS: new Set(clesBds.data.map((b) => b.id)) }
   // Insère un bon sous le premier id libre à partir du numéro prévu. Conflit 23505 (bon créé entre-temps) :
   // si l'id porte la MÊME clé, le bon existe déjà (compté « déjà présent ») ; sinon on essaie l'id suivant.
-  const creerBonIdLibre = async (kind: 'BDT' | 'BDS', yr: string, zz: number, num: number, cle: string, inserer: (id: string) => Promise<{ data: any; error: any }>): Promise<{ statut: 'cree' | 'existant' | 'echec'; id: string; erreur?: string }> => {
-    let n = num, id = fmtBonId(kind, yr, aff, zz, n)
+  // Lot H2 : l'id est construit par `idDe(n)` — fmtBonId pour un lot racine (INCHANGÉ), bonIdDuLot pour un
+  // sous-lot (BDT-AAAA-AFF-ZZ.RR-AA).
+  const creerBonIdLibre = async (kind: 'BDT' | 'BDS', idDe: (n: number) => string, num: number, cle: string, inserer: (id: string) => Promise<{ data: any; error: any }>): Promise<{ statut: 'cree' | 'existant' | 'echec'; id: string; erreur?: string }> => {
+    let n = num, id = idDe(n)
     for (let essai = 0; essai < 50; essai++) {
-      while (idsPris[kind].has(id)) { n++; id = fmtBonId(kind, yr, aff, zz, n) }
+      while (idsPris[kind].has(id)) { n++; id = idDe(n) }
       const r = await inserer(id)
       if (!r.error && r.data) { idsPris[kind].add(id); return { statut: 'cree', id } }
       if (String(r.error?.code || '') !== '23505') return { statut: 'echec', id, erreur: r.error?.message || 'insertion sans retour' }
@@ -5401,6 +5624,12 @@ app.post('/api/be/analyse-dt/:id/generer-bdt', async (c) => {
   }
   let nb = 0, ns = 0, skipped = 0, sansNom = 0, oasGates = 0
   const echecs: { bon: string; piece: string; seq: number; erreur: string }[] = []
+  // Lot H2 : sous-lots des pièces mères (même plan que la cascade d'acceptation).
+  const avertissements: string[] = []
+  let slCrees = 0, slExistants = 0
+  let arbreActif = arbreEtat.dispo
+  let lotsStricts: { data: any[]; error: string | null } | null = null
+  const resP = resolveurProduction(noms as any[])
   let pieceNum = 0
   for (const p of pieces) {
     const ref = String(p.ref_interne || '').toLowerCase().trim()
@@ -5408,57 +5637,86 @@ app.post('/api/be/analyse-dt/:id/generer-bdt', async (c) => {
     const nom = ref ? byCode[ref] : null
     if (!nom) { sansNom++; continue }
     pieceNum++
-    const act = nom.entite || (dt as any).activite || 'Seem'
-    const pieceLbl = p.ref_interne || ref
-    // lie le BDT au lot RÉEL s'il existe déjà (id exact) ; sinon calcule le format cible
-    const exLot = (existingLots as any[]).find((l: any) => String(l.cmd_id || '').endsWith('-' + aff) && String(l.piece || '') === String(pieceLbl))
+    const pieceLbl = String(p.ref_interne || ref)
+    // lie le BDT au lot RÉEL s'il existe déjà (id exact) ; sinon calcule le format cible.
+    // Lot H2 : parmi les lots RACINES seulement (un sous-lot peut porter la même pièce qu'une racine).
+    const exLot = (existingLots as any[]).find((l: any) => !estSousLot(l.id) && !l.lot_parent && String(l.cmd_id || '').endsWith('-' + aff) && String(l.piece || '') === pieceLbl)
     const lotRef = exLot ? String(exLot.id) : fmtLotId(String(new Date().getFullYear()), aff, pieceNum)
     const _lm = String(lotRef).match(/^LOT-(\d{4})-.+-(\d{2,})$/)
     const yr = _lm ? _lm[1] : String(new Date().getFullYear())
     const zz = _lm ? Number(_lm[2]) : pieceNum
-    let bdtNum = 0, bdsNum = 0
-    const etapes = (Array.isArray(nom.etapes_production) ? nom.etapes_production : []).slice().sort((a: any, b: any) => (Number(a.ordre) || 0) - (Number(b.ordre) || 0))
-    // Repère les étapes OAS (est_oas sur l'étape OU process OAS) — elles NE créent PAS de BDT ;
-    // elles agissent comme une porte de lot : le BDT juste avant est marqué oas_apres, celui juste après oas_avant.
-    const oasFlags = etapes.map((e: any) => !!e.est_oas || (e.process_id && oasProcIds.has(String(e.process_id))))
-    let idx = 0
-    for (let i = 0; i < etapes.length; i++) {
-      const e = etapes[i]
-      idx++
-      const seq = Number(e.ordre) || idx
-      if (oasFlags[i]) { oasGates++; continue }
-      const tps = etapeTempsMin(e, txTemps)
-      const dureeH = dureeBdtDepuisTemps(tps, qte)
-      const op = e.nom || e.process_nom || e.operation_st || 'Process'
-      const k = `${aff}|${p.ref_interne || ref}|${seq}`
-      const oasAvant = i > 0 && oasFlags[i - 1]   // ce BDT ne peut être reçu qu'une fois le lot passé à l'OAS
-      const oasApres = i < etapes.length - 1 && oasFlags[i + 1]   // son soldage envoie le lot à l'OAS
-      if (e.type === 'sous_traite') {
-        bdsNum++
-        if (bdsKey.has(k)) { skipped++; continue }
-        const rBds = await creerBonIdLibre('BDS', yr, zz, bdsNum, k, (idBds) => createBDSRow({ id: idBds, cmd_ref: aff, lot_ref: lotRef, client_nom: client, piece: p.ref_interne || ref, qte, operation: op, sous_traitant_id: e.fournisseur_st_id || null, duree_days: Math.max(1, Math.ceil(dureeH / 7)), statut: 'a_planifier', seq }))
-        // Lot H0 (17/09/2026) : supabase-js ne lève jamais — le compteur n'avance qu'après une insertion RÉUSSIE.
-        if (rBds.statut === 'existant') { skipped++; continue }
-        if (rBds.statut === 'echec') { echecs.push({ bon: rBds.id, piece: String(pieceLbl), seq, erreur: rBds.erreur || 'insertion sans retour' }); continue }
-        bdsKey.add(k)
-        ns++
+    // Plan des lots de la pièce : la racine seule, ou la racine + ses sous-lots (pré-ordre) pour une mère.
+    let planPiece: LotPlan[] = [{ id: lotRef, lot_parent: null, rang: zz, niveau: 0, piece: pieceLbl, qte, qte_par_parent: null, nomenclature_id: nom.id != null ? String(nom.id) : null, nom }]
+    if (estMereAvecComposants(nom)) {
+      if (arbreActif && !lotsStricts) lotsStricts = await getLotsStrict()
+      if (arbreActif && lotsStricts && !lotsStricts.error) {
+        const arbre = developperArbre(nom, qte, resP)
+        planPiece = attribuerIdsSousLots(planLotsArbre(lotRef, zz, pieceLbl, arbre), lotsStricts.data)
+        for (const e of arbre.avertissements) avertissements.push(avertMere(pieceLbl, nom, e.message))
+        // Commande passée (le lot racine existe) : on crée les lignes de sous-lots MANQUANTES. Sans commande
+        // (DT seule), aucune ligne `lots` n'est créée — comme pour la racine — et les bons portent les ids calculés.
+        if (exLot) {
+          for (const l of planPiece) {
+            if (!l.lot_parent || l.existe || !arbreActif) continue
+            const r: any = await createLot(payloadLot(l, String(exLot.cmd_id || ''), String(exLot.client_nom || (dt as any).client_nom || ''), true)).catch((e: any) => ({ data: null, error: { message: String(e?.message || e) } }))
+            if (r && !r.error) { slCrees++; lotsStricts.data.push(r.data || { id: l.id, lot_parent: l.lot_parent, piece: l.piece }) }
+            else if (String(r?.error?.code || '') === '23505') slExistants++
+            else if (erreurColonneAbsente(r?.error)) { arbreActif = false; avertissements.push('Lignes de sous-lots non créées : ' + MSG_BASE_A_METTRE_A_JOUR + '.') }
+            else avertissements.push('Sous-lot ' + l.id + ' (' + l.piece + ') non créé : ' + String(r?.error?.message || 'insertion sans retour') + '.')
+          }
+          slExistants += planPiece.filter((l) => l.lot_parent && l.existe).length
+        }
       } else {
-        bdtNum++
-        if (bdtKey.has(k)) { skipped++; continue }
-        const rBdt = await creerBonIdLibre('BDT', yr, zz, bdtNum, k, (idBdt) => creerBDTAvecReglage({ id: idBdt, num_affaire: aff, cmd_ref: aff, lot_ref: lotRef, client_nom: client, piece: p.ref_interne || ref, operation: op, machine_id: e.machine_id || null, process_id: e.process_id || null, seq, duree: dureeH, temps_alloue: dureeH, temps_reglage: reglageBdtHeures(tps.reglageMin, dureeH), statut: 'a_programmer', priorite: prio, activite: act, oas_avant: oasAvant, oas_apres: oasApres }, etatReglage))
-        if (rBdt.statut === 'existant') { skipped++; continue }
-        if (rBdt.statut === 'echec') { echecs.push({ bon: rBdt.id, piece: String(pieceLbl), seq, erreur: rBdt.erreur || 'insertion sans retour' }); continue }
-        bdtKey.add(k)
-        nb++
+        avertissements.push(arbreActif && lotsStricts?.error ? AVERT_ARBRE_ILLISIBLE(pieceLbl, lotsStricts.error) : (arbreEtat.erreur ? AVERT_ARBRE_ILLISIBLE(pieceLbl, arbreEtat.erreur) : AVERT_CLOUD14(pieceLbl)))
+      }
+    }
+    for (const lot of planPiece) {
+      const act = lot.nom?.entite || (dt as any).activite || 'Seem'
+      const idDe = (kind: 'BDT' | 'BDS') => (n: number) => lot.lot_parent ? bonIdDuLot(kind, lot.id, n) : fmtBonId(kind, yr, aff, zz, n)
+      let bdtNum = 0, bdsNum = 0
+      const { etapes, oasFlags } = etapesDeGamme(lot.nom, oasProcIds)
+      // Repère les étapes OAS (est_oas sur l'étape OU process OAS) — elles NE créent PAS de BDT ;
+      // elles agissent comme une porte de lot : le BDT juste avant est marqué oas_apres, celui juste après oas_avant.
+      let idx = 0
+      for (let i = 0; i < etapes.length; i++) {
+        const e = etapes[i]
+        idx++
+        const seq = Number(e.ordre) || idx
+        if (oasFlags[i]) { oasGates++; continue }
+        const tps = etapeTempsMin(e, txTemps)
+        const dureeH = dureeBdtDepuisTemps(tps, lot.qte)
+        const op = e.nom || e.process_nom || e.operation_st || 'Process'
+        const k = cleBon(aff, lot.piece, seq, lot.id)
+        const oasAvant = i > 0 && oasFlags[i - 1]   // ce BDT ne peut être reçu qu'une fois le lot passé à l'OAS
+        const oasApres = i < etapes.length - 1 && oasFlags[i + 1]   // son soldage envoie le lot à l'OAS
+        if (e.type === 'sous_traite') {
+          bdsNum++
+          if (bdsKey.has(k)) { skipped++; continue }
+          const rBds = await creerBonIdLibre('BDS', idDe('BDS'), bdsNum, k, (idBds) => createBDSRow({ id: idBds, cmd_ref: aff, lot_ref: lot.id, client_nom: client, piece: lot.piece, qte: lot.qte, operation: op, sous_traitant_id: e.fournisseur_st_id || null, duree_days: Math.max(1, Math.ceil(dureeH / 7)), statut: 'a_planifier', seq }))
+          // Lot H0 (17/09/2026) : supabase-js ne lève jamais — le compteur n'avance qu'après une insertion RÉUSSIE.
+          if (rBds.statut === 'existant') { skipped++; continue }
+          if (rBds.statut === 'echec') { echecs.push({ bon: rBds.id, piece: String(lot.piece), seq, erreur: rBds.erreur || 'insertion sans retour' }); continue }
+          bdsKey.add(k)
+          ns++
+        } else {
+          bdtNum++
+          if (bdtKey.has(k)) { skipped++; continue }
+          const rBdt = await creerBonIdLibre('BDT', idDe('BDT'), bdtNum, k, (idBdt) => creerBDTAvecReglage({ id: idBdt, num_affaire: aff, cmd_ref: aff, lot_ref: lot.id, client_nom: client, piece: lot.piece, operation: op, machine_id: e.machine_id || null, process_id: e.process_id || null, seq, duree: dureeH, temps_alloue: dureeH, temps_reglage: reglageBdtHeures(tps.reglageMin, dureeH), statut: 'a_programmer', priorite: prio, activite: act, oas_avant: oasAvant, oas_apres: oasApres }, etatReglage))
+          if (rBdt.statut === 'existant') { skipped++; continue }
+          if (rBdt.statut === 'echec') { echecs.push({ bon: rBdt.id, piece: String(lot.piece), seq, erreur: rBdt.erreur || 'insertion sans retour' }); continue }
+          bdtKey.add(k)
+          nb++
+        }
       }
     }
   }
   const avert = etatReglage.sansReglage ? { avertissement: AVERT_CLOUD9 } : {}
+  const h2 = { sous_lots: { crees: slCrees, existants: slExistants }, avertissements }
   if (echecs.length) {
     console.error('[generer-bdt] ' + id + ' : ' + echecs.length + ' bon(s) non créé(s) — ' + echecs.map((x) => x.bon + ' : ' + x.erreur).join(' | '))
-    return c.json({ ok: false, error: echecs.length + ' bon(s) non créé(s) : ' + echecs.map((x) => x.bon + ' (' + x.erreur + ')').join(' ; ') + '. Relancer la génération recrée seulement les bons manquants.', bdt: nb, bds: ns, skipped, sansNom, oasGates, echecs, ...avert }, 500)
+    return c.json({ ok: false, error: echecs.length + ' bon(s) non créé(s) : ' + echecs.map((x) => x.bon + ' (' + x.erreur + ')').join(' ; ') + '. Relancer la génération recrée seulement les bons manquants.', bdt: nb, bds: ns, skipped, sansNom, oasGates, echecs, ...avert, ...h2 }, 500)
   }
-  return c.json({ ok: true, bdt: nb, bds: ns, skipped, sansNom, oasGates, echecs: [], ...avert })
+  return c.json({ ok: true, bdt: nb, bds: ns, skipped, sansNom, oasGates, echecs: [], ...avert, ...h2 })
 })
 
 // ══ GED : upload / ouverture / liste / suppression de documents (plans, CAO, FAO) ══
@@ -5858,6 +6116,27 @@ function fournituresPropres(fournitures: any): any {
   })
 }
 
+// ── COMPOSANTS D'UNE MÈRE : contrôle cycle / profondeur AVANT toute écriture (lot H2, 18/09/2026) ──────
+// « dans les nomenclatures mères, il faut pouvoir changer l'ordre des pièces et les ordonnancer dans
+//   l'ordre qu'on veut, l'ordre de fabrication sera toujours considéré du haut vers le bas. »
+// Une mère peut contenir des mères (sous-sous-lots en production). Deux refus 409, messages et chemins
+// rédigés par src/nomenclature_arbre.ts (controlerComposants) :
+//   · cycle_composants : la mère se contiendrait elle-même (A › B › A), directement ou non ;
+//   · profondeur_max   : plus de PROFONDEUR_MAX_NOMENCLATURE (5) niveaux, racine comprise, en comptant
+//                        aussi les mères qui contiennent déjà cette fiche.
+// La fiche à contrôler REMPLACE sa version en base (même id) ou s'y ajoute (création). La lecture de toutes
+// les nomenclatures est STRICTE : en panne ⇒ 503, on n'enregistre pas une mère sans l'avoir contrôlée.
+// Rien n'est écrit (ni fiche, ni fournitures, ni journal) quand le contrôle refuse.
+async function refusComposants(c: any, fiche: any): Promise<Response | null> {
+  if (!fiche || String(fiche.type_nom || '') !== 'mere') return null
+  const lec = await getNomenclaturesStrictes()
+  if (lec.error) return c.json({ ok: false, code: 'lecture_impossible', error: 'Lecture des nomenclatures impossible : les composants de la mère (cycle, profondeur) ne peuvent pas être contrôlés, rien n’a été enregistré (' + lec.error + '). Réessayez.' }, 503)
+  const e: ErreurArbre | null = controlerComposants(fiche, lec.data)
+  if (!e) return null
+  if (e.code === 'profondeur_max') return c.json({ ok: false, code: e.code, profondeur: e.profondeur, max: e.max, chemin: e.chemin, error: e.message }, 409)
+  return c.json({ ok: false, code: e.code, chemin: e.chemin, error: e.message }, 409)
+}
+
 app.post('/api/nomenclature', async (c) => {
   const payload = await c.req.json()
   // strip client-side id + temps calculés côté client (non colonnes) ; etapes_production est désormais persisté (colonne jsonb)
@@ -5866,7 +6145,8 @@ app.post('/api/nomenclature', async (c) => {
   const _refusDoublon = refusDoublonFournitures(c, _fournituresBrutes)
   if (_refusDoublon) return _refusDoublon
   const fournitures = fournituresPropres(_fournituresBrutes)
-  if ('composants' in nomPayload) nomPayload.composants = composantsDe(nomPayload.composants)   // tableau, quel que soit le type de colonne
+  // Tableau quel que soit le type de colonne ; lot H2 : ordre de fabrication (rangs 1..n), champs nettoyés.
+  if ('composants' in nomPayload) nomPayload.composants = normaliserComposants(nomPayload.composants)
   // N3 : num_nom = réf. pièce saisie manuellement ; auto-génération seulement en secours si vide
   if (!nomPayload.num_nom || !String(nomPayload.num_nom).trim()) {
     const year = new Date().getFullYear()
@@ -5888,6 +6168,11 @@ app.post('/api/nomenclature', async (c) => {
     const _draft = _same.find((n: any) => (n.statut || 'brouillon') === 'brouillon')
     const _valide = _same.find((n: any) => n.statut === 'valide')
     if (_draft) {
+      // Lot H2 : mère → cycle / profondeur contrôlés sur le brouillon tel qu'il sera après écrasement.
+      if ('composants' in nomPayload || String(_draft.type_nom || '') !== 'mere') {
+        const refusDraft = await refusComposants(c, { ..._draft, ...nomPayload, id: _draft.id })
+        if (refusDraft) return refusDraft
+      }
       const { data, error } = await updateNomenclature(_draft.id, nomPayload)
       if (error || !data) return c.json({ ok: false, error: error?.message ?? 'Erreur mise à jour brouillon' })
       // Un brouillon écrasé AU STATUT VALIDÉ, c'est une validation : le journal démarre ici. Un
@@ -5913,6 +6198,9 @@ app.post('/api/nomenclature', async (c) => {
       return c.json({ ok: false, error: 'Une nomenclature validée existe déjà pour la réf ' + _code + ' à l\'indice ' + _indice + '. Créez une révision (nouvel indice) plutôt qu\'un doublon.' }, 409)
     }
   }
+  // Lot H2 : une mère créée est contrôlée (cycle, profondeur) avant d'exister.
+  const refusCreation = await refusComposants(c, { ...nomPayload })
+  if (refusCreation) return refusCreation
   const { data, error } = await createNomenclature(nomPayload)
   if (error || !data) return c.json({ ok: false, error: error?.message ?? 'Erreur creation nomenclature' })
   if (fournitures?.length) await upsertFournitures(data.id, fournitures)
@@ -5981,7 +6269,9 @@ app.put('/api/nomenclature/:id', async (c) => {
   //   suivant écrasait la mère avec []. Un client périmé ne doit plus pouvoir détruire la liste :
   //   passer d'une liste NON VIDE à une liste vide exige le drapeau explicite { vider_composants: true }.
   if ('composants' in nomPayload) {
-    const composantsEnvoyes = composantsDe(nomPayload.composants)
+    // Lot H2 : liste NORMALISÉE (ordre de fabrication = ordre du tableau, rangs 1..n) ; une liste dont aucun
+    // élément ne désigne une nomenclature compte pour vide (garde-fou ci-dessous).
+    const composantsEnvoyes = normaliserComposants(nomPayload.composants)
     if (avant && composantsDe(avant).length > 0 && composantsEnvoyes.length === 0 && _viderComposants !== true) {
       return c.json({ ok: false, code: 'composants_vides', error: 'Enregistrement refusé : cette nomenclature compte ' + composantsDe(avant).length + ' composant(s) en base et la liste envoyée est vide. Rouvrez la fiche pour recharger ses composants ; pour les retirer tous volontairement, confirmez le retrait.', composants_en_base: composantsDe(avant).length }, 409)
     }
@@ -6003,6 +6293,16 @@ app.put('/api/nomenclature/:id', async (c) => {
   if (nomPayload.statut !== undefined && nomPayload.statut !== 'valide' && _devalider !== true) {
     if (lecAvant.error || !avant) delete nomPayload.statut            // lecture en échec : on ne touche pas au statut
     else if (avant.statut === 'valide') nomPayload.statut = 'valide'
+  }
+  // Lot H2 : la fiche RÉSULTANTE est une mère → cycle / profondeur contrôlés avant toute écriture, dès que
+  // ses composants sont envoyés, qu'elle DEVIENT mère, ou que son identité (code / n°) change.
+  if (avant) {
+    const apresFiche = { ...avant, ...nomPayload, id }
+    const identiteChange = cleNomenclature(apresFiche) !== cleNomenclature(avant)
+    if (String(apresFiche.type_nom || '') === 'mere' && ('composants' in nomPayload || String(avant.type_nom || '') !== 'mere' || identiteChange)) {
+      const refusPut = await refusComposants(c, apresFiche)
+      if (refusPut) return refusPut
+    }
   }
   // Le journal s'applique aux fiches validées, à l'acte de validation lui-même (référence de
   // départ), et aux fiches validées puis dévalidées (déjà présentes au journal).
@@ -6124,7 +6424,14 @@ app.post('/api/nomenclature/:id/nouvel-indice', async (c) => {
     statut: 'en_cours',
     valide_par: null,
     date_validation: null,
-    composants: composantsDe('composants' in over ? over.composants : base.composants),
+    // Lot H2 : composants normalisés (ordre de fabrication, rangs 1..n) — recopiés de la base s'ils ne sont pas envoyés.
+    composants: normaliserComposants('composants' in over ? over.composants : base.composants),
+  }
+  // Lot H2 : une révision de mère dont les composants CHANGENT (ou qui devient mère) est contrôlée avant
+  // d'être créée (cycle, profondeur). La révision n'a pas encore d'id : elle s'AJOUTE aux fiches existantes.
+  if (String(newRow.type_nom || '') === 'mere' && ('composants' in over || String(base.type_nom || '') !== 'mere' || cleNomenclature(newRow) !== cleNomenclature(base))) {
+    const refusIndice = await refusComposants(c, newRow)
+    if (refusIndice) return refusIndice
   }
   const { data, error } = await createNomenclature(newRow)
   if (error || !data) return c.json({ ok: false, error: error?.message ?? 'Erreur création révision' })
@@ -6161,6 +6468,26 @@ app.delete('/api/nomenclature/:id', async (c) => {
   if (lec.error) return c.json({ ok: false, error: 'Lecture de la nomenclature impossible : suppression refusée pour garantir la traçabilité (' + lec.error + ').' }, 503)
   const avant: any = lec.data
   if (!avant) return c.json({ ok: true, deja_supprimee: true, journal: null, journal_raison: null })
+  // Lot H2 : une fiche encore COMPOSANT d'une mère (dernières révisions) ne se supprime pas — la mère
+  // perdrait un sous-ensemble en silence et son sous-lot ne serait plus lancé. Refus AVANT toute écriture
+  // (journal compris). Désignée par sa révision (nom_id) : toujours ; par son code : seulement si c'est la
+  // DERNIÈRE fiche de ce code (une autre révision du même code reste résolvable par la production).
+  {
+    const lecToutes = await getNomenclaturesStrictes()
+    if (lecToutes.error) return c.json({ ok: false, error: 'Lecture des nomenclatures impossible : suppression refusée (utilisation comme composant d’une mère non vérifiable — ' + lecToutes.error + ').' }, 503)
+    const cleSup = cleNomenclature(avant)
+    // Correctif H2 : mères = dernière révision de chaque groupe ET dernière révision VALIDÉE de chaque code (celle
+    // que la production lance — revisionsRetenues, même ensemble que le contrôle des cycles). Une référence par code
+    // ne tombe que s'il reste une AUTRE révision VALIDÉE du même code (la production ne résout que du validé).
+    const autresMemeCode = cleSup ? lecToutes.data.some((n: any) => String(n.id) !== String(id) && cleNomenclature(n) === cleSup && String(n.statut || '') === 'valide') : false
+    const meres = revisionsRetenues(lecToutes.data)
+      .filter((m: any) => String(m.id) !== String(id) && String(m.type_nom || '') === 'mere')
+      .filter((m: any) => composantsOrdonnes(m).some((cp) => String(cp.nom_id || '') === String(id) || (!autresMemeCode && !!cleSup && cleComposant(cp) === cleSup)))
+    if (meres.length) {
+      const noms = meres.map((m: any) => String(m.num_nom || m.code_ref_produit || m.id))
+      return c.json({ ok: false, code: 'composant_utilise', meres: noms, error: 'Suppression refusée : « ' + String(avant.num_nom || avant.code_ref_produit || id) + ' » est un composant de ' + (noms.length > 1 ? 'ces nomenclatures mères' : 'la nomenclature mère') + ' : ' + noms.join(', ') + '. Retirez-le d’abord de leurs composants.' }, 409)
+    }
+  }
   let jr: ResultatJournal = { journal: null, raison: null }
   const suiviSup = await suiviEN9100(avant)
   if (suiviSup === null) return c.json({ ok: false, error: 'Lecture du journal EN 9100 impossible : suppression refusée pour garantir la traçabilité. Réessayez.' }, 503)
@@ -6976,6 +7303,16 @@ ${BE_ETAPE_COUT_JS}
       renderSurface(block,p);
       if(ap&&ap.plan_doc_id){ var a=byId('planopen-'+n); if(a){ a.href='/api/ged/file/'+encodeURIComponent(ap.plan_doc_id); a.style.display='inline-flex'; if(ap.plan_fichier) a.title=ap.plan_fichier; } }
       beRenderCoverage(n,(ap&&ap.fournitures_stock)?ap.fournitures_stock:[]);
+      // Lot H2 : pièce mère — bandeau orange (ses sous-ensembles seront des sous-lots, NON chiffrés ici)
+      if(ap&&ap.mere&&Array.isArray(ap.mere.sous_ensembles)){
+        var se=ap.mere.sous_ensembles, hw=byId('gwarn-'+n), bm=document.createElement('div');
+        bm.setAttribute('data-mere-banner','1');
+        bm.style.cssText='margin:8px 0;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:8px;padding:7px 10px;font-size:.7rem;color:#9a3412;line-height:1.5;';
+        bm.innerHTML="<div style='font-weight:800;margin-bottom:2px;'><i class='fas fa-sitemap' style='margin-right:5px;'></i>Pièce mère : le coût affiché ne compte que les étapes propres de la mère ; ses "+se.length+" sous-ensembles seront fabriqués en sous-lots et ne sont PAS chiffrés ici.</div>"
+          + se.slice(0,12).map(function(s){ return "<div>• "+esc(s.chemin)+" — "+esc(s.piece)+" × "+esc(s.qte)+(s.statut==='valide'?"":" <b>(aucune révision validée : non lancé)</b>")+"</div>"; }).join('')
+          + (se.length>12?"<div>… +"+(se.length-12)+"</div>":"");
+        if(hw&&hw.parentNode) hw.parentNode.insertBefore(bm,hw); else block.appendChild(bm);
+      }
       // Taux homme = coût chargé RH moyen du SITE de la pièce, tel que le serveur l'a résolu (même valeur que ses coûts)
       var g=GAM[n]; g.qte=Number(p.quantite)||1; g.site=(ap&&ap.site)?ap.site:beSiteOf(p);
       g.tauxHomme=(ap&&ap.taux_homme!=null)?Number(ap.taux_homme):null; g.hommeManquant=(ap&&ap.homme_manquant!=null)?!!ap.homme_manquant:null;
@@ -7528,8 +7865,11 @@ app.get('/production/service', async (c) => {
   //    (matiere_ok !== false : les BDT hérités à matiere_ok null restent visibles.)
   // TOUS les BDT partent au planning — plus aucun n'est retiré. Ce qui leur manque
   // encore (matière, préparation) les accompagne sous forme d'avertissement.
+  // Lot H2 : + « sous-lots non terminés » sur les BDT d'un lot de pièce mère (assemblage) tant qu'un de ses
+  // sous-lots n'est pas fini — une vigilance, jamais un retrait (programmer n'est pas produire).
+  const arbreVigil = { lots: lots as any[], ops: opsParLot(bdts as any[], bds as any[]) }
   const bdtsVigilance = (bdts as any[])
-    .map((b: any) => ({ bdt: b, raison: bdtVigilance(b, prepRows as any[]) }))
+    .map((b: any) => ({ bdt: b, raison: bdtVigilance(b, prepRows as any[], arbreVigil) }))
     .filter((x) => !!x.raison)
     .map((x) => ({
       id: String(x.bdt.id ?? ''), piece: String(x.bdt.piece ?? ''), operation: String(x.bdt.operation ?? ''),
@@ -7730,6 +8070,9 @@ app.patch('/api/production/bds/:id', async (c) => {
   }
   const { data, error } = await updateBDS(id, patch)
   if (error) return c.json({ ok: false, error: error.message })
+  // Lot H2 : un BDS reçu (statut ou date de retour effective) peut finir son lot — et, par lui, le lot de la
+  // pièce mère. Même recalcul qu'après le soldage d'un BDT ; non bloquant, jamais de régression (FIGES).
+  if ('statut' in patch || 'date_retour_effective' in patch) await recalculerCommandeApres(c, (data as any)?.cmd_ref || (data as any)?.cmd_id)
   return c.json({ ok: true, data })
 })
 
@@ -7766,6 +8109,9 @@ const retourBdsHandler = async (c: any) => {
   const jour = String(body?.date_retour_effective || '').slice(0, 10) || new Date().toISOString().slice(0, 10)
   const { data, error } = await updateBDS(id, { date_retour_effective: jour, statut: 'recu' } as any)
   if (error) return c.json({ ok: false, error: error.message })
+  // Lot H2 : « terminé » compte aussi les BDS — le RETOUR du sous-traitant peut donc finir un lot dont la
+  // sous-traitance est la dernière opération (et, par l'arbre, le lot de sa pièce mère) : même recalcul qu'au soldage.
+  await recalculerCommandeApres(c, (data as any)?.cmd_ref || (data as any)?.cmd_id)
   return c.json({ ok: true, data })
 }
 
@@ -7866,6 +8212,26 @@ app.post('/api/qualite/lot/:id/liberer', async (c) => {
   const body = await c.req.json().catch(() => ({} as any))
   const lot = await getLot(id).catch(() => null)
   const decision = body.decision === 'bloque' ? 'bloque' : 'libere'
+  // Lot H2 : un SOUS-lot ne se libère pas seul — la libération porte sur le lot racine, dont la production
+  // n'est finie qu'avec tout l'arbre. Refus avant toute écriture (PV compris). La mise en quarantaine
+  // (« bloque ») d'un sous-lot reste possible : les quarantaines comptent les sous-lots, c'est voulu.
+  if (decision === 'libere' && (lot ? parentDuLot(lot) : parentDuLot(id))) {
+    const racine = racineDansLots(id, (await getLots().catch(() => [] as any[])) as any[])
+    return c.json({ ok: false, code: 'sous_lot_non_liberable', lot_racine: racine, error: 'Un sous-lot se libère avec son lot racine (' + racine + ') : libérez la racine une fois tout l’arbre terminé.' }, 409)
+  }
+  // Correctif H2 (règle A8, EN 9100) : le lot d'une pièce mère ne se libère qu'avec TOUS ses sous-ensembles fabriqués —
+  // jusqu'ici seule la liste /qualite/service le garantissait ; un appel direct (ou un onglet ancien) écrivait un PV
+  // « valide » avant la fabrication des sous-lots. Lecture stricte : une panne n'autorise rien (503).
+  // (Les étapes propres du lot ne sont pas vérifiées ici, comme avant H2 pour tout lot.)
+  if (decision === 'libere') {
+    // Lecture stricte du lot : getLot rend null sur une panne, ce qui aurait sauté le contrôle.
+    const lecL = await getLotStrict(id)
+    if (lecL.error) return c.json({ ok: false, error: 'Lecture du lot impossible (' + lecL.error + ') : libération refusée. Réessayez.' }, 503)
+    const arbre = lecL.data ? await lireArbreLotStrict(lecL.data) : { lots: [], ops: {}, error: null }
+    if (arbre.error) return c.json({ ok: false, error: 'Lecture des sous-lots impossible (' + arbre.error + ') : libération refusée. Réessayez.' }, 503)
+    const nf = sousLotsNonTermines(String(id), arbre.lots, arbre.ops as any)
+    if (nf.length) return c.json({ ok: false, code: 'arbre_non_termine', sous_lots: nf, error: 'Libération refusée : ' + nf.length + ' sous-lot' + (nf.length > 1 ? 's' : '') + ' de cette pièce mère ' + (nf.length > 1 ? 'ne sont' : 'n’est') + ' pas terminé' + (nf.length > 1 ? 's' : '') + ' (' + nf.slice(0, 3).join(', ') + (nf.length > 3 ? '…' : '') + ').' }, 409)
+  }
   const controleur = await resolveSigner(c, body, 'Qualité')
   const pvs = await getPVControles().catch(() => [] as any[])
   const numPv = nextSeqId('PV', (pvs as any[]).map((p: any) => p.num_pv))
@@ -9870,12 +10236,14 @@ app.get('/production/commande/:id', async (c) => {
 app.get('/production/lot/:id', async (c) => {
   const id = decodeURIComponent(c.req.param('id'))
   // getLotDetail(id) ne dépend d'aucun autre résultat → le mettre DANS le Promise.all (au lieu d'un await en série) supprime un aller-retour réseau.
-  const [cmds, lots, bdts, bsts, noms, dts, detail] = await Promise.all([
+  const [cmds, lots, bdts, bsts, lecNomsLot, dts, detail] = await Promise.all([
     getCommandes().catch(() => []), getLots().catch(() => []),
     getBonsDeTravail().catch(() => []), getPlanningBDS().catch(() => []),
-    getNomenclatures().catch(() => []), getDemandesTravaux().catch(() => []),
+    // Lot H2 (correctif) : lecture STRICTE et paginée — l'état des composants d'une mère n'est jamais jugé sur une liste tronquée.
+    getNomenclaturesStrictes(), getDemandesTravaux().catch(() => []),
     getLotDetail(id).catch(() => null as any)
   ])
+  const noms: any[] = lecNomsLot.error ? [] : lecNomsLot.data
   const lot = (lots as any[]).find(l => String(l.id) === id)
   const cmd = lot ? (cmds as any[]).find(x => String(x.id) === String(lot.cmd_id)) : undefined
   const mBdt = (bdts as any[]).filter(b => String(b.lot_id ?? '') === id || String(b.lot_ref ?? '') === id)
@@ -9884,32 +10252,19 @@ app.get('/production/lot/:id', async (c) => {
   const nrm = (s: any) => String(s ?? '').trim().toLowerCase()
   const piece = nrm(lot?.piece)
   const aff = nrm((cmd as any)?.num_affaire ?? lot?.affaire_id)
-  // ⚠ Lot H0 (17/09/2026) : on ne retient JAMAIS un brouillon. getNomenclatures trie par created_at
-  //   décroissant : la fiche lot et l'OF imprimé prenaient la DERNIÈRE fiche créée pour la pièce, même
-  //   en cours (indice B non relu → gamme B sur l'OF alors que les BDT du lot viennent de A).
-  //   Règle, alignée sur generer-bdt et la cascade : la nomenclature VALIDÉE d'indice le plus haut.
-  const valides = (noms as any[]).filter((n: any) => n.statut === 'valide')
-  const plusHautIndice = (liste: any[]) => liste.reduce((best: any, n: any) => (!best || String(n.indice || 'A') > String(best.indice || 'A')) ? n : best, null as any)
-  let nom: any = null
-  if ((cmd as any)?.nomenclature_id) nom = valides.find(n => String(n.id) === String((cmd as any).nomenclature_id)) || null
-  if (!nom) nom = plusHautIndice(valides.filter(n => String(n.lot_id ?? '') === id))
-  if (!nom && piece) nom = plusHautIndice(valides.filter(n => nrm(n.code_ref_produit) === piece || nrm(n.num_nom) === piece))
-  if (!nom && aff) nom = plusHautIndice(valides.filter(n => nrm(n.num_affaire) === aff))
-  // Repli (ancien comportement) UNIQUEMENT si aucune fiche validée ne correspond : la fiche est
-  // marquée `nomenclature_non_validee` pour que l'écran puisse l'afficher.
-  if (!nom) {
-    let repli: any = null
-    if ((cmd as any)?.nomenclature_id) repli = (noms as any[]).find(n => String(n.id) === String((cmd as any).nomenclature_id))
-    if (!repli) repli = (noms as any[]).find(n => String(n.lot_id ?? '') === id)
-    if (!repli && piece) repli = (noms as any[]).find(n => nrm(n.code_ref_produit) === piece || nrm(n.num_nom) === piece)
-    if (!repli && aff) repli = (noms as any[]).find(n => nrm(n.num_affaire) === aff)
-    if (repli) {
-      console.warn('[fiche lot] ' + id + ' : aucune nomenclature validée pour la pièce — repli sur ' + String(repli.num_nom || repli.id) + ' ind. ' + String(repli.indice || 'A') + ' (' + String(repli.statut || 'brouillon') + ')')
-      // Relecture H0 : la fiche lot n'affiche la nomenclature QUE sur l'OF imprimé (ofData.indice). Le drapeau
-      // seul n'était lu par personne : l'indice imprimé porte donc la mention, l'OF ne passe plus pour validé.
-      nom = { ...repli, indice: String(repli.indice || 'A') + ' — GAMME NON VALIDÉE (' + String(repli.statut || 'brouillon') + ')', nomenclature_non_validee: true }
-    }
-  }
+  const nom: any = nomenclaturePourLot(id, lot, cmd, noms as any[])
+  // ── Lot H2 : arbre du lot (sous-lots d'une pièce mère, parent d'un sous-lot, vigilance, avertissements) ──
+  // Lots de la même commande (+ la racine du lot) et bons de ces lots seulement : vueArbreLot ne voit que l'affaire.
+  const arbreEtat = await lotsArbreDispo()
+  const racineDuLotAffiche = racineDansLots(id, lots as any[])
+  const lotsArbre = (lots as any[]).filter((l: any) => (lot && String(l.cmd_id ?? '') !== '' && String(l.cmd_id) === String(lot.cmd_id)) || String(l.id) === id || String(l.id) === racineDuLotAffiche)
+  const racinesArbre = new Set(lotsArbre.map((l: any) => racineDuLot(String(l.id))))
+  const dansArbre = (b: any) => { const k = String((b.lot_id ?? b.lot_ref ?? '') || ''); return !!k && racinesArbre.has(racineDuLot(k)) }
+  // Correctif H2 : `noms` ⇒ composants résolus comme en production — la fiche NOMME un composant sans révision validée
+  // et ne propose « Créer les sous-lots » que s'il peut créer quelque chose (lot ouvert, composant validé sans sous-lot).
+  const arbreLot = vueArbreLot(id, lotsArbre, opsParLot((bdts as any[]).filter(dansArbre), (bsts as any[]).filter(dansArbre)), { nomLot: nom, arbreDispo: arbreEtat.dispo, noms: lecNomsLot.error ? undefined : noms })
+  if (lecNomsLot.error && arbreLot.avertissement) { arbreLot.avertissement = 'Pièce mère : nomenclatures illisibles (' + lecNomsLot.error + ') — état des sous-lots non vérifié, réessayez.'; arbreLot.action_creer = false }
+  if (arbreEtat.erreur && arbreLot.avertissement) { arbreLot.avertissement = 'Pièce mère : état des sous-lots illisible (' + arbreEtat.erreur + ') — réessayez.'; arbreLot.action_creer = false }
   // n° de plan : sur les pièces détaillées (commande puis DT de l'affaire)
   const pickPlan = (src: any) => {
     const ps = Array.isArray(src?.pieces_detail) ? src.pieces_detail : (Array.isArray(src?.pieces) ? src.pieces : [])
@@ -9918,7 +10273,197 @@ app.get('/production/lot/:id', async (c) => {
   }
   let planRef = cmd ? pickPlan(cmd) : ''
   if (!planRef) { const dt = (dts as any[]).find(d => nrm(d.num_affaire) === aff); if (dt) planRef = pickPlan(dt) }
-  return c.html(pageLotDetail(id, lot as any, cmd as any, mBdt, mBst, detail, nom, planRef))
+  return c.html(pageLotDetail(id, lot as any, cmd as any, mBdt, mBst, detail, nom, planRef, arbreLot))
+})
+
+// Nomenclature d'un lot (fiche lot, OF, « Créer les sous-lots »).
+// Lot H2 : `lots.nomenclature_id` EN PREMIER — c'est la révision retenue au LANCEMENT (validée à ce
+// moment-là), celle dont viennent les bons du lot, même si un indice plus récent a été validé depuis.
+// Puis la chaîne d'avant H2.
+// ⚠ Lot H0 (17/09/2026) : on ne retient JAMAIS un brouillon. getNomenclatures trie par created_at
+//   décroissant : la fiche lot et l'OF imprimé prenaient la DERNIÈRE fiche créée pour la pièce, même
+//   en cours (indice B non relu → gamme B sur l'OF alors que les BDT du lot viennent de A).
+//   Règle, alignée sur generer-bdt et la cascade : la nomenclature VALIDÉE d'indice le plus haut.
+function nomenclaturePourLot(id: string, lot: any, cmd: any, noms: any[], opts?: { sansRepli?: boolean }): any {
+  const nrm = (s: any) => String(s ?? '').trim().toLowerCase()
+  const piece = nrm(lot?.piece)
+  const aff = nrm(cmd?.num_affaire ?? lot?.affaire_id)
+  if (lot?.nomenclature_id) {
+    const lance = noms.find((n: any) => String(n.id) === String(lot.nomenclature_id))
+    if (lance) return lance
+  }
+  const valides = noms.filter((n: any) => n.statut === 'valide')
+  const plusHautIndice = (liste: any[]) => liste.reduce((best: any, n: any) => (!best || String(n.indice || 'A') > String(best.indice || 'A')) ? n : best, null as any)
+  let nom: any = null
+  if (cmd?.nomenclature_id) nom = valides.find(n => String(n.id) === String(cmd.nomenclature_id)) || null
+  if (!nom) nom = plusHautIndice(valides.filter(n => String(n.lot_id ?? '') === id))
+  if (!nom && piece) nom = plusHautIndice(valides.filter(n => nrm(n.code_ref_produit) === piece || nrm(n.num_nom) === piece))
+  if (!nom && aff) nom = plusHautIndice(valides.filter(n => nrm(n.num_affaire) === aff))
+  if (nom || opts?.sansRepli) return nom
+  // Repli (ancien comportement) UNIQUEMENT si aucune fiche validée ne correspond : la fiche est
+  // marquée `nomenclature_non_validee` pour que l'écran puisse l'afficher.
+  let repli: any = null
+  if (cmd?.nomenclature_id) repli = noms.find(n => String(n.id) === String(cmd.nomenclature_id))
+  if (!repli) repli = noms.find(n => String(n.lot_id ?? '') === id)
+  if (!repli && piece) repli = noms.find(n => nrm(n.code_ref_produit) === piece || nrm(n.num_nom) === piece)
+  if (!repli && aff) repli = noms.find(n => nrm(n.num_affaire) === aff)
+  if (!repli) return null
+  console.warn('[fiche lot] ' + id + ' : aucune nomenclature validée pour la pièce — repli sur ' + String(repli.num_nom || repli.id) + ' ind. ' + String(repli.indice || 'A') + ' (' + String(repli.statut || 'brouillon') + ')')
+  // Relecture H0 : la fiche lot n'affiche la nomenclature QUE sur l'OF imprimé (ofData.indice). Le drapeau
+  // seul n'était lu par personne : l'indice imprimé porte donc la mention, l'OF ne passe plus pour validé.
+  return { ...repli, indice: String(repli.indice || 'A') + ' — GAMME NON VALIDÉE (' + String(repli.statut || 'brouillon') + ')', nomenclature_non_validee: true }
+}
+
+// ─── CRÉER LES SOUS-LOTS d'un lot existant (lot H2, 18/09/2026) ─────────────────────────────────────
+// POST /api/production/lot/:id/sous-lots   corps { simuler?: boolean }   (RBAC : famille production)
+// Pour les affaires lancées AVANT la gestion des sous-lots, et pour le cloud une fois cloud-14 joué.
+// Développe la nomenclature du lot (mère) depuis CE lot — son niveau, sa quantité d'origine — et crée ce qui
+// manque : lignes de sous-lots (et sous-sous-lots), leurs BDT/BDS (gamme de leur nomenclature), les
+// préparations techniques des nouvelles pièces et les DA du sous-arbre créé (ids suffixés -SL<ZZ> : pas de
+// fusion avec une DA existante de même référence, les Achats arbitrent). Idempotent : rejouée, 0 création.
+// simuler:true ⇒ le plan seul, aucune écriture. Lectures en échec ⇒ 503 (jamais « rien n'existe »).
+app.post('/api/production/lot/:id/sous-lots', async (c) => {
+  const id = decodeURIComponent(c.req.param('id'))
+  const b = await c.req.json().catch(() => ({} as any))
+  const simuler = b?.simuler === true
+  const lecLot = await getLotStrict(id)
+  if (lecLot.error) return c.json({ ok: false, error: 'Lecture du lot impossible (' + lecLot.error + '). Réessayez.' }, 503)
+  const lot: any = lecLot.data
+  if (!lot) return c.json({ ok: false, error: 'Lot introuvable : ' + id }, 404)
+  const arbreEtat = await lotsArbreDispo()
+  if (arbreEtat.erreur) return c.json({ ok: false, error: 'Lecture de la table des lots impossible (' + arbreEtat.erreur + '). Réessayez.' }, 503)
+  if (!arbreEtat.dispo) return c.json({ ok: false, code: 'arbre_indisponible', error: 'Sous-lots indisponibles : ' + MSG_BASE_A_METTRE_A_JOUR + ', puis recommencez.' }, 409)
+  const [lecNoms, lecLots, cmds] = await Promise.all([getNomenclaturesStrictes(), getLotsStrict(), getCommandes().catch(() => [] as any[])])
+  if (lecNoms.error || lecLots.error) return c.json({ ok: false, error: 'Lecture impossible (' + (lecNoms.error || lecLots.error) + ') : aucun sous-lot créé. Réessayez.' }, 503)
+  const noms = lecNoms.data, lotsTous = lecLots.data
+  // Correctif H2 : production CLOSE (lot ou racine libéré, expédié, livré, annulé) ⇒ refus avant toute écriture — sinon
+  // un clic relançait BDT, prépas et ACHATS pour une production déjà livrée. Lot « terminé » : confirmation explicite.
+  const racineLue = racineDansLots(id, lotsTous)
+  const lotRacine: any = lotsTous.find((l: any) => String(l.id) === racineLue) || null
+  const clos = motifLotClos(lot, lotRacine)
+  if (clos) return c.json({ ok: false, code: 'lot_clos', error: 'Sous-lots non créés : ' + clos + ' — la production de cette pièce mère est close (rien n’est relancé, ni fabrication ni achat).' }, 409)
+  const termine = lotOuRacineTermine(lot, lotRacine)
+  if (termine && !simuler && b?.confirmer_termine !== true) return c.json({ ok: false, code: 'lot_termine', error: 'Le lot ' + (lotOuRacineTermine(lot) ? id : racineLue) + ' est déjà terminé : confirmez la création des sous-lots (elle relance de la fabrication et des demandes d’achat).' }, 409)
+  const cmd: any = (cmds as any[]).find((x: any) => String(x.id) === String(lot.cmd_id || '')) || null
+  const nom = nomenclaturePourLot(id, lot, cmd, noms, { sansRepli: true })
+  if (!nom) return c.json({ ok: false, code: 'pas_une_mere', error: 'Aucune nomenclature validée pour la pièce ' + String(lot.piece || '') + ' : sous-lots impossibles à déterminer.' }, 409)
+  if (!estMereAvecComposants(nom)) return c.json({ ok: false, code: 'pas_une_mere', error: 'La nomenclature ' + String(nom.num_nom || nom.id) + ' du lot n’est pas une nomenclature mère avec composants : pas de sous-lots.' }, 409)
+  // Identités des nomenclatures des lots AU-DESSUS (un cycle qui passerait par eux est coupé).
+  const ancetres: string[] = []
+  for (let x = parentDuLot(lot), garde = 0; x && garde < 12; garde++) {
+    const lx: any = lotsTous.find((l: any) => String(l.id) === String(x))
+    if (!lx) break
+    const nx = lx.nomenclature_id ? noms.find((n: any) => String(n.id) === String(lx.nomenclature_id)) : null
+    if (nx) ancetres.push(cleNomenclature(nx))
+    x = parentDuLot(lx)
+  }
+  const qteLot = Number(lot.qte_initiale) > 0 ? Number(lot.qte_initiale) : (Number(lot.qte) || 1)
+  const rangLot = Number(lot.rang) > 0 ? Number(lot.rang) : (Number((/[.-](\d{2,})$/.exec(id) || [])[1]) || 1)
+  // Correctif H2 (EN 9100) : un sous-lot EXISTANT garde la révision de SON lancement (lots.nomenclature_id) pour ses bons
+  // et son sous-arbre ; seuls les sous-lots nouveaux prennent la dernière révision validée (planCompletementLot).
+  const complet = planCompletementLot({ id, rang: rangLot, piece: String(lot.piece || ''), qte: qteLot, niveau: niveauDuLot(lot), nom }, noms, lotsTous, { ancetres })
+  const plan = complet.plan
+  const avertissements = complet.avertissements.map((e) => e.message)
+  const planVue = plan.filter((l) => l.lot_parent).map((l) => ({ id: l.id, lot_parent: l.lot_parent, rang: l.rang, niveau: l.niveau, piece: l.piece, qte: l.qte, existe: !!l.existe }))
+  if (simuler) return c.json({ ok: true, simule: true, plan: planVue, avertissements, lot_termine: termine })
+  // ── Écritures ──
+  const racineId = racineLue
+  const mAff = /^LOT-\d{4}-(.+)-\d{2,}$/.exec(racineId)
+  const aff = String(cmd?.num_affaire || (mAff ? mAff[1] : '') || '')
+  if (!aff) return c.json({ ok: false, error: 'Affaire du lot introuvable (lot sans commande et id non standard) : aucun sous-lot créé.' }, 409)
+  const cmdId = String(lot.cmd_id || cmd?.id || '')
+  const client = String(lot.client_nom || cmd?.client_nom || '')
+  const [clesBdt, clesBds, procs, dts] = await Promise.all([getClesBonsStrictes('BDT'), getClesBonsStrictes('BDS'), getProcessAtelier().catch(() => [] as any[]), getDemandesTravaux().catch(() => [] as any[])])
+  if (clesBdt.error || clesBds.error) return c.json({ ok: false, error: 'Lecture des bons existants impossible, aucun sous-lot créé : ' + (clesBdt.error || clesBds.error) + '. Réessayez.' }, 503)
+  const bdtKey = new Set(clesBdt.data.map((x) => x.cle)), bdsKey = new Set(clesBds.data.map((x) => x.cle))
+  const idsPris: Record<'BDT' | 'BDS', Set<string>> = { BDT: new Set(clesBdt.data.map((x) => x.id)), BDS: new Set(clesBds.data.map((x) => x.id)) }
+  const txTemps = construireTauxAtelier(procs as any[])
+  const oasProcIds = new Set((procs as any[]).filter((p: any) => p.est_oas).map((p: any) => String(p.id)))
+  const etatReglage = { sansReglage: false }
+  const prio = String(cmd?.priorite || 'normal')
+  const dtAff: any = (dts as any[]).find((d: any) => String(d.num_affaire || '') === aff) || { id: null, num_affaire: aff, activite: cmd?.activite || null, pieces_detail: [] }
+  const crees = { lots: 0, bdt: 0, bds: 0, prepa: 0, da: 0 }
+  const bonsExistants = { bdt: 0, bds: 0 }
+  const ecartes = new Set<string>()
+  const nouveaux: LotPlan[] = []
+  const bdtCrees: string[] = []
+  const lotParId = new Map<string, any>(lotsTous.map((x: any) => [String(x.id), x]))
+  for (const l of plan) {
+    if (!l.lot_parent) continue                                   // le lot lui-même existe déjà (ses bons aussi)
+    if (ecartes.has(String(l.lot_parent))) { ecartes.add(l.id); continue }
+    // Sous-lot existant ANNULÉ, ou dont la révision de lancement est inconnue : on n'y ajoute rien (ni bon ni sous-lot).
+    if (l.existe && (estAnnule(lotParId.get(String(l.id))?.statut) || l.nom_lance === false)) { ecartes.add(l.id); continue }
+    if (!l.existe) {
+      const r: any = await createLot(payloadLot(l, cmdId, client, true)).catch((e: any) => ({ data: null, error: { message: String(e?.message || e) } }))
+      if (r && !r.error) { crees.lots++; nouveaux.push(l) }
+      else if (String(r?.error?.code || '') !== '23505') {
+        ecartes.add(l.id)
+        avertissements.push('Sous-lot ' + l.id + ' (' + l.piece + ') non créé : ' + String(r?.error?.message || 'insertion sans retour') + ' — ni ses bons ni ses sous-lots.')
+        continue
+      }
+    }
+    // Bons du sous-lot (tous, existant ou nouveau : un bon manquant est complété, un bon présent est ignoré).
+    const act = l.nom?.entite || cmd?.activite || dtAff.activite || 'Seem'
+    let bdtNum = 0, bdsNum = 0
+    const { etapes, oasFlags } = etapesDeGamme(l.nom, oasProcIds)
+    for (let i = 0; i < etapes.length; i++) {
+      const e = etapes[i], seq = Number(e.ordre) || (i + 1)
+      if (oasFlags[i]) continue
+      const tps = etapeTempsMin(e, txTemps)
+      const dureeH = dureeBdtDepuisTemps(tps, l.qte)
+      const op = e.nom || e.process_nom || e.operation_st || 'Process'
+      const k = cleBon(aff, l.piece, seq, l.id)
+      const oasAvant = i > 0 && oasFlags[i - 1], oasApres = i < etapes.length - 1 && oasFlags[i + 1]
+      const kind: 'BDT' | 'BDS' = e.type === 'sous_traite' ? 'BDS' : 'BDT'
+      const num = kind === 'BDS' ? ++bdsNum : ++bdtNum
+      if ((kind === 'BDS' ? bdsKey : bdtKey).has(k)) { if (kind === 'BDS') bonsExistants.bds++; else bonsExistants.bdt++; continue }
+      let n = num, idBon = bonIdDuLot(kind, l.id, n)
+      while (idsPris[kind].has(idBon)) { n++; idBon = bonIdDuLot(kind, l.id, n) }
+      const r: any = kind === 'BDS'
+        ? await createBDSRow({ id: idBon, cmd_ref: cmdId || aff, lot_ref: l.id, client_nom: client, piece: l.piece, qte: l.qte, operation: op, sous_traitant_id: e.fournisseur_st_id || null, duree_days: Math.max(1, Math.ceil(dureeH / 7)), statut: 'a_planifier', seq }).catch((er: any) => ({ error: { message: String(er?.message || er) } }))
+        : await creerBDTAvecReglage({ id: idBon, num_affaire: aff, cmd_ref: cmdId || aff, lot_ref: l.id, client_nom: client, piece: l.piece, operation: op, machine_id: e.machine_id || null, process_id: e.process_id || null, seq, duree: dureeH, temps_alloue: dureeH, temps_reglage: reglageBdtHeures(tps.reglageMin, dureeH), statut: 'a_programmer', priorite: prio, activite: act, oas_avant: oasAvant, oas_apres: oasApres, matiere_ok: false }, etatReglage).catch((er: any) => ({ error: { message: String(er?.message || er) } }))
+      idsPris[kind].add(idBon)
+      if (r && !r.error) { (kind === 'BDS' ? bdsKey : bdtKey).add(k); if (kind === 'BDS') crees.bds++; else { crees.bdt++; bdtCrees.push(idBon) } }
+      else avertissements.push(kind + ' ' + idBon + ' (' + l.piece + ', étape ' + seq + ') non créé : ' + String(r?.error?.message || 'insertion sans retour') + '.')
+    }
+  }
+  if (etatReglage.sansReglage) avertissements.push(AVERT_CLOUD9)
+  // Prépas et DA : seulement pour les sous-lots CRÉÉS maintenant (un sous-lot existant a eu les siens).
+  const bilanDA = { manques: 0, echecs: [] as string[] }
+  let daEvaluees = true
+  if (nouveaux.length) {
+    const pieceRacine = (Array.isArray(dtAff.pieces_detail) ? dtAff.pieces_detail : []).find((p: any) => String(p?.ref_interne || '').trim().toLowerCase() === String((lotsTous.find((x: any) => String(x.id) === racineId) || {}).piece || '').trim().toLowerCase()) || {}
+    const planH2: PlanAffaire = { lots: nouveaux, avertissements: [], pieceParRacine: { [racineId]: pieceRacine }, racineParLot: Object.fromEntries(nouveaux.map((l) => [l.id, racineId])), arbreDispo: true, colonnesDispo: true }
+    crees.prepa = await cascadePrepaTechnique(dtAff, cmdId, planH2).catch(() => 0)
+    const zz = (/-(\d{2,})$/.exec(racineId) || [])[1] || '00'
+    crees.da = await cascadeDAManques(dtAff, cmdId, planH2, { suffixe: '-SL' + zz, demandeur: 'Création des sous-lots ' + id, bilan: bilanDA }).catch((e: any) => { daEvaluees = false; bilanDA.echecs.push('Demandes d’achat interrompues : ' + String(e?.message || e) + ' — vérifiez les besoins matière aux Achats.'); return 0 })
+    avertissements.push(...bilanDA.echecs)
+  }
+  // Correctif H2 — PORTE MATIÈRE. Les nouveaux BDT naissent « matière non réceptionnée » ; la porte ne se réévalue
+  // qu'au rangement d'un BC. Or cette route vise des affaires dont la matière est en général DÉJÀ rangée : si le stock
+  // couvre les nouveaux besoins (aucun manque, donc aucune DA ni BC à venir) et que la porte de l'affaire est ouverte
+  // (tous ses autres BDT « matière OK »), les nouveaux BDT sont « matière OK » — programmables comme le reste.
+  // Sinon ils restent à false et s'ouvrent avec la porte de l'affaire (rangement du BC des DA créées ici).
+  let porteMatiere: 'ouverte' | 'fermee' | 'non_evaluee' | null = null
+  if (bdtCrees.length) {
+    porteMatiere = 'fermee'
+    if (daEvaluees && bilanDA.manques === 0) {
+      const lus = await lireBonsCommandeStrict('BDT', cmdId, aff)
+      if (lus.error) { porteMatiere = 'non_evaluee'; avertissements.push('Porte matière non réévaluée (lecture des BDT de l’affaire impossible : ' + lus.error + ') : les nouveaux BDT restent « matière non réceptionnée » jusqu’au prochain rangement.') }
+      else {
+        const nouveauxBdt = new Set(bdtCrees)
+        const autres = lus.data.filter((x: any) => String(x.num_affaire ?? '') === aff && !nouveauxBdt.has(String(x.id)) && !estAnnule(x.statut))
+        if (autres.length && autres.every((x: any) => x.matiere_ok === true)) {
+          let echecs = 0
+          for (const idB of bdtCrees) { const r: any = await updateBDT(idB, { matiere_ok: true }).catch(() => ({ error: true })); if (r?.error) echecs++ }
+          porteMatiere = echecs ? 'fermee' : 'ouverte'
+          if (echecs) avertissements.push(echecs + ' BDT non marqué(s) « matière OK » (écriture refusée) : ils le seront au prochain rangement de matière de l’affaire.')
+        }
+      }
+    }
+  }
+  const existants = planVue.filter((l) => l.existe).length
+  return c.json({ ok: true, simule: false, plan: planVue, crees, existants, bons_existants: bonsExistants, porte_matiere: porteMatiere, avertissements })
 })
 // Anciens dashboards production (données simulées en dur) → remplacés par les dashboards réels reliés DB.
 app.get('/production/dashboard-programmation', (c) => c.redirect('/dashboard/programmation', 301))
@@ -10154,16 +10699,26 @@ app.get('/qualite/service', async (c) => {
   ;(ecmeVerifs as any[]).forEach((v: any) => { const k = String(v.ecme_id || ''); if (k) (verifsByEcme[k] = verifsByEcme[k] || []).push(v) })
   ;(ecme as any[]).forEach((e: any) => { e.verifications = verifsByEcme[String(e.id)] || [] })
   const [auditProg, auditGrilles, auditQuestions, auditAuto, fais] = await Promise.all([getAuditProgramme().catch(() => []), getAuditGrilles().catch(() => []), getAuditQuestions().catch(() => []), getAuditAutoStatus().catch(() => ({})), getFai().catch(() => [])])
-  // Libération des lots : un lot dont TOUS les BDT sont soldés (production terminée) est « à libérer ».
+  // Libération des lots : un lot dont la production est terminée est « à libérer ».
+  // Lot H2 (18/09/2026) :
+  //   · bons indexés par lot_id || lot_ref — les BDT de la cascade ne portent que lot_ref : avant, `prod_finie`
+  //     restait faux pour tous les lots nés d'une acceptation d'offre ;
+  //   · seuls les lots RACINES se libèrent (un sous-lot part assemblé dans sa racine) et une racine n'est
+  //     « finie » qu'avec TOUT son arbre (lotFini : ses bons + tous ses sous-lots), BDS reçus compris.
+  const bdsQual = await getPlanningBDS().catch(() => [] as any[])
+  const opsQual = opsParLot(bdts as any[], bdsQual as any[])
+  const lotsQual = lots as any[]
   const bdtByLot: Record<string, any[]> = {}
-  ;(bdts as any[]).forEach((b: any) => { const k = String(b.lot_id || ''); if (k) (bdtByLot[k] = bdtByLot[k] || []).push(b) })
+  ;(bdts as any[]).forEach((b: any) => { const k = String((b.lot_id || b.lot_ref || '') || ''); if (k) (bdtByLot[k] = bdtByLot[k] || []).push(b) })
   const quarLotIds = new Set((qs as any[]).filter((q: any) => q.statut === 'en_cours').map((q: any) => String(q.lot_id)))
-  const lotsEnr = (lots as any[]).map((l: any) => {
+  const lotsEnr = lotsQual.map((l: any) => {
     const bs = bdtByLot[String(l.id)] || []
-    return { ...l, nb_bdt: bs.length, prod_finie: bs.length > 0 && bs.every((b: any) => b.statut === 'solde') }
+    const racine = !parentDuLot(l)
+    const prodFinie = racine && avancementArbre(String(l.id), lotsQual, opsQual).total > 0 && lotFini(String(l.id), lotsQual, opsQual)
+    return { ...l, nb_bdt: bs.length, prod_finie: prodFinie, sous_lot: !racine }
   })
   const liberation = {
-    aLiberer: lotsEnr.filter((l: any) => l.prod_finie && l.statut !== 'libere' && l.statut !== 'expedie' && !quarLotIds.has(String(l.id))),
+    aLiberer: lotsEnr.filter((l: any) => l.prod_finie && !l.sous_lot && l.statut !== 'libere' && l.statut !== 'expedie' && !quarLotIds.has(String(l.id))),
     liberes: lotsEnr.filter((l: any) => l.statut === 'libere'),
   }
   // Quarantaine : quand le lot vient d'une RÉCEPTION fournisseur, l'écran doit pouvoir proposer la

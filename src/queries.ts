@@ -5,8 +5,9 @@
 import { supabase } from './db'
 import { verifyPin, hashPin, isHashedPin } from './auth'
 import { computeExpositionSante, normQuantiteChimique } from './qref'
-import { construireTauxAtelier, coutReelBdt, typeProcess, normaliserReference } from './shared'
+import { construireTauxAtelier, coutReelBdt, typeProcess, normaliserReference, estAnnule } from './shared'
 import type { TauxAtelier } from './shared'
+import { cleBon, opsParLot, lotFini, avancementArbre, trierOrdreFabrication, parentDuLot, niveauDuLot, vigilanceSousLots, racineDuLot } from './nomenclature_arbre'
 
 // Migration paresseuse : si le PIN stocké est en clair (legacy), le remplacer
 // par son empreinte hachée après une vérification réussie (best-effort).
@@ -745,6 +746,42 @@ export async function getLot(id: string): Promise<any | null> {
   return data ?? null
 }
 
+// ─── Sous-lots des pièces mères (lot H2, 18/09/2026 — migration 018 / cloud-14) ─────────────────
+// Colonnes lot_parent, rang, niveau, nomenclature_id, qte_par_parent présentes ? Toutes les lectures de
+// `lots` restent en select('*') : sans elles, l'arbre se déduit des ids (parentDuLot). Seule l'ÉCRITURE
+// d'un sous-lot en a besoin. Colonne absente (42703 / PGRST204 / « does not exist ») ⇒ dispo:false sans
+// erreur ; toute autre erreur est une PANNE (dispo:false ET erreur) : pas de sous-lots, et on le dit.
+export const COLS_ARBRE_LOTS = ['lot_parent', 'rang', 'niveau', 'nomenclature_id', 'qte_par_parent']
+export function erreurColonneAbsente(e: any): boolean {
+  if (!e) return false
+  const code = String(e.code || '')
+  if (code === '42703' || code === 'PGRST204') return true
+  return /does not exist|could not find the .* column/i.test(String(e.message || ''))
+}
+export async function lotsArbreDispo(): Promise<{ dispo: boolean; erreur: string | null }> {
+  const { error } = await supabase.from('lots').select('lot_parent, rang, niveau, nomenclature_id, qte_par_parent').limit(1)
+  if (!error) return { dispo: true, erreur: null }
+  if (erreurColonneAbsente(error)) return { dispo: false, erreur: null }
+  return { dispo: false, erreur: error.message || 'lecture des lots impossible' }
+}
+// Lectures STRICTES (supabase-js ne lève jamais : une panne ne doit pas passer pour « aucun lot »,
+// sinon les sous-lots existants seraient recréés sous d'autres ids). Paginées : PostgREST tronque en silence.
+export async function getLotsStrict(): Promise<{ data: any[]; error: string | null }> {
+  const out: any[] = []
+  const PAGE = 1000
+  for (let from = 0; from < 1_000_000; from += PAGE) {
+    const { data, error } = await supabase.from('lots').select('*').order('id', { ascending: true }).range(from, from + PAGE - 1)
+    if (error) return { data: [], error: error.message }
+    out.push(...((data ?? []) as any[]))
+    if (!data || data.length < PAGE) break
+  }
+  return { data: out, error: null }
+}
+export async function getLotStrict(id: string): Promise<{ data: any | null; error: string | null }> {
+  const { data, error } = await supabase.from('lots').select('*').eq('id', id).maybeSingle()
+  return { data: data ?? null, error: error ? error.message : null }
+}
+
 export async function updateLot(id: string, payload: Record<string, any>) {
   const { data, error } = await supabase.from('lots').update(payload).eq('id', id).select().single()
   return { data, error }
@@ -892,6 +929,60 @@ export async function updateCommande(id: string, payload: Partial<Commande>) {
   return { data, error }
 }
 
+// Lecture STRICTE, FILTRÉE à la source et paginée (correctif lot H2) : PostgREST tronque en silence à 1 000 lignes,
+// et supabase-js ne lève jamais — une page en échec rend { error }, jamais « aucune ligne ».
+async function _lireFiltreStrict(table: string, cols: string, filtre: (q: any) => any): Promise<{ data: any[]; error: string | null }> {
+  const out: any[] = []
+  const PAGE = 1000
+  for (let debut = 0; debut < 200000; debut += PAGE) {
+    const { data, error } = await filtre(supabase.from(table).select(cols)).order('id', { ascending: true }).range(debut, debut + PAGE - 1)
+    if (error) return { data: [], error: table + ' : ' + error.message }
+    out.push(...((data ?? []) as any[]))
+    if (!data || data.length < PAGE) break
+  }
+  return { data: out, error: null }
+}
+// Bons (BDT ou BDS) d'une commande, lus à la SOURCE avec le périmètre du filtre souple historique — BDT : cmd_id,
+// cmd_ref ou num_affaire ; BDS : cmd_ref = id de commande ou n° d'affaire — plus les bons des lots `lotIds` (lot_ref,
+// et lot_id pour un BDT). Dédoublonnés par id. Une seule lecture en échec ⇒ { error } : l'appelant ne conclut rien.
+// Colonnes filtrées = celles qu'écrivent toutes les créations de bons (cascade, generer-bdt, « Créer les sous-lots »).
+export async function lireBonsCommandeStrict(kind: 'BDT' | 'BDS', cmdId: string, aff: string, lotIds: string[] = []): Promise<{ data: any[]; error: string | null }> {
+  const table = kind === 'BDT' ? 'bons_de_travail' : 'bons_sous_traitance'
+  const cols = kind === 'BDT' ? 'id, statut, lot_id, lot_ref, cmd_id, cmd_ref, num_affaire, piece, matiere_ok' : '*'
+  const c = String(cmdId ?? '').trim(), a = String(aff ?? '').trim()
+  const filtres: Array<(q: any) => any> = []
+  for (const v of Array.from(new Set([c, a].filter(Boolean)))) filtres.push((q) => q.eq('cmd_ref', v))
+  if (kind === 'BDT') { if (c) filtres.push((q) => q.eq('cmd_id', c)); if (a) filtres.push((q) => q.eq('num_affaire', a)) }
+  const ids = Array.from(new Set((lotIds || []).map((x) => String(x ?? '').trim()).filter(Boolean)))
+  for (let i = 0; i < ids.length; i += 80) {
+    const t = ids.slice(i, i + 80)
+    filtres.push((q) => q.in('lot_ref', t))
+    if (kind === 'BDT') filtres.push((q) => q.in('lot_id', t))
+  }
+  const lus = await Promise.all(filtres.map((f) => _lireFiltreStrict(table, cols, f)))
+  const err = lus.find((r) => r.error)
+  if (err) return { data: [], error: err.error }
+  const parId = new Map<string, any>()
+  for (const r of lus) for (const b of r.data) if (!parId.has(String(b.id))) parId.set(String(b.id), b)
+  return { data: Array.from(parId.values()), error: null }
+}
+// Arbre d'un lot, lu STRICTEMENT : les lots de sa commande (cmd_id ; lot sans commande : lui et les ids « lot.RR… »)
+// et les opérations (BDT + BDS) de ces lots, pour juger lotFini / sousLotsNonTermines sans conclure sur une panne.
+export async function lireArbreLotStrict(lot: any, aff = ''): Promise<{ lots: any[]; ops: Record<string, any[]>; error: string | null }> {
+  const c = String(lot?.cmd_id ?? '').trim(), idL = String(lot?.id ?? '').trim()
+  let lecLots: { data: any[]; error: string | null }
+  if (c) lecLots = await _lireFiltreStrict('lots', '*', (q) => q.eq('cmd_id', c))
+  else {
+    const [a, d] = await Promise.all([_lireFiltreStrict('lots', '*', (q) => q.eq('id', idL)), _lireFiltreStrict('lots', '*', (q) => q.like('id', idL + '.%'))])
+    lecLots = a.error || d.error ? { data: [], error: a.error || d.error } : { data: [...a.data, ...d.data.filter((l: any) => racineDuLot(String(l.id)).startsWith(idL))], error: null }
+  }
+  if (lecLots.error) return { lots: [], ops: {}, error: lecLots.error }
+  const ids = lecLots.data.map((l: any) => String(l.id))
+  const [b1, b2] = await Promise.all([lireBonsCommandeStrict('BDT', c, aff, ids), lireBonsCommandeStrict('BDS', c, aff, ids)])
+  if (b1.error || b2.error) return { lots: lecLots.data, ops: {}, error: b1.error || b2.error }
+  return { lots: lecLots.data, ops: opsParLot(b1.data, b2.data), error: null }
+}
+
 // Recalcule l'avancement d'une commande depuis ses BDT (lien souple : cmd_id | cmd_ref | num_affaire,
 // car les BDT générés depuis la nomenclature portent cmd_ref/num_affaire mais pas toujours cmd_id).
 // Met à jour commandes.bdt_total / bdt_soldes et passe à 'termine' les lots entièrement soldés.
@@ -907,8 +998,12 @@ export async function recomputeCmdAvancement(ref: string | null | undefined): Pr
     // ⚠ Réconciliation clé-lot : les BDT de la cascade ne portent que lot_ref → on regroupe par lot_id ?? lot_ref
     //   (= lots.id). Sans ça byLot était vide et les lots/commandes ne passaient jamais « terminé ».
     const lotKey = (b: any) => String((b?.lot_id ?? b?.lot_ref ?? '') || '')
-    const { data: bdts } = await supabase.from('bons_de_travail').select('id, statut, lot_id, lot_ref, cmd_id, cmd_ref, num_affaire')
-    const mine = (bdts ?? []).filter((b: any) =>
+    // Lot H2 (correctif) : lecture FILTRÉE à la source, paginée et STRICTE. Avant : toute la table sans pagination
+    // (PostgREST tronque à 1 000 lignes) et sans lire { error } — une panne écrivait bdt_total = 0, et un lot mère dont
+    // les bons devenaient invisibles passait « terminé » (irréversible : FIGES). Lecture en échec ⇒ on n'écrit RIEN.
+    const lecBdt = await lireBonsCommandeStrict('BDT', String((cmd as any).id), aff)
+    if (lecBdt.error) return
+    const mine = lecBdt.data.filter((b: any) =>
       String(b.cmd_id ?? '') === String((cmd as any).id) || String(b.cmd_ref ?? '') === aff || String(b.num_affaire ?? '') === aff)
     const total = mine.length
     const soldes = mine.filter((b: any) => /sold/.test(lc(b.statut))).length
@@ -919,12 +1014,46 @@ export async function recomputeCmdAvancement(ref: string | null | undefined): Pr
     if (total > 0 && soldes === total && !AVANCES.includes(cur)) patch.statut = 'terminee'
     else if (soldes > 0 && soldes < total && ['a_programmer', 'a_planifier', 'planifie', 'en_attente', 'nouvelle', ''].includes(cur)) patch.statut = 'en_production'
     await supabase.from('commandes').update(patch).eq('id', (cmd as any).id)
-    const byLot: Record<string, any[]> = {}
-    for (const b of mine) { const k = lotKey(b); if (k) (byLot[k] = byLot[k] || []).push(b) }
-    for (const [lotId, arr] of Object.entries(byLot)) {
-      if (arr.length && arr.every((b: any) => /sold/.test(lc(b.statut)))) {
-        await supabase.from('lots').update({ statut: 'termine', updated_at: new Date().toISOString() }).eq('id', lotId)
-      }
+    // ── Statut des LOTS (lot H2, 18/09/2026) ─────────────────────────────────────────────────
+    // Un lot est « terminé » quand SES bons (BDT soldés, BDS reçus — annulés exclus) sont finis ET
+    // que tous ses SOUS-LOTS le sont (lotFini, src/nomenclature_arbre.ts) : le lot d'une pièce mère
+    // n'est fini qu'avec tout son arbre. Parcours en ordre de fabrication (feuilles d'abord).
+    // ⚠ Jamais de régression : un lot libéré, expédié, annulé (ou déjà terminé) n'est plus réécrit —
+    //   avant H2, un soldage tardif remettait « termine » sur un lot déjà LIBÉRÉ par la Qualité.
+    // Lectures STRICTES (correctif H2) : une lecture en échec ou tronquée ne doit jamais faire passer un lot « terminé ».
+    const lecLots = await _lireFiltreStrict('lots', '*', (q) => q.eq('cmd_id', String((cmd as any).id)))
+    if (lecLots.error) return
+    const lotsArr: any[] = [...lecLots.data]
+    const connus = new Set(lotsArr.map((l: any) => String(l.id)))
+    // Lots désignés par un bon de l'affaire mais rattachés à une autre commande (liens souples) : relus par id.
+    const autres = Array.from(new Set(mine.map(lotKey).filter((k) => k && !connus.has(k))))
+    if (autres.length) {
+      const { data: lx, error: eX } = await supabase.from('lots').select('*').in('id', autres)
+      if (eX) return
+      for (const l of ((lx ?? []) as any[])) { if (!connus.has(String(l.id))) { connus.add(String(l.id)); lotsArr.push(l) } }
+    }
+    // BDS : filtrés à la source (commande / affaire / lots connus), paginés, erreur lue (avant : select('*') sans filtre).
+    const lecBds = await lireBonsCommandeStrict('BDS', String((cmd as any).id), aff, Array.from(connus))
+    if (lecBds.error) return
+    const racines = new Set(Array.from(connus).map((id) => racineDuLot(id)))
+    const bdsMine = lecBds.data.filter((b: any) => {
+      const k = lotKey(b)
+      return String(b.cmd_ref ?? '') === String((cmd as any).id) || String(b.cmd_ref ?? '') === aff || (k && (connus.has(k) || racines.has(racineDuLot(k))))
+    })
+    const ops = opsParLot(mine as any[], bdsMine)
+    const aDesEnfants = new Set<string>(lotsArr.map((l: any) => String(parentDuLot(l) || '')).filter(Boolean))
+    const FIGES = ['libere', 'expedie', 'expedié', 'livre', 'livré', 'termine', 'terminé']
+    for (const l of trierOrdreFabrication(lotsArr)) {
+      const id = String(l.id)
+      if (!(ops[id] || []).length && !aDesEnfants.has(id)) continue          // ni bon ni sous-lot : rien à juger
+      if (estAnnule(l.statut) || FIGES.includes(lc(l.statut))) continue
+      // Au moins UN bon dans l'arbre du lot (comme /qualite/service) : un lot mère dont aucun bon n'est visible
+      // (sous-lots sans bon) n'est pas « fini » par défaut — « terminé » est irréversible (FIGES).
+      if (avancementArbre(id, lotsArr, ops).total <= 0) continue
+      if (!lotFini(id, lotsArr, ops)) continue
+      const r = await supabase.from('lots').update({ statut: 'termine', updated_at: new Date().toISOString() }).eq('id', id)
+      // Base sans lots.updated_at (certains projets cloud) : sans ce repli le lot ne passait jamais « terminé ».
+      if (r.error && /updated_at/.test(String(r.error.message || ''))) await supabase.from('lots').update({ statut: 'termine' }).eq('id', id)
     }
   } catch { /* non bloquant */ }
 }
@@ -1085,8 +1214,9 @@ export async function getCommandeDetail(cmdId: string) {
   return {
     cmd: { id: (cmd as any).id, num_affaire: (cmd as any).num_affaire, client_nom: (cmd as any).client_nom, montant: budget, statut: (cmd as any).statut, date_cmd: (cmd as any).date_cmd, date_liv: (cmd as any).date_liv },
     kpi: { budget, caFacture: +caFacture.toFixed(2), coutReel, coutMo, coutMach, coutMat, marge, margePct, avancement: bdtTotal > 0 ? Math.round(bdtSoldes / bdtTotal * 100) : 0, bdtTotal, bdtSoldes, moH: +moH.toFixed(1), machH: +machH.toFixed(1), manquants: Array.from(manquantsCout), tauxErreur: rates.error },
-    bdts: bdts.slice(0, 200).map((b: any) => ({ id: b.id, piece: b.piece, operation: b.operation, machine: typeBdt[String(b.id)] === 'machine' ? 'machine' : 'mo', statut: b.statut, duree: Number(b.duree) || 0, temps_reel: b.temps_reel != null ? Number(b.temps_reel) : null, operateur_id: b.operateur_id ?? null, operateur_nom: b.operateur_nom ?? null, lot_id: b.lot_id ?? null })),
-    lots: lots.slice(0, 100).map((l: any) => ({ id: l.id, piece: l.piece, qte: Number(l.qte) || 0, statut: l.statut, nc: (ncsAll ?? []).filter((n: any) => String(n.lot_ref) === String(l.id)).length })),
+    bdts: bdts.slice(0, 200).map((b: any) => ({ id: b.id, piece: b.piece, operation: b.operation, machine: typeBdt[String(b.id)] === 'machine' ? 'machine' : 'mo', statut: b.statut, duree: Number(b.duree) || 0, temps_reel: b.temps_reel != null ? Number(b.temps_reel) : null, operateur_id: b.operateur_id ?? null, operateur_nom: b.operateur_nom ?? null, lot_id: b.lot_id ?? null, lot_ref: b.lot_ref ?? null, matiere_ok: b.matiere_ok ?? null })),
+    // Lot H2 : arbre des lots (sous-lots des pièces mères) — parent déduit de l'id sans les colonnes cloud-14.
+    lots: lots.slice(0, 100).map((l: any) => ({ id: l.id, piece: l.piece, qte: Number(l.qte) || 0, statut: l.statut, nc: (ncsAll ?? []).filter((n: any) => String(n.lot_ref) === String(l.id)).length, lot_parent: parentDuLot(l), niveau: niveauDuLot(l), rang: l.rang ?? null })),
     factures: factures.map((f: any) => ({ num: f.num_facture || f.id, montant_ht: Number(f.montant_ht) || 0, statut: f.statut, date: String(f.date_facture || f.created_at || '').slice(0, 10) })),
     matieres: matieres.slice(0, 100),
     ncs: ncs.slice(0, 50).map((n: any) => ({ id: n.id, type: n.type_nc, gravite: n.gravite, statut: n.statut, lot: n.lot_ref, date: n.date_nc })),
@@ -1175,16 +1305,37 @@ export async function getAffaireDetail(numAffaire: string) {
       const cmd = String(p.cmd_ref || '').trim(), pc = String(p.piece || '').toLowerCase().trim()
       if (cmd && pc) prepOuvLot.add(cmd + '|' + pc); else prepOuvAff.add(String(p.num_affaire || ''))
     }
+    // Lot H2 : BDT + BDS de l'affaire (sous-lots : un lot mère n'est prêt qu'avec tout son arbre). Correctif : lus à la
+    // SOURCE, complets et stricts — getCommandeDetail ne rend que 200 BDT sans ordre (des sous-lots paraissaient finis)
+    // et la table des BDS était lue sans filtre (tronquée à 1 000 lignes). Lecture en échec ⇒ vigilance « non vérifié ».
     for (const d of cmdDetails) {
       const cmdId = String((d as any).cmd?.id ?? '')
       const aff = String((d as any).cmd?.num_affaire ?? num)
-      for (const l of (((d as any).lots ?? []) as any[])) {
+      const lotsD = (((d as any).lots ?? []) as any[])
+      const idsLots = new Set(lotsD.map((l: any) => String(l.id)))
+      const [lecBdtD, lecBdsD] = await Promise.all([lireBonsCommandeStrict('BDT', cmdId, aff, Array.from(idsLots)), lireBonsCommandeStrict('BDS', cmdId, aff, Array.from(idsLots))])
+      const lectureOk = !lecBdtD.error && !lecBdsD.error
+      const bdtsD = lecBdtD.error ? (((d as any).bdts ?? []) as any[]) : lecBdtD.data.filter((b: any) =>
+        String(b.cmd_id ?? '') === cmdId || String(b.cmd_ref ?? '') === aff || String(b.num_affaire ?? '') === aff || idsLots.has(String((b.lot_id ?? b.lot_ref ?? '') || '')))
+      const opsD = opsParLot(bdtsD, lecBdsD.data.filter((b: any) => {
+        const k = String((b.lot_id ?? b.lot_ref ?? '') || '')
+        return String(b.cmd_ref ?? '') === cmdId || String(b.cmd_ref ?? '') === aff || (k !== '' && idsLots.has(k))
+      }))
+      const aDesEnfants = new Set<string>(lotsD.map((l: any) => String(parentDuLot(l) || '')).filter(Boolean))
+      for (const l of lotsD) {
         const pc = String(l.piece || '').toLowerCase().trim()
-        const bdtsLot = (((d as any).bdts ?? []) as any[])
-          .filter((b: any) => String(b.lot_ref ?? '') === String(l.id) || String(b.piece || '').toLowerCase().trim() === pc)
+        // Rapprochement EXACT par lot (lot_ref / lot_id) ; la pièce ne sert que pour un BDT SANS lot. Avant H2,
+        // la pièce seule rattachait au lot d'une mère les BDT d'un sous-lot de même pièce (et `lot_ref`
+        // n'était pas transmis par getCommandeDetail : seul le repli par pièce jouait).
+        const bdtsLot = bdtsD.filter((b: any) => {
+          const k = String((b.lot_id ?? b.lot_ref ?? '') || '')
+          return k ? k === String(l.id) : String(b.piece || '').toLowerCase().trim() === pc
+        })
         const raisons: string[] = []
         if (prepOuvLot.has(cmdId + '|' + pc) || prepOuvAff.has(aff)) raisons.push('préparation technique')
         if (bdtsLot.length && bdtsLot.every((b: any) => b.matiere_ok === false)) raisons.push('matière non réceptionnée')
+        if (!lectureOk && aDesEnfants.has(String(l.id))) raisons.push('avancement des sous-lots non vérifié (lecture des bons en échec)')
+        else { const vSl = vigilanceSousLots({ lot_id: l.id }, lotsD, opsD); if (vSl) raisons.push(vSl) }
         l.blocages = raisons
         l.pret = raisons.length === 0
       }
@@ -2585,6 +2736,20 @@ export async function getNomenclatures(): Promise<Nomenclature[]> {
   return data ?? []
 }
 
+// Lecture STRICTE et paginée (lot H2) : le contrôle cycle / profondeur d'une mère et le développement
+// des sous-lots ne doivent jamais se faire sur une liste vide faute de lecture.
+export async function getNomenclaturesStrictes(): Promise<{ data: any[]; error: string | null }> {
+  const out: any[] = []
+  const PAGE = 1000
+  for (let from = 0; from < 1_000_000; from += PAGE) {
+    const { data, error } = await supabase.from('nomenclatures').select('*').order('id', { ascending: true }).range(from, from + PAGE - 1)
+    if (error) return { data: [], error: error.message }
+    out.push(...((data ?? []) as any[]))
+    if (!data || data.length < PAGE) break
+  }
+  return { data: out, error: null }
+}
+
 export async function getNomenclature(id: string): Promise<Nomenclature | null> {
   const { data } = await supabase.from('nomenclatures').select('*').eq('id', id).single()
   return data
@@ -3161,15 +3326,25 @@ export async function createBDTRow(payload: Record<string, any>) {
 // Clés des bons existants, lecture STRICTE et paginée (relecture lot H0) : « Générer les BDT » juge
 // l'idempotence sur (affaire | pièce | seq) et choisit un identifiant LIBRE. Une lecture en échec ne
 // doit jamais passer pour « aucun bon » (tous les bons seraient recréés en double sous d'autres ids).
+// Lot H2 (18/09/2026) : la clé suit `cleBon` (src/nomenclature_arbre.ts) — INCHANGÉE pour un bon de lot
+// racine (affaire | pièce | seq), suffixée du lot pour un bon de SOUS-lot (une même fille peut être
+// lancée dans plusieurs lots d'une affaire : deux mères, ou pièce directe + composant). `lot_ref` est lu.
+// Affaire d'un BDS : `cmd_ref` porte l'affaire (generer-bdt) OU l'id de commande « CMD-AAAA-<affaire> »
+// (cascade d'acceptation) ; le préfixe est retiré pour que les deux chemins jugent la MÊME clé (sans ça,
+// generer-bdt rejoué après une acceptation recréait les BDS de la cascade sous un autre id).
+export const affaireDeBon = (kind: 'BDT' | 'BDS', b: any): string => kind === 'BDT'
+  ? String(b?.num_affaire ?? '')
+  : String(b?.cmd_ref ?? '').replace(/^CMD-\d{4}-/, '')
+export const cleDeBon = (kind: 'BDT' | 'BDS', b: any): string => cleBon(affaireDeBon(kind, b), b?.piece, b?.seq, b?.lot_ref)
 export async function getClesBonsStrictes(kind: 'BDT' | 'BDS'): Promise<{ data: { id: string; cle: string }[]; error: string | null }> {
   const table = kind === 'BDT' ? 'bons_de_travail' : 'bons_sous_traitance'
   const colAff = kind === 'BDT' ? 'num_affaire' : 'cmd_ref'
   const out: { id: string; cle: string }[] = []
   const PAGE = 1000
   for (let from = 0; from < 1_000_000; from += PAGE) {
-    const { data, error } = await supabase.from(table).select(`id, ${colAff}, piece, seq`).order('id', { ascending: true }).range(from, from + PAGE - 1)
+    const { data, error } = await supabase.from(table).select(`id, ${colAff}, piece, seq, lot_ref`).order('id', { ascending: true }).range(from, from + PAGE - 1)
     if (error) return { data: [], error: error.message }
-    for (const b of (data ?? []) as any[]) out.push({ id: String(b.id), cle: `${b[colAff]}|${b.piece}|${b.seq}` })
+    for (const b of (data ?? []) as any[]) out.push({ id: String(b.id), cle: cleDeBon(kind, b) })
     if (!data || data.length < PAGE) break
   }
   return { data: out, error: null }
@@ -3178,10 +3353,10 @@ export async function getClesBonsStrictes(kind: 'BDT' | 'BDS'): Promise<{ data: 
 export async function getCleBonParId(kind: 'BDT' | 'BDS', id: string): Promise<{ data: { id: string; cle: string } | null; error: string | null }> {
   const table = kind === 'BDT' ? 'bons_de_travail' : 'bons_sous_traitance'
   const colAff = kind === 'BDT' ? 'num_affaire' : 'cmd_ref'
-  const { data, error } = await supabase.from(table).select(`id, ${colAff}, piece, seq`).eq('id', id).limit(1).maybeSingle()
+  const { data, error } = await supabase.from(table).select(`id, ${colAff}, piece, seq, lot_ref`).eq('id', id).limit(1).maybeSingle()
   if (error) return { data: null, error: error.message }
   const b: any = data
-  return { data: b ? { id: String(b.id), cle: `${b[colAff]}|${b.piece}|${b.seq}` } : null, error: null }
+  return { data: b ? { id: String(b.id), cle: cleDeBon(kind, b) } : null, error: null }
 }
 
 // ─── Réglage / découpe / recollage des BDT (lot C, 14/09/2026) ─────────────────────────────────

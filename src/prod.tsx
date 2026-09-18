@@ -9,6 +9,9 @@ import { scriptCadencePage, voletCadenceBouton, voletCadenceHTML, scriptVoletCad
 import type { LectureCadence } from './cadence_db'
 import type { BonDeTravail, Machine, Operateur, Lot, Commande, FournisseurSt } from './types'
 import { blocDaNcProduction, refFormulairesProd } from './prod_da_nc'
+// Lot H2 (18/09/2026) : sous-lots d'une pièce mère — module pur, utilisé au RENDU serveur uniquement (jamais injecté en JS client).
+import { opsParLot, avancementArbre, sousLotsNonTermines, vigilanceSousLots, trierArborescence, trierOrdreFabrication, parentDuLot, niveauDuLot, estSousLot, racineDuLot } from './nomenclature_arbre'
+import type { ArbreLotVue, OpLot } from './nomenclature_arbre'
 
 const sjX = (v: any) => JSON.stringify(v).replace(/</g, '\\u003c')
 
@@ -70,6 +73,60 @@ export function buildLotColorMap(keys: (string|null|undefined)[]): Record<string
   const m: Record<string,string> = {}
   uniq.forEach((k,i) => { m[k] = LOT_PALETTE[i % LOT_PALETTE.length] })
   return m
+}
+
+// ─── SOUS-LOTS D'UNE PIÈCE MÈRE (lot H2, 18/09/2026) ─────────
+// Le lot d'une pièce mère porte un sous-lot par composant (LOT-…-01.02 = 2e composant du lot LOT-…-01), récursivement
+// (sous-sous-lots LOT-…-01.02.01). L'ordre des composants de la mère = ORDRE DE FABRICATION, du haut vers le bas : il fixe
+// le rang du sous-lot. Affichage en ARBRE (pré-ordre : le lot, puis ses sous-lots en retrait, rang croissant) ; goulotte en
+// ordre de FABRICATION (sous-lots d'abord, puis l'assemblage de la mère). Aucune porte nouvelle : un sous-lot se programme
+// comme le reste (porte matière existante) ; la mère porte seulement une VIGILANCE « sous-lots non terminés ».
+// Sans cloud-14 (colonnes lot_parent / rang / niveau absentes), l'arbre se déduit de l'id (parentDuLot, niveauDuLot).
+const rangLot = (l: any): number | null => {
+  if (l && l.rang != null && l.rang !== '' && Number.isFinite(Number(l.rang))) return Number(l.rang)
+  const m = /\.(\d{2,})$/.exec(String(l?.id ?? ''))
+  return m ? Number(m[1]) : null
+}
+/** Suffixe d'arbre d'un id de sous-lot : « 01.02 » pour LOT-2026-0001-01.02 (n° de pièce puis rangs) ; '' pour une racine. */
+export const suffixeSousLot = (lotId: any): string => {
+  const id = String(lotId ?? '')
+  if (!estSousLot(id)) return ''
+  const m = /-(\d{2,}(?:\.\d{2,})+)$/.exec(id)
+  return m ? m[1] : ''
+}
+const libelleNiveauLot = (niv: number) => niv <= 1 ? 'Sous-lot' : niv === 2 ? 'Sous-sous-lot' : 'Sous-lot niv. ' + niv
+/** Pastille « Sous-lot 01.02 » (rendu serveur) ; '' pour une racine. */
+const pastilleSousLot = (l: any) => {
+  const id = String(l?.id ?? l ?? '')
+  const suf = suffixeSousLot(id)
+  const niv = niveauDuLot(l)
+  if (!suf && !(niv > 0)) return ''
+  return `<span title="${escX(libelleNiveauLot(niv) + ' de ' + (parentDuLot(l) || racineDuLot(id)))}" style="display:inline-flex;align-items:center;gap:3px;background:#ecfeff;color:#0e7490;border:1px solid #a5f3fc;border-radius:999px;padding:1px 7px;font-size:.6rem;font-weight:800;white-space:nowrap;"><i class="fas fa-diagram-project" style="font-size:.55rem;"></i>${escX(libelleNiveauLot(niv))}${suf ? ' ' + escX(suf) : ''}</span>`
+}
+/** Cellule « Réf. lot » en arbre : retrait 16 px × niveau, « ↳ », pastille « n° rang » (ordre de fabrication). */
+const celluleLotArbre = (l: any, opts: { lien?: boolean; nbSousLots?: number } = {}) => {
+  const niv = niveauDuLot(l)
+  const rang = niv > 0 ? rangLot(l) : null
+  const id = String(l?.id ?? '')
+  const ref = opts.lien
+    ? `<a href="/production/lot/${encodeURIComponent(id)}" onclick="event.stopPropagation()" style="font-weight:700;color:#3b82f6;text-decoration:none;white-space:nowrap;">${escX(id)}</a>`
+    : `<span style="font-weight:700;color:#3b82f6;white-space:nowrap;">${escX(id)}</span>`
+  return `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:3px 6px;padding-left:${niv * 16}px;">`
+    + (niv > 0 ? `<span style="color:#94a3b8;font-weight:700;" aria-hidden="true">↳</span>` : '')
+    + (rang != null ? `<span title="Rang ${rang} dans l’ordre de fabrication de ${escX(parentDuLot(l) || '')}" style="display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:18px;border-radius:5px;background:#ecfeff;border:1px solid #a5f3fc;color:#0e7490;font-size:.6rem;font-weight:800;">n°${rang}</span>` : '')
+    + ref
+    + (opts.nbSousLots ? `<span title="Pièce mère : ${opts.nbSousLots} sous-lot(s) direct(s)" style="background:#f5f3ff;color:#6d28d9;border-radius:999px;padding:1px 7px;font-size:.58rem;font-weight:800;">${opts.nbSousLots} sous-lot${opts.nbSousLots > 1 ? 's' : ''}</span>` : '')
+    + `</div>`
+}
+/** Nombre de sous-lots DIRECTS (non annulés) par lot parent. */
+const compterSousLots = (lots: any[]): Record<string, number> => {
+  const out: Record<string, number> = {}
+  for (const l of lots || []) {
+    if (!l || estAnnule(l.statut)) continue
+    const p = parentDuLot(l)
+    if (p && p !== String(l.id)) out[p] = (out[p] || 0) + 1
+  }
+  return out
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -868,10 +925,13 @@ export const pageCommandesProd = (dbCmds?: Commande[]) => {
 // PAGE 4 : LOTS EN COURS
 // ══════════════════════════════════════════════════════════════
 export const pageLotsProd = (dbLots?: Lot[]) => {
-  const LOTS = dbLots ?? LOTS_DEFAULT
+  // Lot H2 : arborescence (pré-ordre) — lot de la pièce mère, puis ses sous-lots en retrait, rang croissant.
+  const LOTS = trierArborescence((dbLots ?? LOTS_DEFAULT) as any[]) as Lot[]
+  const NB_SL = compterSousLots(LOTS as any[])
+  const nbSousLots = LOTS.filter(l => niveauDuLot(l) > 0).length
   const rows = LOTS.map(l => `
-    <tr data-id="${l.id}" data-client="${escX(l.client_nom??'')}" data-piece="${escX(l.piece??'')}" data-statut="${l.statut??''}" onclick="location.href='/production/lot/'+encodeURIComponent('${l.id}')" style="cursor:pointer;" onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">
-      ${TD(`<span style="font-weight:700;color:#3b82f6;">${l.id}</span>`)}
+    <tr data-id="${escX(l.id)}" data-client="${escX(l.client_nom??'')}" data-piece="${escX(l.piece??'')}" data-statut="${escX(l.statut??'')}" onclick="location.href='/production/lot/'+encodeURIComponent('${escX(l.id)}')" style="cursor:pointer;" onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">
+      ${TD(celluleLotArbre(l, { nbSousLots: NB_SL[String(l.id)] || 0 }))}
       ${TD(escX(l.client_nom??'—'))}
       ${TD(escX(l.piece??'—'))}
       ${TD(l.qte!=null?String(l.qte):'—')}
@@ -887,7 +947,7 @@ export const pageLotsProd = (dbLots?: Lot[]) => {
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
     <div>
       <h1 style="font-size:1.35rem;font-weight:900;color:#1e293b;margin:0;">Lots en cours</h1>
-      <div style="font-size:.78rem;color:#64748b;margin-top:2px;">${LOTS.length} lot${LOTS.length!==1?'s':''}</div>
+      <div style="font-size:.78rem;color:#64748b;margin-top:2px;">${LOTS.length - nbSousLots} lot${(LOTS.length - nbSousLots)!==1?'s':''}${nbSousLots ? ` + ${nbSousLots} sous-lot${nbSousLots!==1?'s':''} (en retrait sous leur pièce mère ; n° = rang dans l’ordre de fabrication, la mère s’assemble après ses sous-lots)` : ''}</div>
     </div>
     ${prodSearchBar('tbl-lots-prod',[['id','Réf. lot'],['client','Client'],['piece','Pièce'],['statut','Statut']])}
   </div>
@@ -959,7 +1019,20 @@ export const pageCommandeDetail = (
     }
     groups.get(key).ops.push(op)
   })
-  const groupArr = Array.from(groups.values()).filter(g => g.ops.length > 0 || !(g.lot as any).synthetic)
+  // Lot H2 : cartes dans l'ORDRE DE FABRICATION, lu du haut vers le bas (correctif : pré-ordre avant, la carte
+  // d'assemblage de la mère était EN HAUT, au-dessus de ses sous-lots — l'écran contredisait son propre texte).
+  // Post-ordre (trierOrdreFabrication, comme la goulotte) : sous-lots les plus profonds d'abord, rang croissant,
+  // chaque pièce mère APRÈS ses sous-lots ; le retrait garde la hiérarchie. Un groupe « réf. seule » dont la clé
+  // est un id de sous-lot (bons sans ligne lots) se range avec son parent (parentDuLot déduit de l'id).
+  const groupArr = trierOrdreFabrication(
+    Array.from(groups.values())
+      .filter(g => g.ops.length > 0 || !(g.lot as any).synthetic)
+      .map(g => ({ id: String(g.key), rang: (g.lot as any).rang ?? null, lot_parent: (g.lot as any).synthetic ? null : ((g.lot as any).lot_parent ?? null), g }))
+  ).map(x => x.g)
+  const lotsArbre: any[] = groupArr.map(g => (g.lot as any).synthetic ? { id: String(g.key), statut: '' } : g.lot)
+  const opsArbre = opsParLot(bdts, bsts)
+  const NB_SL = compterSousLots(lotsArbre)
+  const nbSousLots = groupArr.filter(g => niveauDuLot((g.lot as any).synthetic ? String(g.key) : g.lot) > 0).length
 
   const totalOps = ops.length
   const soldes = ops.filter(o => isSolde(o.statut)).length
@@ -968,17 +1041,26 @@ export const pageCommandeDetail = (
 
   const lotCards = groupArr.map(g => {
     const L: any = g.lot
+    const cle = L.synthetic ? String(g.key) : String(L.id)
+    const niv = niveauDuLot(L.synthetic ? cle : L)
+    const nbSL = NB_SL[cle] || 0
+    const rangL = niv > 0 ? rangLot(L.synthetic ? { id: cle } : L) : null
     const lotRef = L.synthetic
-      ? `<span style="font-weight:800;color:#1e293b;">${L.id}</span><span style="margin-left:8px;font-size:.6rem;font-weight:700;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:1px 6px;">réf. seule</span>`
-      : `<a href="/production/lot/${encodeURIComponent(L.id)}" style="font-weight:800;color:#3b82f6;text-decoration:none;">${L.id}</a>`
+      ? `<span style="font-weight:800;color:#1e293b;">${escX(L.id)}</span><span style="margin-left:8px;font-size:.6rem;font-weight:700;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:1px 6px;">réf. seule</span>`
+      : `<a href="/production/lot/${encodeURIComponent(L.id)}" style="font-weight:800;color:#3b82f6;text-decoration:none;">${escX(L.id)}</a>`
     const rows = opRowsHtml(g.ops)
+    // Pièce mère : avancement de l'arbre (le lot + tous ses sous-lots) et vigilance tant qu'un sous-lot n'est pas fini.
+    const avA = nbSL ? avancementArbre(cle, lotsArbre, opsArbre) : null
+    const nf = nbSL ? sousLotsNonTermines(cle, lotsArbre, opsArbre) : []
     return `
-    <div class="card" style="overflow:hidden;margin-bottom:14px;">
-      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 16px;background:#f8fafc;border-bottom:1px solid #eef2f7;">
-        <div style="display:flex;align-items:center;gap:8px;"><i class="fas fa-layer-group" style="color:#6366f1;"></i>${lotRef}</div>
+    <div class="card" style="overflow:hidden;margin-bottom:14px;${niv > 0 ? `margin-left:${Math.min(niv, 4) * 28}px;border-left:3px solid #a5f3fc;` : ''}">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 16px;background:${niv > 0 ? '#f8feff' : '#f8fafc'};border-bottom:1px solid #eef2f7;">
+        <div style="display:flex;align-items:center;gap:8px;">${niv > 0 ? `<span title="Sous-lot de ${escX(parentDuLot(L.synthetic ? cle : L) || '')} — sa pièce mère s’assemble plus bas" style="color:#94a3b8;font-weight:700;" aria-hidden="true">⤵</span>` : ''}${rangL != null ? `<span title="Rang ${rangL} dans l’ordre de fabrication" style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:20px;border-radius:6px;background:#ecfeff;border:1px solid #a5f3fc;color:#0e7490;font-size:.62rem;font-weight:800;">n°${rangL}</span>` : ''}<i class="fas ${nbSL ? 'fa-sitemap' : 'fa-layer-group'}" style="color:#6366f1;"></i>${lotRef}${pastilleSousLot(L.synthetic ? cle : L)}</div>
         <div style="font-size:.78rem;color:#475569;">${escX(L.piece || '—')}</div>
-        ${L.qte != null ? `<div style="font-size:.72rem;color:#94a3b8;">Qté ${L.qte}</div>` : ''}
+        ${L.qte != null ? `<div style="font-size:.72rem;color:#94a3b8;">Qté ${escX(L.qte)}</div>` : ''}
         ${!L.synthetic ? STATUT_BADGE(L.statut) : ''}
+        ${nbSL ? `<span title="Avancement de la pièce mère et de ses sous-lots : ${avA!.soldes}/${avA!.total} étapes (propres à la mère : ${avA!.propre.soldes}/${avA!.propre.total})" style="background:#f5f3ff;color:#6d28d9;border-radius:999px;padding:2px 9px;font-size:.62rem;font-weight:800;">${nbSL} sous-lot${nbSL > 1 ? 's' : ''} · arbre ${avA!.pct}%</span>` : ''}
+        ${nf.length ? `<span title="Vigilance, non bloquante : l’assemblage de la mère se programme, mais il ne se réalise qu’une fois ses sous-ensembles fabriqués. Non terminés : ${escX(nf.join(', '))}" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:999px;padding:2px 9px;font-size:.62rem;font-weight:800;"><i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>sous-lots non terminés (${nf.length}/${nbSL})</span>` : ''}
         <div style="margin-left:auto;font-size:.7rem;font-weight:700;color:#64748b;">${g.ops.length} opération${g.ops.length !== 1 ? 's' : ''}</div>
       </div>
       <table style="width:100%;border-collapse:collapse;">
@@ -1007,13 +1089,14 @@ export const pageCommandeDetail = (
       </div>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">
-      ${KPI_CARD('Lots', String(groupArr.length), '#6366f1')}
+      ${KPI_CARD('Lots', String(groupArr.length - nbSousLots) + (nbSousLots ? `<span style="font-size:.7rem;font-weight:700;color:#0e7490;margin-left:6px;">+ ${nbSousLots} sous-lot${nbSousLots > 1 ? 's' : ''}</span>` : ''), '#6366f1')}
       ${KPI_CARD('BDT (usine)', String(nbBdt), '#3b82f6')}
       ${KPI_CARD('BDS (sous-trait.)', String(nbBds), '#6d28d9')}
       ${KPI_CARD('Avancement', av + '%', av === 100 ? '#22c55e' : av > 50 ? '#3b82f6' : '#f59e0b')}
     </div>
   </div>
-  <h2 style="font-size:.95rem;font-weight:800;color:#1e293b;margin:0 0 10px;">Lots & opérations <span style="font-weight:600;color:#94a3b8;font-size:.78rem;">(dans l'ordre des opérations)</span></h2>
+  <h2 style="font-size:.95rem;font-weight:800;color:#1e293b;margin:0 0 10px;">Lots & opérations <span style="font-weight:600;color:#94a3b8;font-size:.78rem;">${nbSousLots ? '(dans l’ordre de fabrication, du haut vers le bas)' : '(dans l’ordre des opérations)'}</span></h2>
+  ${nbSousLots ? `<div style="font-size:.74rem;color:#0e7490;background:#ecfeff;border:1px solid #a5f3fc;border-radius:10px;padding:8px 12px;margin:0 0 12px;"><i class="fas fa-sitemap" style="margin-right:6px;"></i>Pièce mère : lisez de haut en bas — les sous-lots d’abord (les plus profonds en premier, en retrait), puis la carte de la pièce mère, qui assemble les sous-lots au-dessus d’elle. Chaque lot se programme dès que sa matière est en stock, comme les autres lots.</div>` : ''}
   ${lotCards || `<div class="card" style="padding:40px;text-align:center;color:#94a3b8;">Aucun lot ni opération rattaché à cette commande.</div>`}
 </div>`
   return layout('Commande ' + (C.num_affaire || C.id), content, 'prod-commandes')
@@ -1030,7 +1113,11 @@ export const pageLotDetail = (
   bsts: any[],
   detail?: any,
   nom?: any,
-  planRef?: string
+  planRef?: string,
+  // Lot H2 (18/09/2026) : arbre du lot (vueArbreLot, src/nomenclature_arbre.ts) — parent, sous-lots DIRECTS dans l'ordre
+  // de fabrication, avancement de l'arbre, vigilance « sous-lots non terminés », sous-lots manquants (+ bouton « Créer
+  // les sous-lots »). Absent (appelant pas encore à jour) : la fiche s'affiche comme avant.
+  arbre?: ArbreLotVue
 ) => {
   const L: any = lot ?? { id: routeId, client_nom: (bdts[0]?.client_nom) || (bsts[0]?.client_nom) || '—', piece: (bdts[0]?.piece) || (bsts[0]?.piece) || '—', statut: '—', synthetic: true }
   const ops = normOps(bdts, bsts)
@@ -1040,6 +1127,44 @@ export const pageLotDetail = (
   const cmdId = (cmd?.id) || L.cmd_id || ''
   const cmdLabel = (cmd?.num_affaire) || cmdId
   const rows = opRowsHtml(ops)
+
+  // ─── Lot H2 : sous-lots d'une pièce mère ───
+  const A: ArbreLotVue | null = (arbre && typeof arbre === 'object' && Array.isArray((arbre as any).enfants)) ? arbre : null
+  const colAv = (p: number) => p === 100 ? '#22c55e' : p > 50 ? '#3b82f6' : p > 0 ? '#f59e0b' : '#cbd5e1'
+  const niveauL = A ? A.niveau : niveauDuLot(L)
+  // Fil d'Ariane : « Sous-lot n° r de LOT-… » (+ lot racine quand il est plus haut). Un sous-lot est INTERNE : il n'est ni
+  // libéré ni expédié seul, il suit son lot racine (arbitrage A8).
+  const filAriane = (A && A.parent) ? `<div style="font-size:.76rem;color:#0e7490;background:#ecfeff;border:1px solid #a5f3fc;border-radius:9px;padding:6px 10px;margin-top:8px;display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <i class="fas fa-sitemap"></i><b>${escX(libelleNiveauLot(niveauL))}${A.rang != null ? ' n° ' + escX(A.rang) : ''}</b> de
+          <a href="/production/lot/${encodeURIComponent(A.parent.id)}" style="color:#0369a1;font-weight:800;text-decoration:none;">${escX(A.parent.id)}</a>${A.parent.piece ? `<span style="color:#64748b;">(${escX(A.parent.piece)})</span>` : ''}
+          ${A.racine && A.racine !== A.parent.id ? `<span style="color:#94a3b8;">·</span> lot racine <a href="/production/lot/${encodeURIComponent(A.racine)}" style="color:#0369a1;font-weight:800;text-decoration:none;">${escX(A.racine)}</a>` : ''}
+          <span style="color:#64748b;">· sous-ensemble interne : libéré et expédié avec son lot racine</span>
+        </div>` : ''
+  const sousLotsRows = A ? A.enfants.map((e) => `<tr>
+      ${TD(`<span style="display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:22px;border-radius:6px;background:#ecfeff;border:1px solid #a5f3fc;color:#0e7490;font-weight:800;font-size:.7rem;">${e.rang != null ? escX(e.rang) : '—'}</span>`)}
+      ${TD(`<a href="/production/lot/${encodeURIComponent(e.id)}" style="font-weight:800;color:#3b82f6;text-decoration:none;">${escX(e.id)}</a>${e.niveau > 1 ? ' ' + pastilleSousLot({ id: e.id, niveau: e.niveau }) : ''}`)}
+      ${TD(escX(e.piece || '—'))}
+      ${TD(e.qte != null ? escX(e.qte) : '—')}
+      ${TD(e.statut ? STATUT_BADGE(e.statut) : '—')}
+      ${TD(`<div title="${e.avancement.soldes}/${e.avancement.total} étapes soldées (sous-lot et ses propres sous-lots)" style="display:flex;align-items:center;gap:8px;min-width:130px;"><div style="flex:1;height:7px;background:#eef2f7;border-radius:4px;overflow:hidden;min-width:70px;"><div style="height:100%;width:${e.avancement.pct}%;background:${colAv(e.avancement.pct)};border-radius:4px;"></div></div><span style="font-size:.7rem;font-weight:800;color:${colAv(e.avancement.pct)};">${e.avancement.pct}%</span>${e.fini ? '<i class="fas fa-circle-check" style="color:#22c55e;" title="Sous-lot terminé"></i>' : ''}</div>`)}
+    </tr>`).join('') : ''
+  const sectionSousLots = (A && A.enfants.length) ? `
+  <h2 style="font-size:.95rem;font-weight:800;color:#1e293b;margin:0 0 10px;"><i class="fas fa-sitemap" style="color:#0e7490;margin-right:7px;"></i>Sous-lots <span style="font-weight:600;color:#94a3b8;font-size:.78rem;">(ordre de fabrication, du haut vers le bas — puis l’assemblage de cette pièce mère)</span></h2>
+  <div class="card" style="overflow:hidden;margin-bottom:16px;">
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr style="background:#f8fafc;">${TH('Rang')}${TH('Sous-lot')}${TH('Pièce')}${TH('Qté')}${TH('Statut')}${TH('Avancement')}</tr></thead>
+      <tbody>${sousLotsRows}</tbody>
+    </table>
+  </div>` : ''
+  const bandeauVigilance = (A && A.vigilance) ? `<div style="background:#fff7ed;border:1px solid #fed7aa;border-left:4px solid #f59e0b;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:.78rem;color:#9a3412;">
+    <i class="fas fa-triangle-exclamation" style="margin-right:6px;"></i><b>Vigilance (non bloquante) — ${escX(A.vigilance)}.</b>
+    Les étapes d’assemblage de cette pièce mère restent programmables ; elles ne se réalisent qu’une fois ses sous-ensembles fabriqués.
+  </div>` : ''
+  const bandeauManquants = (A && A.avertissement) ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #d97706;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:.78rem;color:#92400e;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:260px;"><i class="fas fa-sitemap" style="margin-right:6px;"></i>${escX(A.avertissement)}</div>
+    ${A.action_creer ? `<button type="button" id="btnCreerSousLots" onclick="creerSousLots()" style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;background:linear-gradient(135deg,#0891b2,#0e7490);color:white;border:none;border-radius:9px;font-weight:700;font-size:.78rem;cursor:pointer;white-space:nowrap;"><i class="fas fa-sitemap"></i>Créer les sous-lots</button>` : ''}
+  </div>` : ''
+  const avArbre = (A && A.enfants.length) ? A.avancement_arbre : null
 
   // ─── Lot 360 : cascade qualité + coût engagé ───
   const _LD = detail && detail.kpi ? detail : null
@@ -1080,22 +1205,32 @@ export const pageLotDetail = (
         <div style="font-size:.85rem;color:#475569;margin-top:4px;">${escX(L.piece || '—')} · ${escX(L.client_nom || '—')}${L.qte != null ? ` · Qté ${L.qte}` : ''}</div>
         <div style="font-size:.75rem;color:#64748b;margin-top:3px;display:flex;gap:12px;flex-wrap:wrap;">${((cmd?.num_affaire) || L.affaire_id) ? `<span>Affaire <b style="color:#334155;">${escX((cmd?.num_affaire) || L.affaire_id)}</b></span>` : ''}<span>Lot <b style="color:#334155;">${escX(L.id)}</b></span>${planRef ? `<span>Plan <b style="color:#334155;">${escX(planRef)}</b></span>` : ''}${(nom && nom.indice) ? `<span>Indice <b style="color:#334155;">${escX(nom.indice)}</b></span>` : ''}</div>
         ${cmdId ? `<div style="font-size:.78rem;margin-top:6px;"><i class="fas fa-file-invoice" style="color:#94a3b8;margin-right:6px;"></i>Commande <a href="/production/commande/${encodeURIComponent(cmdId)}" style="color:#3b82f6;text-decoration:none;font-weight:700;">${escX(cmdLabel)}</a></div>` : ''}
+        ${filAriane}
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
         <button onclick="ofPdf()" title="Imprimer l'ordre de fabrication (fiche suiveuse)" style="display:inline-flex;align-items:center;gap:7px;padding:10px 15px;background:linear-gradient(135deg,#6366f1,#4338ca);color:white;border:none;border-radius:10px;font-weight:700;font-size:.8rem;cursor:pointer;align-self:stretch;"><i class="fas fa-print"></i>Imprimer l'OF</button>
         ${KPI_CARD('Étapes', String(totalOps), '#6366f1')}
         ${KPI_CARD('Avancement', av + '%', av === 100 ? '#22c55e' : av > 50 ? '#3b82f6' : '#f59e0b')}
+        ${avArbre ? KPI_CARD('Avec sous-lots', avArbre.pct + '%', colAv(avArbre.pct)) : ''}
       </div>
     </div>
     <div style="margin-top:14px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
-        <span style="font-size:.72rem;font-weight:700;color:#64748b;">Avancement du lot</span>
+        <span style="font-size:.72rem;font-weight:700;color:#64748b;">Avancement du lot${avArbre ? ' (étapes propres de la pièce mère : assemblage)' : ''}</span>
         <span style="font-size:.72rem;font-weight:800;color:${av === 100 ? '#22c55e' : av > 50 ? '#3b82f6' : '#f59e0b'};">${soldes}/${totalOps} étapes soldées · ${av}%</span>
       </div>
       <div style="height:10px;background:#eef2f7;border-radius:6px;overflow:hidden;"><div style="height:100%;width:${av}%;background:${av === 100 ? '#22c55e' : av > 50 ? '#3b82f6' : '#f59e0b'};border-radius:6px;transition:width .5s;"></div></div>
+      ${avArbre ? `<div style="display:flex;align-items:center;justify-content:space-between;margin:9px 0 5px;">
+        <span style="font-size:.72rem;font-weight:700;color:#64748b;">Avancement de l’arbre (la pièce mère et tous ses sous-lots)</span>
+        <span style="font-size:.72rem;font-weight:800;color:${colAv(avArbre.pct)};">${avArbre.soldes}/${avArbre.total} étapes soldées · ${avArbre.pct}%</span>
+      </div>
+      <div style="height:10px;background:#eef2f7;border-radius:6px;overflow:hidden;"><div style="height:100%;width:${avArbre.pct}%;background:${colAv(avArbre.pct)};border-radius:6px;transition:width .5s;"></div></div>` : ''}
     </div>
   </div>
-  <h2 style="font-size:.95rem;font-weight:800;color:#1e293b;margin:0 0 10px;">Étapes de production <span style="font-weight:600;color:#94a3b8;font-size:.78rem;">(BDT usine & BDS sous-traitance, dans l'ordre)</span></h2>
+  ${bandeauManquants}
+  ${bandeauVigilance}
+  ${sectionSousLots}
+  <h2 style="font-size:.95rem;font-weight:800;color:#1e293b;margin:0 0 10px;">Étapes de production${avArbre ? ' de la pièce mère' : ''} <span style="font-weight:600;color:#94a3b8;font-size:.78rem;">(BDT usine & BDS sous-traitance, dans l'ordre${avArbre ? ' — après ses sous-lots' : ''})</span></h2>
   <div class="card" style="overflow:hidden;">
     <table style="width:100%;border-collapse:collapse;">
       <thead><tr style="background:#f8fafc;">${TH('Ordre')}${TH('Type')}${TH('Opération')}${TH('Pièce')}${TH('N° Bon')}${TH('Statut')}</tr></thead>
@@ -1144,7 +1279,10 @@ export const pageLotDetail = (
   // Totaux : avec gamme, MO et machine sont UNITAIRES (× quantité) ; en repli ce sont déjà des temps du bon.
   const _mult = _etapes.length ? _qte : 1
   const _tot = ofOps.reduce((a: any, o: any) => ({ reg: a.reg + o.reg, mo: a.mo + o.moU * _mult, mach: a.mach + o.machU * _mult, total: a.total + o.total }), { reg: 0, mo: 0, mach: 0, total: 0 })
-  const ofData = { numLot: L.id, affaire: (cmd?.num_affaire) || L.affaire_id || cmdLabel || '', plan: (nom && nom.num_plan) || planRef || '', planFichier: (nom && nom.plan_fichier) || '', indice: (nom && nom.indice) || '', client: L.client_nom, piece: L.piece || (nom && nom.code_ref_produit) || '', qte: _qte, statut: L.synthetic ? '' : (L.statut || ''), dateDebut: L.date_debut, dateFin: L.date_fin, hasGamme: _etapes.length > 0, ops: ofOps, tot: _tot }
+  const ofData = { numLot: L.id, affaire: (cmd?.num_affaire) || L.affaire_id || cmdLabel || '', plan: (nom && nom.num_plan) || planRef || '', planFichier: (nom && nom.plan_fichier) || '', indice: (nom && nom.indice) || '', client: L.client_nom, piece: L.piece || (nom && nom.code_ref_produit) || '', qte: _qte, statut: L.synthetic ? '' : (L.statut || ''), dateDebut: L.date_debut, dateFin: L.date_fin, hasGamme: _etapes.length > 0, ops: ofOps, tot: _tot,
+    // Lot H2 : sous-ensembles à assembler (sous-lots DIRECTS, ordre de fabrication) et lot parent d'un sous-lot.
+    sousEns: A ? A.enfants.map((e) => ({ rang: e.rang, lot: e.id, piece: e.piece || '', qte: e.qte, fini: e.fini })) : [],
+    parentLot: (A && A.parent) ? A.parent.id : '', racineLot: (A && A.racine && A.racine !== L.id) ? A.racine : '', niveauLib: (A && A.parent) ? libelleNiveauLot(niveauL) : '' }
   const ofScript = `<script>
 window.OF_DATA=${sjX(ofData)};
 var BRAND_LOGO=${sjX(LOGO_SVG)}; var BRAND_VIOLET=${sjX(BRAND.violet)}; var BRAND_BLEU=${sjX(BRAND.bleu)};
@@ -1176,6 +1314,7 @@ function ofPdf(){
     +'table{width:100%;border-collapse:collapse;} th,td{border:1px solid #bbb;padding:3px 5px;vertical-align:top;height:18px;}'
     +'th{background:#eef1f8;color:'+BRAND_BLEU+';font-size:8px;text-transform:uppercase;} td.c{text-align:center;} td.r{text-align:right;} td.b{font-weight:bold;} td.s{font-size:8.5px;color:#777;} td.mono{font-family:monospace;font-size:8.5px;color:#555;} tr.tot td{background:#f1f5ff;}'
     +'.leg{font-size:8.5px;color:#888;margin-top:5px;}'
+    +'.sec{font-weight:bold;color:'+BRAND_BLEU+';font-size:11px;margin:10px 0 4px;} table.se{margin-bottom:6px;}'
     +'.sign{display:flex;justify-content:space-between;margin-top:22px;font-size:10px;color:#555;} .sign div{border-top:1px solid #999;width:30%;padding-top:4px;text-align:center;}'
     +'</style></head><body>'
     +'<div class="hd"><div class="lft"><div class="lg">'+BRAND_LOGO+'</div><div><h1>ORDRE DE FABRICATION</h1><div class="sub">Fiche suiveuse — Seem Semrac'+(o.hasGamme?'':' · gamme absente, temps depuis BDT')+'</div></div></div>'
@@ -1190,6 +1329,10 @@ function ofPdf(){
     +'<div><span>Quantité :</span> <b>'+e(o.qte!=null?o.qte:'—')+'</b></div>'
     +'<div><span>Début / Fin :</span> <b>'+e(o.dateDebut||'—')+' → '+e(o.dateFin||'—')+'</b></div>'
     +'</div>'
+    +(o.parentLot?'<div class="info" style="grid-template-columns:1fr;"><div><span>'+e(o.niveauLib||'Sous-lot')+' de :</span> <b>'+e(o.parentLot)+'</b>'+(o.racineLot?' <span>· lot racine</span> <b>'+e(o.racineLot)+'</b>':'')+' <span>· sous-ensemble interne, livré avec son lot racine</span></div></div>':'')
+    +((o.sousEns&&o.sousEns.length)?'<div class="sec">Sous-ensembles à assembler — ordre de fabrication (du haut vers le bas), à fabriquer AVANT les étapes ci-dessous</div><table class="se"><thead><tr><th>Rang</th><th>Sous-lot</th><th>Pièce / réf</th><th>Quantité</th><th>État à l\\u0027édition</th><th>Visa réception</th></tr></thead><tbody>'
+      +o.sousEns.map(function(x){ return '<tr><td class="c b">'+e(x.rang!=null?x.rang:'')+'</td><td class="mono">'+e(x.lot)+'</td><td>'+e(x.piece||'')+'</td><td class="c b">'+e(x.qte!=null?x.qte:'—')+'</td><td class="c">'+(x.fini?'terminé':'en cours')+'</td><td></td></tr>'; }).join('')
+      +'</tbody></table><div class="sec">Étapes de la pièce mère (assemblage)</div>':'')
     +'<table><thead><tr><th>N°</th><th>Phase</th><th>Opération</th><th>Poste / Machine</th><th>N° Programme</th><th>Réglage</th><th>Tps MO (u)</th><th>Tps Machine (u)</th><th>Total (×qté)</th><th>Visa</th></tr></thead>'
     +'<tbody>'+(rows||'<tr><td colspan="10" style="text-align:center;color:#999;padding:14px;">Aucune opération / gamme sur ce lot</td></tr>')+totRow+'</tbody></table>'
     +'<div class="leg">Temps en heures:minutes. Réglage = temps fixe par lot. Tps MO / Machine = temps <b>unitaire</b> (par pièce) ; Total = réglage + unitaire × quantité. N° Programme et Visa à compléter par l\\u0027opérateur.</div>'
@@ -1200,6 +1343,50 @@ function ofPdf(){
   setTimeout(function(){ w.focus(); w.print(); }, 350);
 }
 try{ if(location && /[?&]print=1(&|$)/.test(location.search)) setTimeout(ofPdf, 500); }catch(_e){}
+// Lot H2 : « Créer les sous-lots » d un lot de piece mere lance avant H2 (ou sur une base qui vient de recevoir cloud-14).
+// 1) simulation (aucune ecriture) -> plan dans l ordre de fabrication ; 2) confirmation ; 3) creation ; rejouer = 0 creation.
+var LOT_ID_SL=${sjX(String(L.id))};
+function slEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function slErreur(j,st){
+  var code=(j&&j.code)?String(j.code):'';
+  var m=(j&&j.error)?String(j.error):'';
+  if(!m&&code==='arbre_indisponible') m='Sous-lots indisponibles : la base doit \\u00eatre mise \\u00e0 jour (script cloud-14, \\u00e0 faire par l\\u2019administrateur).';
+  if(!m&&code==='pas_une_mere') m='Ce lot n\\u2019est pas celui d\\u2019une pi\\u00e8ce m\\u00e8re avec composants : aucun sous-lot \\u00e0 cr\\u00e9er.';
+  if(!m) m='\\u00c9chec ('+st+').';
+  if(st===503) m='Lecture de la base impossible : '+m+(/[.!?]$/.test(m)?'':'.')+' R\\u00e9essayez dans un instant.';
+  pushNotif(st===409?'warn':'err',st===409?'fa-triangle-exclamation':'fa-ban',slEsc(m),14000);
+}
+async function creerSousLots(){
+  var btn=document.getElementById('btnCreerSousLots'); if(btn&&btn.disabled) return;
+  var fin=function(){ if(btn){ btn.disabled=false; btn.style.opacity=''; } };
+  if(btn){ btn.disabled=true; btn.style.opacity='.6'; }
+  var url='/api/production/lot/'+encodeURIComponent(LOT_ID_SL)+'/sous-lots';
+  try{
+    var r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({simuler:true})});
+    var j=null; try{ j=await r.json(); }catch(_e){}
+    if(!r.ok||!j||!j.ok){ slErreur(j,r.status); fin(); return; }
+    var plan=(j.plan||[]).filter(function(p){ return p&&p.lot_parent; });
+    var nouveaux=plan.filter(function(p){ return !p.existe; });
+    var avSim=(Array.isArray(j.avertissements)?j.avertissements:[]).filter(Boolean).map(String);
+    // Correctif H2 : rien a creer MAIS des composants bloques (revision non validee...) -> avertissement orange, jamais un faux « tout existe ».
+    if(!nouveaux.length){
+      if(avSim.length){ pushNotif('warn','fa-triangle-exclamation',slEsc('Aucun sous-lot ne peut \\u00eatre cr\\u00e9\\u00e9 : '+avSim[0]),20000); avSim.slice(1).forEach(function(a){ pushNotif('warn','fa-triangle-exclamation',slEsc(a),20000); }); }
+      else pushNotif('ok','fa-check','Tous les sous-lots existent d\\u00e9j\\u00e0 : rien \\u00e0 cr\\u00e9er.',6000);
+      fin(); return;
+    }
+    var termine=!!j.lot_termine;
+    var lignes=plan.map(function(p){ var niv=Math.max(1,Number(p.niveau)||1); var pad=new Array(niv).join('\\u00a0\\u00a0\\u00a0\\u00a0'); return pad+'n\\u00b0'+p.rang+' \\u00b7 '+p.id+' \\u2014 '+(p.piece||'?')+' \\u00d7 '+p.qte+(p.existe?' (existe)':' (\\u00e0 cr\\u00e9er)'); });
+    var msg='Cr\\u00e9er '+nouveaux.length+' sous-lot(s) pour '+LOT_ID_SL+', dans l\\u2019ordre de fabrication (du haut vers le bas) :\\n'+lignes.slice(0,25).join('\\n')+(lignes.length>25?'\\n\\u2026 +'+(lignes.length-25):'')+'\\n\\nChaque sous-lot re\\u00e7oit ses BDT/BDS (gamme de sa nomenclature), sa pr\\u00e9paration technique et ses demandes d\\u2019achat ; il se programme d\\u00e8s que sa mati\\u00e8re est en stock, comme les autres lots.'+(termine?'\\n\\n\\u26a0 Ce lot est d\\u00e9j\\u00e0 termin\\u00e9 : cr\\u00e9er ses sous-lots relance de la fabrication et des demandes d\\u2019achat.':'')+(avSim.length?'\\n\\n\\u00c0 noter :\\n\\u2022 '+avSim.slice(0,6).join('\\n\\u2022 '):'');
+    if(!(await appConfirm(msg,{danger:termine,title:'Cr\\u00e9er les sous-lots',okLabel:'Cr\\u00e9er les sous-lots',icon:'fa-sitemap'}))){ fin(); return; }
+    var r2=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(termine?{confirmer_termine:true}:{})});
+    var j2=null; try{ j2=await r2.json(); }catch(_e){}
+    if(!r2.ok||!j2||!j2.ok){ slErreur(j2,r2.status); fin(); return; }
+    var c=j2.crees||{};
+    notifDurable('ok','fa-sitemap',slEsc((c.lots||0)+' sous-lot(s) cr\\u00e9\\u00e9(s) \\u00b7 '+(c.bdt||0)+' BDT \\u00b7 '+(c.bds||0)+' BDS \\u00b7 '+(c.prepa||0)+' pr\\u00e9pa \\u00b7 '+(c.da||0)+' DA'+(j2.porte_matiere==='ouverte'?' \\u00b7 mati\\u00e8re d\\u00e9j\\u00e0 en stock : BDT \\u00ab mati\\u00e8re OK \\u00bb':'')),15000);
+    (j2.avertissements||[]).forEach(function(a){ notifDurable('warn','fa-triangle-exclamation',slEsc(a),30000); });
+    setTimeout(function(){ softReload(); },700);
+  }catch(_e){ pushNotif('err','fa-times','Erreur r\\u00e9seau.'); fin(); }
+}
 </script>`
   return layout('Lot ' + L.id, content + ofScript, 'prod-lots')
 }
@@ -1360,6 +1547,25 @@ export const pageServiceProd = (
   //   oasAvant / oasApres : étape OAS entre deux BDT (chemin critique : fin complète)
   //   cleLot      : clé de gamme (gamme.ts cleLot) ; sansHeure : `debut` vide en base (l'écran l'affiche à 6 h)
   // Les champs lus par le moteur de chemin critique client (ccRowBdt) doivent rester fidèles aux colonnes brutes.
+  // Lot H2 : libellé de sous-lot d'un BDT (« Sous-lot 01.02 », « Sous-sous-lot 01.02.01 ») — null pour un lot racine.
+  const sousLotLib = (k: any): string | null => (k && estSousLot(k)) ? libelleNiveauLot(niveauDuLot(String(k))) + ' ' + suffixeSousLot(k) : null
+  // Lot H2 : échéance d'un ARBRE de lots (pièce mère + sous-lots) = la plus proche échéance de ses BDT. La goulotte trie
+  // d'abord par échéance : sans elle, un sous-lot sans échéance (ou d'échéance différente) se détacherait de sa mère et
+  // l'ordre de fabrication (sous-lots puis assemblage) serait rompu. Posée SEULEMENT pour les arbres qui ont des sous-lots
+  // (un lot sans sous-lot garde exactement l'ordre d'avant).
+  const ECH_ARBRE: Record<string, string> = (() => {
+    const avecSousLots = new Set<string>()
+    ;(dbBDTs ?? []).forEach((b: any) => { const k = b.lot_id || b.lot_ref; if (k && estSousLot(k)) avecSousLots.add(racineDuLot(k)) })
+    ;(dbLots ?? []).forEach((l: any) => { if (l && l.id && (estSousLot(l.id) || l.lot_parent)) avecSousLots.add(racineDuLot(l.lot_parent && !estSousLot(l.id) ? l.lot_parent : l.id)) })
+    const out: Record<string, string> = {}
+    ;(dbBDTs ?? []).forEach((b: any) => {
+      const k = b.lot_id || b.lot_ref, e = b.date_echeance ? String(b.date_echeance).slice(0, 10) : ''
+      if (!k || !e) return
+      const r = racineDuLot(k)
+      if (avecSousLots.has(r) && (!out[r] || e < out[r])) out[r] = e
+    })
+    return out
+  })()
   const bdtsForGantt = (dbBDTs && dbBDTs.length > 0)
     ? dbBDTs.map(b => {
         const racine = racineBdt(b.id), rang = rangMorceauBdt(b.id), rangs = _rangsFamille[racine] || [rang]
@@ -1370,7 +1576,9 @@ export const pageServiceProd = (
           // Lot G : process OAS suivant (route /production/service, tableau vide = introuvable) · remis en goulotte par un déplacement (014 / cloud-12)
           , oasSuivant:(Array.isArray((b as any).oas_suivant)?(b as any).oas_suivant:null), remisGoulotteLe:((b as any).remis_goulotte_le||null)
           // Lot G · G5 : activité BRUTE (site de cadence du BDT ; « activite » ci-dessus vaut Seem par défaut pour l'affichage)
-          , activiteBrute:((b as any).activite ?? null)}
+          , activiteBrute:((b as any).activite ?? null)
+          // Lot H2 : pastille « Sous-lot 01.02 » (null pour un lot racine) · échéance de l'ARBRE (voir ECH_ARBRE)
+          , sousLot:sousLotLib((b as any).lot_id||(b as any).lot_ref), echeanceArbre:ECH_ARBRE[racineDuLot((b as any).lot_id||(b as any).lot_ref||'')]||null}
       })
     : BDT_DEFAULT
   const PROCESS_J = sjX(procForGantt)   // sjX (et non JSON.stringify) : un nom contenant « </script> » ne casse plus la page
@@ -1504,41 +1712,68 @@ export const pageServiceProd = (
   }).join('')
 
   // ─── Lots data ───────────────────────────────────────────
-  const LOTS = dbLots ?? LOTS_DEFAULT
-  // Avancement par lot = opérations soldées (BDT usine + BDS sous-traitance) / total des opérations du lot
-  const lotProgress = (lotId: string) => {
-    const key = String(lotId)
-    const bdtOf = bdtsForGantt.filter((b:any) => String(b.lotId||'') === key)
-    const bdsOf = bdsRowsForBst.filter((s:any) => String(s.lot_ref||'') === key)
-    const total = bdtOf.length + bdsOf.length
-    const done = bdtOf.filter((b:any) => b.statut==='solde').length
-      + bdsOf.filter((s:any) => s.statut==='recu' || s.statut==='solde').length
-    const pct = total > 0 ? Math.round(done/total*100) : 0
-    return { total, done, pct }
-  }
-  const progressBar = (pct: number, total: number, done: number) => {
+  // Lot H2 : ARBORESCENCE (pré-ordre) — le lot d'une pièce mère, puis ses sous-lots en retrait (rang = ordre de fabrication).
+  const LOTS = trierArborescence((dbLots ?? LOTS_DEFAULT) as any[]) as Lot[]
+  // Avancement = opérations finies (BDT soldés, BDS revenus) / opérations du lot, clé lot_id || lot_ref, annulées exclues
+  // (opsParLot, src/nomenclature_arbre.ts). Pièce mère : avancement de l'ARBRE (la mère + tous ses sous-lots), le lot seul
+  // en infobulle.
+  const OPS_LOTS: Record<string, OpLot[]> = opsParLot((dbBDTs ?? []) as any[], bdsRowsForBst)
+  const NB_SOUS_LOTS = compterSousLots(LOTS as any[])
+  const progressBar = (pct: number, total: number, done: number, titre = '') => {
     const col = pct===100 ? '#22c55e' : pct>50 ? '#3b82f6' : pct>0 ? '#f59e0b' : '#cbd5e1'
-    return `<div style="display:flex;align-items:center;gap:8px;min-width:120px;">
+    return `<div${titre ? ` title="${escX(titre)}"` : ''} style="display:flex;align-items:center;gap:8px;min-width:120px;">
       <div style="flex:1;height:7px;background:#eef2f7;border-radius:4px;overflow:hidden;min-width:70px;"><div style="height:100%;width:${pct}%;background:${col};border-radius:4px;transition:width .4s;"></div></div>
       <span style="font-size:.7rem;font-weight:800;color:${col};white-space:nowrap;">${pct}%</span>
       ${total>0?`<span style="font-size:.62rem;color:#94a3b8;white-space:nowrap;">${done}/${total}</span>`:''}
     </div>`
   }
   const lotTableRows = LOTS.map(l=>{
-    const pr = lotProgress(l.id)
+    const nbSL = NB_SOUS_LOTS[String(l.id)] || 0
+    const a = avancementArbre(String(l.id), LOTS as any[], OPS_LOTS)
+    const nf = nbSL ? sousLotsNonTermines(String(l.id), LOTS as any[], OPS_LOTS) : []
+    const titre = nbSL ? `Pièce mère — arbre (la mère et ses sous-lots) : ${a.soldes}/${a.total} étapes · la mère seule (assemblage) : ${a.propre.soldes}/${a.propre.total}` : ''
     return `
-    <tr data-id="${l.id}" data-client="${escX(l.client_nom??'')}" data-piece="${escX(l.piece??'')}" data-statut="${l.statut??''}" onclick="location.href='/production/lot/'+encodeURIComponent('${l.id}')" style="cursor:pointer;" onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">
-      ${TD(`<span style="font-weight:700;color:#3b82f6;">${l.id}</span>`)}
+    <tr data-id="${escX(l.id)}" data-client="${escX(l.client_nom??'')}" data-piece="${escX(l.piece??'')}" data-statut="${escX(l.statut??'')}" onclick="location.href='/production/lot/'+encodeURIComponent('${escX(l.id)}')" style="cursor:pointer;" onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">
+      ${TD(celluleLotArbre(l, { nbSousLots: nbSL }))}
       ${TD(escX(l.client_nom??'—'))}${TD(escX(l.piece??'—'))}${TD(l.qte!=null?String(l.qte):'—')}
-      ${TD(l.date_debut??'—')}${TD(l.date_fin??'—')}${TD(STATUT_BADGE(l.statut))}
-      ${TD(progressBar(pr.pct, pr.total, pr.done))}
-      ${TD(l.cmd_id?`<a href="/production/commande/${encodeURIComponent(l.cmd_id)}" onclick="event.stopPropagation()" style="color:#3b82f6;text-decoration:none;font-size:.78rem;">${l.cmd_id}</a>`:'—')}
+      ${TD(l.date_debut??'—')}${TD(l.date_fin??'—')}${TD(STATUT_BADGE(l.statut) + (nf.length ? `<div title="Vigilance, non bloquante : l’assemblage se programme, il se réalise une fois les sous-ensembles fabriqués — ${escX(nf.join(', '))}" style="margin-top:3px;font-size:.6rem;font-weight:800;color:#c2410c;line-height:1.25;"><i class="fas fa-triangle-exclamation" style="margin-right:3px;"></i>sous-lots en cours ${nf.length}/${nbSL}</div>` : ''))}
+      ${TD(progressBar(a.pct, a.total, a.soldes, titre) + (nbSL ? `<div style="font-size:.58rem;color:#6d28d9;font-weight:700;margin-top:2px;">avec ses sous-lots · assemblage seul ${a.propre.pct}%</div>` : ''))}
+      ${TD(l.cmd_id?`<a href="/production/commande/${encodeURIComponent(l.cmd_id)}" onclick="event.stopPropagation()" style="color:#3b82f6;text-decoration:none;font-size:.78rem;">${escX(l.cmd_id)}</a>`:'—')}
     </tr>`}).join('')
+
+  // ─── Lot H2 : goulotte en ORDRE DE FABRICATION + vigilance « sous-lots non terminés » ───
+  // ORDRE_FAB : { id de lot → position } en post-ordre (trierOrdreFabrication : sous-lots d'abord, rang croissant, chaque
+  // enfant avant son parent). Les ids vus seulement sur des bons (sous-lot sans ligne lots) y entrent aussi : leur parent
+  // se déduit de l'id. Le client compare ces positions (pendSort) et, pour une clé inconnue, retombe sur k+'~'.
+  const ORDRE_FAB: Record<string, number> = (() => {
+    const vus = new Set<string>(LOTS.map(l => String(l.id)))
+    const pseudo: any[] = []
+    ;(dbBDTs ?? []).forEach((b: any) => { const k = b.lot_id || b.lot_ref; if (k && !vus.has(String(k))) { vus.add(String(k)); pseudo.push({ id: String(k) }) } })
+    const out: Record<string, number> = {}
+    trierOrdreFabrication([...(LOTS as any[]), ...pseudo]).forEach((l: any, i: number) => { out[String(l.id)] = i })
+    return out
+  })()
+  // VIGIL_PAR_ID : { id de BDT → { sl, r } } depuis dbBdtsVigilance (raisons jointes par « · », route /production/service) :
+  // sl = la partie « sous-lots non terminés … » (badge orange sur la carte de goulotte et la barre), r = toutes les raisons.
+  // Appelant pas encore à jour (dbBdtsVigilance absent) : calcul local, même module (vigilanceSousLots). Jamais bloquant.
+  const VIGIL_PAR_ID: Record<string, { sl: string; r: string }> = {}
+  if (dbBdtsVigilance) {
+    dbBdtsVigilance.forEach((v) => {
+      const sl = String(v.raison || '').split(' · ').filter(x => /sous-lots? non termin/i.test(x)).join(' · ')
+      if (sl) VIGIL_PAR_ID[String(v.id)] = { sl, r: String(v.raison || '') }
+    })
+  } else {
+    ;(dbBDTs ?? []).forEach((b: any) => { const sl = vigilanceSousLots(b, LOTS as any[], OPS_LOTS); if (sl) VIGIL_PAR_ID[String(b.id)] = { sl, r: sl } })
+  }
 
   // ─── Dashboard Programmation data ────────────────────────
   const BDTS_PROG = dbBDTs ?? (BDT_DEFAULT as unknown as BonDeTravail[])
   const cmdsEnCours = CMDS.filter(c=>c.statut!=='terminé'&&c.statut!=='validée')
   const lotsEnCours = LOTS.filter(l=>l.statut!=='terminé')
+  // Lot H2 : le KPI « Lots en cours » compte les lots RACINES (un sous-lot est un sous-ensemble interne, arbitrage A8) ;
+  // les sous-lots en cours sont donnés à part en sous-titre. Le tableau garde l'arbre (sous-lots en retrait).
+  const lotsEnCoursRacines = lotsEnCours.filter(l => niveauDuLot(l) === 0 && !parentDuLot(l))
+  const nbSousLotsEnCours = lotsEnCours.length - lotsEnCoursRacines.length
   const bdtsJour    = BDTS_PROG.filter(b=>b.statut!=='solde')
   const totalCharge = (BDTS_PROG.length>0?BDTS_PROG:BDT_DEFAULT as unknown as BonDeTravail[]).reduce((s,b)=>s+(b.duree||0),0)
   // Capacité = nombre d'opérateurs Seem/Semrac × 8h (depuis la DB si dispo)
@@ -1573,7 +1808,7 @@ export const pageServiceProd = (
   const lotRowsProg = lotsEnCours.map(l=>{
     const etape=l.statut==='sous_trait'?'Sous-traitance':l.statut==='bloqué'?'Bloqué':l.statut==='planifié'?'Planifié':'Production'
     const ec=l.statut==='bloqué'?'#ef4444':l.statut==='sous_trait'?'#6366f1':l.statut==='planifié'?'#3b82f6':'#22c55e'
-    return `<tr>${TD(`<span style="font-weight:700;">${l.id}</span>`)}${TD(escX(l.client_nom??'—'))}${TD(escX(l.piece??'—'))}${TD(`<span style="background:${ec}22;color:${ec};border-radius:999px;padding:2px 9px;font-size:.65rem;font-weight:700;">${etape}</span>`)}${TD(l.date_fin??'—')}</tr>`
+    return `<tr>${TD(`<div style="display:flex;align-items:center;gap:5px;padding-left:${niveauDuLot(l)*14}px;">${niveauDuLot(l) > 0 ? '<span style="color:#94a3b8;">↳</span>' : ''}<span style="font-weight:700;">${escX(l.id)}</span></div>`)}${TD(escX(l.client_nom??'—'))}${TD(escX(l.piece??'—'))}${TD(`<span style="background:${ec}22;color:${ec};border-radius:999px;padding:2px 9px;font-size:.65rem;font-weight:700;">${etape}</span>`)}${TD(l.date_fin??'—')}</tr>`
   }).join('')
   const cmdRowsProg = cmdsEnCours.slice(0,8).map(c=>{
     const av=c.bdt_total>0?Math.round(c.bdt_soldes/c.bdt_total*100):0
@@ -1744,7 +1979,7 @@ ${scriptCadencePage(dbCadence)}
     <div id="pendingDropZone" class="card" style="padding:14px 16px;border-radius:14px;transition:outline .12s;margin-bottom:14px;" ondragover="onPendingOver(event)" ondragleave="onPendingLeave(event)" ondrop="onPendingDrop(event)">
       <div style="margin-bottom:10px;">
         <div style="font-weight:700;color:#1e293b;font-size:.82rem;display:flex;align-items:center;gap:6px;"><i class="fas fa-inbox" style="color:#f97316;"></i> BDT à classer / en attente de programmation<span id="cntPend" style="background:#ffedd5;color:#c2410c;font-size:.65rem;font-weight:700;padding:1px 7px;border-radius:999px;margin-left:auto;">0</span></div>
-        <div style="font-size:.62rem;color:#94a3b8;margin-top:3px;">Triés par échéance, puis par lot et ordre de gamme · Glisser une carte sur le planning pour la programmer (l’heure est calée après le réglage de l’étape précédente : chemin critique) · <i class="fas fa-rotate-left"></i> sur une carte découpée pour annuler la découpe · déposer ici une barre du planning pour la déprogrammer · <i class="fas fa-scissors"></i> sur une carte pour découper le BDT en morceaux (le réglage reste sur le 1er morceau, seule la réalisation se répartit) — la découpe se fait uniquement ici, dans la goulotte · <span style="color:#b91c1c;font-weight:700;">Remis en goulotte</span> (en tête) : BDT déprogrammé parce qu’une étape précédente a été déplacée · <span style="color:#0e7490;font-weight:700;">→ OAS</span> : le lot part à l’OAS au soldage de ce BDT · deux BDT du même process ne se chevauchent pas sur un poste</div>
+        <div style="font-size:.62rem;color:#94a3b8;margin-top:3px;">Triés par échéance, puis par lot et ordre de gamme — pièce mère : ses sous-lots d’abord, du haut vers le bas, puis son assemblage · Glisser une carte sur le planning pour la programmer (l’heure est calée après le réglage de l’étape précédente : chemin critique) · <i class="fas fa-rotate-left"></i> sur une carte découpée pour annuler la découpe · déposer ici une barre du planning pour la déprogrammer · <i class="fas fa-scissors"></i> sur une carte pour découper le BDT en morceaux (le réglage reste sur le 1er morceau, seule la réalisation se répartit) — la découpe se fait uniquement ici, dans la goulotte · <span style="color:#b91c1c;font-weight:700;">Remis en goulotte</span> (en tête) : BDT déprogrammé parce qu’une étape précédente a été déplacée · <span style="color:#0e7490;font-weight:700;">→ OAS</span> : le lot part à l’OAS au soldage de ce BDT · deux BDT du même process ne se chevauchent pas sur un poste</div>
       </div>
       <div id="pendingList" style="overflow-y:auto;max-height:240px;display:flex;flex-wrap:wrap;gap:8px;margin:0 -4px;padding:4px;"></div>
     </div>
@@ -2134,10 +2369,10 @@ ${blocDaNcProduction(refFormulairesProd({ commandes: dbCmds ?? [], lots: dbLots 
 
     <div id="subview-lots" style="display:none;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <div><h1 style="font-size:1.35rem;font-weight:900;color:#1e293b;margin:0;">Lots en cours</h1><div style="font-size:.78rem;color:#64748b;margin-top:2px;">${LOTS.length} lot${LOTS.length!==1?'s':''} · cliquez une ligne pour ouvrir les étapes de production</div></div>
+        <div><h1 style="font-size:1.35rem;font-weight:900;color:#1e293b;margin:0;">Lots en cours</h1><div style="font-size:.78rem;color:#64748b;margin-top:2px;">${(() => { const nSL = LOTS.filter(l => niveauDuLot(l) > 0).length, nR = LOTS.length - nSL; return `${nR} lot${nR!==1?'s':''}${nSL ? ` + ${nSL} sous-lot${nSL!==1?'s':''} (en retrait sous leur pièce mère ; n° = rang dans l’ordre de fabrication, la mère s’assemble après ses sous-lots)` : ''}` })()} · cliquez une ligne pour ouvrir les étapes de production</div></div>
         ${prodSearchBar('tbl-lots-prod',[['id','Réf. lot'],['client','Client'],['piece','Pièce'],['statut','Statut']])}
       </div>
-      <div class="card" style="overflow:hidden;">
+      <div class="card" style="overflow-x:auto;">
         <table id="tbl-lots-prod" style="width:100%;border-collapse:collapse;">
           <thead><tr style="background:#f8fafc;">${TH('Réf. Lot')}${TH('Client')}${TH('Pièce')}${TH('Qté')}${TH('Début')}${TH('Fin')}${TH('Statut')}${TH('Avancement')}${TH('Commande')}</tr></thead>
           <tbody>${lotTableRows||'<tr><td colspan="9" style="text-align:center;padding:40px;color:#94a3b8;">Aucun lot en cours.</td></tr>'}</tbody>
@@ -2160,7 +2395,7 @@ ${blocDaNcProduction(refFormulairesProd({ commandes: dbCmds ?? [], lots: dbLots 
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
       ${kpiCard('fa-clipboard-list','#3b82f6',cmdsEnCours.length,'Commandes en cours',`${CMDS.filter(c=>c.retard).length} en retard`)}
-      ${kpiCard('fa-layer-group','#f97316',lotsEnCours.length,'Lots en cours',`${LOTS.filter(l=>l.statut==='bloqué').length} bloqués`)}
+      ${kpiCard('fa-layer-group','#f97316',lotsEnCoursRacines.length,'Lots en cours',`${LOTS.filter(l=>l.statut==='bloqué'&&niveauDuLot(l)===0&&!parentDuLot(l)).length} bloqués${nbSousLotsEnCours ? ` · +${nbSousLotsEnCours} sous-lot${nbSousLotsEnCours>1?'s':''}` : ''}`)}
       ${kpiCard('fa-hard-hat','#22c55e',bdtsJour.length,'BDT actifs',`${BDT_DEFAULT.filter(b=>b.statut==='recu').length} en cours`)}
       ${kpiCard('fa-chart-bar','#8b5cf6',txCharge+'%','Charge journée',`${totalCharge.toFixed(1)}h / ${capaTot}h cap.`)}
     </div>
@@ -2878,6 +3113,9 @@ var OPS_ST_OPS = ${OPS_ST_J};
 var BDTS = JSON.parse('${escapeForJS(JSON.stringify(bdtsForGantt))}');
 var currentDate = '${TODAY}';
 var TODAY_REAL = '${TODAY}';                                  // date réelle figée (currentDate change à la navigation)
+// Lot H2 : ordre de fabrication des lots (sous-lots avant leur mere) et vigilance « sous-lots non termines » par BDT.
+var ORDRE_FAB = ${sjX(ORDRE_FAB)};
+var VIGIL_PAR_ID = ${sjX(VIGIL_PAR_ID)};
 var AFFECTATIONS = ${sjX(dbAffectations || {})};   // { 'YYYY-MM-DD': { opId: [{p:process_id, s:shift}, …] } } (multi-affectation)
 var dragOpId=null, selOpId=null, selBdtId=null;   // sélection au clic (clic-pour-sélectionner puis clic-pour-placer)
 var filtAct='all', filtType='all', filtAffaire='', dragId=null, _grabDX=0, soldageBdtId=null, recuBdtId=null, focusLot=null;
@@ -3569,7 +3807,17 @@ function clearAffaireFilter(){ var i=document.getElementById('affSearch'); if(i)
 // Ordre file d'attente : échéance client au plus tôt, puis lot, puis ordre de gamme (seq). C'est un TRI d'affichage,
 // pas le chemin critique : celui-ci (réglage de l'étape précédente) est calculé par le moteur cc… plus bas.
 // Lot G : les BDT REMIS en goulotte par un déplacement passent en tête (le plus récent d abord), avant l échéance (poste_oas.ts comparerGoulotte).
-function pendSort(a,b){ var rg=ppComparerRemis(a.remisGoulotteLe,b.remisGoulotteLe); if(rg) return rg; var da=a.dateEcheance||'9999-12-31', db=b.dateEcheance||'9999-12-31'; if(da!==db) return da<db?-1:1; var ka=lotKey(a), kb=lotKey(b); if(ka!==kb) return ka<kb?-1:1; var sa=(a.seq==null?9999:a.seq), sb=(b.seq==null?9999:b.seq); if(sa!==sb) return sa-sb; return String(a.id).localeCompare(String(b.id),undefined,{numeric:true}); }
+// Lot H2 : une piece mere et ses sous-lots forment un ARBRE trie a l echeance de l arbre (echeanceArbre, la plus proche de
+// ses BDT), puis en ORDRE DE FABRICATION (cmpOrdreFab) : sous-lots du haut vers le bas, puis l assemblage de la mere.
+function pendSort(a,b){ var rg=ppComparerRemis(a.remisGoulotteLe,b.remisGoulotteLe); if(rg) return rg; var da=a.echeanceArbre||a.dateEcheance||'9999-12-31', db=b.echeanceArbre||b.dateEcheance||'9999-12-31'; if(da!==db) return da<db?-1:1; var ka=lotKey(a), kb=lotKey(b); if(ka!==kb) return cmpOrdreFab(ka,kb); var sa=(a.seq==null?9999:a.seq), sb=(b.seq==null?9999:b.seq); if(sa!==sb) return sa-sb; return String(a.id).localeCompare(String(b.id),undefined,{numeric:true}); }
+// Lot H2 : ordre de fabrication de deux cles de lot. Positions calculees au rendu (ORDRE_FAB, post-ordre du module
+// nomenclature_arbre) ; cle inconnue : k+'~' (miroir de cleTriFabrication : « . » < « ~ », un sous-lot passe avant son parent).
+function cmpOrdreFab(ka,kb){ if(ka===kb) return 0; var ia=ORDRE_FAB[ka], ib=ORDRE_FAB[kb]; if(ia!=null&&ib!=null) return ia-ib; var xa=String(ka)+'~', xb=String(kb)+'~'; return xa<xb?-1:(xa>xb?1:0); }
+// Lot H2 : pastille de sous-lot (carte de goulotte) et badge de vigilance « sous-lots non termines » (carte et barre).
+function slPastille(b){ if(!b||!b.sousLot) return ''; return '<span class="pp-sous-lot" title="'+ccEsc(b.sousLot+' — lot '+(b.lotId||'')+' : fabriqué avant l’assemblage de sa pièce mère')+'" style="background:#ecfeff;color:#0e7490;border:1px solid #a5f3fc;font-weight:800;border-radius:999px;padding:0 7px;white-space:nowrap;"><i class="fas fa-diagram-project" style="margin-right:3px;"></i>'+ccEsc(b.sousLot)+'</span>'; }
+function slVigil(b){ var v=b&&VIGIL_PAR_ID[b.id]; return (v&&v.sl)?v:null; }
+function slBadgeCarte(b){ var v=slVigil(b); if(!v) return ''; return '<span class="pp-vigil-sl" title="'+ccEsc('Vigilance, non bloquante : '+v.r+'. L’assemblage se programme ; il se réalise une fois les sous-ensembles fabriqués.')+'" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;font-weight:800;border-radius:999px;padding:0 7px;white-space:nowrap;"><i class="fas fa-triangle-exclamation" style="margin-right:3px;"></i>Sous-lots en cours</span>'; }
+function slBadgeBarre(b){ var v=slVigil(b); if(!v) return ''; return '<span class="pp-vigil-sl-barre" title="'+ccEsc('Vigilance, non bloquante : '+v.sl)+'" style="display:inline-block;margin-left:4px;background:rgba(255,247,237,.95);color:#c2410c;border-radius:4px;padding:0 4px;font-size:.52rem;font-weight:800;text-shadow:none;vertical-align:middle;white-space:nowrap;"><i class="fas fa-triangle-exclamation" style="margin-right:2px;"></i>sous-lots</span>'; }
 // Surbrillance de tous les BDT d'un même lot dans le planning (pour repérer le précédent)
 function highlightLot(key){ var bars=document.querySelectorAll('#ganttBody .bdt-bar'); for(var i=0;i<bars.length;i++){ var el=bars[i]; if(el.dataset.lot===key){ el.style.outline='3px solid #facc15'; el.style.outlineOffset='1px'; el.style.zIndex='25'; el.style.opacity='1'; } else { el.style.opacity='0.28'; } } }
 function clearHighlight(){ var bars=document.querySelectorAll('#ganttBody .bdt-bar'); for(var i=0;i<bars.length;i++){ var el=bars[i]; el.style.outline=''; el.style.outlineOffset=''; el.style.zIndex=''; if(!filtAffaire) el.style.opacity=''; } if(filtAffaire) buildGantt(); }
@@ -3832,7 +4080,7 @@ function makeBdtBar(bdt){
   var OMBRE='text-shadow:0 0 2px rgba(0,0,0,.6);';   // lisible aussi sur la partie hachurée
   el.innerHTML=(rglW?'<div class="bdt-rgl" title="Réglage '+ccFmtNb(tps.R)+' h (fixe, une seule fois)" style="position:absolute;left:0;top:0;bottom:0;width:'+rglW+'px;background:repeating-linear-gradient(135deg,rgba(15,23,42,.3) 0,rgba(15,23,42,.3) 3px,transparent 3px,transparent 6px);border-right:2px solid rgba(15,23,42,.85);pointer-events:none;"></div>':'')
     +(viol?'<span class="bdt-viol" title="'+ccEsc(viol)+'" style="position:absolute;top:2px;right:3px;z-index:3;background:#dc2626;color:white;border-radius:999px;font-size:.52rem;line-height:1;padding:2px 4px;box-shadow:0 0 0 1.5px white;"><i class="fas fa-link-slash"></i></span>':'')
-    +'<div style="position:relative;font-size:.58rem;font-weight:800;opacity:.9;'+OMBRE+'">'+oxyBox(bdt.oxydation)+bdt.id+ppBadgeOasBarre(bdt)+'</div><div style="position:relative;font-size:.62rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+OMBRE+'">'+bdt.operation+'</div><div style="position:relative;font-size:.58rem;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+OMBRE+'">'+fmtHour(bdt.debut)+' · '+(tps.R!=null?ccFmtNb(tps.R)+' + '+ccFmtNb(tps.V)+' h':bdt.duree+'h')+' · '+bdt.client+'</div>';
+    +'<div style="position:relative;font-size:.58rem;font-weight:800;opacity:.9;'+OMBRE+'">'+oxyBox(bdt.oxydation)+bdt.id+ppBadgeOasBarre(bdt)+slBadgeBarre(bdt)+'</div><div style="position:relative;font-size:.62rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+OMBRE+'">'+bdt.operation+'</div><div style="position:relative;font-size:.58rem;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+OMBRE+'">'+fmtHour(bdt.debut)+' · '+(tps.R!=null?ccFmtNb(tps.R)+' + '+ccFmtNb(tps.V)+' h':bdt.duree+'h')+' · '+bdt.client+'</div>';
   if(viol) el.style.boxShadow='0 0 0 2px #dc2626';
   if(fo&&(fo.deborde||fo.ferme||coupe)){
     // Icône (revue du 16/09/2026) : lune = posé sur une heure fermée ; pause = la fin en heures ouvrées tombe APRÈS début + durée
@@ -4093,6 +4341,7 @@ function buildPending(){
         +ccMiniBarre(b)
         +'<div style="font-size:.6rem;margin-top:3px;display:flex;gap:5px;flex-wrap:wrap;align-items:center;">'
           +'<span style="background:'+col+'22;color:'+col+';font-weight:700;border-radius:999px;padding:1px 7px;"><i class="fas fa-layer-group" style="margin-right:3px;"></i>'+lotLabel+'</span>'
+          +slPastille(b)+slBadgeCarte(b)
           +ccPastilleMorceau(b)
           +ppBadgeRemis(b)+ppBadgeOas(b)
           +(b.numAffaire?'<span style="color:#94a3b8;">Aff. '+b.numAffaire+'</span>':'')

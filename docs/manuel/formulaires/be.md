@@ -26,16 +26,21 @@
 ⚠️ **Attention :** Le « N° Nomenclature » et l'« Entité » sont obligatoires : sans eux, l'enregistrement est refusé.
 
 ## Éditeur de nomenclature — Composants (assemblage « mère »)
-**Quand l'utiliser :** Uniquement pour une nomenclature de type « Mère » : pour lister les pièces standard qui composent l'assemblage et leur quantité.
-**Où le trouver :** Éditeur de nomenclature, type « Mère (assemblage) » activé → encadré jaune « Composants » → bouton « Ajouter un standard ».
+**Quand l'utiliser :** Uniquement pour une nomenclature de type « Mère » : pour lister les pièces — standards **ou mères** — qui composent l'assemblage, leur quantité et **l'ordre dans lequel on les fabrique**.
+**Où le trouver :** Éditeur de nomenclature, type « Mère (assemblage) » activé → **colonne de droite, tout en haut** : encadré « Composants — ordre de fabrication (du haut vers le bas) » → bouton « Ajouter un composant ».
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
-| Standard | liste déroulante (les nomenclatures standard existantes, format « N° NOM · Code produit ») | Non | Choisissez la pièce standard à ajouter à l'assemblage. Son prix se reprend automatiquement. | SEEM-CAPOT-A24 · CAPOT-001 |
-| Quantité | nombre | Non | Combien de fois cette pièce entre dans l'assemblage. | 2 |
+| Ordre (poignée ⠿, rang, ▲ ▼) | glisser-déposer / boutons / flèches ↑ ↓ sur la poignée | — | **L'ordre des lignes est l'ordre de fabrication** : le rang 1 est fabriqué en premier. Il donne aussi le **n° de sous-lot** en production (`.01`, `.02`…). ▲ grisé en haut de liste, ▼ en bas. | rang 2 → sous-lot `.02` |
+| Composant (nomenclature fille) | recherche dans une liste à deux groupes : « Nomenclatures filles (standards) » et « Nomenclatures mères » | Oui (pour chaque ligne) | Tapez le n°, le code ou la description (majuscules et accents sans importance) : seule la **dernière révision validée** de chaque pièce est proposée. La fiche ouverte et les mères qui la contiennent ne sont **pas** proposées (une mère ne peut pas se contenir elle-même) ; un choix qui dépasserait 5 niveaux est grisé « trop profond ». Son prix se reprend automatiquement. | SEEM-CAPOT-A24 (ind. B) |
+| Qté / mère | nombre | Non (1 par défaut) | Combien de ce composant pour **une** mère. Vide ou 0 = 1 (champ encadré de rouge « 1 sera enregistré »). En production, quantité du sous-lot = cette quantité × quantité du lot, arrondie à l'unité supérieure. | 2 |
+| Total | calculé | — | Prix unitaire × quantité. | 40,00 € |
+| *(bouton)* « n composants — arborescence » | bouton (sous-mère seulement) | — | Déplie les composants de la sous-mère, pour voir les sous-sous-lots qu'elle donnera. | — |
+| *(bouton)* × | bouton | — | Retire le composant. | — |
 
-💡 **Astuce :** Le total des composants s'affiche en bas de l'encadré et alimente le prix de revient de la mère.
-💡 **À la réouverture**, la fiche est relue en base : ses composants réapparaissent, et « Enregistrer » sans y toucher les conserve.
+💡 **Astuce :** Le total des composants s'affiche en bas de l'encadré et alimente le prix de revient de la mère (ses étapes propres d'assemblage n'y sont pas ajoutées). Sous la liste, un résumé rappelle l'ordre (« Fabrication : 1. … → 2. … → assemblage de la mère ») et le nombre de sous-lots créés à la mise en production.
+💡 **À la réouverture**, la fiche est relue en base : ses composants réapparaissent **dans leur ordre**, et « Enregistrer » sans y toucher les conserve.
+⚠️ **Attention :** « Enregistrement refusé : une nomenclature mère ne peut pas se contenir elle-même. Chemin : A › B › A… » ou « imbrication trop profonde (6 niveaux, 5 au plus)… » : la ligne fautive est encadrée en rouge, rien n'est enregistré — retirez le composant cité.
 ⚠️ **Attention :** Pour retirer des composants, cliquez leur croix puis enregistrez. Si l'ERP répond « Enregistrement refusé : cette nomenclature compte N composant(s) en base et la liste envoyée est vide », fermez et rouvrez la fiche pour recharger ses composants.
 
 ## Éditeur de nomenclature — Matière (tôle)
@@ -48,7 +53,7 @@
 | Désignation | recherche (liste déroulante filtrée) | Non | Le nom de la matière. **La recherche marche aussi ici** : « tole alu » propose « Tôle aluminium ». Choisir une entrée remplit aussi la référence. | Tôle aluminium 2 mm |
 | Pc/tôle | nombre | Non | Combien de pièces on tire d'une seule tôle (dépend de l'imbrication, c'est le BE qui le sait). Sert à répartir le prix de la tôle par pièce. | 12 |
 | Prix estimé / pièce | calculé (non saisissable) | — | **Moyenne du prix d'une tôle chez tous les fournisseurs** qui portent la référence, ÷ Pc/tôle. Sous la valeur : « n fourn. · min–max €/tôle ». Survolez pour le détail, **cliquez** pour l'ouvrir en grand (fournisseur, prix, date). | 3,1200 € |
-| *(bouton)* Demande de prix | bouton | — | Disponible **à tout moment**. Gris à côté d'un prix récent, **orange** si un prix a plus de 6 mois ou s'il n'y en a aucun ; sablier « vérifier » quand une demande est en cours. | — |
+| *(bouton)* Demande de prix | bouton libellé « Demande de prix » (colonne du même nom) | — | Disponible **à tout moment**. **Bleu** si le prix est récent (redemander reste possible), **orange** si la demande est conseillée (prix de plus de 6 mois ou absent), **ambre « En attente / vérifier »** quand une demande est en cours. | — |
 | *(bouton)* × | bouton | — | Retire la ligne. | — |
 
 💡 **Il n'y a plus de case Fournisseur** : une ligne désigne une **référence**, et son prix est la moyenne des fournisseurs qui la portent (voir le [manuel du Bureau d'études](../be.md), « Comprendre le prix estimé / pièce »).
@@ -107,13 +112,13 @@ Les cases à choisir sont dans l'ordre : **1) Type → 2) Poste → 3) Process**
 
 ## Éditeur de nomenclature — Journal des modifications (EN 9100)
 **Quand l'utiliser :** Pour savoir qui a modifié une nomenclature validée, quand, et ce qui a changé (exigence de traçabilité EN 9100).
-**Où le trouver :** Éditeur de nomenclature, sous l'encadré « Validation » : carte « Journal des modifications · EN 9100 ».
+**Où le trouver :** Éditeur de nomenclature, **tout en bas, sur toute la largeur** (sous les deux colonnes, depuis le 18/09/2026) : carte « Journal des modifications · EN 9100 ».
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
 | Portée | liste | Non | « Cette révision » (l'indice ouvert) ou « Toutes les révisions » (tous les indices de la pièce). | Toutes les révisions |
 
-Chaque entrée affiche l'événement (Création, Validation, Modification, Dévalidation, Préparation technique, Nouvel indice, Document ajouté / retiré, Référence client, Suppression), la date et l'heure, l'auteur (nom et matricule du compte connecté), l'indice, puis la liste des changements « champ : avant → après ». Survolez une valeur pour la lire en entier ; survolez un élément ajouté ou retiré pour voir sa définition complète.
+Chaque entrée affiche l'événement (Création, Validation, Modification, Dévalidation, Préparation technique, Nouvel indice, Document ajouté / retiré, Référence client, Suppression), la date et l'heure, l'auteur (nom et matricule du compte connecté), l'indice, puis les changements, un par ligne : le champ à gauche, « avant → après » à droite (étiquette « recalcul » pour une valeur recalculée par l'ERP). Pour une mère : « Composant ajouté / retiré « X » », « Composant « X » — quantité / révision », et **une seule** ligne « Ordre de fabrication des composants » (« A, B, C » → « B, A, C ») quand l'ordre change. Survolez une valeur pour la lire en entier ; survolez un élément ajouté ou retiré pour voir sa définition complète.
 
 💡 **Astuce :** Rien à saisir : le journal se remplit tout seul à chaque enregistrement d'une nomenclature validée. Un ré-enregistrement sans changement n'ajoute rien.
 ⚠️ **Attention :** Le journal ne se modifie pas et ne s'efface pas. Un message orange « le journal EN 9100 n'a pas pu… » signifie que la modification est enregistrée mais pas tracée : prévenez l'administrateur. Un message « refusé pour garantir la traçabilité » signifie que rien n'a été enregistré ni supprimé : réessayez un instant plus tard.
@@ -159,7 +164,7 @@ Chaque entrée affiche l'événement (Création, Validation, Modification, Déva
 
 ## Nouvelle demande de prix (RFQ)
 **Quand l'utiliser :** Pour demander au service Achats de chiffrer un ou plusieurs articles (matière, accessoire…). Un prix est à re-demander dès qu'il est **absent ou daté de plus de 6 mois**.
-**Où le trouver — 3 accès, disponibles à tout moment :** onglet « Nomenclatures » (bouton sur **chaque** ligne matière / accessoire : gris à côté d'un prix récent, orange si le prix est ancien ou absent) · onglet « Analyse DT » (bouton « Demande de prix ») · onglet **« Références »** (bouton « Demande de prix » sur **chaque** ligne de catalogue, orange si le prix est absent ou périmé — la demande s'ouvre pré-remplie avec cette référence).
+**Où le trouver — 3 accès, disponibles à tout moment :** onglet « Nomenclatures » (bouton libellé **« Demande de prix »** sur **chaque** ligne matière / accessoire : bleu si le prix est récent, orange si le prix est ancien ou absent, ambre « En attente / vérifier » quand une demande est partie) · onglet « Analyse DT » (bouton « Demande de prix ») · onglet **« Références »** (bouton « Demande de prix » sur **chaque** ligne de catalogue, orange si le prix est absent ou périmé — la demande s'ouvre pré-remplie avec cette référence).
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|

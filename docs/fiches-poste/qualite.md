@@ -43,7 +43,13 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 
 ![qualite-8d](../assets/qualite-8d.png)
 
-### 5. PV de réception fournisseur : qui le signe
+### 5. Libérer un lot (pièce mère comprise)
+1. Qualité › **Libération Lots** → « PV de libération » sur le lot terminé : **Libérer** (il devient expédiable) ou **Bloquer** (quarantaine).
+2. **Pièce mère** : seul le **lot de la mère** apparaît, quand **tout son arbre** (sous-lots et sous-sous-lots) est soldé. Un sous-lot ne se libère pas seul (refusé) ; il peut être mis en quarantaine, ce qui bloque l'expédition de l'affaire.
+
+![qualite-liberation](../assets/qualite-liberation.png)
+
+### 6. PV de réception fournisseur : qui le signe
 1. Le PV d'une livraison fournisseur se fait aux **Expéditions** (Réceptions › « PV à faire »), par un contrôleur choisi dans la liste des salariés ayant l'**écriture sur les Expéditions**.
 2. ⚠ Depuis le 14/09/2026, le rôle Qualité (lecture seule sur Expéditions) ne le signe plus. Si c'est votre travail : faire cocher « Écrire » sur les Expéditions dans votre fiche (RH › Employés) **en gardant cochés Qualité, Sécurité…**, sinon vous les perdez.
 

@@ -8,6 +8,7 @@ import type { DashboardData } from './queries'
 import { computeNomCostForQty, coutEtapeST, construireTauxAtelier } from './shared'
 import type { DashFilter } from './dash_filter'
 import { period, filterRows } from './dash_filter'
+import { parentDuLot } from './nomenclature_arbre'
 
 // ─── GÉNÉRIQUES ───────────────────────────────────────────────
 export const num = (v: any) => { const n = Number(v); return isFinite(n) ? n : 0 }
@@ -198,6 +199,9 @@ const realShipDate = (d: DashboardData): Map<string, string> => {
   return m
 }
 const lots = (d: DashboardData) => d.lots || []
+// Lot H2 (18/09/2026) : les KPI de lots (WIP, takt, taux de NC) ne comptent que les lots RACINES. Un sous-lot
+// (LOT-…-01.02, lot_parent) est un sous-ensemble interne d'une pièce mère : le compter doublerait le lot et sa quantité.
+const lotsRacines = (d: DashboardData) => (d.lots || []).filter((l: any) => !parentDuLot(l))
 const cmdSiteMap = (d: DashboardData): Map<string, string> => {
   const m = new Map<string, string>()
   for (const c of (d.commandes || [])) if ((c as any).id) m.set(String((c as any).id), lc((c as any).activite))
@@ -364,7 +368,7 @@ export function production(d: DashboardData, f?: DashFilter) {
   const chargePct = pctOf(chargeH, capaH)
 
   // WIP : lots en cours
-  const wip = (d.lots || []).filter((l: any) => isOpen(l.statut)).length
+  const wip = lotsRacines(d).filter((l: any) => isOpen(l.statut)).length
 
   // Taux de reprise
   const reprises = bdts.filter(b => /reprise|retouche/.test(lc(b.statut))).length
@@ -385,7 +389,7 @@ export function production(d: DashboardData, f?: DashFilter) {
   // Takt time par site
   const moisCur = P.ym; const heuresDispo = heuresDispoMois(); const siteOf = cmdSiteMap(d)
   const takt = (site: string) => {
-    const ls = (d.lots || []).filter((l: any) => siteOf.get(String(l.cmd_id)) === site && String(l.date_fin || l.date_debut || '').slice(0, 7) === moisCur)
+    const ls = lotsRacines(d).filter((l: any) => siteOf.get(String(l.cmd_id)) === site && String(l.date_fin || l.date_debut || '').slice(0, 7) === moisCur)
     const demande = sumBy(ls, l => (l as any).qte)
     return demande > 0 ? Math.round(heuresDispo * 60 / demande * 10) / 10 : null
   }
@@ -407,7 +411,7 @@ export function qualite(d: DashboardData, f?: DashFilter) {
   const ncs = filterRows(d.ncs || [], f, { siteField: 'entite', clientField: 'client_nom' }) as any[]
   const ncOpen = ncs.filter(n => isOpen(n.statut))
   const ncCrit = ncOpen.filter(n => /critique|bloquante/.test(lc(n.gravite))).length
-  const lotsTot = (d.lots || []).length
+  const lotsTot = lotsRacines(d).length
   const tauxNC = lotsTot > 0 ? round1(ncs.length / lotsTot * 100) : 0
   const serieNC = monthlySeries(ncs, 'date_nc', null, mk)
   const serieNCprev = monthlySeries(ncs, 'date_nc', null, prevYearKeys(mk))

@@ -41,6 +41,23 @@ Plutôt qu'un **miroir écrit à la main** (`BE_ETAPE_COUT_JS`, `CADENCE_CLIENT_
 
 **Lancer les tests** : `node scripts_doc/test_prix_moyen.mjs` depuis la racine du dépôt (utilise l'`esbuild` du `node_modules` local, aucune dépendance à installer, aucune base touchée) → attendu `220 PASS · 0 FAIL`. Il couvre le prix moyen (1 fournisseur, paquets de 100 et de 50, fournisseur sans prix, conditionnement non déclaré, prix périmé au jour près, casse / espaces / accents, matière avec pièces par tôle, base sans `qte_paquet`), la recherche, les doublons (dont `constructor` / `__proto__`) et le journal EN 9100 (bascule ancien → nouveau modèle). **À relancer après toute modification** de `src/prix_moyen.ts` ou de `src/nomenclature_journal.ts`, et avant `erp-verify`. Un nouveau module partagé de ce type doit venir avec son propre test sur le même modèle.
 
+### Un module pur rendu au serveur seulement : `src/nomenclature_arbre.ts` (lot H2, 18/09/2026)
+
+Contre-exemple assumé de `prix_moyen.ts` : l'arbre des nomenclatures mères et des sous-lots est calculé **au rendu serveur**
+(`be.tsx`, `prod.tsx`) et par les routes (`index.tsx`, `queries.ts`) ; il n'est **jamais injecté** dans le navigateur. Le
+navigateur reçoit des **résultats** (`${sjX(carteAncetres(NOMS))}`, `ORDRE_FAB`, `VIGIL_PAR_ID`…), et les deux seuls
+miroirs client — tri des composants par rang (`nomCmpOrdonnes`) et clé de tri de la goulotte (`k + '~'`, `cmpOrdreFab`) —
+font trois lignes, **commentés comme miroirs** sur place. Règles : aucune dépendance à Hono ni à Supabase ; seuls imports
+`composantsDe` et `estAnnule` (`./shared`) ; **pas de réexport par `shared.ts`** (import circulaire) — importer depuis
+`./nomenclature_arbre`. Les fonctions d'avancement / vigilance (`lotFini`, `avancementArbre`, `vigilanceSousLots`,
+`vueArbreLot`…) mettent leur index en cache **par identité** du tableau `lots` : un tableau modifié **en place** entre deux
+appels doit être recopié (`[...lots]`). Traduire les avertissements d'arbre par `e.message` (ne pas écrire de
+`Record<CodeErreurArbre, …>` exhaustif : le type s'enrichit, ex. `revision_differente`).
+
+**Lancer les tests** : `node scripts_doc/test_nomenclature_arbre.mjs` (même patron que `test_prix_moyen.mjs`, aucune base) →
+attendu `147 PASS · 0 FAIL`. À relancer après toute modification de `src/nomenclature_arbre.ts` ou de
+`src/nomenclature_journal.ts` (sa section 6 couvre `diffComposants`), et avant `erp-verify`.
+
 **XSS** : ne jamais injecter une donnée base/utilisateur via `innerHTML` sans échappement côté client. Les scripts définissent au besoin un échappeur local (`pEsc`, `rtEsc`, `esc`) — l'utiliser sur `client_nom`, `piece`, `operation`, noms de salariés, libellés libres.
 
 ## Helpers réutilisables (ne pas réinventer)
@@ -65,6 +82,8 @@ Plutôt qu'un **miroir écrit à la main** (`BE_ETAPE_COUT_JS`, `CADENCE_CLIENT_
 | **Composants d'une mère** (lot H0) | `composantsDe(fiche \| valeur)` (shared.ts) → **toujours un tableau** (la colonne a été `text` sur Docker, `jsonb` sur le cloud). **Ne jamais lire `n.composants` directement** ni tester `Array.isArray` à la main. Navigateur BE : `nomComposantsDe`. |
 | **Fraîcheur d'un prix catalogue** (lot H0) | `PRIX_VALIDITE_JOURS` (shared.ts, 183 j = 6 mois) ; page BE : `NOM_PRIX_VALIDITE_JOURS` injecté, libellé dérivé. Un prix ≤ 0 n'est jamais frais. Ne plus écrire 92 / 183 / « 3 mois » en dur. |
 | **Prix d'une référence, recherche, doublons** (lot H1) | `src/prix_moyen.ts` (réexporté par shared.ts) : `prixMoyenReference`, `normaliserReference`, `memeReference`, `categorieFourniture`, `nombrePositif`, `arrondiPrix`, `qtePaquetDe`, `prixPerime`, `chercherReferences`, `doublonsFournitures` / `messageDoublonFourniture`, `recalculerFournitures`. **Ne jamais recoder une normalisation de référence, un test de catégorie ni une division par un conditionnement.** Côté navigateur : injecter `${prixMoyenClientJs()}` en tête du `<script>` — **mêmes noms, même code** (pas de miroir à maintenir). |
+| **Composants ordonnés d'une mère, cycle, profondeur** (lot H2) | `src/nomenclature_arbre.ts` : `composantsOrdonnes` (lecture : ordre = ordre de fabrication), `normaliserComposants` (ce que le serveur stocke), `deplacerComposant`, `cleNomenclature` / `cleComposant` (identité = `lower(trim(code \|\| num_nom))`), `controlerComposants(fiche, toutes)` (409 `cycle_composants` / `profondeur_max`), `carteAncetres`, `PROFONDEUR_MAX_NOMENCLATURE` (5). **Ne jamais lire l'ordre de `n.composants` sans `composantsOrdonnes`.** |
+| **Arbre des lots d'une pièce mère** (lot H2) | `developperArbre` → `planLotsArbre` → `attribuerIdsSousLots` (plan idempotent), `idSousLot`, `bonIdDuLot`, `cleBon` (clé racine **inchangée**), `estSousLot`, `parentDuLot` (colonne **ou** id), `racineDuLot`, `niveauDuLot`, `trierArborescence` (affichage : parent puis enfants) / `trierOrdreFabrication` (goulotte : enfants avant parent), `opsParLot`, `lotFini`, `avancementArbre`, `sousLotsNonTermines`, `vigilanceSousLots`, `vueArbreLot`. **Filtrer les racines** par `!parentDuLot(l)` (jamais par un motif d'id à la main) ; présence des colonnes : `lotsArbreDispo()` (queries.ts). ⚠ Jamais de `.or()` PostgREST construit avec des ids de lot. |
 | **En-tête de téléchargement d'un fichier** (lot H0) | `dispositionFichier(nom, 'inline' \| 'attachment')` (index.tsx) : repli ASCII + `filename*=UTF-8''…`. **Jamais** de nom brut dans `Content-Disposition` : sous Node, un caractère > U+00FF lève une TypeError. |
 
 ## Accès données (`queries.ts`)
@@ -72,6 +91,11 @@ Plutôt qu'un **miroir écrit à la main** (`BE_ETAPE_COUT_JS`, `CADENCE_CLIENT_
 - **supabase-js ne lève pas d'exception** sur erreur DB → **toujours vérifier `error`** (ne pas faire `.catch(()=>{})` qui masque un échec partiel — cf. audit R4).
 - **Lecture stricte avant écriture** (lot H0) : quand une décision d'écriture dépend d'une lecture, utiliser une lecture qui rend `{ data, error }` et **refuser** en cas d'erreur (une panne n'est jamais « absent ») — ex. `getProduitFournisseurCouple`, `getProduitFournisseurParId`, `getRefPrixHistoriqueRfq`, `getClesBonsStrictes`, `getCleBonParId`, `getNomenclatureStricte`. Pour « créer si absent » : `insertProduitFournisseurSiAbsent` (pas d'upsert complet qui écraserait une ligne existante), puis relecture en cas de course.
 - **Écriture tolérante à une colonne absente en cloud** (lot H1) : quand une colonne vient d'être ajoutée par une migration Docker et que son script `cloud-N` n'est pas encore joué, l'écriture passe par un helper `…Tolerant(...)` qui rend `{ data, error, <colonne>_ignoree }` — il réessaie **sans** le champ sur `42703` / `PGRST204` (`erreurQtePaquetAbsente`) ; la route répond alors **200** + `avertissement` (« … jouez `cloud-N` »), **jamais** 500. Côté lecture : `select('*')` **uniquement**, jamais de projection, de filtre ni d'`order` nommant la colonne — sinon la page entière tombe en 42703. Exemples : `updateProduitFournisseurTolerant`, `insertProduitFournisseurSiAbsentTolerant`, `create/updateDemandePrixReponseTolerant`.
+- **Colonnes absentes en cloud, version « sonde »** (lot H2) : quand tout un comportement dépend de colonnes nouvelles (les 5
+  colonnes de sous-lots de `lots`), on les **sonde une fois** (`lotsArbreDispo()` : `select` des colonnes `.limit(1)` ;
+  `42703` / `PGRST204` ⇒ absentes, `{ dispo:false, erreur:null }` ; autre erreur ⇒ **panne**, `{ dispo:false, erreur }`) et on
+  choisit le comportement dégradé **annoncé** (mère lancée sans sous-lots + avertissement « jouez cloud-14 ») plutôt que
+  d'échouer. Une panne n'est jamais confondue avec « colonnes absentes » (`erreurColonneAbsente`).
 - Ids texte lisibles générés côté serveur (pas de séquence auto pour la plupart).
 
 ## Routes (`index.tsx`)

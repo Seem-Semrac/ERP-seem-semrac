@@ -4,7 +4,7 @@
 
 ## En bref — le rôle du service dans la chaîne
 
-La Production reçoit les **commandes** acceptées côté Commercial. Chaque commande est découpée en **lots**, et chaque lot en **BDT** (bons de travail) : une opération précise (tronçonnage, pliage, usinage…) à faire sur une pièce. Le service **planifie** ces BDT sur le planning Gantt, les **affecte** aux opérateurs ou aux postes atelier, suit leur **démarrage** et leur **clôture**, enregistre la **matière consommée**, et envoie certaines opérations en **sous-traitance** chez un prestataire extérieur.
+La Production reçoit les **commandes** acceptées côté Commercial. Chaque commande est découpée en **lots** — le lot d'une pièce **mère** (assemblage) porte en plus un **sous-lot par composant** (étape 8) —, et chaque lot en **BDT** (bons de travail) : une opération précise (tronçonnage, pliage, usinage…) à faire sur une pièce. Le service **planifie** ces BDT sur le planning Gantt, les **affecte** aux opérateurs ou aux postes atelier, suit leur **démarrage** et leur **clôture**, enregistre la **matière consommée**, et envoie certaines opérations en **sous-traitance** chez un prestataire extérieur.
 
 En sortie, la Production alimente : la **Qualité** (une non-conformité déclarée en fin d'opération, ou un **PV de non-conformité** émis depuis le bandeau, crée une fiche NC), les **Achats** (demandes d'achat de l'atelier), le **Stock** (les sorties matière décrémentent le stock), et le **coût de revient** de la commande (temps réel × coût chargé de l'opérateur, + taux horaire machine du process pour un BDT machine, + matière). Quand tous les BDT d'une commande sont soldés, l'affaire peut avancer vers l'expédition et la facturation.
 
@@ -130,6 +130,22 @@ Onglet Présence opérateurs → « Programmer la semaine ». Vous renseignez :
 **➡️ Ensuite :** la demande d'achat arrive dans **Achats › Demandes d'achat** (« Prénom Nom (Production) », à traiter) ; l'acheteur en fait un bon de commande. Le PV devient une non-conformité **NC-2026-…** dans **Qualité › Non-Conformités** (catégorie Production, statut Ouvert, à votre nom). Une gravité Critique ou Bloquante rattachée à une affaire **bloque son expédition** ; une quarantaine bloque l'expédition du lot. Un matricule sans écriture Production est refusé — un opérateur fait saisir sa demande par son chef.
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/production.md).
+
+## Étape 8 — Fabriquer une pièce mère : sous-lots et sous-sous-lots
+**⬅️ Avant :** Le BE a décrit un **assemblage** par une nomenclature mère, en rangeant ses composants **dans l'ordre de fabrication, du haut vers le bas**. L'offre a été acceptée.
+**📝 Ici, vous :** programmez et suivez la pièce comme un **arbre** : le lot de la mère (`LOT-2026-0001-01`, étapes d'assemblage), **un sous-lot par composant** dans l'ordre (`…-01.01`, `…-01.02`), et, pour un composant lui-même mère, ses **sous-sous-lots** (`…-01.02.01`). Chaque sous-lot a ses propres BDT/BDS, sa préparation technique et ses achats de matière.
+
+![Commandes & Lots › Lots : la pièce mère, puis ses sous-lots et sous-sous-lots en retrait](../../assets/production-lots.png)
+
+Sur ces écrans, vous repérez :
+- **Commandes & Lots › Lots** — la mère (badge « n sous-lots ») puis ses sous-lots en retrait, avec leur **rang** ; l'avancement d'une mère couvre toute l'arborescence.
+- **La goulotte « BDT à classer »** — les cartes d'une pièce mère arrivent dans l'ordre de fabrication (sous-lots d'abord, puis l'assemblage), avec la pastille **« Sous-lot 01.02 »**. Un sous-lot se programme **dès que la matière de l'affaire est en stock**, comme n'importe quel lot.
+- **Le badge orange « Sous-lots en cours »** — sur les BDT d'assemblage de la mère, tant qu'un sous-lot n'est pas terminé : une **vigilance**, jamais un blocage (on peut programmer l'assemblage, on le réalise une fois les sous-ensembles fabriqués).
+- **La fiche du lot de la mère** — section « Sous-lots (ordre de fabrication) », avancement de l'arbre, bandeau de vigilance ; l'OF imprimé liste les « Sous-ensembles à assembler ». Pour une affaire lancée avant le 18/09/2026, un bandeau propose **« Créer les sous-lots »** (aperçu, puis création ; rejouable sans doublon).
+
+![Fiche du lot d'une pièce mère : avancement de l'arbre, vigilance et sous-lots](../../assets/production-lot-sous-lots.png)
+
+**➡️ Ensuite :** quand **tout l'arbre** est soldé, le lot de la mère passe « terminé » et part en **Qualité › Libération**. Un sous-lot ne se libère pas et ne s'expédie pas seul : c'est le **lot de la mère** qui est libéré, puis livré par les Expéditions.
 
 ---
 

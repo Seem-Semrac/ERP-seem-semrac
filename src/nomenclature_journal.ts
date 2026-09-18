@@ -12,13 +12,15 @@
 // prix OAS lui échappaient — la revue adverse du 11/09/2026 l'a montré.)
 
 import { categorieFourniture, normaliserReference } from './prix_moyen'
+import { cleComposant, composantsOrdonnes } from './nomenclature_arbre'
 
 export type Changement = { bloc: 'fiche' | 'gamme' | 'fourniture' | 'recalcul' | 'document' | 'reference_client'; champ: string; cle?: string; avant: unknown; apres: unknown; detail?: unknown }
 
 // Champs de la fiche, dans l'ordre d'affichage. Toute AUTRE colonne est comparée aussi (colonne
 // ajoutée plus tard, ou présente en cloud seulement) ; seules les colonnes techniques sont exclues.
 export const CHAMPS_FICHE = ['num_nom', 'code_ref_produit', 'indice', 'version_groupe', 'entite', 'type_nom', 'description', 'num_plan', 'plan_fichier', 'masse_kg', 'dimensions', 'surface_totale_dm2', 'composants', 'parent_id', 'qte_par_mere', 'notes', 'num_affaire', 'lot_id', 'cree_par', 'statut', 'valide_par', 'date_validation']
-const HORS_FICHE = ['id', 'created_at', 'updated_at', 'etapes_production']
+// `composants` (mère) : suivi ligne par ligne par diffComposants (lot H2), pas en bloc JSON.
+const HORS_FICHE = ['id', 'created_at', 'updated_at', 'etapes_production', 'composants']
 // Valeurs DÉRIVÉES, recalculées à chaque enregistrement (taux atelier…) : tracées à part, pour
 // qu'un simple ré-enregistrement après un changement de taux ne passe pas pour une saisie.
 export const CHAMPS_RECALCUL = ['temps_matiere_h', 'temps_machine_h', 'taux_mo', 'cout_machine_h', 'prix_mo_unitaire', 'cout_machine_unitaire', 'prix_revient_unitaire']
@@ -82,6 +84,7 @@ export function diffNomenclature(avant: any, apres: any, cles?: string[]): Chang
     const va = effectif(a, k), vb = effectif(b, k)
     if (!pareil(va, vb)) out.push({ bloc: 'fiche', champ: lib(k), avant: normaliser(va), apres: normaliser(vb) })
   }
+  if (dans('composants')) out.push(...diffComposants(a.composants, b.composants))
   if (dans('etapes_production')) out.push(...diffEtapes(a.etapes_production, b.etapes_production))
   for (const k of CHAMPS_RECALCUL) if (dans(k) && !pareil(a[k], b[k])) out.push({ bloc: 'recalcul', champ: lib(k), avant: normaliser(a[k]), apres: normaliser(b[k]) })
   return out
@@ -232,5 +235,62 @@ export function diffFournitures(avant: any[] | null, apres: any[] | null): Chang
       }
     }
   }
+  return out
+}
+
+// ── Composants d'une mère (lot H2, 18/09/2026) ────────────────────
+// « l'ordre de fabrication sera toujours considéré du haut vers le bas » : l'ORDRE des composants
+// est désormais une donnée de la définition. Avant H2, `composants` était comparé en bloc : une
+// simple permutation donnait « Composants : [JSON] → [JSON] » (uuid compris), illisible.
+// Identité d'une ligne : cleComposant (code, à défaut n° de nomenclature) + n° d'occurrence — deux
+// fois la même fille s'apparient dans l'ordre, elles ne « s'échangent » jamais.
+// Entrées : ajout, retrait, quantité, révision choisie (nom_id), et UNE SEULE entrée « Ordre de
+// fabrication des composants » quand l'ordre relatif des lignes conservées change (« A, B, C » →
+// « B, A, C »). `rang` n'est jamais comparé ligne à ligne (il découle de l'ordre). Les COPIES tirées
+// de la fille (prix, indice et type à nom_id inchangé, code / n° hors identité) partent en « recalcul ».
+// Complément H2 : une ligne d'avant H2 n'a ni `indice` ni `type_nom` ; le 1er enregistrement les
+// recopie de la fille. Ce n'est pas une saisie : UNE seule entrée « recalcul » pour toute la liste
+// (le journal est en ajout seul, deux lignes par composant ne s'effaceraient jamais).
+const DERIVES_COMPOSANT = ['prix', 'indice', 'type_nom', 'code', 'num_nom']
+const COMPLETES_H2 = ['indice', 'type_nom']
+const horsComposant = (k: string) => k === 'rang' || k === 'qte' || k === 'nom_id' || k.startsWith('_')
+const libComposant = (c: any) => String((c && (c.num_nom || c.code || c.nom_id)) || '?')
+const resumeComposant = (c: any) => resume(c, (k: string) => k === 'rang' || k.startsWith('_'))
+const lisibleComposant = (c: any) => libComposant(c) + ' × ' + String(normaliser(c?.qte) ?? 1) + (c?.indice ? ' (ind. ' + String(c.indice) + ')' : '') + (c?.type_nom === 'mere' ? ' [mère]' : '')
+// Libellés DÉFINITIFS (journal en ajout seul) : lisibles par un auditeur — n° de nomenclature et indice, jamais
+// l'id interne (un uuid en production, gardé dans `detail`), jamais un « ? » pour un indice absent.
+const revisionComposant = (c: any) => libComposant(c) + ' — ' + (String(c?.indice ?? '').trim() ? 'ind. ' + String(c.indice).trim() : 'indice non renseigné')
+const typeLisible = (t: any) => (String(t) === 'mere' ? 'mère' : String(t))
+
+export function diffComposants(avant: any, apres: any): Changement[] {
+  const A = composantsOrdonnes(avant), B = composantsOrdonnes(apres)
+  const numeroter = (l: any[]) => { const n = new Map<string, number>(); return l.map((c) => { const k = cleComposant(c) || ('#' + String(c.nom_id || '')); const i = (n.get(k) || 0) + 1; n.set(k, i); return k + '#' + i }) }
+  const cA = numeroter(A), cB = numeroter(B)
+  const indexA = new Map<string, number>(cA.map((k, i) => [k, i]))
+  const paire = cB.map((k) => (indexA.has(k) ? (indexA.get(k) as number) : -1))
+  const pris = new Set<number>(paire.filter((i) => i >= 0))
+  const out: Changement[] = []
+  const completes: string[] = []
+  const suite = paire.filter((i) => i >= 0)
+  if (suite.some((v, k) => k > 0 && v < suite[k - 1])) out.push({ bloc: 'fiche', champ: 'Ordre de fabrication des composants', avant: A.map(libComposant).join(', '), apres: B.map(libComposant).join(', ') })
+  B.forEach((cb: any, j: number) => {
+    const i = paire[j], X = libComposant(cb)
+    if (i < 0) { out.push({ bloc: 'fiche', champ: 'Composant ajouté « ' + X + ' »', cle: cB[j], avant: null, apres: lisibleComposant(cb), detail: resumeComposant(cb) }); return }
+    const ca: any = A[i]
+    if (!pareil(ca.qte, cb.qte)) out.push({ bloc: 'fiche', champ: 'Composant « ' + X + ' » — quantité', cle: cB[j], avant: normaliser(ca.qte), apres: normaliser(cb.qte) })
+    const autreRevision = !pareil(ca.nom_id, cb.nom_id)
+    if (autreRevision) out.push({ bloc: 'fiche', champ: 'Composant « ' + X + ' » — révision', cle: cB[j], avant: revisionComposant(ca), apres: revisionComposant(cb), detail: { nom_id_avant: ca.nom_id ?? null, nom_id_apres: cb.nom_id ?? null } })
+    const complete = COMPLETES_H2.filter((k) => vide(ca[k]) && !vide(cb[k]))
+    if (complete.length) completes.push(X + ' : ' + complete.map((k) => (k === 'indice' ? 'ind. ' + String(cb[k]) : typeLisible(cb[k]))).join(', '))
+    for (const k of clesDe(ca, cb, horsComposant)) {
+      if (autreRevision && k === 'indice') continue                     // déjà dans l'entrée « révision »
+      if (complete.includes(k)) continue                                // complément H2, résumé plus bas
+      if ((k === 'code' || k === 'num_nom') && String(ca[k] ?? '').trim().toLowerCase() === String(cb[k] ?? '').trim().toLowerCase()) continue
+      if (pareil(ca[k], cb[k])) continue
+      out.push({ bloc: DERIVES_COMPOSANT.includes(k) ? 'recalcul' : 'fiche', champ: 'Composant « ' + X + ' » · ' + k, cle: cB[j], avant: normaliser(ca[k]), apres: normaliser(cb[k]) })
+    }
+  })
+  A.forEach((ca: any, i: number) => { if (!pris.has(i)) out.push({ bloc: 'fiche', champ: 'Composant retiré « ' + libComposant(ca) + ' »', cle: cA[i], avant: lisibleComposant(ca), apres: null, detail: resumeComposant(ca) }) })
+  if (completes.length) out.push({ bloc: 'recalcul', champ: 'Composants · indice et type complétés automatiquement (pas une saisie)', avant: null, apres: completes.join(' ; ') })
   return out
 }

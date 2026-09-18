@@ -22,7 +22,7 @@ Les onglets à connaître :
 
 Sur cet écran, vous renseignez :
 - **N° Commande** — choisissez d'abord la commande à livrer (affichée par n° d'affaire et client). C'est **elle qui fait apparaître la liste des lots** à expédier.
-- **Lots à expédier (+ quantité)** — cochez chaque lot qui part et tapez la **quantité envoyée**. Vous pouvez n'envoyer qu'une partie : c'est un **BL partiel** (le reste partira plus tard). La quantité ne peut pas dépasser le reste à livrer.
+- **Lots à expédier (+ quantité)** — cochez chaque lot qui part et tapez la **quantité envoyée**. Vous pouvez n'envoyer qu'une partie : c'est un **BL partiel** (le reste partira plus tard). La quantité ne peut pas dépasser le reste à livrer. Pour une **pièce mère**, seul le **lot de la mère** est proposé : ses sous-lots (sous-ensembles internes, `LOT-…-01.01`…) partent avec lui, ils ne s'expédient pas seuls.
 - **Transporteur** — qui emporte le colis (Chronopost, GLS… ou « Propre véhicule » pour un véhicule de l'entreprise). Obligatoire : sans transporteur, pas de BL.
 - **Prix transport (€ HT)** — le coût du port si vous le connaissez ; sinon laissez vide.
 - **Générer automatiquement la facture partielle** — cochée par défaut : la facture correspondant à ce qui est livré part **tout de suite** vers la Facturation. Décochez si vous ne voulez pas facturer maintenant.

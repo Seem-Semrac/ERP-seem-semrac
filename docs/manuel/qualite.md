@@ -10,7 +10,7 @@ Maîtrise de la conformité : PV de contrôle, non-conformités, 8D, libération
 - **PV de Contrôle** — Procès-verbaux de contrôle.
 - **Non-Conformités** — Déclaration et suivi des NC (interne, fournisseur, client, procédé).
 - **Rapports 8D** — Résolution structurée (D1→D8).
-- **Libération Lots** — Décision de libération / quarantaine.
+- **Libération Lots** — Décision de libération / quarantaine. Pour une **pièce mère**, seul le **lot de la mère** apparaît, et seulement quand **tout son arbre** (ses sous-lots et sous-sous-lots) est terminé : un sous-lot ne se libère pas seul (« *Un sous-lot se libère avec son lot racine…* »), et une mère dont un sous-lot n'est pas fini est refusée (« *Libération refusée : n sous-lot(s) de cette pièce mère … pas terminé(s)* »). Un sous-lot peut en revanche être **mis en quarantaine**.
 - **Quarantaine** — Objets isolés en attente de décision. C’est ici qu’on décide du sort d’un lot reçu non conforme d’un fournisseur (bouton **« Décider »**).
 - **Plan de contrôle** — Plans EN9100.
 - **Audit Conformité** — Module d'audits **SMI QSE + SI** (voir « Audits de conformité » plus bas).

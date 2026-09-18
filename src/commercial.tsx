@@ -7,6 +7,8 @@ import { escX, layout, pageHeader, afterBox, serviceHeader, SIDEBAR_V2, APP_VERS
 import { normeReferentiel } from './qref'
 import { SOCIETE, LOGO_SVG, societeLignes, BRAND } from './brand'
 import type { Client, DemandeTravaux, Offre, Commande, Credit, BonDeTravail, DemandeSite } from './types'
+// Lot H2 (18/09/2026) : lots en arbre (pièce mère > sous-lots) sur la fiche affaire 360 — module pur, rendu serveur.
+import { trierArborescence, niveauDuLot, parentDuLot } from './nomenclature_arbre'
 
 const sjX = (v: any) => JSON.stringify(v).replace(/</g, '\\u003c')
 
@@ -1147,6 +1149,16 @@ export const pageOffreCommerciale = (dbOffres?: Offre[], dbClients?: Client[], d
     if(m) m.style.display='flex';
   }
 
+  // Lot H2 : avertissements de la cascade d acceptation (piece mere lancee sans sous-lots faute de cloud-14, composant sans
+  // revision validee, BDT non generes...) : notification orange durable, reaffichee apres le rechargement de la page.
+  function cmdAvertCascade(j){
+    var c=(j&&j.cascade)||{}; var l=[];
+    (Array.isArray(c.avertissements)?c.avertissements:[]).forEach(function(a){ if(a) l.push(String(a)); });
+    if(c.avertissement_bdt) l.push(String(c.avertissement_bdt));
+    l.forEach(function(m){ var t=m.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); if(typeof notifDurable==='function') notifDurable('warn','fa-triangle-exclamation',t); else pushNotif('warn','fa-triangle-exclamation',t,45000); });
+    if(l.length){ try{ if(typeof __erpNotifsDurables!=='undefined'&&__erpNotifsDurables.length) sessionStorage.setItem('__erpNotifs', JSON.stringify({ p: location.pathname, t: Date.now(), l: __erpNotifsDurables.slice(-12) })); }catch(e){} }
+    return l.length;
+  }
   async function validerRentreeCmd(){
     var dl=(document.getElementById('rentreeDateLiv')||{}).value||null;
     var bc=(document.getElementById('rentreeBCClient')||{}).value||null;
@@ -1156,6 +1168,7 @@ export const pageOffreCommerciale = (dbOffres?: Offre[], dbClients?: Client[], d
       if(!j.ok){ pushNotif('err','fa-ban',j.error||'Cr\u00e9ation commande impossible'); return; }
       var cid=(j.commande&&j.commande.id)||('CMD-2026-'+currentOffreAffaire);
       pushNotif('ok','fa-check-circle','Commande '+cid+(j.already?' (d\u00e9j\u00e0 cr\u00e9\u00e9e)':' cr\u00e9\u00e9e')+' ! Disponible pour la production.',6000);
+      cmdAvertCascade(j);
       closeModal('modalRentreeCmd');
       setTimeout(function(){ softReload(); },900);
     }catch(e){ pushNotif('err','fa-ban','Erreur r\u00e9seau lors de la cr\u00e9ation de la commande'); }
@@ -3353,6 +3366,16 @@ export const pageServiceCommercial = (
       +((j.ncs||[]).length?tbl('Non-conformités','fa-triangle-exclamation',[{t:'NC'},{t:'Gravité'},{t:'Statut'},{t:'Lot'}],ncRows):'')
       +'</div></div>';
   }
+  // Lot H2 : avertissements de la cascade d acceptation (piece mere lancee sans sous-lots faute de cloud-14, composant sans
+  // revision validee, BDT non generes...) : notification orange durable, reaffichee apres le rechargement de la page.
+  function cmdAvertCascade(j){
+    var c=(j&&j.cascade)||{}; var l=[];
+    (Array.isArray(c.avertissements)?c.avertissements:[]).forEach(function(a){ if(a) l.push(String(a)); });
+    if(c.avertissement_bdt) l.push(String(c.avertissement_bdt));
+    l.forEach(function(m){ var t=m.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); if(typeof notifDurable==='function') notifDurable('warn','fa-triangle-exclamation',t); else pushNotif('warn','fa-triangle-exclamation',t,45000); });
+    if(l.length){ try{ if(typeof __erpNotifsDurables!=='undefined'&&__erpNotifsDurables.length) sessionStorage.setItem('__erpNotifs', JSON.stringify({ p: location.pathname, t: Date.now(), l: __erpNotifsDurables.slice(-12) })); }catch(e){} }
+    return l.length;
+  }
   function svcConfirmerValidationOffre(id){
     var dl=(document.getElementById('svc-val-dateliv')||{}).value||null;
     // /accepter (et non /valider) : crée REELLEMENT la commande, applique les avoirs, passe l'offre en 'acceptee'. Idempotent.
@@ -3363,6 +3386,7 @@ export const pageServiceCommercial = (
         var cid=(j.commande&&j.commande.id)||'';
         var av=(Number(j.avoir_applique)>0)?(' Avoir déduit : '+Number(j.avoir_applique).toLocaleString('fr-FR')+' €.'):'';
         pushNotif('ok','fa-check-circle','Offre '+id+' validée. Commande '+cid+(j.already?' (déjà créée)':' créée')+' — disponible en Production.'+av,7000);
+        cmdAvertCascade(j);
         setTimeout(function(){ window.location.replace('/commercial/service?'+Date.now()+'#offre'); },1100);
       }).catch(function(){ pushNotif('err','fa-times','Erreur réseau.',5000); });
   }
@@ -4212,9 +4236,19 @@ export function pageAffaireFiche(num: string, detail?: any): string {
     const quoi = Array.isArray(l.blocages) && l.blocages.length ? l.blocages.join(' + ') : 'en attente'
     return '<span style="background:#fef3c7;color:#92400e;border-radius:999px;padding:2px 10px;font-size:.66rem;font-weight:700;" title="' + esc(quoi) + '"><i class="fas fa-hourglass-half" style="margin-right:4px;"></i>' + esc(quoi) + '</span>'
   }
-  const nbLotsPrets = allLots.filter((l: any) => l.pret === true).length
-  const nbLotsBloques = allLots.filter((l: any) => l.pret === false).length
-  const lotRows = allLots.map((l: any) => `<tr style="border-bottom:1px solid #f9fafb;">${td(`<span style="font-family:monospace;font-weight:700;">${esc(l.id)}</span>`)}${td(esc(l.piece || '—'))}${td(l.qte || 0, 'center')}${td(lotPret(l), 'center')}${td(statusBadge(l.statut || ''), 'center')}${td(l.nc ? `<span style="color:#dc2626;font-weight:700;">${l.nc} NC</span>` : '—', 'center')}</tr>`)
+  // Lot H2 : les compteurs « prêts / en attente » portent sur les lots RACINES (un sous-lot est un sous-ensemble interne,
+  // livré avec son lot racine) ; le tableau montre l'ARBRE : sous-lots en retrait sous leur pièce mère, rang = ordre de
+  // fabrication. Le blocage « sous-lots non terminés » d'une mère arrive dans `blocages` (getAffaireDetail).
+  const lotsRacines = allLots.filter((l: any) => !parentDuLot(l))
+  const nbLotsPrets = lotsRacines.filter((l: any) => l.pret === true).length
+  const nbLotsBloques = lotsRacines.filter((l: any) => l.pret === false).length
+  const nbSousLotsAff = allLots.length - lotsRacines.length
+  const lotCellule = (l: any) => {
+    const niv = niveauDuLot(l)
+    const rang = niv > 0 && l.rang != null ? l.rang : null
+    return `<div style="display:flex;align-items:center;gap:5px;padding-left:${niv * 16}px;">${niv > 0 ? '<span style="color:#94a3b8;" aria-hidden="true">↳</span>' : ''}${rang != null ? `<span title="Rang ${esc(rang)} dans l’ordre de fabrication" style="background:#ecfeff;border:1px solid #a5f3fc;color:#0e7490;border-radius:5px;padding:0 5px;font-size:.6rem;font-weight:800;">n°${esc(rang)}</span>` : ''}<a href="/production/lot/${encodeURIComponent(String(l.id))}" style="font-family:monospace;font-weight:700;color:#0f172a;text-decoration:none;">${esc(l.id)}</a></div>${niv > 0 ? `<div style="padding-left:${niv * 16 + 14}px;font-size:.6rem;color:#0e7490;font-weight:600;">sous-lot de ${esc(parentDuLot(l) || '')}</div>` : ''}`
+  }
+  const lotRows = (trierArborescence(allLots) as any[]).map((l: any) => `<tr style="border-bottom:1px solid #f9fafb;">${td(lotCellule(l))}${td(esc(l.piece || '—'))}${td(l.qte || 0, 'center')}${td(lotPret(l), 'center')}${td(statusBadge(l.statut || ''), 'center')}${td(l.nc ? `<span style="color:#dc2626;font-weight:700;">${l.nc} NC</span>` : '—', 'center')}</tr>`)
   const bdtRows = allBdts.map((b: any) => `<tr style="border-bottom:1px solid #f9fafb;">${td(`<span style="font-family:monospace;font-weight:700;color:#0d9488;">${esc(b.id)}</span>`)}${td(esc(b.piece || '—'))}${td(esc(b.operation || '—'))}${td(b.operateur ? esc(b.operateur) : '<span style="color:#cbd5e1;font-style:italic;">non pointé</span>')}${td(b.machine === 'machine' ? '<i class="fas fa-gear" title="Machine"></i> Machine' : '<i class="fas fa-user" title="Main d oeuvre"></i> MO', 'center')}${td((b.temps_reel != null ? b.temps_reel : (b.duree || 0)) + ' h', 'right')}${td(statusBadge(b.statut || ''), 'center')}</tr>`)
   const pvRows = allPvs.map((p: any) => `<tr style="border-bottom:1px solid #f9fafb;">${td(`<span style="font-family:monospace;font-weight:700;color:#0891b2;">${esc(p.num)}</span>`)}${td(esc(p.type || '—'))}${td(esc(p.decision || '—'), 'center')}${td(p.cpk != null ? esc(String(p.cpk)) : '—', 'center')}${td(statusBadge(p.statut || ''), 'center')}${td(esc(String(p.date || '').slice(0, 10)), 'center')}</tr>`)
   const facRows = allFactures.map((f: any) => `<tr style="border-bottom:1px solid #f9fafb;">${td(`<span style="font-family:monospace;">${esc(f.num)}</span>`)}${td(eur2(f.montant_ht), 'right')}${td(esc(String(f.date || '').slice(0, 10)), 'center')}${td(statusBadge(f.statut || ''), 'center')}</tr>`)
@@ -4247,7 +4281,7 @@ export function pageAffaireFiche(num: string, detail?: any): string {
       ${miniTable('Offres', 'fa-file-invoice-dollar', '#6366f1', [{ t: 'N° Offre' }, { t: 'Montant HT', a: 'right' }, { t: 'Marge', a: 'right' }, { t: 'Statut', a: 'center' }, { t: '', a: 'center' }], offRows, 'Aucune offre sur cette affaire.')}
       ${miniTable('Commandes', 'fa-check-double', '#0ea5e9', [{ t: 'N° Commande' }, { t: 'Montant HT', a: 'right' }, { t: 'Livraison', a: 'center' }, { t: 'Statut', a: 'center' }, { t: '', a: 'center' }], cmdRows, 'Aucune commande sur cette affaire.')}
       ${miniTable('Production — lots', 'fa-layer-group', '#14b8a6', [{ t: 'Lot' }, { t: 'Pièce' }, { t: 'Qté', a: 'center' }, { t: 'Fabricable', a: 'center' }, { t: 'Statut', a: 'center' }, { t: 'NC', a: 'center' }], lotRows, 'Aucun lot en production.',
-        (nbLotsPrets + nbLotsBloques) ? (nbLotsPrets + ' lot(s) prêt(s) · ' + nbLotsBloques + ' en attente') : (bdtTotal ? (bdtSoldes + '/' + bdtTotal + ' BDT soldés') : ''))}
+        ((nbLotsPrets + nbLotsBloques) ? (nbLotsPrets + ' lot(s) prêt(s) · ' + nbLotsBloques + ' en attente') : (bdtTotal ? (bdtSoldes + '/' + bdtTotal + ' BDT soldés') : '')) + (nbSousLotsAff ? ' · + ' + nbSousLotsAff + ' sous-lot(s)' : ''))}
       ${miniTable('Bons de travail (BDT) et opérateurs', 'fa-list-check', '#0d9488', [{ t: 'N° BDT' }, { t: 'Pièce' }, { t: 'Opération' }, { t: 'Opérateur' }, { t: 'Type', a: 'center' }, { t: 'Temps', a: 'right' }, { t: 'Statut', a: 'center' }], bdtRows, 'Aucun bon de travail.')}
       ${miniTable('Matières consommées (par BDT)', 'fa-boxes-stacked', '#b45309', [{ t: 'Article' }, { t: 'Qté', a: 'center' }, { t: 'Coût', a: 'right' }, { t: 'BDT consommateur', a: 'center' }, { t: 'Date', a: 'center' }], matRows, 'Aucune sortie matière.')}
       ${miniTable('Livraisons (BL)', 'fa-truck', '#0284c7', [{ t: 'N° BL' }, { t: 'Date', a: 'center' }, { t: 'Statut', a: 'center' }], blRows, 'Aucune livraison.')}

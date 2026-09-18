@@ -45,7 +45,7 @@
     <div class="tab-head"><span class="tab-num">1</span><h2>Planning Gantt BDT</h2></div>
     <h3>Ce qui décide qu'un bon de travail apparaît au planning</h3>
     <p><b>Tous</b> les bons de travail d'une commande sont ici, dès que la commande existe — <b>programmer n'est pas produire</b>. On pose la charge <b>avant</b> que la matière arrive : c'est même à cela que sert un planning, sinon on ne voit jamais venir le travail.</p>
-    <p>Ce qui manque encore à un ordre ne le fait donc <b>plus disparaître</b> de l'écran. Il est signalé, nommément, dans la carte <b>« Ordres de travail programmables, mais pas encore lançables »</b>, placée au-dessus du planning : un ordre par ligne, avec ce qu'il attend — <span class="b b-mut">matière non réceptionnée</span> ou <span class="b b-mut">préparation technique en attente</span>. Vous pouvez le programmer ; vous saurez seulement qu'il ne faut pas encore le lancer. Depuis le 15/09/2026, la matière d'une affaire ne compte comme <b>réceptionnée</b> qu'une fois <b>contrôlée au PV de réception et rangée</b> dans le Stock (onglet Rangement / Mise en stock) : si « matière non réceptionnée » persiste alors que la livraison est arrivée, demandez au magasin de ranger les lignes de l'affaire.</p>
+    <p>Ce qui manque encore à un ordre ne le fait donc <b>plus disparaître</b> de l'écran. Il est signalé, nommément, dans la carte <b>« Ordres de travail programmables, mais pas encore lançables »</b>, placée au-dessus du planning : un ordre par ligne, avec ce qu'il attend — <span class="b b-mut">matière non réceptionnée</span> ou <span class="b b-mut">préparation technique en attente</span>. Vous pouvez le programmer ; vous saurez seulement qu'il ne faut pas encore le lancer. Depuis le 18/09/2026, l'assemblage d'une <b>pièce mère</b> y figure aussi avec <span class="b b-mut">sous-lots non terminés (1/2) : LOT-…-01.02</span> tant que ses sous-ensembles ne sont pas fabriqués — une vigilance, jamais un blocage. Depuis le 15/09/2026, la matière d'une affaire ne compte comme <b>réceptionnée</b> qu'une fois <b>contrôlée au PV de réception et rangée</b> dans le Stock (onglet Rangement / Mise en stock) : si « matière non réceptionnée » persiste alors que la livraison est arrivée, demandez au magasin de ranger les lignes de l'affaire.</p>
     <p><b>Depuis le 9 septembre 2026, ce blocage se joue lot par lot.</b> Auparavant, une seule préparation en attente gelait <i>toute l'affaire</i> : des pièces parfaitement prêtes restaient invisibles à cause d'une autre pièce en retard. Désormais, sur une affaire de trois pièces dont une seule attend son plan, <b>les deux autres partent en fabrication</b>.</p>
     <p>Pour savoir où en est chaque lot, ouvrez la <b>fiche affaire</b> (Commercial › Affaires) : le tableau « Production — lots » porte une colonne <b>Fabricable</b> qui indique, lot par lot, <span class="b b-ok">Prêt à fabriquer</span> ou ce qui manque encore (préparation technique, matière non réceptionnée), avec le compte des lots prêts en tête de tableau.</p>
     <p class="tab-but"><b>À quoi ça sert.</b> C'est le planning de la journée d'atelier, organisé par <b>poste de travail</b> (et non par personne) : chaque ligne du Gantt est un poste, chaque barre est un BDT — une opération de fabrication d'un lot. La Programmation y classe les BDT en attente, les glisse sur les postes au bon horaire, puis suit leur avancement (programmé → reçu → soldé). C'est aussi ici que l'on affecte les opérateurs aux postes par plage horaire.</p>
@@ -62,7 +62,8 @@
           <li>une ligne <b>« au plus tôt : 15/09 8h30 · après le réglage de … »</b> quand l'étape précédente du lot impose une heure de départ ;</li>
           <li>le bouton <b>ciseaux</b> pour découper le BDT — c'est le <b>seul</b> endroit où l'on découpe — et, sur chaque morceau d'un BDT découpé, le bouton <b>« Annuler la découpe »</b> (flèche de retour, orange) ;</li>
           <li>un badge rouge <span class="b b-crit">Remis en goulotte</span> sur un BDT que l'ERP a <b>déprogrammé</b> parce qu'une étape précédente du lot a été déplacée : ces cartes passent <b>en tête</b> de la goulotte, la plus récente d'abord (voir « Déplacer une étape » plus bas) ;</li>
-          <li>un badge cyan <span class="b" style="background:#cffafe;color:#0e7490">→ OAS : Desoxydation › Oxydation Incolore</span> sur le BDT <b>qui précède un passage à l'OAS</b> : au soldage de ce BDT, le lot part entier au traitement de surface (voir « Le badge → OAS » plus bas).</li>
+          <li>un badge cyan <span class="b" style="background:#cffafe;color:#0e7490">→ OAS : Desoxydation › Oxydation Incolore</span> sur le BDT <b>qui précède un passage à l'OAS</b> : au soldage de ce BDT, le lot part entier au traitement de surface (voir « Le badge → OAS » plus bas) ;</li>
+          <li><b>pièce mère</b> (depuis le 18/09/2026) : une pastille <span class="b" style="background:#ecfeff;color:#0e7490">Sous-lot 01.02</span> (ou « Sous-sous-lot 01.02.01 ») sur la carte d'un BDT de <b>sous-lot</b>, et un badge orange <span class="b b-warn">Sous-lots en cours</span> sur les BDT d'<b>assemblage</b> de la mère tant qu'un de ses sous-lots n'est pas terminé (aussi sur la barre du planning). Les cartes d'une pièce mère arrivent <b>dans l'ordre de fabrication</b> : ses sous-lots d'abord, du haut vers le bas, puis l'assemblage (voir « Commandes &amp; Lots »).</li>
         </ul>
         On peut aussi y <em>redéposer</em> une barre du planning pour la déprogrammer. Un BDT <b>n'apparaît sur le planning qu'une fois programmé</b> : tant qu'il est « à programmer », il reste dans la goulotte.</li>
       <li><b>Carte « Enchaînements à revoir »</b> (rouge, affichée seulement s'il y en a) : les étapes déjà posées <b>avant leur au plus tôt</b> — avant la fin du réglage de l'étape précédente, avant la fin complète d'une étape suivie d'une OAS ou d'un envoi en sous-traitance, ou avant le retour d'une sous-traitance. Rien n'est décalé automatiquement : un clic sur une ligne ouvre l'étape sur son planning.</li>
@@ -426,25 +427,57 @@
     <p>Deux sous-vues commutées par les boutons <b>Commandes</b> et <b>Lots</b> (avec leur compteur) :</p>
     <ul class="points">
       <li><b>Commandes en cours</b> — colonnes : N° CMD / Affaire, Client, Pièces, Montant, Date cmd, Livraison, Statut (badge <span class="b b-crit">Retard</span> si la date est dépassée), <b>Avancement BDT</b> (barre de progression % = BDT soldés / total) et ST (badge si la commande passe en sous-traitance).</li>
-      <li><b>Lots en cours</b> — colonnes : Réf. Lot, Client, Pièce, Qté, Début, Fin, Statut, <b>Avancement</b> (opérations soldées — BDT usine + BDS revenus — sur le total, ex. « 3/5 »), Commande (lien direct).</li>
+      <li><b>Lots en cours</b> — colonnes : Réf. Lot, Client, Pièce, Qté, Début, Fin, Statut, <b>Avancement</b> (opérations soldées — BDT usine + BDS revenus — sur le total, ex. « 3/5 »), Commande (lien direct). Présentée <b>en arborescence</b> : le lot d'une <b>pièce mère</b> (badge « n sous-lots ») est suivi de ses <b>sous-lots</b> en retrait (flèche ↳, pastille « n° rang » = ordre de fabrication), eux-mêmes suivis de leurs sous-sous-lots. Le sous-titre compte « N lots + M sous-lots ».</li>
       <li>Au-dessus de chaque tableau : une <b>recherche</b> avec choix du champ (N° affaire, client, statut… ). Un clic sur une ligne ouvre la fiche détaillée.</li>
     </ul>
     <figure class="shot">
       <img src="../../assets/production-commandes.png" alt="Capture de l'onglet Commandes et Lots" loading="lazy">
       <figcaption><b>Commandes &amp; Lots</b> — le tableau des commandes avec la barre d'avancement BDT ; le bouton « Lots » bascule sur la vue par lot.</figcaption>
     </figure>
+    <figure class="shot">
+      <img src="../../assets/production-lots.png" alt="Capture de la vue Lots en arborescence : pièce mère, sous-lots et sous-sous-lots en retrait" loading="lazy">
+      <figcaption><b>Vue Lots</b> — la pièce mère (badge « n sous-lots », avancement « avec ses sous-lots », vigilance « sous-lots en cours ») puis ses sous-lots en retrait avec leur rang de fabrication, et le sous-sous-lot d'une sous-mère.</figcaption>
+    </figure>
+
+    <h3>Fabriquer une pièce mère : lot, sous-lots et sous-sous-lots</h3>
+    <p>Une <b>pièce mère</b> est décrite au BE par une nomenclature mère dont les composants sont rangés <b>dans l'ordre de fabrication, du haut vers le bas</b>. À l'acceptation de l'offre, l'ERP crée :</p>
+    <ul class="points">
+      <li>le <b>lot de la mère</b> (<code>LOT-2026-0001-01</code>), qui porte les étapes propres de la mère (l'<b>assemblage</b>) ;</li>
+      <li><b>un sous-lot par composant</b>, dans cet ordre : <code>LOT-2026-0001-01.01</code> (1<sup>er</sup> composant), <code>LOT-2026-0001-01.02</code> (2<sup>e</sup>)… — quantité = quantité du composant × quantité du lot, arrondie à l'unité supérieure ;</li>
+      <li>si un composant est lui-même une mère, <b>ses</b> composants deviennent des <b>sous-sous-lots</b> (<code>LOT-2026-0001-01.02.01</code>…), jusqu'à 5 niveaux ;</li>
+      <li>pour chaque sous-lot : ses <b>BDT / BDS</b> (<code>BDT-2026-0001-01.02-01</code>…), sa <b>préparation technique</b> et ses <b>besoins matière / accessoires</b> — les demandes d'achat de toute la pièce sont regroupées par référence.</li>
+    </ul>
+    <ol class="steps">
+      <li><b>Programmer</b> : un sous-lot se programme comme n'importe quel lot, dès que la <b>matière de l'affaire est en stock</b> (contrôlée au PV et rangée) — il n'y a <b>pas d'autre porte</b>. Dans la goulotte, les cartes de la pièce arrivent dans l'ordre de fabrication (sous-lots d'abord, puis l'assemblage), chaque sous-lot avec sa pastille « Sous-lot 01.02 ».</li>
+      <li><b>Assembler</b> : tant qu'un sous-lot n'est pas terminé, les BDT d'assemblage portent le badge orange « Sous-lots en cours » — vous pouvez les <b>programmer</b>, ils se <b>réalisent</b> une fois les sous-ensembles fabriqués.</li>
+      <li><b>Suivre</b> : la fiche d'une <b>commande</b> présente ses lots dans l'ordre de fabrication, lu de haut en bas (01.01 → 01.02.01 → 01.02 → 01), avec « n sous-lots · arbre x % » sur la mère. La <b>fiche du lot</b> de la mère montre la section <b>« Sous-lots (ordre de fabrication) »</b> (rang, sous-lot, pièce, quantité, statut, avancement), une 2<sup>e</sup> barre <b>« Avancement de l'arbre »</b> (la mère et tous ses sous-lots) et le bandeau de vigilance. La fiche d'un sous-lot rappelle « Sous-lot n° 2 de LOT-… » et son lot racine.</li>
+      <li><b>Imprimer l'OF</b> de la mère : il liste les <b>« Sous-ensembles à assembler »</b> (rang, sous-lot, pièce, quantité, état, visa) avant les étapes de la mère.</li>
+    </ol>
+    <figure class="shot">
+      <img src="../../assets/production-lot-sous-lots.png" alt="Capture de la fiche du lot d'une pièce mère : avancement de l'arbre, vigilance et section Sous-lots" loading="lazy">
+      <figcaption><b>Fiche du lot d'une pièce mère</b> — avancement du lot (assemblage) et de l'arbre, vigilance « sous-lots non terminés », section « Sous-lots (ordre de fabrication) », puis les étapes de la mère.</figcaption>
+    </figure>
+
+    <h3>Créer les sous-lots d'une affaire lancée avant le 18/09/2026</h3>
+    <ol class="steps">
+      <li>Ouvrez la fiche du <b>lot de la mère</b> : un bandeau jaune « Pièce mère : N composant(s) sur N sans sous-lot… » propose le bouton <b>« Créer les sous-lots »</b>.</li>
+      <li>Une fenêtre liste le plan <b>dans l'ordre de fabrication</b> (« n°2 · LOT-…-01.02 — pièce × quantité (à créer) ») : confirmez.</li>
+      <li>L'ERP crée les sous-lots, leurs BDT/BDS, les préparations techniques et les demandes d'achat manquantes (repérées <code>-SL01</code>), puis recharge la fiche avec le bilan. Si le stock couvre déjà les nouveaux besoins, les nouveaux BDT sont tout de suite programmables.</li>
+    </ol>
+    <div class="note">Rejouable sans risque : rien n'est créé deux fois. Refusé sur un lot déjà <b>libéré, expédié, livré ou annulé</b> ; un lot <b>terminé</b> demande une confirmation. Un composant <b>sans révision validée</b> au BE est nommé dans le bandeau : faites-la valider, puis recommencez. Si le bandeau dit « la base doit être mise à jour (script cloud-14…) », prévenez l'administrateur : la mère a été lancée seule, comme avant.</div>
 
     <h3>Pas à pas</h3>
     <ol class="steps">
-      <li>Recherchez la commande (choisissez le champ, tapez le texte) puis <b>cliquez la ligne</b> : la fiche commande liste tous ses lots, chacun découpé en opérations ordonnées (badge <span class="b b-info">BDT</span> pour l'usine, <span class="b" style="background:#ede9fe;color:#6d28d9">BDS</span> pour la sous-traitance) avec leur statut, plus des cartes KPI d'avancement.</li>
+      <li>Recherchez la commande (choisissez le champ, tapez le texte) puis <b>cliquez la ligne</b> : la fiche commande liste tous ses lots, chacun découpé en opérations ordonnées (badge <span class="b b-info">BDT</span> pour l'usine, <span class="b" style="background:#ede9fe;color:#6d28d9">BDS</span> pour la sous-traitance) avec leur statut, plus des cartes KPI d'avancement (« Lots : N + M sous-lots »).</li>
       <li>Depuis la vue Lots, cliquez un lot pour ouvrir sa fiche : les étapes de production dans l'ordre, et l'impression de l'<b>ordre de fabrication</b> (OF) à joindre au dossier atelier.</li>
       <li>Depuis un BDT du planning, le clic droit « Aller à la commande / au lot rattaché » mène aux mêmes fiches.</li>
     </ol>
 
     <h3>Règles &amp; points d'attention</h3>
     <ul class="points">
-      <li>L'avancement d'un lot compte les BDT <b>soldés</b> et les BDS <b>revenus</b> — un BST encore chez le prestataire ne compte pas.</li>
-      <li>Une commande passe automatiquement à 100 % quand toutes ses opérations sont soldées ; son coût réel est consolidé au soldage.</li>
+      <li>L'avancement d'un lot compte les BDT <b>soldés</b> et les BDS <b>revenus</b> — un BST encore chez le prestataire ne compte pas. Depuis le 18/09/2026, le retour d'un BDS met aussi à jour l'avancement et le statut du lot. Pour une pièce mère, l'avancement affiché couvre <b>toute l'arborescence</b> (le détail « assemblage seul » est en infobulle).</li>
+      <li>Une commande passe automatiquement à 100 % quand toutes ses opérations sont soldées ; son coût réel est consolidé au soldage. Un lot de pièce mère ne passe « terminé » que quand <b>tout son arbre</b> l'est ; un lot déjà libéré ou expédié n'est plus jamais remis « terminé ».</li>
+      <li>Un <b>sous-lot</b> est un sous-ensemble interne : il ne se libère pas et ne s'expédie pas seul, et il ne compte pas dans les indicateurs de lots (lots en cours, WIP). La Qualité libère — et les Expéditions livrent — le <b>lot de la mère</b>.</li>
     </ul>
     <div class="astuce"><b>Astuce :</b> depuis la fiche d'un lot, vous pouvez rejoindre le planning avec le BDT déjà surligné (lien « planning » avec focus).</div>
   </section>

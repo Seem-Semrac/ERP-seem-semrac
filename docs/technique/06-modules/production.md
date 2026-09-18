@@ -879,6 +879,273 @@ absentes puis vraies tables), `lotg/ui_cadence.mjs` 35 et `lotg/ui_planning_cade
 4 essais simultanés, 1 007 lignes d'historique), `revue_g/http_docker.mjs` 9 (image reconstruite, `AUTH_ENFORCE=on`).
 Jeux `-TEST-` supprimés et relus à 0.
 
+## Lot H2 : sous-lots des pièces mères (18/09/2026)
+
+**Demande** : « lors de fabrication de nomenclatures mères envoyées en prod le lot pièce mère contient des sous lots qui
+sont les nomenclatures filles, si dans les nomenclatures filles il y a des nomenclatures mères elle aura donc des sous sous
+lots. les lots sous lots et autres pourront être programmés à partir du moment où la matière est en stock comme pour le
+reste. » — et, côté BE, « l'ordre de fabrication sera toujours considéré du haut vers le bas » (ordre des composants d'une
+mère : [be.md](be.md), section « Lot H2 »). Arbitrages A1 → A9 et scripts à jouer : `docs/CHANGELOG.md` (18/09/2026).
+Colonnes : `03-base-de-donnees.md`. Contrats : `07-api-reference.md` (section « Lot H2 »). Mise en ligne :
+`02-exploitation-runbook.md` (**`cloud-13` puis `cloud-14`**).
+
+Avant H2, **les composants d'une mère étaient ignorés partout hors de l'éditeur BE** : la cascade d'acceptation créait
+**un** lot par pièce de la DT, avec les BDT/BDS de la **mère seule** ; la prépa et les DA ne lisaient que la mère ; les
+filles n'étaient **ni lancées ni achetées**.
+
+| Arbitrage | Règle |
+|---|---|
+| **A3** Production | Le lot d'une pièce mère porte **un sous-lot par composant** (qté = qté du composant × qté du lot parent, **arrondie à l'entier supérieur**, ≥ 1), récursivement (sous-sous-lots…). Chaque sous-lot a ses BDT/BDS (gamme de **sa** nomenclature), sa prépa technique et ses besoins matière / accessoires. Les étapes propres de la mère (assemblage) restent sur le lot mère. |
+| **A1** Ordre | Le **rang** d'un sous-lot = position du composant dans la mère (haut → bas) = numéro du sous-lot, ordre d'affichage et ordre de la goulotte (sous-lots dans l'ordre, puis l'assemblage de la mère). Aucune contrainte d'antériorité entre sœurs. |
+| **A4** Porte | **Aucune nouvelle porte bloquante.** Un lot, sous-lot ou sous-sous-lot est programmable dès que sa matière est en stock, comme le reste (porte matière existante, jugée **par affaire**). Les BDT de la mère portent seulement la **vigilance « sous-lots non terminés »** (règle du 10/09 : programmer n'est pas produire). |
+| **A5** Résolution | Un composant est résolu comme la pièce racine : **dernière révision VALIDÉE** de son code ; repli sur la révision `nom_id` si elle est validée ; sinon sous-arbre non lancé + avertissement. La nomenclature retenue est écrite sur le lot (`lots.nomenclature_id`). |
+| **A8** Sous-lot interne | Un sous-lot n'est **ni libéré seul, ni expédié, ni compté dans les KPI de lots**. Libération et BL portent sur le lot **racine**, dont la production est « finie » quand **tout l'arbre** l'est. |
+| **A9** Cloud | Sans `cloud-14` : aucune page cassée ; une mère se lance **sans sous-lots**, comme avant, avec un **avertissement explicite**. |
+
+| Fichier | Rôle |
+|---|---|
+| `src/nomenclature_arbre.ts` | module **pur** (aucun Hono / Supabase) : développement d'une mère en arbre, numérotation, idempotence, tri, avancement, vigilance, vue d'arbre d'un lot. Rendu **serveur** seulement, jamais injecté au navigateur |
+| `src/index.tsx` | plan de production d'une affaire, cascade d'acceptation, proforma, `generer-bdt`, `bdtVigilance`, fiche lot, route **`POST /api/production/lot/:id/sous-lots`**, libération, BL partiel |
+| `src/queries.ts` | `lotsArbreDispo`, lectures strictes (`getLotsStrict`, `getLotStrict`, `getNomenclaturesStrictes`, `lireBonsCommandeStrict`, `lireArbreLotStrict`), clés de bons (`cleDeBon`, `affaireDeBon`), `recomputeCmdAvancement`, `getCommandeDetail`, `getAffaireDetail` |
+| `src/prod.tsx` · `src/listes.tsx` · `src/commercial.tsx` · `src/expeditions.tsx` · `src/kpi.ts` · `src/compta_service.tsx` · `src/types.ts` | écrans en arbre, goulotte, fiche lot + OF, notifications d'acceptation, racines seulement pour l'expédition et les KPI, avertissements du proforma |
+| `docker/db/migrations/018-lots-sous-lots.sql` · `docker/db/cloud/cloud-14-lots-sous-lots.sql` | 5 colonnes de `lots`, index, 3 contraintes `NOT VALID` |
+
+### H2-1 · Numérotation
+
+| Objet | Racine (**inchangé**) | Sous-lot niveau 1 | Niveau 2 |
+|---|---|---|---|
+| Lot | `LOT-2026-0001-01` | `LOT-2026-0001-01.02` (rang 2) | `LOT-2026-0001-01.02.01` |
+| BDT | `BDT-2026-0001-01-03` | `BDT-2026-0001-01.02-03` | `BDT-2026-0001-01.02.01-03` |
+| BDS | `BDS-2026-0001-01-01` | `BDS-2026-0001-01.02-01` | `BDS-2026-0001-01.02.01-01` |
+| Morceau de découpe | `BDT-…-01-03-M2` | `BDT-…-01.02-03-M2` | idem |
+| Préparation technique | `PREP-<aff>-<pièce>` — **une par pièce**, fille comprise, dédoublonnée par l'id | | |
+| DA (cascade) | `DA-<aff>-<réf>-M\|A`, **agrégée par référence sur tout l'arbre** | | |
+| DA (« Créer les sous-lots ») | `DA-<aff>-<réf>-M\|A-SL<ZZ>` (`ZZ` = n° du lot racine) ; id déjà pris ⇒ `…-SL01-2`, `-3`… | | |
+
+- Segment de sous-lot = `'.' + pad2(rang)` (`idSousLot`). **Pourquoi le point** : la racine reste `fmtLotId` (aucune affaire
+  existante ne change) ; le seul analyseur d'id de lot, `/^LOT-(\d{4})-.+-(\d{2,})$/`, ne reconnaît pas un sous-lot (un tiret
+  aurait été lu comme un ZZ) ; `racineBdt` / `rangMorceauBdt` (`-M\d+$`), `/^BDT-P/`, `like(racine+'-M%')` restent justes ;
+  `cleLot` (`gamme.ts`) = `lot_id || lot_ref` ⇒ chaque sous-lot a sa gamme et son chemin critique ; PostgREST `eq` / `in`
+  acceptent le point. ⚠ **Ne jamais construire un `.or()` avec des ids de lot.**
+- `bonIdDuLot(kind, lotId, aa) = kind + lotId.slice(3) + '-' + pad2(aa)` — identique à `fmtBonId` pour une racine.
+- **Idempotence des bons** : `cleBon(aff, piece, seq, lotRef)` = `aff|piece|seq` pour une racine (**clé inchangée**,
+  compatibilité avec les affaires déjà générées), `aff|piece|seq|lotRef` pour un sous-lot (une même fille peut être lancée
+  dans plusieurs lots d'une affaire). Appliquée par la cascade, `generer-bdt`, la route « Créer les sous-lots » et
+  `getClesBonsStrictes` / `getCleBonParId` (qui lisent `lot_ref`). Correctif au passage : l'affaire d'un BDS est `cmd_ref`
+  **sans** le préfixe `CMD-AAAA-` (`affaireDeBon`) — sans cela, `generer-bdt` rejoué après une acceptation recréait les BDS.
+- **Idempotence des sous-lots** : `attribuerIdsSousLots(plan, existants)` réutilise un sous-lot existant de même
+  (`lot_parent`, pièce normalisée, n-ième occurrence), **annulé compris** (rejouer ne recrée jamais rien en silence) ; sinon
+  `idSousLot(parent, rang)` s'il est libre, sinon le premier suffixe libre suivant (vis-à-vis de **tous** les existants).
+  Insertion en `23505` = « existant ». Posé : `LotPlan.existe`.
+- `racineDuLot` retire **tous** les `.RR` finaux (un point dans le n° d'affaire est respecté : `LOT-2026-A.12-01.03` →
+  `LOT-2026-A.12-01`) ; `parentDuLot(lot)` = `lot.lot_parent || lotParentDeId(lot.id)` ; `niveauDuLot` = `lot.niveau ??` nombre de
+  `.RR`. **Sans `cloud-14`**, l'arbre se déduit donc de l'id.
+
+### H2-2 · Plan de production d'une affaire
+
+`planProductionAffaire(dt, noms, cmdId, { arbreDispo })` — **un seul plan**, construit une fois et passé aux trois étapes de la
+cascade (lots / bons, prépa, DA) et au déblocage proforma (`planDepuisBase`) :
+1. pour chaque pièce de `dt.pieces_detail` qui a une nomenclature validée (compteur `pieceNum` inchangé ⇒ **racines
+   inchangées**) : racine `fmtLotId(année, aff, pieceNum)`, `rang` = `pieceNum` ;
+2. mère avec composants **et** colonnes présentes : `developperArbre(nom, qte, resolveurProduction(noms))` →
+   `planLotsArbre` (**pré-ordre** : le parent avant ses enfants, rangs croissants) ; qté d'un sous-lot =
+   `qteSousLot(qte parent, qte du composant)` = `ceil(p × c − 1e-9)`, minimum 1 (3 × 0,5 → 2 ; 3 × 2 → 6) ;
+3. `attribuerIdsSousLots(plan, lots lus strictement)`.
+
+- **Avertissements** (textes prêts à afficher, remontés dans la réponse) : composant **sans révision validée** (le nœud et
+  son sous-arbre ne sont pas lancés, le rang des suivants est **conservé** : `.01`, `.04`) ; composant qui fermerait un
+  cycle ou dépasserait le niveau 4 (absent de l'arbre) ; **`revision_differente`** (information : la production retient une
+  autre révision que celle choisie au BE) ; garde-fou 2 000 nœuds.
+- **Sans les colonnes** (`lotsArbreDispo()` : `42703` / `PGRST204` ⇒ `{dispo:false}`) : racine seule + « Sous-lots de la pièce
+  mère X non créés : la base doit être mise à jour (script cloud-14, à faire par l'administrateur) ; la mère est lancée
+  seule. » ; **table des lots illisible** (panne) : racine seule + « état de la table des lots illisible (…) ».
+
+### H2-3 · Cascade d'acceptation d'une offre (`cascadeAcceptationOffre`)
+
+- **Lots, BDT, BDS** (`cascadeLotsBdtBst`) — en pré-ordre : `createLot({ id, cmd_id, client_nom, piece, qte, qte_initiale,
+  statut:'a_faire', lot_parent, rang, niveau, nomenclature_id, qte_par_parent })` (sans colonnes : payload sans les 5
+  champs ; `23505` = existant ; colonne disparue entre-temps ⇒ arrêt des sous-lots de l'affaire + avertissement, la racine se
+  crée toujours). BDT / BDS tirés de `lot.nom.etapes_production` (même code qu'avant : tri par `ordre`, OAS exclus,
+  `oas_avant/apres`, `etapeTempsMin`, `dureeBdtDepuisTemps(tps, lot.qte)`, `reglageBdtHeures`) ; ids `bonIdDuLot`, clé
+  `cleBon`, `piece` / `qte` / `lot_ref` du **sous-lot**, **même `num_affaire`**, `matiere_ok: false`, activité =
+  `lot.nom.entite || dt.activite || 'Seem'`. Quand les colonnes existent, **tous** les lots (racines comprises) reçoivent
+  `rang`, `niveau`, `nomenclature_id`.
+- **Prépa technique** (`cascadePrepaTechnique`) : même test (CN sans programme / pas de plan) pour chaque lot du plan, sur
+  `lot.nom` ; une par **pièce** (une fille présente deux fois = une prépa).
+- **Demandes d'achat** (`cascadeDAManques`) : besoins **cumulés sur tous les lots** (racines et sous-lots) par clé
+  `_sanId(ref_stock || designation) + M|A`, puis manque = besoin total − (stock + à ranger). ⚠ Corrige au passage la **perte
+  du besoin** quand deux pièces partageaient une référence (la 2ᵉ DA, même id, était refusée **en silence**). Un id déjà pris
+  prend le suivant libre (`-2`…) ; tout autre échec devient un avertissement.
+- **Réponse** : `cascade.sous_lots` (nombre créé) et `cascade.avertissements[]` ; `avertissement_bdt` conservé. Écran
+  (`commercial.tsx`, `cmdAvertCascade`, aux deux acceptations `validerRentreeCmd` et `svcConfirmerValidationOffre`) :
+  notifications orange **conservées après le rechargement**.
+- **Proforma** : le paiement (`debloquerProforma`) reconstruit le **même** plan avec des lectures **strictes** (colonnes,
+  nomenclatures, lots) ; en cas de panne, **rien n'est engagé** et un avertissement le dit (rejeu possible : repasser la
+  facture « payée ») ; seuls les sous-lots qui existent sont couverts. Compta › Facturation affiche les avertissements de
+  `proforma_debloque`.
+
+### H2-4 · « Créer les sous-lots » d'un lot existant
+
+`POST /api/production/lot/:id/sous-lots` — corps `{ simuler?: boolean, confirmer_termine?: boolean }`, famille RBAC
+`production` (déjà mappée). Sert aux **affaires lancées avant H2** et au **cloud après `cloud-14`**. Idempotente : rejouée,
+**0 création**.
+
+| Cas | Réponse |
+|---|---|
+| lot introuvable | 404 |
+| base sans les colonnes | **409 `arbre_indisponible`** (« … la base doit être mise à jour (script cloud-14…) ») |
+| lot **ou sa racine** libéré, expédié, livré ou annulé (simulation comprise) | **409 `lot_clos`** — rien n'est relancé, ni fabrication ni achat |
+| lot (ou racine) **terminé**, sans `confirmer_termine: true` | **409 `lot_termine`** (la simulation rend `lot_termine: true` et l'écran pose la question) |
+| aucune nomenclature validée, ou pas une mère avec composants | **409 `pas_une_mere`** (deux messages distincts) |
+| une lecture en échec | **503** (jamais « rien n'existe ») |
+| `simuler: true` | `{ ok, simule:true, plan:[{id, lot_parent, rang, niveau, piece, qte, existe}], avertissements, lot_termine }`, aucune écriture |
+| création | `{ ok, simule:false, plan, crees:{lots,bdt,bds,prepa,da}, existants, bons_existants:{bdt,bds}, porte_matiere, avertissements }` |
+
+- **`planCompletementLot`** (correctif de relecture, EN 9100) : le plan part de **ce** lot (son niveau, sa quantité
+  d'origine `qte_initiale`) ; un sous-lot **existant garde la révision de son lancement** (`lots.nomenclature_id`) pour ses
+  bons et son sous-arbre — une révision validée plus tard ne lui ajoute **aucun** BDT ; un sous-lot existant annulé ou de
+  révision inconnue est laissé tel quel ; seuls les sous-lots nouveaux prennent la dernière révision validée. Les
+  nomenclatures des lots **au-dessus** coupent un cycle (`ancetres`) ; la limite de 5 niveaux reste **absolue**.
+- Crée : les sous-lots manquants, **leurs** BDT / BDS (un bon manquant d'un sous-lot existant est complété), les prépas des
+  nouvelles pièces, les DA du sous-arbre **créé** (`-SL<ZZ>`, pas de fusion avec une DA existante de même référence : les
+  Achats arbitrent).
+- **`porte_matiere`** (correctif) : les nouveaux BDT naissent « matière non réceptionnée » ; si le stock **couvre** les
+  nouveaux besoins (aucun manque) **et** que tous les autres BDT de l'affaire sont déjà « matière OK », ils passent
+  `matiere_ok = true` (`'ouverte'`) ; sinon ils restent comme la racine (`'fermee'`) et s'ouvriront au prochain rangement ;
+  `'non_evaluee'` si la lecture échoue.
+- **Écran** (fiche lot) : bandeau d'avertissement + bouton **« Créer les sous-lots »**, affiché **seulement s'il peut créer
+  quelque chose** (`vueArbreLot.action_creer` : base à jour, lot ouvert, au moins un composant **validé** sans sous-lot) —
+  simulation → `appConfirm` qui liste le plan dans l'ordre de fabrication (avec les avertissements) → création →
+  `softReload()` ; messages conservés après le rechargement (`notifDurable`). Un composant sans révision validée est nommé
+  (« … (rang 2) : aucune révision validée — faites-la valider au BE ») ; rien à créer mais des composants bloqués ⇒
+  avertissement orange « Aucun sous-lot ne peut être créé : … » (jamais un faux « tout existe »).
+
+### H2-5 · `POST /api/be/analyse-dt/:id/generer-bdt`
+
+Cherche le lot existant parmi les **racines** seulement ; mère avec composants et colonnes présentes : plan comme H2-2 depuis
+le lot racine ; si la **commande existe**, les lignes de sous-lots manquantes sont créées (`cmd_id` du lot racine) ; sinon
+(DT sans commande) aucune ligne `lots`, comme avant pour la racine — les bons portent les ids calculés (`idDe` :
+`fmtBonId` pour une racine, `bonIdDuLot` pour un sous-lot). Réponse `+ sous_lots: { crees, existants }, avertissements`.
+Relancée : 0 création.
+
+### H2-6 · Porte matière et vigilance « sous-lots non terminés » (A4)
+
+- **Aucune modification de `ouvrirPorteMatiere`** : les BDT des sous-lots portent le **même `num_affaire`** et
+  `matiere_ok: false` ; ils s'ouvrent avec le reste de l'affaire quand toute sa matière — celle des filles comprise, achetée
+  par les DA agrégées — est **rangée** (lot F). C'est « programmable dès que la matière est en stock, comme pour le reste ».
+  Une granularité par lot est impossible : un BC ne connaît pas le lot.
+- **`bdtVigilance(bdt, prepRows, arbre?)`** : raisons existantes, puis `vigilanceSousLots(bdt, lots, ops)` — « sous-lots non
+  terminés (n/m) : LOT-…-01.01, LOT-…-01.03 » (n non finis sur m sous-lots **directs**, 3 ids puis « +k ») ; raisons
+  multiples jointes par **« · »** (avant : la première seule). La route `/production/service` passe les lots et les
+  opérations. **Aucun BDT n'est retiré**, aucune route de pose / réception ne refuse quoi que ce soit.
+- ⚠ Écart pré-existant, **non corrigé** : une affaire dont toute la matière est déjà en stock n'a **aucun BC matière** ⇒
+  `ouvrirPorteMatiere` n'est jamais appelée ⇒ vigilance « matière non réceptionnée » permanente (sous-lots compris). À
+  arbitrer (proposition : poser `matiere_ok = true` à la cascade quand aucune DA matière n'est créée).
+
+### H2-7 · Avancement et statut d'un arbre
+
+- `opsParLot(bdts, bdss)` — clé `lot_id || lot_ref` ; BDT fini = statut `sold…` ou `termine|cloture|fini` (« reçu » =
+  commencé, pas fini) ; BDS fini = `recu`, `sold…`, `termine|cloture|fini` ou `date_retour_effective` renseignée ; opérations
+  annulées exclues. Un lot **annulé** n'est l'enfant de personne (il ne bloque pas son parent).
+- `lotFini` = toutes **ses** opérations finies **et** tous ses enfants directs finis ; `avancementArbre` =
+  `{ total, soldes, pct, propre }` (arbre entier / lot seul) ; `sousLotsNonTermines` (enfants directs).
+  ⚠ Ces fonctions mettent leur index en cache **par identité** du tableau `lots` : un tableau modifié en place entre deux
+  appels doit être recopié (`[...lots]`).
+- **`recomputeCmdAvancement`** (après chaque soldage, et désormais aussi au **retour d'un BDS** — `retourBdsHandler` et
+  `PATCH` d'un BDS qui change son statut ou sa date de retour, via `recalculerCommandeApres`) : lectures **strictes**
+  filtrées et paginées (toute erreur ⇒ rien n'est écrit) ; `termine` posé **en remontant** (feuilles d'abord), seulement
+  s'il y a au moins une opération dans l'arbre ; un lot **libéré, expédié, livré, annulé ou déjà terminé n'est plus jamais
+  réécrit** (avant, un soldage remettait `termine` sur un lot libéré) ; base sans `lots.updated_at` : l'écriture est
+  retentée sans cette colonne (avant : PGRST204 avalé, le lot ne passait jamais « terminé » au cloud).
+  `bdt_total / bdt_soldes` de la commande inchangés (ils incluaient déjà les BDT des sous-lots).
+
+### H2-8 · Écrans
+
+| Écran | Ce qui change |
+|---|---|
+| **Commandes & Lots › Lots** (`pageServiceProd`) · **`/production/lots`** | liste **en arbre** (pré-ordre) : la racine puis ses sous-lots en retrait (16 px × niveau, « ↳ », pastille « n° rang », badge « n sous-lots ») ; sur une mère, avancement de **l'arbre** (« avec ses sous-lots · assemblage seul x % », détail en infobulle) et vigilance courte « sous-lots en cours n/m » sous le statut ; sous-titre « N lots + M sous-lots » ; carte à défilement horizontal si besoin (mesuré : 996 px pour 996 px à 1280) |
+| **`/production/commande/:id`** | cartes de lot dans l'**ordre de fabrication**, lu de haut en bas (post-ordre : sous-lots les plus profonds d'abord, rang croissant, chaque mère **après** ses sous-lots — mesuré `01.01 → 01.02.01 → 01.02 → 01`), retrait conservé ; sur une mère « n sous-lots · arbre x % » et vigilance ; KPI « Lots : N + M sous-lots » ; bandeau qui explique la lecture |
+| **`/production/lot/:id`** (fiche lot) | 9ᵉ paramètre `arbre?: ArbreLotVue` de `pageLotDetail` (`vueArbreLot`, ignoré s'il est mal formé) : fil d'Ariane « Sous-lot n° r de LOT-… » (+ lot racine), rappel « sous-ensemble interne : libéré et expédié avec son lot racine » ; 2ᵉ barre et KPI « Avancement de l'arbre » ; bandeau orange de vigilance (non bloquant) ; bandeau « sous-lots manquants » + bouton « Créer les sous-lots » ; section **« Sous-lots (ordre de fabrication) »** (rang, lien, pièce, qté, statut, avancement) ; nomenclature du lot lue d'abord sur `lot.nomenclature_id` (celle du lancement) |
+| **OF imprimé** | tableau **« Sous-ensembles à assembler — ordre de fabrication »** (rang, sous-lot, pièce, qté, état, visa) avant les étapes de la mère ; mention « Sous-lot de … » sur un sous-lot |
+| **Planning › goulotte BDT** | tri en **ordre de fabrication** : `ORDRE_FAB` (post-ordre calculé au rendu) comparé par `cmpOrdreFab` dans `pendSort` (repli `k+'~'`, miroir commenté de `cleTriFabrication`) ; échéance de l'**arbre** (`echeanceArbre`, la plus proche de ses BDT, posée seulement pour les arbres qui ont des sous-lots — un lot sans sous-lot garde exactement l'ordre d'avant) ; pastille **« Sous-lot 01.02 »** / « Sous-sous-lot 01.02.01 » sur la carte ; badge orange **« Sous-lots en cours »** sur les BDT de la mère (carte **et** barre du Gantt), depuis `VIGIL_PAR_ID` (`dbBdtsVigilance`) |
+| **Tableau Programmation** | KPI « Lots en cours » = **racines**, « +n sous-lots » en sous-titre ; table indentée |
+| **Suivi LOT de fabrication** (`/production/lot-liste`, `listes.tsx`) | liste en arbre (retrait, rang ; « sous-lot de … » en infobulle) ; avancement et nombre de BDT **réels** (la page affichait toujours 0) — pour une mère, sur l'arbre entier ; KPI « LOT actifs » = racines « (+n sous-lots) » |
+| **Fiche affaire 360** (`/commercial/affaire/:num`) | lots en arbre avec lien ; compteurs « prêts / en attente » sur les **racines** « + n sous-lot(s) » ; chaque bon rattaché à son lot **exact** (`lot_ref` / `lot_id`, la pièce seulement pour un bon sans lot) ; blocage « sous-lots non terminés (n/m) » fourni par le serveur. Correctif : le blocage « matière non réceptionnée » était inopérant (les bons n'exposaient pas `matiere_ok`) — il s'affiche désormais |
+| **Panneau « programmables mais pas encore lançables »** | inchangé : il affiche la nouvelle raison telle quelle |
+
+### H2-9 · Qualité, expédition, KPI (A8)
+
+- **Qualité › Libération** : « à libérer » = **racines** dont `lotFini` (arbre complet) et qui ont au moins une opération dans
+  l'arbre ; bons rattachés par `lot_id` **ou** `lot_ref` (correctif : indexés par `lot_id` seul, les lots de cascade n'étaient
+  jamais « prod finie »). `POST /api/qualite/lot/:id/liberer` : **409 `sous_lot_non_liberable`** sur un sous-lot (décision
+  « libéré » ; la mise en quarantaine d'un sous-lot reste possible) ; **409 `arbre_non_termine`** `{ sous_lots }` sur une
+  racine dont un sous-lot n'est pas fini (503 si la lecture échoue, aucun PV écrit). Seuls les sous-lots sont vérifiés, pas les
+  étapes propres du lot (comme avant H2).
+- **Expéditions** : porte « lots à libérer » et choix des lots du BL = **racines seulement** (`expeditions.tsx`) ;
+  `POST /api/expeditions/bl-partiel` : **409 `sous_lot_non_expediable`** (« Un sous-lot s'expédie avec son lot racine
+  (LOT-…). ») ; correctif : le prorata de facturation d'un BL partiel ne compte que les lots **racines** (il additionnait les
+  quantités de tout l'arbre : 5 mères livrées = 5/35 de la commande facturés). Les **quarantaines comptent les sous-lots**
+  (voulu).
+- **KPI** (`kpi.ts`) : WIP, takt time et dénominateur du taux de NC = **racines seulement**.
+
+### H2-10 · Compatibilité cloud sans `cloud-14` (A9)
+
+| Action | Sans les colonnes |
+|---|---|
+| Toute page listant des lots | 200, sans erreur ; arbre déduit des ids (il n'y a pas de sous-lots) |
+| Acceptation d'une offre avec une mère | commande + racine + BDT / BDS de la mère **comme avant** ; `cascade.avertissements` porte le message `cloud-14`, l'écran l'affiche |
+| Fiche lot d'une mère | bandeau « sous-lots non créés — la base doit être mise à jour (cloud-14) » ; pas de bouton « Créer les sous-lots » (la route répondrait 409 `arbre_indisponible`) |
+| `generer-bdt` | racine seule + avertissement |
+| Nomenclatures (ordre, mère dans mère, cycle, profondeur) | fonctionne (jsonb, aucune DDL) |
+
+Vérifié sur le Docker en renommant **temporairement** les 5 colonnes (`*__h2sim`), puis en les rétablissant et en relisant
+`information_schema.columns` (phases A / G / G2 des e2e).
+
+### Défauts pré-existants corrigés au passage
+Libération indexée par `lot_id` seul (`prod_finie` toujours faux pour les lots de cascade) · `termine` réécrit sur un lot
+libéré · `lots.updated_at` absent au cloud ⇒ le lot ne passait jamais « terminé » · besoin de DA perdu quand deux pièces
+partagent une référence · clé BDS de la cascade (`cmd_ref` = `CMD-…` comparé à l'affaire) · blocage « matière non
+réceptionnée » inopérant sur la fiche affaire · Suivi LOT à 0 % en permanence · quantité vide = 0,00 € dans l'éditeur de
+mère · avancement d'un lot non recalculé au retour d'un BDS.
+
+### Limites et points ouverts
+- **Coût d'une mère dans l'offre** : l'analyse DT ne chiffre que les étapes propres de la mère ; avec H2, les filles sont
+  fabriquées et achetées mais **pas chiffrées** ⇒ offre sous-évaluée (bandeau sur `/be/analyse`). Chiffrage récursif à
+  arbitrer.
+- **Porte matière sans BC** (H2-6) : à arbitrer.
+- **Indice des composants** : la production prend la dernière révision **validée** de la fille, pas forcément celle choisie
+  au BE (tracé par `lots.nomenclature_id`, avertissement `revision_differente`). Figer l'indice = autre arbitrage (lot H3,
+  propagation d'un indice aux commandes en cours).
+- **Affaires déjà lancées** : pas de reprise automatique — « Créer les sous-lots », lot par lot.
+- **Réordonner après lancement** : les lots gardent leur rang de création (configuration figée) ; après une collision
+  d'id, le rang affiché peut différer du suffixe de l'id.
+- **Qualité par sous-lot** : aucun PV ni libération propres à un sous-lot (A8) ; si l'EN 9100 l'exige pour certains
+  sous-ensembles, lot ultérieur.
+- **Hors périmètre, non modifié** : goulotte **BST** (`bstBuildPending`) sans tri par ordre de fabrication ; ancienne page
+  `pageGanttBDT` (sans route) ; listes de lots de `prod_da_nc.ts` et `annulation.ts` (sous-lots compris) ; Suivi LOT :
+  1 233 px de large, défilement horizontal à 1280 et 1366 px (il débordait déjà avant H2).
+- **Charge** : `getFournitures` par nœud (cache par id), `getNomenclatures` à chaque PUT de mère ; base cloud qui se met en
+  pause ⇒ lectures strictes et 503 plutôt qu'un contrôle sauté.
+
+### Tests
+`node scripts_doc/test_nomenclature_arbre.mjs` **147 PASS / 0 FAIL** (lecture chaîne / tableau / objet, ordre par rang complet
+ou partiel, `deplacerComposant`, cycles direct / indirect / via une ancienne révision / via une révision en cours,
+profondeur 5 acceptée / 6 refusée y compris par les ancêtres, `qteSousLot`, `planLotsArbre`, `attribuerIdsSousLots`
+(réutilisation, collision après réordonnancement, deux occurrences de la même fille), ids exotiques, `bonIdDuLot` =
+`fmtBonId` pour une racine, `cleBon` racine inchangée, `trierOrdreFabrication` (`01.01, 01.02.01, 01.02, 01`), `lotFini` /
+`vigilanceSousLots` avec BDS reçus et ops annulées, journal des composants) · e2e sur le Docker local (scratchpad du lot,
+hors dépôt) : serveur 72 PASS avec les colonnes / 40 sans ; vérification finale B 20, C 20, D1 7, D2 10, S 21, P 5 (proforma),
+X 22 (révision de lancement), G 23 et G2 6 (cloud sans `cloud-14`), interface 77 ; rendu d'un vrai arbre de lots 45 PASS ·
+jeux `-TEST-H2-` supprimés et relus (0 ligne), nombre de lignes de chaque table identique avant / après.
+
+**Captures de la doc** (18/09/2026, stack Docker locale — seule base qui a 018 — code du lot servi par `erp-app`) : jeu
+`-TEST-DOCH2-` (armoire = capot + châssis, châssis = platine × 2 + axe × 4) inséré en SQL, offre acceptée par la **vraie route**
+(5 lots dont 4 sous-lots, 7 BDT, 1 BDS, 5 prépas, 2 DA), 3 BDT soldés en SQL pour montrer l'avancement, puis tout supprimé et
+relu (0 ligne ; nombre de lignes de chaque table identique avant / après ; journal EN 9100 toujours à 0). Nouvelles
+`production-lots` (vue Lots en arbre) et `production-lot-sous-lots` (fiche du lot racine, option `suivre` de
+`capture_screens.mjs`) ; refaite `production-commandes`. Non refaites : goulotte (`production-service`, sans changement de mise
+en page hors pastilles) et OF imprimé.
+
 ## Mission
 <!-- auto:mission -->
 Planning Gantt BDT/BST, présence opérateurs, commandes & lots, process ateliers.
@@ -910,6 +1177,11 @@ Planning Gantt BDT/BST, présence opérateurs, commandes & lots, process atelier
 - **Découpe d'un BDT** (revue 13/09/2026) : **uniquement** depuis les ciseaux d'une carte de la goulotte → modale `splitModal` (rangée dans `#ppanel-gantt-bdt`, 2 à 12 morceaux, temps **libre** par morceau) → `POST /api/production/bdt/:id/separer` ; le BDT d'origine garde le 1ᵉʳ morceau, les suivants sont créés en `-M2`/`-M3`… dans la goulotte. Plus de clic droit sur le planning, plus de prorata ; un BDT posé sur le planning est refusé (409). ⚠ **Revu le 14/09/2026 (lot C)** : seul le temps de réalisation se découpe, le réglage reste sur le morceau 1, et une découpe s'annule (voir la section Lot C). ⚠ **Interface revue le 15/09/2026** : **jauge** du temps de réalisation V à répartir (un segment coloré par morceau, gris = reste à répartir, rayures orange = dépassement, réglage à part en bloc hachuré fixe) + **un curseur par morceau** (`input range` 0…V, pas 0,01 arrondi au quart d'heure par le JS avec aimant sur la valeur qui complète V ; champ en heures synchronisé ; clavier flèches ±0,25 h, Page ±1 h) ; aides « Répartir également » (centièmes entiers, le dernier prend le reste) et « Mettre le reste sur le dernier morceau » ; une somme ≠ V demande une **confirmation** (`appConfirm`) avant l'envoi. Contrat serveur inchangé (`{ realisation, reglage? }`). Fonctions : `splitJauge`, `splitRender`, `splitAimant`, `splitRepartirEgal`, `splitResteDernier`, `splitPretAEnvoyer`, `splitEnvoyer`.
 - **Bandeau du service** (15/09/2026) : « Demande d'achat » et « PV de non-conformité » côte à côte (`#prod-hdr-actions`, `src/prod_da_nc.ts`), réservés à l'**écriture Production** du salarié qui signe par matricule + PIN. **Soldage** : l'opérateur qui a reçu le BDT **ou** une personne qui écrit en Production ; la matrice de compétences n'avertit plus que. **Réception** : un opérateur ou une personne qui écrit en Production (elle devient alors le réalisateur, `operateur_id`). Voir la section du 15/09/2026.
 - **Lot G (16/09/2026)** : Process Ateliers a un 3ᵉ volet **« Cadence usine »** (cadence par site, modèles d'horaires, historique) ; les horaires de la présence, de l'affectation et de RH › Temps viennent de la cadence ; le planning BDT suit les **heures ouvrées** du site (axe du jour, heures fermées hachurées, dépôt refusé sur une heure fermée, chemin critique et fin prévue en heures ouvrées) ; deux BDT du **même process** ne se chevauchent pas sur un poste (409) ; déplacer une étape **remet en goulotte** les étapes suivantes devenues incohérentes après un message préventif (badge « Remis en goulotte », en tête) ; badge **« → OAS »** sur le BDT qui précède l'OAS. Voir la section « Lot G ».
+- **Lot H2 (18/09/2026)** : le lot d'une **pièce mère** porte un **sous-lot par composant** (`LOT-…-01.02`), récursivement
+  (`LOT-…-01.02.01`), dans l'ordre de fabrication de la nomenclature (haut → bas) ; chaque sous-lot a sa gamme, sa prépa et ses
+  DA ; aucune porte nouvelle (vigilance « sous-lots non terminés » sur la mère) ; listes en arbre, goulotte en ordre de
+  fabrication, fiche lot avec sous-lots, avancement de l'arbre et bouton « Créer les sous-lots » ; libération, BL et KPI sur
+  les **racines** seulement. Colonnes `lots` 018 / `cloud-14`. Voir la section « Lot H2 ».
 - ℹ Cette fiche est **fusionnée, pas écrasée** par `scripts_doc/gen_module_fiches.mjs` : seuls les blocs `<!-- auto:… -->` sont régénérés depuis le manifeste ; ces points d'attention, écrits à la main, sont conservés.
 
 ---

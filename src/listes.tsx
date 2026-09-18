@@ -4,6 +4,8 @@
 // ══════════════════════════════════════════════════════════════
 import { escX, layout, pageHeader, afterBox, APP_VERSION } from './shared'
 import type { DemandeTravaux, Offre, Commande, DemandeAchat, NonConformite, BonDeLivraison, BonDeTravail, Lot, FournisseurSt } from './types'
+// Lot H2 (18/09/2026) : sous-lots d'une pièce mère (arbre, avancement) — module pur, rendu serveur uniquement.
+import { opsParLot, avancementArbre, trierArborescence, parentDuLot, niveauDuLot } from './nomenclature_arbre'
 
 const J = (v: any) => JSON.stringify(v)
 const sjX = (v: any) => JSON.stringify(v).replace(/</g, '\\u003c')
@@ -682,18 +684,27 @@ function filterAct(a) {
 // ══════════════════════════════════════════════════════════════
 const LOT_LISTE_DEFAULT: any[] = []
 
-function mapLot(l: Lot) {
-  return { id:l.id, cmd:l.cmd_id??'—', client:l.client_nom??'', piece:l.piece??'', qte:l.qte??0, activite:'Seem', statut:l.statut, debut:l.date_debut??'—', livraison:l.date_fin??'—', avancement:0, priorite:'normal', bdtTotal:0, bdtSoldes:0 }
+// Lot H2 : niveau / parent / rang (arbre des sous-lots) et avancement réel = BDT finis / BDT du lot ; pièce mère : de
+// l'ARBRE (la mère + tous ses sous-lots). Sans bons, 0 % comme avant.
+function mapLot(l: Lot, arbre?: { lots: any[]; ops: Record<string, any[]> }) {
+  const a = arbre ? avancementArbre(String(l.id), arbre.lots, arbre.ops as any) : null
+  const niveau = niveauDuLot(l), parent = parentDuLot(l)
+  return { id:l.id, cmd:l.cmd_id??'—', client:l.client_nom??'', piece:l.piece??'', qte:l.qte??0, activite:'Seem', statut:l.statut, debut:l.date_debut??'—', livraison:l.date_fin??'—', avancement:a ? a.pct : 0, priorite:'normal', bdtTotal:a ? a.total : 0, bdtSoldes:a ? a.soldes : 0,
+    niveau, parent, rang:(l.rang != null ? l.rang : null), arbre:!!(a && a.total !== a.propre.total) }
 }
 
 export const pageLOTListe = (dbData?: Lot[], dbOps?: any[], dbBdts?: any[]) => {
-  const LOT_LISTE = dbData ? dbData.map(mapLot) : []
+  // Lot H2 : arborescence (pré-ordre) — pièce mère puis ses sous-lots en retrait, rang = ordre de fabrication.
+  const LOTS_ARBRE = dbData ? trierArborescence(dbData as any[]) as Lot[] : []
+  const ARBRE = { lots: LOTS_ARBRE as any[], ops: opsParLot(dbBdts || [], []) }
+  const LOT_LISTE = LOTS_ARBRE.map(l => mapLot(l, ARBRE))
+  const nbRacines = LOT_LISTE.filter(l => !l.parent).length
   const content = `
 ${pageHeader('fas fa-layer-group','#f59e0b,#d97706','Suivi LOT de fabrication','Sylvie · Avancement · BDT par LOT · Délais · Priorités',['LOT','Production','Planning'])}
 <div style="padding:16px 20px;">
   <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;">
     ${[
-      {label:'LOT actifs',val:LOT_LISTE.length,icon:'fa-layer-group',c:'#f59e0b',bg:'#fffbeb'},
+      {label:'LOT actifs' + (LOT_LISTE.length > nbRacines ? ' (+' + (LOT_LISTE.length - nbRacines) + ' sous-lots)' : ''),val:nbRacines,icon:'fa-layer-group',c:'#f59e0b',bg:'#fffbeb'},
       {label:'En production',val:LOT_LISTE.filter(l=>l.statut==='En production').length,icon:'fa-industry',c:'#f97316',bg:'#fff7ed'},
       {label:'Programmés',val:LOT_LISTE.filter(l=>l.statut==='Programmé').length,icon:'fa-calendar-alt',c:'#3b82f6',bg:'#eff6ff'},
       {label:'Bloqués',val:LOT_LISTE.filter(l=>l.statut==='Mat. manquante').length,icon:'fa-exclamation-triangle',c:'#ef4444',bg:'#fef2f2'},
@@ -710,7 +721,7 @@ ${pageHeader('fas fa-layer-group','#f59e0b,#d97706','Suivi LOT de fabrication','
       <i class="fas fa-plus"></i> Créer un LOT
     </a>
   </div>
-  <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;">
+  <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow-x:auto;">
     <table style="width:100%;border-collapse:collapse;">
       ${tableHead('N° LOT','Commande','Client','Pièce','Qté','Activité','Statut','Priorité','Avancement','BDT','Livraison','Actions')}
       <tbody>
@@ -720,7 +731,7 @@ ${pageHeader('fas fa-layer-group','#f59e0b,#d97706','Suivi LOT de fabrication','
           return `
         <tr style="border-bottom:1px solid #f8fafc;${l.statut==='Mat. manquante'||l.statut==='À planifier'?'background:#fffbeb;':''}"
           onmouseenter="this.style.background='#f9fafb'" onmouseleave="this.style.background='${l.statut==='Mat. manquante'||l.statut==='À planifier'?'#fffbeb':''}'">
-          <td style="padding:10px 12px;font-weight:800;color:#f59e0b;font-size:.82rem;font-family:monospace;">${l.id}</td>
+          <td style="padding:10px 12px;font-weight:800;color:#f59e0b;font-size:.82rem;font-family:monospace;"${l.parent ? ` title="Sous-lot de ${escX(l.parent)}"` : ''}><div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px 5px;padding-left:${l.niveau * 16}px;">${l.niveau > 0 ? '<span style="color:#94a3b8;font-family:inherit;" aria-hidden="true">↳</span>' : ''}<a href="/production/lot/${encodeURIComponent(l.id)}" style="color:#f59e0b;text-decoration:none;white-space:nowrap;">${escX(l.id)}</a>${l.niveau > 0 && l.rang != null ? `<span title="Rang ${escX(l.rang)} dans l’ordre de fabrication" style="background:#ecfeff;border:1px solid #a5f3fc;color:#0e7490;border-radius:5px;padding:0 5px;font-size:.6rem;white-space:nowrap;">n°${escX(l.rang)}</span>` : ''}</div></td>
           <td style="padding:10px 12px;font-size:.72rem;color:#6b7280;">${escX(l.cmd)}</td>
           <td style="padding:10px 12px;font-size:.78rem;font-weight:700;">${escX(l.client)}</td>
           <td style="padding:10px 12px;font-size:.75rem;">${escX(l.piece)}</td>
@@ -734,7 +745,7 @@ ${pageHeader('fas fa-layer-group','#f59e0b,#d97706','Suivi LOT de fabrication','
                 <div style="width:${pct}%;height:100%;background:${barColor};border-radius:4px;"></div>
               </div>
               <span style="font-size:.72rem;font-weight:700;color:${pct>=80?'#15803d':pct>=40?'#b45309':'#6b7280'};">${pct}%</span>
-            </div>
+            </div>${l.arbre ? '<div style="font-size:.58rem;color:#6d28d9;font-weight:700;margin-top:2px;">avec ses sous-lots</div>' : ''}
           </td>
           <td style="padding:10px 12px;font-size:.75rem;color:#374151;text-align:center;">
             <span style="font-weight:700;color:#22c55e;">${l.bdtSoldes}</span><span style="color:#9ca3af;">/</span><span style="font-weight:600;">${l.bdtTotal}</span>

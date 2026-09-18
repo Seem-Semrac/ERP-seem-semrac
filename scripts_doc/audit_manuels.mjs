@@ -187,7 +187,8 @@ const main = async () => {
     // 3) manifeste : sélecteurs disparus
     const mine = entrees.filter(e => e.path === s.route)
     for (const e of mine) {
-      const sels = [...e.reste.matchAll(/#([a-z0-9-]+)/g)].map(x => x[1])
+      // Majuscules et « _ » compris (18/09/2026) : `#subBtn-lots` était lu `#sub` → faux « sélecteur disparu ».
+      const sels = [...e.reste.matchAll(/#([A-Za-z0-9_-]+)/g)].map(x => x[1])
       const morts = sels.filter(sel => !html.includes('id="' + sel + '"'))
       if (morts.length) ligne(s.man, 'GRAVE', 'manifeste vise un sélecteur DISPARU', e.file + ' → #' + morts.join(', #'))
     }

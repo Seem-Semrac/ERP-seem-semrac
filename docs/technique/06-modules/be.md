@@ -27,7 +27,7 @@ Nomenclatures (BOM), analyse des DT, préparation technique, références.
 <!-- /auto -->
 ## Points d'attention
 <!-- auto:notes -->
-Masse en g ; temps en millièmes d'heure ; réglage = coût FIXE/lot ; prix des fournitures = MOYENNE des fournisseurs du catalogue (lot H1 : plus de fournisseur ni de qté/paquet sur la ligne, une même référence une seule fois par fiche) ; prix « frais » 6 mois (183 j) sinon demande de prix ; indices A/B/C ; drag-drop des process. Supprimer une nomenclature VALIDÉE exige un MOTIF (sinon 400 motif_requis), inscrit au journal EN 9100 avec l’auteur et la date ; sans le journal en base, la suppression d’une fiche suivie est refusée (409) plutôt que tracée nulle part.
+Masse en g ; temps en millièmes d'heure ; réglage = coût FIXE/lot ; prix des fournitures = MOYENNE des fournisseurs du catalogue (lot H1 : plus de fournisseur ni de qté/paquet sur la ligne, une même référence une seule fois par fiche) ; prix « frais » 6 mois (183 j) sinon demande de prix (bouton libellé « Demande de prix » sur chaque ligne, lot H2) ; indices A/B/C ; drag-drop des process. Mères (lot H2) : l'ordre des composants = ORDRE DE FABRICATION (haut → bas, rang = n° de sous-lot), une mère peut contenir des mères (5 niveaux au plus, 409 cycle_composants / profondeur_max), chaque composant devient un sous-lot en production ; une fiche encore composant d'une mère ne se supprime pas (409 composant_utilise) ; journal EN 9100 pleine largeur. Supprimer une nomenclature VALIDÉE exige un MOTIF (sinon 400 motif_requis), inscrit au journal EN 9100 avec l’auteur et la date ; sans le journal en base, la suppression d’une fiche suivie est refusée (409) plutôt que tracée nulle part.
 <!-- /auto -->
 
 > ⚠ **Seuil des prix** : un prix catalogue est « frais » pendant **6 mois** (`PRIX_VALIDITE_JOURS = 183`, `src/shared.ts`),
@@ -35,8 +35,12 @@ Masse en g ; temps en millièmes d'heure ; réglage = coût FIXE/lot ; prix des 
 > (même jour), le prix d'une ligne matière / accessoire est la **moyenne des fournisseurs du catalogue** qui portent la
 > référence : la ligne ne porte plus ni fournisseur ni quantité par paquet. Détail : sections « Lot H0 » et « Lot H1 » plus bas.
 > Le manifeste de `scripts_doc/gen_module_fiches.mjs` (bloc `auto:notes` ci-dessus) a été corrigé en conséquence.
+> **Lot H2** (18/09/2026) : l'ordre des composants d'une mère = **ordre de fabrication** (haut → bas), une mère peut contenir
+> des mères (**5 niveaux** au plus, cycle refusé), chaque composant devient un **sous-lot** en production ; bouton libellé
+> **« Demande de prix »** sur chaque ligne ; journal EN 9100 **pleine largeur**. Détail : section « Lot H2 » plus bas, et
+> [production.md](production.md) (sous-lots).
 
-Le formulaire nomenclature est en **deux colonnes** : saisie des champs à gauche (`minmax(340px, 0.78fr)`), déclaration des process et gamme à droite (`minmax(0, 1.22fr)`) — la gamme porte 10 colonnes depuis l'ajout de ROP/RGM et a besoin de la place. **Depuis le lot H1**, les compartiments **Matière** et **Accessoires** sont en **tête de la colonne de droite**, au-dessus des Étapes (la colonne de gauche ne porte plus que l'identification, les documents et la validation).
+Le formulaire nomenclature est en **deux colonnes** : saisie des champs à gauche (`minmax(340px, 0.78fr)`), déclaration des process et gamme à droite (`minmax(0, 1.22fr)`) — la gamme porte 10 colonnes depuis l'ajout de ROP/RGM et a besoin de la place. **Depuis le lot H1**, les compartiments **Matière** et **Accessoires** sont en **tête de la colonne de droite**, au-dessus des Étapes (la colonne de gauche ne porte plus que l'identification, les documents et la validation). **Depuis le lot H2**, pour une **mère**, c'est le bloc **« Composants — ordre de fabrication »** qui occupe la tête de la colonne de droite (les compartiments de fournitures y sont masqués, comme avant) ; la carte **« Journal des modifications · EN 9100 »** est sortie de la colonne de droite et occupe **toute la largeur** du formulaire, sous les deux colonnes.
 
 **Deux temps de réglage** depuis le 09/09/2026 — la gamme distingue **ROP** (réglage opérateur) et **RGM** (réglage machine). Les deux restent des **coûts fixes par lot**, jamais multipliés par la quantité. ⚠ **Depuis le 14/09/2026**, ROP compte en **homme** et RGM en **homme + machine** (avant : RGM au taux machine seul) — voir la section « Coût d'une étape » ci-dessous.
 
@@ -176,6 +180,8 @@ la requête : c'est ce qui est réellement enregistré.
 - **Fournitures** : remplacées en bloc avec de nouveaux id, donc appariées par catégorie +
   référence ; toutes leurs colonnes sont comparées.
 - **Valeurs recalculées** (coûts, taux, prix par pièce) : bloc `recalcul`, à part des saisies.
+- **Composants d'une mère** (lot H2, `diffComposants`) : suivis **ligne par ligne**, plus en bloc JSON (une permutation
+  donnait « Composants : [JSON] → [JSON] », uuid compris). Voir la section « Lot H2 » plus bas.
 
 ### Règles de sûreté
 
@@ -207,9 +213,12 @@ la requête : c'est ce qui est réellement enregistré.
 **Lecture** : `GET /api/nomenclature/:id/journal?portee=fiche|groupe` (groupe = toutes les révisions
 de la pièce ; après la suppression de la fiche, le groupe est retrouvé dans le journal). 500 entrées
 au plus, `tronque: true` au-delà (l'écran le signale). Écran : carte **« Journal des modifications ·
-EN 9100 »** sous la carte Validation (`nomJournalLoad()` — une réponse arrivée après un changement de
-fiche ou de portée est ignorée ; valeurs longues coupées autour de la première différence, valeur
-entière et définition complète au survol).
+EN 9100 »** — **depuis le lot H2, sous les deux colonnes, sur toute la largeur du formulaire** (avant :
+dans la colonne de droite, sous la carte Validation, 60 % de la largeur) ; `nomJournalLoad()` — une réponse
+arrivée après un changement de fiche ou de portée est ignorée ; une modification par ligne (champ à
+gauche, « avant → après » à droite, étiquette « recalcul » pour les valeurs recalculées) ; valeurs longues
+coupées à **180 caractères** (90 avant H2) autour de la première différence, valeur entière et définition
+complète au survol.
 
 **Purger un jeu de test** : voir le runbook (`02-exploitation-runbook.md`) — jamais sur des entrées
 réelles.
@@ -535,10 +544,195 @@ ligne 2 → frappe sans perte, doublon refusé sans perdre le prix ni la RFQ, au
 
 **Captures de la doc** (18/09/2026, serveur local sur la base en ligne, **sans `cloud-13`**) : `form-be-nomenclature.png`
 refaite — la ligne matière et la ligne accessoire sont prises dans le vrai catalogue par `capture_forms.mjs` (navigateur seul,
-rien n'est enregistré) ; l'accessoire `136290` y porte « cond. ? » faute de quantité par paquet. `be-refs.png` refaite
+rien n'est enregistré) ; l'accessoire `136290` y porte « cond. ? » faute de quantité par paquet (capture **refaite au lot H2**
+sur la stack Docker, qui a 017 : 136290 y est à 0,1040 €/pce, bouton « Demande de prix » libellé). `be-refs.png` refaite
 (bandeau + colonne Qté/paquet). ⚠ `form-be-analyse.png` **gardée dans sa version d'avant H1** (besoin en « paquets ») avec
 l'avertissement « capture à rafraîchir » : refaite sans `cloud-13`, elle montrait `136290` à 10,40 € la pièce (17 040 pièces →
 177 216 € d'accessoires sur `DT-2026-0001`). À refaire après `cloud-13` : `node scripts_doc/capture_screens.mjs --only form-be-analyse`.
+
+## Lot H2 (18/09/2026) — mères ordonnées, mère dans mère, bouton « Demande de prix », journal pleine largeur
+
+> « LE BOUTON DE DEMANDE DE PRIX DANS LA NOMENCLATURE N'A PAS ÉTÉ remis. Dans les nomenclatures mères, il faut pouvoir
+> changer l'ordre des pièces et les ordonnancer dans l'ordre qu'on veut, l'ordre de fabrication sera toujours considéré du
+> haut vers le bas. […] Le journal des modifications dans la nomenclature, tu peux l'étirer pour qu'il prenne toute la
+> largeur de l'écran. » (18/09/2026 — la suite de la demande, les sous-lots en production, est dans
+> [production.md](production.md#lot-h2--sous-lots-des-pièces-mères-18092026))
+
+Arbitrages retenus (liste complète A1 → A9 : `docs/CHANGELOG.md`, 18/09/2026) : **A1** l'ordre du tableau `composants` =
+ordre de fabrication, du haut vers le bas ; il fixe le **rang** (1, 2, 3…), donc le numéro du sous-lot, l'ordre d'affichage et
+l'ordre de la goulotte ; aucune contrainte d'antériorité entre sœurs · **A2** mère dans mère autorisée, **cycle refusé**
+(409 `cycle_composants`), **5 niveaux au plus**, racine comprise (409 `profondeur_max`, constante unique
+`PROFONDEUR_MAX_NOMENCLATURE = 5`) · **A5** en production, un composant est résolu comme la pièce racine : **dernière
+révision VALIDÉE** de son code · **A6** vrai bouton libellé « Demande de prix » · **A7** journal sur toute la largeur.
+Contrats des routes : `07-api-reference.md`, section « Lot H2 ». Aucune DDL côté BE (`composants` est `jsonb` depuis 015) ;
+les colonnes de sous-lots (018 / `cloud-14`) sont côté Production.
+
+### Le bouton « Demande de prix » (A6)
+
+**Constat** (Docker, H1) : le bouton existait et fonctionnait, mais c'était une **icône grise de 26 × 24 px sans libellé**,
+dans une colonne dont l'en-tête était **vide** — rien ne disait « demande de prix ». Avant H0, c'était un bouton bleu
+« demande / de prix » dans la case prix ; H0 l'avait réduit à une icône dès qu'un prix existait, H1 l'avait sorti dans une
+colonne dédiée, icône seule dans tous les cas. « Le bouton n'a pas été remis » = le bouton **libellé** avait disparu.
+
+**Correction** — `nomFourRfqBtnHtml(k, l, i)` rend `<button type="button" class="nom-rfq-btn" data-rfq data-nk>` : icône +
+**« Demande / de prix »** sur deux lignes, `aria-label="Demande de prix — <réf>"`, infobulle inchangée ; `nomFourMajLigne`
+le remplace toujours par `[data-rfq][data-nk]`. En-tête de colonne libellé **« Demande de prix »**.
+
+| État de la ligne | Rendu |
+|---|---|
+| prix récent (< 6 mois) | bleu (`#eff6ff` / `#1d4ed8`) — redemander reste possible |
+| demande conseillée (prix ancien, absent ou hors catalogue) | orange (`#fff7ed` / `#c2410c`) |
+| demande envoyée, en attente | ambre, sablier, **« En attente / vérifier »** |
+
+Grilles `.nom-mat-grid` / `.nom-acc-grid` (en-tête et lignes, un seul gabarit) :
+`minmax(96px,.55fr) minmax(88px,1fr) minmax(60px,.16fr) minmax(172px,.42fr) 72px 24px` — **532 px** de minimums pour un cadre
+de 548 px à 1280 px. **Mesuré** (Playwright, 1280 / 1366 / 1600 / 1920 px) : bouton **72 × 28 px**, libellé entièrement
+visible, dans son cadre, `elementFromPoint` au centre = le bouton, **aucun défilement horizontal**, écart en-tête ↔ ligne
+**0 px**, hauteur de ligne 30,7 px, Désignation 104 px à 1280, badge « n fourn. · min–max » non tronqué, clic → fenêtre
+de demande de prix (`#be-rfq-overlay`). Le bouton « Créer une demande de prix » de la barre de la liste est inchangé.
+
+### Journal EN 9100 pleine largeur (A7)
+
+`#nom-journal-card` est sorti de la colonne de droite et placé **après la grille à deux colonnes**, dans `#nom-form-view` :
+largeur = celle du formulaire (ratio mesuré **1,0** à toutes les largeurs, contre 0,60 avant). Identifiants et fonctions
+inchangés (`nomJournalLoad`, `#nom-journal-list`, `#nom-journal-portee`). Une modification par ligne (champ à gauche,
+« avant → après » à droite), étiquette **« recalcul »** sur les valeurs recalculées, valeurs coupées à 180 caractères.
+
+### Composants d'une mère : l'ordre est l'ordre de fabrication (A1)
+
+**Format** (`nomenclatures.composants`, jsonb) — l'**ordre du tableau** est l'ordre de fabrication :
+
+```json
+[ { "nom_id": "…", "code": "PIECE-F1", "num_nom": "PIECE-F1", "qte": 1, "rang": 1, "type_nom": "standard", "indice": "A", "prix": 12.3 },
+  { "nom_id": "…", "code": "SE-02",    "num_nom": "SE-02",    "qte": 2, "rang": 2, "type_nom": "mere",     "indice": "B", "prix": 40 } ]
+```
+
+- `rang`, `type_nom`, `indice` sont **nouveaux** (aucune DDL) ; les anciennes lignes `{nom_id, num_nom, code, prix, qte}`
+  restent lisibles. `prix` est une **copie informative** (coût au moment du choix).
+- **Lecture** : `composantsOrdonnes(v)` (`src/nomenclature_arbre.ts`, via `composantsDe`) — ordre = `rang` si **tous** les
+  éléments ont un rang entier ≥ 1 distinct, sinon ordre du tableau ; rangs réécrits 1..n ; un élément qui n'a qu'un
+  `num_nom` est gardé (sinon un ré-enregistrement le perdrait). `GET /api/nomenclature/:id` rend les composants **dans cet
+  ordre**.
+- **Écriture** : le serveur stocke `normaliserComposants(...)` (POST, PUT, nouvel indice) — `qte` > 0 (« 0,5 » accepté,
+  invalide ⇒ 1), `rang` 1..n, `type_nom` ∈ `standard|mere`, clés `_…` retirées. Le garde-fou `composants_vides` (H0)
+  s'applique à la liste **normalisée**.
+
+**Écran** (`src/be.tsx`) — bloc **« Composants — ordre de fabrication (du haut vers le bas) »**, **en tête de la colonne de
+droite** (il était dans la carte Identification, colonne gauche de 370 px : la croix débordait) ; `nomSetType` le montre
+pour une mère et masque les fournitures. Aide : « Le 1ᵉʳ composant est fabriqué en premier. Chaque composant devient un
+sous-lot du lot de la mère ; une mère peut contenir des mères (5 niveaux au plus, mère comprise). »
+
+| Élément d'une ligne | Rôle |
+|---|---|
+| poignée ⠿ · pastille de **rang** · ▲ ▼ | réordonner : ▲ ▼ (grisés aux extrémités, `aria-label` « Monter » / « Descendre »), flèches ↑ ↓ au clavier sur la poignée, **glisser-déposer** par la poignée ; la nouvelle position est annoncée aux lecteurs d'écran (`#nom-cmp-annonce`) |
+| recherche (popover maison) | deux groupes **« Nomenclatures filles (standards) »** et **« Nomenclatures mères »** ; dernière révision **validée** de chaque produit (`NOM_COMPOSABLES`, remplace `NOM_STANDARDS`) ; n°, code, description, casse et accents ignorés |
+| Qté / mère · total · × | quantité par unité de la mère (vide ou ≤ 0 ⇒ **1**, à l'écran comme à l'enregistrement, champ encadré rouge « 1 sera enregistré ») |
+| sous la ligne | badge standard / mère, **n° de sous-lot** (`.01`, `.02`…), prix unitaire ; pour une sous-mère, bouton « n composants — arborescence » qui déplie son propre arbre |
+
+- **Exclusions** (confort, le serveur reste juge) : la fiche elle-même et **toute mère qui la contient** ne sont jamais
+  proposées — `var NOM_ANCETRES = ${sjX(carteAncetres(NOMS))}`, calculé au **rendu serveur** (le module n'est jamais
+  injecté dans le navigateur) ; un composant qui ferait dépasser 5 niveaux est listé mais **grisé « trop profond »**. Un
+  composant enregistré qui n'est plus proposable reste affiché « (indisponible) » pour ne pas le perdre.
+- **Résumé sous la liste** : « Fabrication : 1. … → 2. … → assemblage de la mère », « N sous-lots à la mise en production, sur
+  K niveaux (mère comprise ; 5 au plus) », et les mères qui contiennent déjà la fiche ; **alerte rouge avant l'enregistrement**
+  si l'arbre dépasserait 5 niveaux.
+- **Refus du serveur** (`nomSave`, 409 `cycle_composants` / `profondeur_max`) : message du serveur **avec le chemin**,
+  12 s, ligne fautive encadrée en rouge (`nomComposantsErreur`), **formulaire laissé ouvert**.
+- **Envoi** (`nomComposantsPourEnvoi`) : `{ nom_id, code, num_nom, qte, rang: i+1, type_nom, indice, prix }` **dans l'ordre
+  affiché**. Correctifs : une ancienne ligne avec un code mais sans `nom_id` n'est plus perdue ; la saisie d'une quantité ne
+  re-rend plus toute la liste à chaque frappe (le focus était perdu).
+- **Liste des mères** : colonne « n composants dont m mère(s) ».
+- ⚠ Limite connue : après l'enregistrement d'une mère, rouvrir **une autre** mère dans la même page sans recharger utilise
+  une liste d'exclusions légèrement périmée — le serveur refuse alors avec un message clair.
+
+**Coût d'une mère** : **inchangé** — somme de `prix × qte` des composants (le prix d'une sous-mère est déjà la somme des
+siens) ; les étapes propres de la mère (assemblage) ne sont pas ajoutées. Le **chiffrage récursif** est un point ouvert
+(voir « Reste à faire » du CHANGELOG) ; l'analyse DT le signale (plus bas).
+
+### Contrôles serveur avant toute écriture — cycle et profondeur (A2)
+
+`refusComposants(c, fiche)` (`src/index.tsx`) appelle `controlerComposants(fiche, toutes)` (`src/nomenclature_arbre.ts`)
+**avant** toute écriture, sur `POST /api/nomenclature` (création **et** écrasement d'un brouillon), `PUT /api/nomenclature/:id`
+(mère résultante — `{...avant, ...corps}` — dont les composants, le type ou l'identité changent) et
+`POST /api/nomenclature/:id/nouvel-indice`. `toutes` = nomenclatures lues **strictement** ; la fiche en cours remplace sa
+version en base.
+
+| Refus | HTTP | Réponse | Message (exact) |
+|---|---|---|---|
+| `cycle_composants` | 409 | `{ ok:false, code, chemin, error }` | « Enregistrement refusé : une nomenclature mère ne peut pas se contenir elle-même. Chemin : A › B › A. Retirez « B » des composants. » |
+| `profondeur_max` | 409 | `{ ok:false, code, profondeur, max:5, chemin, error }` | « Enregistrement refusé : imbrication trop profonde (6 niveaux, 5 au plus). Chemin le plus long : A › B › C › D › E › F. » |
+| `lecture_impossible` | 503 | `{ ok:false, code, error }` | nomenclatures illisibles : on n'enregistre pas sans contrôle |
+
+- **Identité** d'une nomenclature = `cleNomenclature` = `lower(trim(code_ref_produit || num_nom))` (même clé que
+  `_nomByCode`) : un cycle se juge sur le **produit**, pas sur une révision.
+- **Deux révisions suivies** pour chaque composant : sa révision d'**édition** (`nom_id` s'il existe, sinon dernière
+  révision du code, tout statut), sa révision de **production** (dernière validée du code) — et, correctif de relecture, la
+  **dernière révision en cours**. Un cycle que seule la production rencontrerait (mère ind. A vide choisie au BE, ind. B
+  validée contenant la fiche) est refusé **dès le BE**.
+- **Profondeur** = niveaux au-dessus de la fiche (`hauteurAncetres`, mères qui la contiennent) + hauteur de son sous-arbre,
+  racine = 1 ; > 5 ⇒ 409.
+- Composant introuvable (ni `nom_id` ni code en base) : **pas** de refus (le BE ne propose que des fiches existantes).
+- Standard (`type_nom` ≠ mère) : aucun contrôle ; s'il **devient** mère, le contrôle s'applique.
+
+**Suppression d'une fiche encore composant** (`DELETE /api/nomenclature/:id`) : **409 `composant_utilise`**
+`{ meres: [n°…] }`, **avant** tout motif et toute entrée de journal — « Suppression refusée : « X » est un composant de la
+nomenclature mère : M1. Retirez-le d'abord de leurs composants. ». Une fiche est bloquée si une mère la désigne par sa
+révision (`nom_id`) ; par son **code**, seulement si c'est la **dernière révision validée** de ce code (une autre révision
+validée reste utilisable par la production). Les mères examinées : dernière révision de chaque groupe et dernière validée
+de chaque code (`revisionsRetenues`). L'écran affiche ce refus avec son propre message.
+
+### Journal EN 9100 des composants — `diffComposants` (`src/nomenclature_journal.ts`)
+
+`composants` sort de la boucle générique (`HORS_FICHE`) ; `diffNomenclature` (signature **inchangée**) ajoute
+`diffComposants(avant, apres)`. Identité d'une ligne = `cleComposant` (code, à défaut n°) + n° d'occurrence : deux fois la
+même fille s'apparient dans l'ordre, elles ne « s'échangent » jamais.
+
+| Entrée | Bloc | Quand |
+|---|---|---|
+| « Ordre de fabrication des composants » (`A, B, C` → `B, A, C`) | fiche | **une seule**, quand l'ordre **relatif** des lignes conservées change (un ajout en tête n'en crée pas) |
+| « Composant ajouté « X » » / « Composant retiré « X » » | fiche | valeur lisible « X × q (ind. I) [mère] », définition complète dans `detail` |
+| « Composant « X » — quantité » | fiche | quantité changée |
+| « Composant « X » — révision » | fiche | `nom_id` changé : « X — ind. A » → « X — ind. B » (n° et indice, jamais l'id interne, gardé dans `detail` ; « indice non renseigné » au lieu de « ? ») |
+| « Composant « X » · prix » (et `indice`, `type_nom`, `code` / `num_nom` hors identité à `nom_id` égal) | recalcul | copies tirées de la fille |
+| « Composants · indice et type complétés automatiquement (pas une saisie) » | recalcul | **une seule** entrée pour toute la liste, au 1ᵉʳ enregistrement d'une mère d'avant H2 (lignes sans `indice` / `type_nom`) |
+
+`rang` n'est **jamais** comparé ligne à ligne (il découle de l'ordre). Libellés **définitifs** (journal en ajout seul) :
+« mère » et non « mere ».
+
+### Analyse DT d'une pièce mère (signalement, aucun changement de calcul)
+
+`GET /api/be/analyse-dt/:id` ajoute à une pièce mère `mere: { sous_ensembles: [{ chemin, piece, qte, niveau, statut }],
+cout_non_inclus: true, avertissements }` (même développement que la cascade : `developperArbre` + `resolveurProduction`) ;
+`/be/analyse` affiche un bandeau orange : « Pièce mère : le coût affiché ne compte que les étapes propres de la mère ; ses
+N sous-ensembles seront fabriqués en sous-lots et ne sont PAS chiffrés ici. » ⚠ Conséquence : une offre sur une pièce mère
+reste **sous-évaluée** tant que le chiffrage récursif n'est pas arbitré.
+
+### Module pur `src/nomenclature_arbre.ts`
+
+Aucune dépendance à Hono ni à Supabase ; seuls imports : `composantsDe`, `estAnnule` (`./shared`). Utilisé par le serveur
+(`index.tsx`, `queries.ts`) et au **rendu serveur** de `be.tsx` / `prod.tsx` — **jamais injecté dans le navigateur** (à la
+différence de `src/prix_moyen.ts`) : les deux miroirs client (tri des composants par rang, clé de tri de la goulotte) font
+trois lignes et sont commentés sur place. `src/shared.ts` ne le réexporte **pas** (import circulaire) : importer depuis
+`./nomenclature_arbre`. Familles d'exports : composants (`cleNomenclature`, `cleComposant`, `composantsOrdonnes`,
+`normaliserComposants`, `deplacerComposant`), contrôles (`resolveurEdition`, `resolveurProduction`, `dernieresRevisions`,
+`revisionsRetenues`, `ancetresDe`, `hauteurAncetres`, `carteAncetres`, `controlerComposants`), production (voir
+[production.md](production.md#lot-h2--sous-lots-des-pièces-mères-18092026)). Tests : `node scripts_doc/test_nomenclature_arbre.mjs`
+(**147 PASS**, dont la section 6 = journal des composants).
+
+### Vérifications (BE)
+
+`npx tsc --noEmit` 0 erreur · `test_nomenclature_arbre` 147 PASS · `test_prix_moyen` 220 PASS · harnais toutes pages 60 PASS /
+0 FAIL / 1 SKIP · Playwright sur le Docker local : éditeur de mère 31/31 puis 77 (réordonnancement de M1, enregistrement,
+réouverture dans une page neuve = même ordre, rangs 1, 2, 3 en base, refus 409 cycle et profondeur **sans rien modifier en
+base**), bouton « Demande de prix » et journal aux 4 largeurs · données `-TEST-H2-` supprimées et relues (0), journal
+EN 9100 resté à 0 entrée (nomenclatures de test insérées en SQL, jamais par l'API).
+
+**Captures de la doc** (18/09/2026, stack Docker locale — la seule base qui a `cloud-14` — avec un jeu `-TEST-DOCH2-`
+supprimé et relu ensuite — nombre de lignes de chaque table identique avant / après) : `form-be-nomenclature` (bouton
+« Demande de prix » libellé ; `136290` y a sa quantité par paquet, 017 étant jouée sur le Docker), nouvelle
+`form-be-nomenclature-mere` (composants ordonnés, sous-mère dépliée, résumé de fabrication ; posés dans le navigateur, rien
+n'est enregistré), `be-noms`, nouvelle `be-noms-meres` (« 2 composants dont 1 mère »). Pas de capture du journal pleine
+largeur : le journal du Docker est vide (et reste vide : aucune entrée de test n'y est écrite).
 
 ---
 > Fiche générée. Manuel utilisateur correspondant : `docs/manuel/be.md`. Voir aussi `04-auth-rbac.md`, `07-api-reference.md`.

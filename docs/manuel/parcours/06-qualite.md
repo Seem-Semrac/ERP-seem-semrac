@@ -77,6 +77,8 @@ Il n'y a pas de formulaire à remplir : c'est une décision par bouton, avec con
 
 **➡️ Ensuite :** un lot **libéré** lève la porte qualité et redevient expédiable (le **BL** peut être émis en Expédition). Un lot **rejeté** reste bloqué et suit le circuit rebut/retouche.
 
+> **Pièce mère** (depuis le 18/09/2026) — son lot porte des **sous-lots** (un par composant, `LOT-…-01.01`, `LOT-…-01.02`…). On ne libère que le **lot de la mère**, et seulement quand **tout son arbre** est terminé : un sous-lot n'apparaît pas dans « Libération Lots » et ne se libère pas seul. Un sous-lot peut en revanche être mis en **quarantaine** (l'expédition de l'affaire est alors bloquée).
+
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/qualite.md).
 
 ## Étape 5 — Demander une dérogation

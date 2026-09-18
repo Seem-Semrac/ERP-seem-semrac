@@ -56,6 +56,8 @@ Porte d'entrée et de sortie des marchandises, organisée par **sens du flux** :
 
 > **Porte qualité** — le BL est **refusé** si le lot porte une NC ouverte ou est en quarantaine. Faire lever le blocage par la Qualité.
 
+> **Pièce mère** (depuis le 18/09/2026) — son lot porte des **sous-lots** (`LOT-…-01.01`, `LOT-…-01.02`…) : ce sont des sous-ensembles internes, ils ne s'expédient **pas** seuls et n'apparaissent pas dans le choix des lots du BL. On livre le **lot de la mère** (`LOT-…-01`), une fois libéré. Une quarantaine sur un sous-lot bloque bien l'expédition de l'affaire. Un BL qui viserait un sous-lot est refusé : « *Un sous-lot s'expédie avec son lot racine (LOT-…).* »
+
 ### Expédier un retour fournisseur
 1. Onglet **Envois**, carte **« Retours fournisseurs »** : y figurent les lots que la Qualité a décidé de **renvoyer** et les **excédents de réception refusés par la Direction** — BL / lot, fournisseur, pièce, **quantité à renvoyer**, avoir ou remplacement attendu, date de décision.
 2. Préparer le colis, puis cliquer **« Expédié »**.

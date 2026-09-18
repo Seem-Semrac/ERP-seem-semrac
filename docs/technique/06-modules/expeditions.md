@@ -5,6 +5,24 @@
 - **Accès (RBAC)** : écriture — expéditions, stock (logistique) · lecture — commercial, achats, production
 <!-- /auto -->
 
+## Lot H2 — sous-lots des pièces mères : on expédie le lot racine (18/09/2026)
+
+Depuis le lot H2, le lot d'une pièce mère porte des **sous-lots** (`LOT-…-01.02`, `LOT-…-01.02.01` : un par composant de la
+nomenclature mère, voir [production.md](production.md#lot-h2--sous-lots-des-pièces-mères-18092026)). Un sous-lot est un
+**sous-ensemble interne** (arbitrage A8) : il n'est **ni libéré seul, ni expédié**.
+
+- **Écran** (`src/expeditions.tsx`) : la porte « lots à libérer » (`qualiteBloque`), la liste `LOTS_EXP` et le choix des lots
+  d'un BL (`blLoadLots`) ne prennent que les lots **racines** (`!parentDuLot(l)`). Les **quarantaines** comptent toujours les
+  sous-lots (`indexOf(aff)`) : une quarantaine sur un sous-ensemble bloque bien l'affaire — c'est voulu.
+- **Serveur** : `POST /api/expeditions/bl-partiel` répond **409 `sous_lot_non_expediable`** `{ lot_id, lot_racine, error }` —
+  « Un sous-lot s'expédie avec son lot racine (LOT-…). » — si une ligne désigne un sous-lot.
+- **Correctif de facturation** : le prorata d'un BL partiel (part de la commande facturée) ne compte que les lots **racines** ;
+  son dénominateur additionnait les quantités de **tout l'arbre** (essai : 5 mères + 30 pièces de sous-lots = 35, un BL des
+  5 mères facturait 5/35 de la commande ; désormais 1 000 € sur 1 000 €). Aucune autre somme de lots par commande n'avait le
+  défaut.
+- La production d'une racine est « finie » quand **tout son arbre** l'est (Qualité › Libération, voir
+  [qualite.md](qualite.md)).
+
 ## Lot F — PV quantitatif / qualitatif, reliquat, Mise en stock (15/09/2026)
 
 > « Dans le PV de contrôle de réception d'expédition je veux pouvoir avoir à côté de la case observations la quantité

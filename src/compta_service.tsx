@@ -1284,7 +1284,11 @@ export function pageServiceCompta(
       fetch('/api/factures/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({statut:'payee'})})
         .then(function(r){return r.json();}).then(function(j){
           if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Mise à jour échouée.'); return; }
-          pushNotif('ok','fa-check-circle','Facture <strong>'+id+'</strong> marquée payée.',4000); setTimeout(function(){ softReload(); },700);
+          pushNotif('ok','fa-check-circle','Facture <strong>'+id+'</strong> marquée payée.',4000);
+          // Proforma (lot H2) : ce que l'encaissement n'a pas pu lancer (prépa technique, demandes d'achat) est dit, et reste affiché.
+          var avP=(j.proforma_debloque&&Array.isArray(j.proforma_debloque.avertissements))?j.proforma_debloque.avertissements:[];
+          avP.forEach(function(m){ var t=String(m).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); if(typeof notifDurable==='function') notifDurable('warn','fa-triangle-exclamation',t); else pushNotif('warn','fa-triangle-exclamation',t,45000); });
+          setTimeout(function(){ softReload(); },700);
         }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
     }
     // ── Export PDF auto-rempli d'une facture (impression navigateur) ──

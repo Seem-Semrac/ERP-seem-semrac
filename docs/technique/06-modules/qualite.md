@@ -194,5 +194,24 @@ Le formulaire vit en Production (bouton rouge « PV de non-conformité » du ban
 - `ncEstClose` (`src/queries.ts`) reconnaît **« Soldé »**, statut de clôture de `NC_STATUTS_LISTE` : une NC soldée ne
   bloque plus l'expédition et ne remonte plus dans le cockpit Direction (qui utilise désormais ce même prédicat).
 
+## Libération d'une pièce mère : le lot racine, quand tout l'arbre est fini (lot H2, 18/09/2026)
+
+Le lot d'une pièce mère porte des **sous-lots** (un par composant de la nomenclature mère, récursivement — voir
+[production.md](production.md#lot-h2--sous-lots-des-pièces-mères-18092026)). Un sous-lot est **interne** (arbitrage A8) : pas
+de PV ni de libération propres.
+
+- **Liste « à libérer »** (données de `/qualite/service`, `src/index.tsx`) : seulement les lots **racines** dont **tout
+  l'arbre** est fini (`lotFini` : toutes les opérations du lot et de ses sous-lots, BDT soldés et BDS revenus) et qui ont au
+  moins une opération dans l'arbre ; un sous-lot n'y figure jamais. Correctif au passage : les bons étaient indexés par
+  `lot_id` **seul**, or les BDT de la cascade n'ont que `lot_ref` — `prod_finie` était toujours faux pour eux ; ils sont
+  désormais rattachés par `lot_id` **ou** `lot_ref`.
+- **`POST /api/qualite/lot/:id/liberer`** (décision « libéré ») : **409 `sous_lot_non_liberable`** `{ lot_racine }` sur un
+  sous-lot (« Un sous-lot se libère avec son lot racine … ») ; **409 `arbre_non_termine`** `{ sous_lots }` sur une racine dont
+  un sous-lot n'est pas fini (« Libération refusée : n sous-lot(s) de cette pièce mère … pas terminé(s) (…) ») ; **503** si
+  la lecture de l'arbre échoue — **aucun PV n'est écrit**. Seuls les sous-lots sont vérifiés, pas les étapes propres du lot
+  (comme avant H2). La **mise en quarantaine** d'un sous-lot reste possible.
+- Les **quarantaines** et NC d'un sous-lot comptent pour l'affaire (porte qualité des BL), comme toute quarantaine.
+- Points ouverts : si l'EN 9100 exige un PV propre à certains sous-ensembles, ce sera un lot ultérieur.
+
 ---
 > Fiche générée. Manuel utilisateur correspondant : `docs/manuel/qualite.md`. Voir aussi `04-auth-rbac.md`, `07-api-reference.md`.

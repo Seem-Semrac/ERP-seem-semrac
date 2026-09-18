@@ -49,6 +49,20 @@ const M = [
       + "if(aa){nomAddAccessoire();var ia=nomAccessoires.length-1;nomFourSetRefDes(0,ia,aa.reference,aa.designation);nomFourSetQte(0,ia,4);}"
       + "nomRenderMatieres();nomRenderAccessoires();"
       + "nomRenderEtapes();if(typeof nomCalcTotaux==='function') nomCalcTotaux();})()" },
+  // Lot H2 (18/09/2026) : nouvelle nomenclature MÈRE posée DANS LE NAVIGATEUR (rien n'est enregistré, aucun verrou pris) :
+  //   3 composants pris dans NOM_COMPOSABLES (dernières révisions validées) — un standard, une MÈRE (dépliée : son
+  //   arborescence) puis un standard —, pour montrer l'ordre de fabrication (rang, ▲ ▼, n° de sous-lot) et le résumé
+  //   « Fabrication : 1. … → assemblage de la mère ». Préfère le jeu de la doc (-TEST-DOCH2-…) s'il est présent.
+  { file: 'form-be-nomenclature-mere', path: '/be/service', inline: true, wait: 1200,
+    fn: "(function(){nomNewMere();var S=(typeof NOM_COMPOSABLES!=='undefined'?NOM_COMPOSABLES:[]);"
+      + "var doc=S.filter(function(s){return /DOCH2/.test(String(s.num_nom||''));});var L=doc.length?doc:S;"
+      + "var trouve=function(re,t){return L.filter(function(s){return s.type_nom===t&&re.test(String(s.num_nom||''));})[0];};"
+      + "var st=L.filter(function(s){return s.type_nom==='standard';}),me=L.filter(function(s){return s.type_nom==='mere';});"
+      + "var a=trouve(/CAPOT/,'standard')||st[0],m=trouve(/CHASSIS/,'mere')||me[0],b=trouve(/PLATINE/,'standard')||st[1]||st[0];"
+      + "var n=document.getElementById('nom-f-num');if(n) n.value='EXEMPLE-ENSEMBLE';var d=document.getElementById('nom-f-desc');if(d) d.value='Ensemble soudé (exemple de la documentation, non enregistré)';"
+      + "nomComposants.length=0;[[a,1],[m,1],[b,4]].forEach(function(x){var s=x[0];if(!s) return;nomComposants.push({nom_id:String(s.id),num_nom:s.num_nom||'',code:s.code_ref_produit||'',prix:Number(s.prix_revient_unitaire)||0,qte:x[1],type_nom:s.type_nom,indice:s.indice||'A',_ouvert:s.type_nom==='mere'});});"
+      + "nomComposantsModifies=true;nomRenderComposants();if(typeof nomCalcTotaux==='function') nomCalcTotaux();"
+      + "var blk=document.getElementById('nom-f-mere-block');if(blk&&blk.scrollIntoView) blk.scrollIntoView({block:'start'});window.scrollBy(0,-90);})()" },
   // Achats
   //   BC direct : case « Certificat matière requis » cochée DANS LE NAVIGATEUR (lot D, 14/09/2026) — rien n'est envoyé.
   { file: 'form-achats-bc',            path: '/achats/service', fn: "(function(){achNewBC();var c=document.getElementById('bcw_certificat');if(c) c.checked=true;})()" },

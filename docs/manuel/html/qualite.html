@@ -317,6 +317,7 @@
     <ul class="points">
       <li>Tant qu'un seul lot d'une commande n'est pas libéré, l'expédition de la commande reste bloquée côté Expéditions.</li>
       <li>La colonne « Production » confirme le prérequis : le nombre de BDT soldés du lot.</li>
+      <li><b>Pièce mère</b> (depuis le 18/09/2026) : son lot porte des <b>sous-lots</b> (<code>LOT-…-01.01</code>, <code>LOT-…-01.02</code>…, un par composant, et des sous-sous-lots pour une sous-mère). Ce sont des sous-ensembles <b>internes</b> : ils n'apparaissent pas ici et ne se libèrent pas seuls (« <i>Un sous-lot se libère avec son lot racine…</i> »). Seul le <b>lot de la mère</b> apparaît, et seulement quand <b>tout son arbre</b> est terminé (étapes des sous-lots soldées, sous-traitances revenues) ; une mère dont un sous-lot n'est pas fini est refusée (« <i>Libération refusée : n sous-lot(s) de cette pièce mère … pas terminé(s)</i> »). Un sous-lot peut en revanche être <b>mis en quarantaine</b> : cela bloque l'expédition de l'affaire.</li>
     </ul>
     <div class="warn"><b>Attention :</b> « Bloquer (quarantaine) » sort le lot du flux d'expédition ; sa remise en circulation exige ensuite une décision explicite dans l'onglet Quarantaine.</div>
   </section>

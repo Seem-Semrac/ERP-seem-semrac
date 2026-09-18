@@ -4,6 +4,8 @@
 // ══════════════════════════════════════════════════════════════
 import { escX, layout, pageHeader, serviceHeader, bulkToolbar, bulkSelectAssets, PRIX_VALIDITE_JOURS, composantsDe, prixMoyenClientJs, qtePaquetDe } from './shared'
 import type { DemandeTravaux, Commande, Nomenclature, Offre } from './types'
+// Lot H2 : arbre des mères (module pur). Utilisé au RENDU serveur seulement (jamais ré-émis au navigateur).
+import { carteAncetres, cleNomenclature, composantsOrdonnes, PROFONDEUR_MAX_NOMENCLATURE } from './nomenclature_arbre'
 
 const sjX = (v: any) => JSON.stringify(v).replace(/</g, '\\u003c')
 
@@ -319,6 +321,30 @@ export const pageServiceBE = (
   }
   // Lecture tolérante (lot H0) : `composants` arrive en tableau (jsonb) OU en chaîne JSON (colonne TEXT du schéma Docker)
   const composantsCount = (n:any) => composantsDe(n?.composants).length
+  // ── Lot H2 : composants d'une mère = standards ET mères, dans l'ordre de fabrication ──────────────
+  // Type d'un composant : sa copie (type_nom, écrite depuis H2) ; à défaut celui de la révision nom_id.
+  const NOM_TYPE_PAR_ID: Record<string, string> = {}
+  for (const n of NOMS as any[]) if (n && n.id != null) NOM_TYPE_PAR_ID[String(n.id)] = n.type_nom === 'mere' ? 'mere' : 'standard'
+  const composantsMeresCount = (n:any) => composantsOrdonnes(n?.composants)
+    .filter((c:any) => (c.type_nom || NOM_TYPE_PAR_ID[String(c.nom_id)]) === 'mere').length
+  const composantsLib = (n:any) => {
+    const t = composantsOrdonnes(n?.composants).length, m = composantsMeresCount(n)
+    return `${t} composant${t !== 1 ? 's' : ''}${m ? ` dont ${m} mère${m !== 1 ? 's' : ''}` : ''}`
+  }
+  // Proposables comme composant : la dernière révision VALIDÉE de chaque produit (version_groupe),
+  // standards ET mères. Un nouvel indice resté « en cours » (lot H0) ne fait donc pas disparaître le
+  // produit du sélecteur, et c'est la révision que la production retiendra (règle A5 du lot H2).
+  const derniereValidee = (g: any[]) => { for (let i = g.length - 1; i >= 0; i--) if (g[i] && g[i].statut === 'valide') return g[i]; return null }
+  const NOM_COMPOSABLES = Object.values(VERSIONS_MAP).map(derniereValidee).filter(Boolean).map((n: any) => ({
+    id: n.id, num_nom: n.num_nom || '', code_ref_produit: n.code_ref_produit || '', description: n.description || '',
+    prix_revient_unitaire: Number(n.prix_revient_unitaire) || 0, type_nom: n.type_nom === 'mere' ? 'mere' : 'standard',
+    indice: n.indice || 'A', version_groupe: n.version_groupe || n.id, cle: cleNomenclature(n), entite: n.entite === 'Semrac' ? 'Semrac' : 'Seem',
+    nb_composants: n.type_nom === 'mere' ? composantsCount(n) : 0,
+  })).sort((a: any, b: any) => String(a.num_nom).localeCompare(String(b.num_nom), 'fr'))
+  // { identité (code en minuscules) → mères qui la contiennent, transitivement } : le navigateur retire du
+  // sélecteur la fiche elle-même et ses ancêtres (sinon cycle, refusé en 409 par le serveur).
+  let NOM_ANCETRES: Record<string, string[]> = {}
+  try { NOM_ANCETRES = carteAncetres(NOMS as any[]) } catch { NOM_ANCETRES = {} }
   // Entité Seem / Semrac
   const nomEntite = (n:any) => (n.entite === 'Semrac' ? 'Semrac' : 'Seem')
   const entiteBadge = (n:any) => nomEntite(n) === 'Semrac'
@@ -586,7 +612,7 @@ export const pageServiceBE = (
       <div id="nom-subtab-meres" style="display:none;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
           <div style="font-size:1rem;font-weight:800;color:#111827;display:flex;align-items:center;gap:8px;">
-            <i class="fas fa-sitemap" style="color:#b45309;"></i>Nomenclatures mères <span style="font-size:.72rem;font-weight:600;color:#94a3b8;">— assemblage de standards</span>
+            <i class="fas fa-sitemap" style="color:#b45309;"></i>Nomenclatures mères <span style="font-size:.72rem;font-weight:600;color:#94a3b8;">— assemblages ordonnés (standards et mères)</span>
             <span style="background:#fef3c7;color:#b45309;border-radius:999px;padding:1px 10px;font-size:.72rem;font-weight:800;">${NOMS_MERES.length}</span>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -602,7 +628,7 @@ export const pageServiceBE = (
         </div>
         <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;">
           ${NOMS_MERES.length === 0
-            ? `<div style="padding:40px;text-align:center;color:#9ca3af;"><i class="fas fa-sitemap" style="font-size:1.8rem;margin-bottom:10px;display:block;color:#cbd5e1;"></i><div style="font-weight:600;margin-bottom:4px;">Aucune nomenclature mère</div><div style="font-size:.78rem;">Cliquez « + Nouvelle mère » puis assemblez des nomenclatures standard.</div></div>`
+            ? `<div style="padding:40px;text-align:center;color:#9ca3af;"><i class="fas fa-sitemap" style="font-size:1.8rem;margin-bottom:10px;display:block;color:#cbd5e1;"></i><div style="font-weight:600;margin-bottom:4px;">Aucune nomenclature mère</div><div style="font-size:.78rem;">Cliquez « + Nouvelle mère » puis assemblez des nomenclatures filles (standards ou mères) dans l'ordre de fabrication.</div></div>`
             : `
           <div style="overflow-x:auto;">
             <table style="width:100%;border-collapse:collapse;font-size:.8rem;" id="nom-meres-tbl">
@@ -629,7 +655,7 @@ export const pageServiceBE = (
                   <td style="${TD}text-align:center;">${entiteBadge(n)}</td>
                   <td style="${TD}"><span style="font-weight:700;color:#111827;">${escX(n.code_ref_produit ?? '—')}</span></td>
                   <td style="${TD}color:#6b7280;font-size:.78rem;max-width:180px;">${escX(n.description ?? '—')}</td>
-                  <td style="${TD}text-align:center;font-weight:700;color:#b45309;">${composantsCount(n)} standard${composantsCount(n)!==1?'s':''}</td>
+                  <td style="${TD}text-align:center;font-weight:700;color:#b45309;" title="Composants dans l'ordre de fabrication (du haut vers le bas) : standards et mères">${composantsLib(n)}</td>
                   <td style="${TD}text-align:center;">${nomStatutBadge(n.statut)}</td>
                   <td style="${TD}text-align:center;font-weight:700;color:#111827;">${n.prix_revient_unitaire ? n.prix_revient_unitaire.toFixed(2) + ' €' : '—'}</td>
                   <td style="${TD}text-align:center;">
@@ -651,7 +677,7 @@ export const pageServiceBE = (
         </div>
         <div style="margin-top:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px 16px;font-size:.76rem;color:#92400e;">
           <i class="fas fa-info-circle" style="margin-right:6px;"></i>
-          Une <strong>nomenclature mère</strong> est un <strong>assemblage de nomenclatures standard</strong> (chacune avec sa quantité). Son prix de revient est la somme des standards qui la composent.
+          Une <strong>nomenclature mère</strong> est un <strong>assemblage de nomenclatures filles</strong> — standards ou mères, ${PROFONDEUR_MAX_NOMENCLATURE} niveaux au plus — chacune avec sa quantité. <strong>L'ordre des composants est l'ordre de fabrication</strong> (du haut vers le bas) : en production, chaque composant devient un <strong>sous-lot</strong> du lot de la mère (une mère dans la mère donne des sous-sous-lots), puis la mère est assemblée. Son prix de revient est la somme des composants.
         </div>
       </div>
     </div>
@@ -718,14 +744,6 @@ export const pageServiceBE = (
                   <button type="button" id="nom-type-btn-standard" onclick="nomSetType('standard')" style="border:none;cursor:pointer;border-radius:7px;padding:7px 16px;font-size:.78rem;font-weight:700;background:#fff;color:#6d28d9;box-shadow:0 1px 3px rgba(0,0,0,.12);transition:all .12s;"><i class="fas fa-file" style="margin-right:5px;"></i>Standard (1 pièce)</button>
                   <button type="button" id="nom-type-btn-mere" onclick="nomSetType('mere')" style="border:none;cursor:pointer;border-radius:7px;padding:7px 16px;font-size:.78rem;font-weight:700;background:transparent;color:#64748b;box-shadow:none;transition:all .12s;"><i class="fas fa-sitemap" style="margin-right:5px;"></i>Mère (assemblage)</button>
                 </div>
-              </div>
-              <div id="nom-f-mere-block" style="grid-column:1/-1;display:none;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px;">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-                  <div style="font-size:.72rem;font-weight:800;color:#b45309;text-transform:uppercase;letter-spacing:.04em;"><i class="fas fa-sitemap" style="margin-right:5px;"></i>Composants — nomenclatures standard</div>
-                  <button type="button" onclick="nomAddComposant()" style="padding:5px 12px;background:#f59e0b;color:#fff;border:none;border-radius:7px;font-size:.72rem;font-weight:700;cursor:pointer;"><i class="fas fa-plus" style="margin-right:4px;"></i>Ajouter un standard</button>
-                </div>
-                <div id="nom-f-composants-list"></div>
-                <div style="margin-top:8px;text-align:right;font-size:.74rem;color:#92400e;font-weight:700;">Total composants : <span id="nom-composants-total">0.00 €</span></div>
               </div>
               <div style="grid-column:1/-1;">
                 <label style="display:block;font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:.3rem;">Code produit <span style="font-weight:500;text-transform:none;color:#94a3b8;">(optionnel · = N° par défaut)</span></label>
@@ -811,6 +829,37 @@ export const pageServiceBE = (
         <!-- COL DROITE : FOURNITURES + TEMPS + CALCULS -->
         <div style="display:flex;flex-direction:column;gap:16px;">
 
+          <!-- ═══ COMPOSANTS D'UNE MÈRE — ordre de fabrication (lot H2, 18/09/2026) ═══════════════════
+               « l'ordre de fabrication sera toujours considéré du haut vers le bas » : le 1er composant
+               est fabriqué en premier ; chacun devient un sous-lot du lot de la mère (.01, .02…), une mère
+               dans la mère donne des sous-sous-lots (.02.01…). Sorti de la carte Identification (colonne
+               gauche de 370 px : la croix débordait) et placé en tête de la colonne droite. Rendu par
+               nomRenderComposants ; événements délégués (poignée, flèches, recherche, glisser-déposer). -->
+          <div id="nom-f-mere-block" style="display:none;background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);padding:20px;border-top:3px solid #f59e0b;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+              <div style="font-size:.72rem;font-weight:800;color:#b45309;text-transform:uppercase;letter-spacing:.06em;flex:1;min-width:240px;"><i class="fas fa-sitemap" style="margin-right:6px;"></i>Composants — ordre de fabrication <span style="text-transform:none;letter-spacing:0;">(du haut vers le bas)</span></div>
+              <button type="button" onclick="nomAddComposant()" style="padding:5px 12px;background:linear-gradient(135deg,#f59e0b,#b45309);color:#fff;border:none;border-radius:7px;font-size:.75rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;"><i class="fas fa-plus"></i>Ajouter un composant</button>
+            </div>
+            <div style="font-size:.68rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:7px 10px;margin-bottom:10px;line-height:1.45;">
+              <i class="fas fa-arrow-down-short-wide" style="margin-right:5px;"></i>Le 1<sup>er</sup> composant est fabriqué en premier. Chaque composant devient un <strong>sous-lot</strong> du lot de la mère ; une mère peut contenir des mères (<strong>${PROFONDEUR_MAX_NOMENCLATURE} niveaux au plus</strong>, mère comprise). Réordonnez avec <strong>▲ ▼</strong> ou en glissant la poignée <i class="fas fa-grip-vertical"></i>. La mère est assemblée après ses sous-lots, avec ses propres étapes.
+            </div>
+            <div class="nom-cmp-grid nom-cmp-head" aria-hidden="true">
+              <span></span>
+              <span title="Rang de fabrication : 1 = fabriqué en premier">Rang</span>
+              <span title="Monter / descendre dans l'ordre de fabrication">Ordre</span>
+              <span title="Nomenclature fille : standard ou mère (dernière révision validée)">Composant (nomenclature fille)</span>
+              <span style="text-align:right;" title="Quantité du composant pour UNE mère">Qté / mère</span>
+              <span style="text-align:right;" title="Prix de revient du composant × quantité">Total</span>
+              <span></span>
+            </div>
+            <div id="nom-f-composants-list" role="list" aria-label="Composants de la mère, dans l'ordre de fabrication"></div>
+            <div id="nom-cmp-annonce" class="nom-sr-only" aria-live="polite"></div>
+            <div id="nom-f-composants-resume" style="margin-top:8px;font-size:.68rem;color:#64748b;line-height:1.5;"></div>
+            <div style="margin-top:8px;display:flex;justify-content:flex-end;padding-top:8px;border-top:1.5px solid #f1f5f9;">
+              <span style="font-size:.78rem;font-weight:800;color:#374151;">Total composants / mère : <span id="nom-composants-total" style="color:#b45309;">0,00 €</span></span>
+            </div>
+          </div>
+
           <!-- ═══ FOURNITURES : 2 compartiments (Matière / Accessoires) ═══════════════════════════
                Lot H1 §10 : déplacés EN TÊTE de la colonne droite (la colonne gauche, étroite depuis
                le commit d8028d4414, faisait déborder les lignes : à 1600 px et moins la croix de
@@ -833,7 +882,7 @@ export const pageServiceBE = (
                 <span title="Désignation — la recherche fonctionne aussi ici" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Désignation</span>
                 <span title="Nombre de pièces découpées dans une tôle (dépend de l'imbrication, saisi au BE)" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Pc/tôle</span>
                 <span title="Prix estimé par pièce = prix moyen d'une tôle ÷ Pc/tôle" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Prix estimé / pièce</span>
-                <span title="Demande de prix aux Achats (possible à tout moment)"></span>
+                <span class="nom-rfq-head" title="Demande de prix aux Achats (possible à tout moment)">Demande de prix</span>
                 <span></span>
               </div>
               <div id="nom-matieres-list"></div>
@@ -856,7 +905,7 @@ export const pageServiceBE = (
                 <span title="Désignation — la recherche fonctionne aussi ici" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Désignation</span>
                 <span title="Nombre d'accessoires par pièce fabriquée" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Nb/pièce</span>
                 <span title="Prix estimé par pièce fabriquée = prix moyen d'UNE pièce d'accessoire × Nb/pièce" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Prix estimé / pièce</span>
-                <span title="Demande de prix aux Achats (possible à tout moment)"></span>
+                <span class="nom-rfq-head" title="Demande de prix aux Achats (possible à tout moment)">Demande de prix</span>
                 <span></span>
               </div>
               <div id="nom-accessoires-list"></div>
@@ -1007,19 +1056,22 @@ export const pageServiceBE = (
             <div id="nom-f-id" style="display:none;"></div>
           </div>
 
-          <!-- Journal EN 9100 : toutes les modifications d'une nomenclature validée -->
-          <div id="nom-journal-card" style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);padding:18px 20px;margin-top:14px;">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-              <div style="font-size:.72rem;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;"><i class="fas fa-clipboard-list" style="color:#8b5cf6;margin-right:6px;"></i>Journal des modifications · EN 9100</div>
-              <select id="nom-journal-portee" onchange="nomJournalLoad()" style="margin-left:auto;border:1.5px solid #e2e8f0;border-radius:7px;padding:3px 6px;font-size:.7rem;background:#f8fafc;">
-                <option value="fiche">Cette révision</option>
-                <option value="groupe">Toutes les révisions</option>
-              </select>
-            </div>
-            <div id="nom-journal-list" style="font-size:.74rem;color:#475569;"><div style="color:#94a3b8;">Aucun historique avant le premier enregistrement.</div></div>
-          </div>
-
         </div>
+      </div>
+
+      <!-- Journal EN 9100 : toutes les modifications d'une nomenclature validée.
+           Lot H2 : sorti de la colonne droite (60 % de la largeur, entrées tronquées) — il occupe toute
+           la largeur du formulaire, sous les deux colonnes. Ids et fonctions inchangés (nomJournalLoad). -->
+      <div id="nom-journal-card" style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);padding:18px 22px;margin-top:16px;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+          <div style="font-size:.72rem;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;"><i class="fas fa-clipboard-list" style="color:#8b5cf6;margin-right:6px;"></i>Journal des modifications · EN 9100</div>
+          <span style="font-size:.66rem;color:#94a3b8;">toutes les modifications d'une nomenclature validée, la plus récente en haut</span>
+          <select id="nom-journal-portee" onchange="nomJournalLoad()" aria-label="Portée du journal" style="margin-left:auto;border:1.5px solid #e2e8f0;border-radius:7px;padding:3px 6px;font-size:.7rem;background:#f8fafc;">
+            <option value="fiche">Cette révision</option>
+            <option value="groupe">Toutes les révisions</option>
+          </select>
+        </div>
+        <div id="nom-journal-list" style="font-size:.76rem;color:#475569;"><div style="color:#94a3b8;">Aucun historique avant le premier enregistrement.</div></div>
       </div>
     </div>
   </div>`
@@ -1535,6 +1587,8 @@ export const pageServiceBE = (
   <div id="nom-ref-pop" role="listbox" aria-label="Références du catalogue"></div>
   <!-- Lot H1 : détail du prix moyen d'une référence (clic sur la cellule « Prix estimé / pièce ») -->
   <div id="nom-prix-detail"></div>
+  <!-- Lot H2 : sélecteur recherchable des composants d'une mère (un seul popup pour toutes les lignes) -->
+  <div id="nom-cmp-pop" role="listbox" aria-label="Nomenclatures proposées comme composant"></div>
 
   <style>
   /* ── Compartiments Matière / Accessoires (lot H1 §10, 17/09/2026) ────────────────────────────────
@@ -1553,11 +1607,16 @@ export const pageServiceBE = (
      2 fournisseurs, si bien que le marqueur « · cond. ? » n'était JAMAIS visible. Elles ont désormais
      un minimum réaliste et grandissent avec la place (c'est la piste Désignation, en 1fr, qui
      absorbait tout : 189 px à 1280 et 441 px à 1920).
-     Somme des minimums = 104+96+64+190+26+24 + 5 gaps de 4 px = 524 px : la grille tient toujours
-     dans la carte à 1280 px, et .nom-grid-scroll reste le filet au-delà. */
+     Piste 5 (lot H2, 18/09/2026) : « le bouton de demande de prix n'a pas été remis ». Il était
+     présent mais réduit à une icône grise de 26 px, sans libellé, sous un en-tête VIDE : personne ne
+     le reconnaissait. Il redevient un vrai bouton libellé « Demande / de prix » (72 px, deux lignes),
+     sous un en-tête « Demande de prix ». Pour le loger sans défilement à 1280 px, les minimums des
+     pistes 1 à 4 cèdent un peu : 96+88+60+172+72+24 + 5 gaps de 4 px = 532 px ≤ 548 px (largeur de la
+     carte à 1280). La Désignation garde ≥ 100 px à 1280 et le badge « n fourn. · min–max » tient
+     (mesure H1 : 172 px suffisent pour 2 fournisseurs). .nom-grid-scroll reste le filet au-delà. */
   #nom-fournitures-block{display:flex;flex-direction:column;gap:16px;}
-  .nom-mat-grid{display:grid;grid-template-columns:minmax(104px,.55fr) minmax(96px,1fr) minmax(64px,.16fr) minmax(190px,.42fr) 26px 24px;gap:4px;align-items:center;}
-  .nom-acc-grid{display:grid;grid-template-columns:minmax(104px,.55fr) minmax(96px,1fr) minmax(64px,.16fr) minmax(190px,.42fr) 26px 24px;gap:4px;align-items:center;}
+  .nom-mat-grid{display:grid;grid-template-columns:minmax(96px,.55fr) minmax(88px,1fr) minmax(60px,.16fr) minmax(172px,.42fr) 72px 24px;gap:4px;align-items:center;}
+  .nom-acc-grid{display:grid;grid-template-columns:minmax(96px,.55fr) minmax(88px,1fr) minmax(60px,.16fr) minmax(172px,.42fr) 72px 24px;gap:4px;align-items:center;}
   .nom-grid-head{margin-bottom:4px;padding:0;}
   .nom-grid-head > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .nom-grid-scroll{overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;padding-bottom:2px;}
@@ -1566,7 +1625,57 @@ export const pageServiceBE = (
   .nom-prix-cell{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:0;min-width:0;padding:2px 0;cursor:pointer;}
   .nom-prix-val{max-width:100%;min-width:0;text-align:right;font-size:.78rem;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25;}
   .nom-prix-badge{max-width:100%;min-width:0;text-align:right;font-size:.58rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;}
-  .nom-rfq-ico{flex:0 0 auto;width:26px;height:24px;border-radius:6px;cursor:pointer;font-size:.66rem;padding:0;line-height:1;}
+  /* Bouton « Demande de prix » d'une ligne (lot H2) : icône + libellé sur deux lignes, jamais une icône
+     seule. Couleurs posées par nomFourRfqBtnHtml : bleu = prix récent (demande possible), orange =
+     demande conseillée (prix périmé, hors catalogue ou absent), ambre = demande envoyée, en attente. */
+  .nom-rfq-btn{flex:0 0 auto;width:72px;min-height:28px;max-height:32px;box-sizing:border-box;border-radius:7px;padding:2px 3px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;text-align:left;white-space:normal;font-family:inherit;}
+  .nom-rfq-btn i{font-size:.72rem;flex:0 0 auto;}
+  .nom-rfq-btn .nom-rfq-lib{font-size:.6rem;font-weight:800;line-height:1.05;letter-spacing:-.01em;}
+  .nom-rfq-btn:hover{filter:brightness(.96);}
+  .nom-rfq-btn:focus-visible{outline:2px solid #6366f1;outline-offset:1px;}
+  .nom-grid-head > .nom-rfq-head{white-space:normal;line-height:1.1;overflow:visible;text-align:center;font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;}
+  /* ── Composants d'une mère (lot H2) : grille commune en-tête / lignes ──────────────────────────────
+     poignée · rang · ▲▼ · composant (recherche) · qté / mère · total · croix. Minimums : 20+34+54+70+
+     84+24 + 6 gaps de 6 px = 322 px ; la recherche prend le reste (≈ 226 px à 1280). */
+  .nom-cmp-grid{display:grid;grid-template-columns:20px 34px 54px minmax(0,1fr) 70px 84px 24px;gap:6px;align-items:center;}
+  .nom-cmp-grid > *{min-width:0;}
+  .nom-cmp-head{margin:0 9px 4px;}
+  .nom-cmp-head > span{font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .nom-cmp-row{background:#fff;border:1px solid #fde68a;border-radius:9px;padding:6px 8px;margin-bottom:5px;transition:box-shadow .08s;}
+  .nom-cmp-row.nom-cmp-err{border-color:#f87171;background:#fef2f2;}
+  .nom-cmp-row.nom-cmp-src{opacity:.45;}
+  .nom-cmp-row.nom-cmp-avant{box-shadow:0 -3px 0 #f59e0b;}
+  .nom-cmp-row.nom-cmp-apres{box-shadow:0 3px 0 #f59e0b;}
+  .nom-cmp-poignee{display:flex;align-items:center;justify-content:center;height:26px;border-radius:6px;color:#b45309;cursor:grab;font-size:.8rem;}
+  .nom-cmp-poignee:hover{background:#fef3c7;}
+  .nom-cmp-poignee:focus-visible, .nom-cmp-fl button:focus-visible{outline:2px solid #6366f1;outline-offset:1px;}
+  .nom-cmp-rang{display:inline-flex;align-items:center;justify-content:center;width:30px;height:24px;border-radius:999px;background:#f59e0b;color:#fff;font-weight:900;font-size:.74rem;font-family:monospace;}
+  .nom-cmp-fl{display:flex;gap:4px;}
+  .nom-cmp-fl button{width:25px;height:24px;border-radius:6px;border:1px solid #fde68a;background:#fffbeb;color:#b45309;cursor:pointer;font-size:.6rem;padding:0;line-height:1;}
+  .nom-cmp-fl button:hover:not(:disabled){background:#fde68a;}
+  .nom-cmp-fl button:disabled{opacity:.3;cursor:default;}
+  .nom-cmp-tot{text-align:right;font-size:.76rem;font-weight:800;color:#92400e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .nom-cmp-inp.nom-cmp-indispo{border-color:#fdba74;background:#fff7ed;color:#9a3412;}
+  .nom-cmp-meta{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:4px 0 0 126px;font-size:.64rem;color:#64748b;}
+  .nom-cmp-chip{border-radius:999px;padding:0 7px;font-weight:800;font-size:.6rem;line-height:1.65;white-space:nowrap;}
+  .nom-cmp-tgl{border:1px solid #fcd34d;background:#fffbeb;color:#92400e;border-radius:999px;padding:0 8px;font-size:.62rem;font-weight:800;cursor:pointer;line-height:1.65;}
+  .nom-cmp-tgl:hover{background:#fef3c7;}
+  .nom-cmp-arbre{margin:5px 0 2px 126px;border-left:2px dashed #fcd34d;padding-left:9px;font-size:.68rem;color:#374151;}
+  .nom-cmp-arbre details{margin:0;}
+  .nom-cmp-arbre summary{cursor:pointer;list-style-position:outside;}
+  .nom-cmp-noeud{display:flex;flex-wrap:wrap;gap:5px;align-items:baseline;padding:2px 0;}
+  .nom-cmp-noeud .nn{font-family:monospace;font-weight:800;color:#1e293b;}
+  .nom-cmp-sous{margin-left:14px;border-left:1px solid #fde68a;padding-left:9px;}
+  .nom-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+  #nom-cmp-pop{position:fixed;z-index:2500;display:none;max-height:340px;overflow-y:auto;background:#fff;border:1.5px solid #cbd5e1;border-radius:10px;box-shadow:0 18px 44px rgba(15,23,42,.22);padding:4px;}
+  #nom-cmp-pop .ncp-gh{position:sticky;top:-4px;z-index:1;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:.6rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#475569;padding:6px 8px;margin:0 -4px 2px;}
+  #nom-cmp-pop .ncp-o{display:flex;gap:8px;align-items:baseline;padding:5px 8px;border-radius:7px;cursor:pointer;white-space:nowrap;}
+  #nom-cmp-pop .ncp-o.on, #nom-cmp-pop .ncp-o:hover{background:#fef3c7;}
+  #nom-cmp-pop .ncp-o[aria-disabled="true"]{opacity:.5;cursor:not-allowed;background:none;}
+  #nom-cmp-pop .ncp-n{flex:0 0 auto;font-family:monospace;font-weight:800;color:#b45309;font-size:.74rem;}
+  #nom-cmp-pop .ncp-d{flex:1 1 auto;min-width:0;color:#374151;font-size:.72rem;overflow:hidden;text-overflow:ellipsis;}
+  #nom-cmp-pop .ncp-x{flex:0 0 auto;font-size:.62rem;color:#94a3b8;font-weight:700;}
+  #nom-cmp-pop .ncp-vide{padding:6px 10px;color:#94a3b8;font-size:.7rem;white-space:normal;}
   .nom-f-inp{border:1.5px solid #e2e8f0;border-radius:6px;padding:5px 8px;font-size:.76rem;background:#f8fafc;outline:none;width:100%;min-width:0;text-overflow:ellipsis;box-sizing:border-box;}
   #nom-etapes-list > div, #nom-matieres-list > div, #nom-accessoires-list > div{min-width:0;}
   #nom-etapes-list > div > *, #nom-matieres-list > div > *, #nom-accessoires-list > div > *{min-width:0;}
@@ -1633,7 +1742,8 @@ export const pageServiceBE = (
   function nomJournalTxt(v){ return (v==null||v==='')?'':((typeof v==='object')?JSON.stringify(v):String(v)); }
   // Valeur affichée : coupée AUTOUR de la première différence avec l'autre côté (deux textes longs
   // qui ne diffèrent qu'à la fin s'afficheraient sinon identiques) ; la valeur entière est au survol.
-  function nomJournalVal(v,autre){ if(v==null||v==='') return '<span style="color:#cbd5e1;">∅</span>'; var s=nomJournalTxt(v), o=nomJournalTxt(autre), d=0; while(d<s.length&&d<o.length&&s.charAt(d)===o.charAt(d)) d++; var deb=Math.max(0,Math.min(d-30,s.length-90)); var vu=s.length>90?((deb>0?'…':'')+s.slice(deb,deb+90)+(deb+90<s.length?'…':'')):s; return '<span title="'+nomJournalEsc(s)+'">'+nomJournalEsc(vu)+'</span>'; }
+  // Lot H2 : le journal occupe toute la largeur du formulaire → fenêtre de 180 caractères (90 avant).
+  function nomJournalVal(v,autre){ if(v==null||v==='') return '<span style="color:#cbd5e1;">∅</span>'; var s=nomJournalTxt(v), o=nomJournalTxt(autre), d=0; while(d<s.length&&d<o.length&&s.charAt(d)===o.charAt(d)) d++; var deb=Math.max(0,Math.min(d-60,s.length-180)); var vu=s.length>180?((deb>0?'…':'')+s.slice(deb,deb+180)+(deb+180<s.length?'…':'')):s; return '<span title="'+nomJournalEsc(s)+'">'+nomJournalEsc(vu)+'</span>'; }
   function nomJournalLoad(){
     var el=document.getElementById('nom-journal-list'); if(!el) return;
     var tok=++NOM_JOURNAL_SEQ;
@@ -1656,7 +1766,9 @@ export const pageServiceBE = (
           +(x.indice?'<span style="background:#f5f3ff;color:#6d28d9;border-radius:999px;padding:0 7px;font-size:.66rem;">ind. '+nomJournalEsc(x.indice)+'</span>':'')
           +(x.auteur_source&&x.auteur_source!=='session'?'<span style="color:#b45309;font-size:.66rem;">'+(x.auteur_source==='bootstrap'?'compte de secours':'sans authentification')+'</span>':'')
           +'</div>'
-          +(ch.length?'<ul style="margin:4px 0 0 16px;padding:0;">'+ch.map(function(c){ return '<li>'+nomJournalEsc(c.champ)+' : '+nomJournalVal(c.avant,c.apres)+' → '+nomJournalVal(c.apres,c.avant)+(c.detail?' <i class="fas fa-circle-info" style="color:#a78bfa;cursor:help;" title="'+nomJournalEsc(JSON.stringify(c.detail))+'"></i>':'')+'</li>'; }).join('')+'</ul>':'')
+          // Lot H2 (pleine largeur) : une ligne par changement, champ à gauche, « avant → après » à droite ;
+          // les valeurs recalculées (copies de taux, de prix, compléments) sont signalées « recalcul ».
+          +(ch.length?'<div style="display:grid;grid-template-columns:fit-content(40%) minmax(0,1fr);gap:2px 16px;margin:5px 0 0 4px;">'+ch.map(function(c){ return '<div style="color:#334155;font-weight:600;">'+nomJournalEsc(c.champ)+(c.bloc==='recalcul'?' <span style="background:#f1f5f9;color:#64748b;border-radius:999px;padding:0 6px;font-size:.62rem;font-weight:700;" title="Valeur recalculée ou recopiée, pas une saisie">recalcul</span>':'')+'</div><div style="min-width:0;overflow-wrap:anywhere;">'+nomJournalVal(c.avant,c.apres)+' <span style="color:#a78bfa;">→</span> '+nomJournalVal(c.apres,c.avant)+(c.detail?' <i class="fas fa-circle-info" style="color:#a78bfa;cursor:help;" title="'+nomJournalEsc(JSON.stringify(c.detail))+'"></i>':'')+'</div>'; }).join('')+'</div>':'')
           +(x.motif?'<div style="color:#64748b;">Motif : '+nomJournalEsc(x.motif)+'</div>':'')
           +'</div>';
       }).join('');
@@ -2049,8 +2161,15 @@ ${BE_ETAPE_COUT_JS}
   var TYPES_FOURN = ['Matière première','Visserie / Boulonnerie','Composant acheté','Emballage','Consommable','Sous-traitance','Outillage','Autre'];
 
   // ── NOMENCLATURES STANDARD / MÈRE ────────────────────────────
-  // Toutes les nomenclatures standard (pour le sélecteur de composants des mères)
-  var NOM_STANDARDS = ${sjX(NOMS_STD.map((n:any)=>({id:n.id,num_nom:n.num_nom,code_ref_produit:n.code_ref_produit,description:n.description,prix_revient_unitaire:n.prix_revient_unitaire||0})))};
+  // Lot H2 : nomenclatures proposées comme COMPOSANT d'une mère = dernière révision VALIDÉE de chaque
+  // produit, standards ET mères (rendu serveur, NOM_COMPOSABLES). Chaque entrée :
+  //   { id, num_nom, code_ref_produit, description, prix_revient_unitaire, type_nom, indice, version_groupe, cle, entite, nb_composants }
+  var NOM_COMPOSABLES = ${sjX(NOM_COMPOSABLES)};
+  // { identité (code produit, à défaut n°, en minuscules) → mères qui la contiennent, transitivement } :
+  // carteAncetres (module nomenclature_arbre) calculé au rendu serveur. Sert à retirer du sélecteur la
+  // fiche elle-même et ses ancêtres (sinon cycle : refusé en 409 cycle_composants par le serveur).
+  var NOM_ANCETRES = ${sjX(NOM_ANCETRES)};
+  var NOM_PROF_MAX = ${JSON.stringify(PROFONDEUR_MAX_NOMENCLATURE)};   // niveaux au plus, mère racine comprise
   // Toutes les révisions (toutes versions confondues) indexées par id → pour récupérer/ouvrir une révision
   var NOM_BY_ID = ${sjX(Object.fromEntries((NOMS as any[]).map(n => [String(n.id), n])))};
   // Lot H0 : lecture TOLÉRANTE des composants d'une mère — tableau (jsonb) OU chaîne JSON (colonne TEXT du schéma
@@ -2134,12 +2253,16 @@ ${BE_ETAPE_COUT_JS}
       else { btn.style.background='#8b5cf6'; btn.style.color='white'; btn.style.borderColor='#8b5cf6'; }
     }
   }
-  // Composants de la mère en cours d'édition : [{nom_id, num_nom, code, prix, qte}]
+  // Composants de la mère en cours d'édition, DANS L'ORDRE DE FABRICATION (du haut vers le bas, lot H2) :
+  //   [{ nom_id, num_nom, code, prix, qte, type_nom, indice, _ouvert }]   (_ouvert = arborescence dépliée, jamais envoyé)
   var nomComposants = [];
   // Lot H0 : garde-fou contre l'écrasement des composants. Une liste VIDE n'est envoyée que si l'utilisateur a
   // explicitement retiré / changé des composants (drapeau vider_composants) ; sinon la clé est omise et la base garde les siens.
   var nomComposantsModifies = false;
   var nomTypeCharge = 'standard';   // type de la fiche à l'ouverture (mère → standard = retrait explicite des composants)
+  // Dernier refus 409 du serveur (cycle_composants / profondeur_max) : { code, chemin } — la ligne fautive est
+  // encadrée en rouge jusqu'à la prochaine modification des composants.
+  var nomComposantsErreur = null;
 
   // Bascule le type de nomenclature (standard / mère)
   function nomSetType(t) {
@@ -2161,50 +2284,595 @@ ${BE_ETAPE_COUT_JS}
     // '' rend la main à la feuille de style (#nom-fournitures-block = flex colonne + gap) : 'block'
     // écraserait la mise en page et recollerait les deux compartiments.
     if (fourBlock) fourBlock.style.display = (t === 'mere') ? 'none' : '';
-    if (t === 'mere') nomRenderComposants();
+    if (t === 'mere') nomRenderComposants(); else nomCmpPopFermer(false);
     nomCalcTotaux();
   }
 
-  // ── Composants d'une mère (assemblage de standards) ──
+  // ══ COMPOSANTS D'UNE MÈRE — ordre de fabrication, mère dans mère (lot H2, 18/09/2026) ═════════════
+  // « l'ordre de fabrication sera toujours considéré du haut vers le bas » : l'ordre de nomComposants EST
+  // l'ordre de fabrication (rang 1 = fabriqué en premier = sous-lot .01). Une mère peut contenir des mères
+  // (NOM_PROF_MAX niveaux au plus, mère comprise) ; la fiche elle-même et les mères qui la contiennent ne
+  // sont jamais proposées (cycle). Le SERVEUR reste juge : controlerComposants (409 cycle / profondeur).
+  // Les quelques miroirs du module nomenclature_arbre ci-dessous (clés, ordre par rang, résolution des
+  // révisions, déplacement) sont COMMENTÉS comme tels : le module n'est jamais ré-émis au navigateur.
+  // Événements : délégation unique (poignée, ▲ ▼, recherche, glisser-déposer), plus bas.
   function nomAddComposant() {
-    nomComposants.push({ nom_id:'', num_nom:'', code:'', prix:0, qte:1 });
+    nomComposants.push({ nom_id:'', num_nom:'', code:'', prix:0, qte:1, type_nom:'', indice:'' });
     nomRenderComposants();
+    // La nouvelle ligne prend le focus : sa recherche s'ouvre aussitôt (deux groupes, standards et mères).
+    var inp = document.querySelector('#nom-f-composants-list [data-cmp-inp="'+(nomComposants.length-1)+'"]');
+    if (inp && inp.focus) { try { inp.focus(); } catch(e) {} }
   }
-  function nomRemoveComposant(i) { nomComposants.splice(i,1); nomComposantsModifies = true; nomRenderComposants(); nomCalcTotaux(); }
+  function nomRemoveComposant(i) {
+    nomCmpPopFermer(false);
+    var x = nomComposants.splice(i,1)[0];
+    nomComposantsModifies = true; nomComposantsErreur = null;
+    nomRenderComposants(); nomCalcTotaux();
+    nomCmpAnnoncer('« ' + (nomCmpLibelle(x) || 'Composant') + ' » retiré.');
+  }
   function nomComposantTotal() {
-    return nomComposants.reduce(function(s,c){ return s + ((parseFloat(c.prix)||0) * (parseFloat(c.qte)||0)); }, 0);
+    // Même règle que l'enregistrement : quantité vide ou ≤ 0 ⇒ 1 (correctif H2).
+    return nomComposants.reduce(function(s,c){ var q = parseFloat(c.qte); return s + ((parseFloat(c.prix)||0) * (q > 0 ? q : 1)); }, 0);
   }
+  function nomCmpAnnoncer(t){ var a = document.getElementById('nom-cmp-annonce'); if (a) a.textContent = t; }
+  function nomCmpPad(n){ return (n < 10 ? '0' : '') + n; }
+  function nomCmpQ(v){ var n = Number(v); if (!isFinite(n)) n = 0; return n.toLocaleString('fr-FR', { maximumFractionDigits: 3 }); }
+  function nomCmpCle(v){ return String(v==null?'':v).replace(/^\\s+|\\s+$/g,'').toLowerCase(); }
+  // Identité d'une nomenclature : code produit, à défaut n° (miroir de cleNomenclature, module nomenclature_arbre).
+  function nomCmpCleNom(n){ if (!n) return ''; return nomCmpCle(n.code_ref_produit) || nomCmpCle(n.num_nom); }
+  // Identité d'un composant : code, à défaut n° (miroir de cleComposant).
+  function nomCmpCleComposant(c){ if (!c) return ''; return nomCmpCle(c.code) || nomCmpCle(c.num_nom); }
+  // Miroir de composantsOrdonnes : ordre = rang si TOUS les éléments portent un rang entier ≥ 1 distinct,
+  // sinon ordre du tableau (données d'avant H2) ; éléments qui ne désignent rien écartés.
+  function nomCmpOrdonnes(v){
+    var l = nomComposantsDe(v).filter(function(c){ return c && typeof c === 'object' && !Array.isArray(c) && (c.nom_id || c.code || c.num_nom); });
+    var vus = {}, parRang = l.length > 0 && l.every(function(c){ var r = Number(c.rang); if (!(r >= 1 && Math.floor(r) === r) || vus[r]) return false; vus[r] = 1; return true; });
+    return parRang ? l.slice().sort(function(x, y){ return Number(x.rang) - Number(y.rang); }) : l.slice();
+  }
+  // Index { identité → révisions } bâti sur NOM_BY_ID (que nomFicheFraiche / nomMajInstantane tiennent à jour) ;
+  // reconstruit à chaque rendu de la liste (quelques centaines de fiches : négligeable).
+  var NOM_CMP_IX = null;
+  function nomCmpIndex(){
+    if (NOM_CMP_IX) return NOM_CMP_IX;
+    var ix = {};
+    Object.keys(NOM_BY_ID).forEach(function(id){ var n = NOM_BY_ID[id], k = nomCmpCleNom(n); if (k) (ix[k] = ix[k] || []).push(n); });
+    NOM_CMP_IX = ix;
+    return ix;
+  }
+  // Révision la plus haute (A < B < … < Z < AA ; à égalité, la validée) — miroir de compareIndice / plusHaute.
+  function nomCmpCmpIndice(a, b){ var x = String(a||'').trim().toUpperCase() || 'A', y = String(b||'').trim().toUpperCase() || 'A'; if (x.length !== y.length) return x.length - y.length; return x < y ? -1 : (x > y ? 1 : 0); }
+  function nomCmpPlusHaute(l){
+    var best = null;
+    (l || []).forEach(function(n){ if (!n) return; if (!best) { best = n; return; } var c = nomCmpCmpIndice(n.indice, best.indice); if (c > 0 || (c === 0 && n.statut === 'valide' && best.statut !== 'valide')) best = n; });
+    return best;
+  }
+  function nomCmpValideeDuCode(k){ return k ? nomCmpPlusHaute((nomCmpIndex()[k] || []).filter(function(n){ return n.statut === 'valide'; })) : null; }
+  // Révision d'ÉDITION d'un composant (miroir de resolveurEdition) : la révision nom_id si elle existe, sinon la
+  // plus haute du même code. Révision de PRODUCTION (miroir de resolveurProduction, règle A5) : la plus haute
+  // révision VALIDÉE du code ; sinon celle du code actuel de la révision nom_id ; sinon la révision nom_id si
+  // elle est validée ; sinon null (le sous-lot ne serait pas lancé).
+  function nomCmpEdition(c){
+    var id = String((c && c.nom_id) || '');
+    if (id && NOM_BY_ID[id]) return NOM_BY_ID[id];
+    var k = nomCmpCleComposant(c);
+    return k ? nomCmpPlusHaute(nomCmpIndex()[k]) : null;
+  }
+  function nomCmpProduction(c){
+    var k = nomCmpCleComposant(c), v = nomCmpValideeDuCode(k);
+    if (v) return v;
+    var id = String((c && c.nom_id) || ''), r = id ? NOM_BY_ID[id] : null;
+    if (!r) return null;
+    var k2 = nomCmpCleNom(r);
+    if (k2 && k2 !== k) { v = nomCmpValideeDuCode(k2); if (v) return v; }
+    return (r.statut === 'valide') ? r : null;
+  }
+  // Identités de la fiche ouverte : le code saisi (à défaut le n°) ET celui enregistré — un code modifié à
+  // l'écran n'efface pas les mères qui contiennent déjà la fiche en base.
+  function nomCmpClesCourantes(){
+    var out = [];
+    var k1 = nomCmpCle((document.getElementById('nom-f-code')||{}).value) || nomCmpCle((document.getElementById('nom-f-num')||{}).value);
+    if (k1) out.push(k1);
+    var k2 = nomCmpCleNom(nomCurrentId ? NOM_BY_ID[String(nomCurrentId)] : null);
+    if (k2 && out.indexOf(k2) < 0) out.push(k2);
+    return out;
+  }
+  // Niveaux AU-DESSUS d'une identité : hauteur(k) = max(1 + hauteur(a)) sur ses ancêtres a (NOM_ANCETRES).
+  // Exact sans cycle en base ; la garde de pile évite de boucler sur une donnée d'avant H2.
+  function nomCmpHauteur(k, memo, pile){
+    if (memo[k] != null) return memo[k];
+    if (pile[k]) return 0;
+    pile[k] = 1;
+    var h = 0;
+    (NOM_ANCETRES[k] || []).forEach(function(a){ var x = 1 + nomCmpHauteur(a, memo, pile); if (x > h) h = x; });
+    pile[k] = 0; memo[k] = h;
+    return h;
+  }
+  // Niveaux d'une nomenclature, elle comprise (standard = 1). Chaque composant est suivi vers sa révision
+  // d'édition ET de production, comme controlerComposants : si le navigateur la juge trop profonde, le
+  // serveur la refuserait aussi (l'inverse n'est pas garanti : le serveur reste juge).
+  function nomCmpNiveaux(n, pile){
+    if (!n || n.type_nom !== 'mere') return 1;
+    var k = nomCmpCleNom(n) || ('#' + n.id);
+    if (pile.indexOf(k) >= 0 || pile.length > 12) return 1;
+    var p2 = pile.concat([k]), m = 0;
+    nomCmpOrdonnes(n.composants).forEach(function(c){
+      [nomCmpEdition(c), nomCmpProduction(c)].forEach(function(r){ if (r) { var x = nomCmpNiveaux(r, p2); if (x > m) m = x; } });
+    });
+    return 1 + m;
+  }
+  // Contexte de la fiche ouverte, calculé une fois par rendu / ouverture de la recherche.
+  function nomCmpContexte(){
+    var cles = nomCmpClesCourantes(), anc = [], memo = {}, haut = 0;
+    cles.forEach(function(k){
+      (NOM_ANCETRES[k] || []).forEach(function(a){ if (anc.indexOf(a) < 0) anc.push(a); });
+      var h = nomCmpHauteur(k, memo, {}); if (h > haut) haut = h;
+    });
+    return { cles: cles, anc: anc, haut: haut };
+  }
+  // Pourquoi une nomenclature proposable (entrée de NOM_COMPOSABLES) ne peut PAS être composant de la fiche :
+  //   'soi'     : la fiche elle-même (ou une autre de ses révisions) ;
+  //   'ancetre' : une mère qui contient déjà la fiche → cycle (409 cycle_composants) ;
+  //   'profond' : l'ajouter dépasserait NOM_PROF_MAX niveaux (409 profondeur_max) ;
+  //   ''        : proposable.
+  function nomCmpExclusion(s, ctx){
+    if (!s) return 'soi';
+    if (nomCurrentId && String(s.id) === String(nomCurrentId)) return 'soi';
+    if (nomCurrentGroupe && String(s.version_groupe || s.id) === String(nomCurrentGroupe)) return 'soi';
+    if (ctx.cles.indexOf(s.cle) >= 0) return 'soi';
+    if (ctx.anc.indexOf(s.cle) >= 0) return 'ancetre';
+    if (ctx.haut + 1 + nomCmpNiveaux(NOM_BY_ID[String(s.id)] || s, []) > NOM_PROF_MAX) return 'profond';
+    return '';
+  }
+  function nomCmpRaison(s, ex, ctx){
+    if (ex === 'soi') return 'C’est la nomenclature ouverte : une mère ne peut pas se contenir elle-même.';
+    if (ex === 'ancetre') return '« ' + (s.num_nom || s.code_ref_produit) + ' » contient déjà cette nomenclature : l’ajouter créerait un cycle.';
+    if (ex === 'profond') return 'Trop profond : l’ajouter donnerait ' + (ctx.haut + 1 + nomCmpNiveaux(NOM_BY_ID[String(s.id)] || s, [])) + ' niveaux (' + NOM_PROF_MAX + ' au plus, mères qui contiennent cette fiche comprises).';
+    return '';
+  }
+  // Entrée proposable qui correspond à un composant déjà choisi (même id, sinon même identité).
+  function nomCmpComposable(c){
+    var k = nomCmpCleComposant(c), id = String((c && c.nom_id) || ''), j, parCle = null;
+    for (j = 0; j < NOM_COMPOSABLES.length; j++) {
+      var s = NOM_COMPOSABLES[j];
+      if (id && String(s.id) === id) return s;
+      if (!parCle && k && s.cle === k) parCle = s;
+    }
+    return parCle;
+  }
+  function nomCmpLibelle(c){
+    if (!c || !(c.nom_id || c.code || c.num_nom)) return '';
+    var num = String(c.num_nom || ''), code = String(c.code || '');
+    return (num || code) + ((code && num && nomCmpCle(code) !== nomCmpCle(num)) ? ' · ' + code : '') + (c.indice ? ' (ind. ' + c.indice + ')' : '');
+  }
+  // État d'un composant choisi : toujours proposable ? révision que la production lancera ?
+  function nomCmpEtat(c, ctx){
+    var out = { dispo: true, raison: '', prod: null, edit: null };
+    if (!c || !(c.nom_id || c.code || c.num_nom)) return out;
+    out.edit = nomCmpEdition(c); out.prod = nomCmpProduction(c);
+    var s = nomCmpComposable(c);
+    if (!s) { out.dispo = false; out.raison = 'Aucune révision validée de cette nomenclature : elle n’est plus proposable et son sous-lot ne serait pas lancé.'; return out; }
+    var ex = nomCmpExclusion(s, ctx);
+    if (ex) { out.dispo = false; out.raison = nomCmpRaison(s, ex, ctx); }
+    return out;
+  }
+  function nomCmpLibelleAffiche(c, st){ var l = nomCmpLibelle(c); return (l && st && !st.dispo) ? (l + ' (indisponible)') : l; }
+  // Ligne visée par le dernier refus 409 : le chemin du serveur commence par la fiche (précédée de ses
+  // ancêtres pour la profondeur) ; le composant direct est l'élément qui suit le libellé de la fiche.
+  function nomCmpLigneFautive(c){
+    var e = nomComposantsErreur;
+    if (!e || !Array.isArray(e.chemin) || !c || !(c.nom_id || c.code || c.num_nom)) return '';
+    var num = nomCmpCle((document.getElementById('nom-f-num')||{}).value);
+    var ch = e.chemin.map(nomCmpCle), p = ch.indexOf(num);
+    if (p < 0) p = 0;
+    var direct = ch[p + 1];
+    if (!direct || (direct !== nomCmpCle(c.num_nom) && direct !== nomCmpCle(c.code))) return '';
+    return e.code === 'cycle_composants' ? 'Refusé : ce composant contient la mère ouverte (cycle).' : 'Refusé : cette branche dépasse ' + NOM_PROF_MAX + ' niveaux.';
+  }
+
+  // ── Rendu ─────────────────────────────────────────────────────────────────────────────────────────
   function nomRenderComposants() {
     var c = document.getElementById('nom-f-composants-list');
     if (!c) return;
-    if (!nomComposants.length) {
-      c.innerHTML = '<div style="text-align:center;padding:12px;color:#9ca3af;font-size:.74rem;border:1.5px dashed #fde68a;border-radius:8px;background:#fff;">Aucun composant. Cliquez « Ajouter un standard » pour assembler la mère.</div>';
+    NOM_CMP_IX = null;
+    if (NOM_CPOP && NOM_CPOP.input) nomCmpPopFermer(false);
+    var n = nomComposants.length;
+    if (!n) {
+      c.innerHTML = '<div style="text-align:center;padding:14px;color:#9ca3af;font-size:.76rem;border:1.5px dashed #fde68a;border-radius:8px;background:#fff;">Aucun composant. Cliquez « Ajouter un composant » : nomenclatures filles standards ou mères, dans l’ordre de fabrication.</div>';
     } else {
-      c.innerHTML = nomComposants.map(function(cp, i){
-        var opts = '<option value="">— Choisir un standard —</option>' + NOM_STANDARDS.map(function(s){
-          var label = ((s.num_nom||'') + ' · ' + (s.code_ref_produit||'')).replace(/</g,'&lt;').replace(/"/g,'&quot;');
-          return '<option value="'+s.id+'"'+(String(s.id)===String(cp.nom_id)?' selected':'')+'>'+label+'</option>';
-        }).join('');
-        var lineTotal = ((parseFloat(cp.prix)||0)*(parseFloat(cp.qte)||0)).toFixed(2);
-        return '<div style="display:grid;grid-template-columns:1fr 70px 80px 28px;gap:6px;align-items:center;background:#fff;border:1px solid #fde68a;border-radius:8px;padding:6px 8px;margin-bottom:4px;">'
-          + '<select onchange="nomComposantPick('+i+',this.value)" style="border:1px solid #e2e8f0;border-radius:6px;padding:4px 6px;font-size:.76rem;">'+opts+'</select>'
-          + '<input type="number" step="0.001" min="0" value="'+(cp.qte!=null?cp.qte:1)+'" oninput="nomComposants['+i+'].qte=parseFloat(this.value)||0;nomRenderComposants();nomCalcTotaux();" style="border:1px solid #e2e8f0;border-radius:6px;padding:4px 6px;font-size:.76rem;text-align:right;" title="Quantité"/>'
-          + '<div style="text-align:right;font-size:.74rem;font-weight:700;color:#92400e;">'+lineTotal+' €</div>'
-          + '<button type="button" onclick="nomRemoveComposant('+i+')" style="width:24px;height:24px;border-radius:6px;border:none;background:#fee2e2;color:#dc2626;cursor:pointer;font-weight:700;">×</button>'
-          + '</div>';
-      }).join('');
+      var ctx = nomCmpContexte();
+      c.innerHTML = nomComposants.map(function(cp, i){ return nomCmpLigneHtml(cp, i, n, ctx); }).join('');
     }
     var tot = document.getElementById('nom-composants-total');
-    if (tot) tot.textContent = nomComposantTotal().toFixed(2) + ' €';
+    if (tot) tot.textContent = nomFmtEur(nomComposantTotal(), 2);
+    nomCmpResume();
   }
-  function nomComposantPick(i, id) {
-    var s = NOM_STANDARDS.find(function(x){ return String(x.id) === String(id); });
+  function nomCmpLigneHtml(cp, i, n, ctx){
+    var st = nomCmpEtat(cp, ctx), err = nomCmpLigneFautive(cp);
+    var choisi = !!(cp.nom_id || cp.code || cp.num_nom);
+    var lib = nomCmpLibelle(cp);
+    var total = (parseFloat(cp.prix)||0) * (parseFloat(cp.qte) > 0 ? parseFloat(cp.qte) : 1);
+    var titreInp = choisi
+      ? (lib + (st.dispo ? '' : '\\n' + st.raison) + '\\nCliquez puis tapez pour changer de nomenclature (n°, code ou description).')
+      : 'Tapez un n°, un code ou une description : standards et mères validés.';
+    return '<div class="nom-cmp-row'+(err?' nom-cmp-err':'')+'" role="listitem" data-ci="'+i+'" draggable="false">'
+      + '<div class="nom-cmp-grid">'
+      + '<span class="nom-cmp-poignee" data-cmp-act="drag" data-ci="'+i+'" role="button" tabindex="0" title="Glisser pour déplacer (ou flèches haut / bas au clavier)" aria-label="'+nomEscA('Déplacer le composant de rang '+(i+1)+' (flèches haut et bas)')+'"><i class="fas fa-grip-vertical" aria-hidden="true"></i></span>'
+      + '<span class="nom-cmp-rang" title="'+nomEscA('Rang de fabrication '+(i+1)+' sur '+n+' (1 = fabriqué en premier)')+'">'+(i+1)+'</span>'
+      + '<span class="nom-cmp-fl">'
+      +   '<button type="button" data-cmp-act="up" data-ci="'+i+'" aria-label="Monter" title="Monter : fabriqué plus tôt"'+(i===0?' disabled':'')+'>▲</button>'
+      +   '<button type="button" data-cmp-act="down" data-ci="'+i+'" aria-label="Descendre" title="Descendre : fabriqué plus tard"'+(i===n-1?' disabled':'')+'>▼</button>'
+      + '</span>'
+      + '<input class="nom-f-inp nom-cmp-inp'+(choisi && !st.dispo ? ' nom-cmp-indispo' : '')+'" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="nom-cmp-pop" autocomplete="off" spellcheck="false" data-cmp-inp="'+i+'" value="'+nomEscA(nomCmpLibelleAffiche(cp, st))+'" placeholder="Rechercher : n°, code ou description…" title="'+nomEscA(titreInp)+'" aria-label="'+nomEscA('Composant de rang '+(i+1))+'"/>'
+      + '<input class="nom-f-inp" type="number" step="0.001" min="0.001" data-cmp-qte="'+i+'" value="'+nomEscA(cp.qte!=null?cp.qte:1)+'" title="Quantité de ce composant pour UNE mère" aria-label="Quantité par mère" style="text-align:right;"/>'
+      + '<div class="nom-cmp-tot" data-cmp-tot="'+i+'" title="Prix de revient du composant × quantité">'+nomEscH(nomFmtEur(total, 2))+'</div>'
+      + '<button type="button" data-cmp-act="del" data-ci="'+i+'" aria-label="Retirer ce composant" title="Retirer ce composant" style="width:24px;height:24px;border-radius:6px;border:none;background:#fee2e2;color:#dc2626;cursor:pointer;font-weight:700;line-height:1;padding:0;">×</button>'
+      + '</div>'
+      + nomCmpMetaHtml(cp, i, st, err, choisi)
+      + (cp._ouvert ? nomCmpArbreHtml(cp, i, ctx) : '')
+      + '</div>';
+  }
+  // Ligne d'information sous un composant : type, n° de sous-lot, prix unitaire, révision lancée en
+  // production, et le bouton qui déplie l'arborescence d'une sous-mère.
+  function nomCmpMetaHtml(cp, i, st, err, choisi){
+    if (!choisi) return '<div class="nom-cmp-meta"><span style="color:#b45309;">Choisissez une nomenclature fille (standard ou mère). Sans choix, la ligne n’est pas enregistrée.</span></div>';
+    var ref = st.prod || st.edit;
+    var mere = (cp.type_nom === 'mere') || !!(ref && ref.type_nom === 'mere');
+    var h = '<div class="nom-cmp-meta">';
+    h += mere
+      ? '<span class="nom-cmp-chip" style="background:#fef3c7;color:#b45309;"><i class="fas fa-sitemap" style="margin-right:3px;"></i>mère</span>'
+      : '<span class="nom-cmp-chip" style="background:#ede9fe;color:#5b21b6;">standard</span>';
+    h += '<span class="nom-cmp-chip" style="background:#f1f5f9;color:#475569;" title="'+nomEscA('À la mise en production, ce composant devient le sous-lot LOT-…-ZZ.'+nomCmpPad(i+1)+' du lot de la mère')+'">sous-lot .'+nomCmpPad(i+1)+'</span>';
+    h += '<span title="Prix de revient unitaire du composant (copie au moment du choix)">'+nomEscH(nomFmtEur(cp.prix, 2))+' / u</span>';
+    if (st.prod && cp.nom_id && String(st.prod.id) !== String(cp.nom_id)) {
+      h += '<span class="nom-cmp-chip" style="background:#fff7ed;color:#c2410c;" title="'+nomEscA('La production lance la dernière révision VALIDÉE de cette nomenclature (ind. '+(st.prod.indice||'A')+') ; révision choisie ici : ind. '+(cp.indice||'?')+'.')+'">production : ind. '+nomEscH(st.prod.indice||'A')+'</span>';
+    }
+    if (!st.prod) h += '<span class="nom-cmp-chip" style="background:#fef2f2;color:#b91c1c;" title="Sans révision validée, la production ne lance pas ce sous-lot (avertissement à l’acceptation de l’offre).">aucune révision validée</span>';
+    if (!st.dispo) h += '<span style="color:#c2410c;font-weight:700;">'+nomEscH(st.raison)+'</span>';
+    if (mere) {
+      var nb = nomCmpOrdonnes((ref || {}).composants).length;
+      h += '<button type="button" class="nom-cmp-tgl" data-cmp-act="tree" data-ci="'+i+'" aria-expanded="'+(cp._ouvert?'true':'false')+'" title="Afficher ses composants (sous-sous-lots), dans l’ordre de fabrication">'+(cp._ouvert?'▾':'▸')+' '+nb+' composant'+(nb!==1?'s':'')+' — arborescence</button>';
+    }
+    if (err) h += '<span style="color:#b91c1c;font-weight:800;"><i class="fas fa-ban" style="margin-right:3px;"></i>'+nomEscH(err)+'</span>';
+    return h + '</div>';
+  }
+  // Arborescence d'une sous-mère (lecture seule) : ce que la production lancera, dans l'ordre de fabrication,
+  // avec le n° de sous-lot et la quantité cumulée pour UNE mère ouverte. Sous-mères dépliables (details).
+  function nomCmpArbreHtml(cp, i, ctx){
+    var racine = nomCmpProduction(cp) || nomCmpEdition(cp);
+    var limite = NOM_PROF_MAX - 1 - ctx.haut;   // niveau le plus bas permis (la mère ouverte = niveau 0)
+    return '<div class="nom-cmp-arbre" data-cmp-arbre="'+i+'">'
+      + nomCmpSousArbreHtml(racine, '.'+nomCmpPad(i+1), (Number(cp.qte) > 0 ? Number(cp.qte) : 1), ctx.cles.slice(), 2, limite)
+      + '</div>';
+  }
+  function nomCmpSousArbreHtml(n, suffixe, qteCumul, pile, niveau, limite){
+    if (!n) return '<div style="color:#b91c1c;">Nomenclature introuvable.</div>';
+    var liste = nomCmpOrdonnes(n.composants);
+    if (!liste.length) return '<div style="color:#94a3b8;">Aucun composant.</div>';
+    var p2 = pile.concat([nomCmpCleNom(n)]);
+    return liste.map(function(c, j){
+      var r = nomCmpProduction(c), re = r || nomCmpEdition(c);
+      var suf = suffixe + '.' + nomCmpPad(j+1);
+      var q = (Number(c.qte) > 0 ? Number(c.qte) : 1), qc = qteCumul * q;
+      var lib = re ? (re.num_nom || re.code_ref_produit || '?') : (c.num_nom || c.code || '?');
+      var ligne = '<span class="nom-cmp-chip" style="background:#f1f5f9;color:#475569;" title="n° de sous-lot">'+nomEscH(suf)+'</span>'
+        + '<span class="nn">'+nomEscH(lib)+'</span>'
+        + (re ? '<span>ind. '+nomEscH(re.indice || 'A')+'</span>' : '')
+        + '<span>× '+nomEscH(nomCmpQ(q))+(qc !== q ? ' (× '+nomEscH(nomCmpQ(qc))+' par mère)' : '')+'</span>'
+        + (!r ? '<span style="color:#b91c1c;font-weight:700;">'+(re ? 'non validée : sous-lot non lancé' : 'introuvable')+'</span>' : '');
+      if (niveau > limite) return '<div class="nom-cmp-noeud">'+ligne+'<span style="color:#b91c1c;font-weight:700;">au-delà de '+NOM_PROF_MAX+' niveaux</span></div>';
+      if (re && re.type_nom === 'mere') {
+        if (p2.indexOf(nomCmpCleNom(re)) >= 0) return '<div class="nom-cmp-noeud">'+ligne+'<span style="color:#b91c1c;font-weight:700;">cycle</span></div>';
+        return '<details open><summary class="nom-cmp-noeud">'+ligne+'<span class="nom-cmp-chip" style="background:#fef3c7;color:#b45309;">mère</span></summary>'
+          + '<div class="nom-cmp-sous">'+nomCmpSousArbreHtml(re, suf, qc, p2, niveau + 1, limite)+'</div></details>';
+      }
+      return '<div class="nom-cmp-noeud">'+ligne+'</div>';
+    }).join('');
+  }
+  // Arbre complet de la mère ouverte, tel que la production le développera : nombre de sous-lots et de niveaux.
+  function nomCmpStats(){
+    // niveaux : la mère ouverte compte pour 1 ; un composant à la profondeur p (1 = composant direct) en ajoute p.
+    var st = { sousLots: 0, niveaux: 1 };
+    var visiter = function(liste, prof, pile){
+      liste.forEach(function(c){
+        var r = nomCmpProduction(c);
+        if (!r) return;
+        st.sousLots++;
+        if (prof + 1 > st.niveaux) st.niveaux = prof + 1;
+        if (r.type_nom === 'mere' && prof < 12) {
+          var k = nomCmpCleNom(r);
+          if (pile.indexOf(k) < 0) visiter(nomCmpOrdonnes(r.composants), prof + 1, pile.concat([k]));
+        }
+      });
+    };
+    visiter(nomComposants.filter(function(c){ return c && (c.nom_id || c.code || c.num_nom); }), 1, nomCmpClesCourantes());
+    return st;
+  }
+  // Résumé sous la liste : ordre de fabrication, nombre de sous-lots et de niveaux (mères au-dessus comprises).
+  function nomCmpResume(){
+    var el = document.getElementById('nom-f-composants-resume'); if (!el) return;
+    var choisis = nomComposants.filter(function(c){ return c && (c.nom_id || c.code || c.num_nom); });
+    if (!choisis.length) { el.innerHTML = ''; return; }
+    var ctx = nomCmpContexte(), stt = nomCmpStats();
+    var libs = choisis.slice(0, 8).map(function(c, i){ return '<strong>' + (i+1) + '.</strong> ' + nomEscH(c.num_nom || c.code || '?'); });
+    if (choisis.length > 8) libs.push('… (' + (choisis.length - 8) + ' de plus)');
+    var total = ctx.haut + stt.niveaux;
+    var h = '<div><i class="fas fa-industry" style="color:#b45309;margin-right:5px;"></i>Fabrication : ' + libs.join(' → ') + ' → <strong>assemblage de la mère</strong>.</div>';
+    h += '<div><i class="fas fa-sitemap" style="color:#b45309;margin-right:5px;"></i>' + stt.sousLots + ' sous-lot' + (stt.sousLots !== 1 ? 's' : '') + ' à la mise en production, sur ' + stt.niveaux + ' niveau' + (stt.niveaux !== 1 ? 'x' : '') + ' (mère comprise ; ' + NOM_PROF_MAX + ' au plus)';
+    if (ctx.anc.length) {
+      var noms = ctx.anc.slice(0, 3).map(function(k){ var s = null, j; for (j = 0; j < NOM_COMPOSABLES.length; j++) if (NOM_COMPOSABLES[j].cle === k) { s = NOM_COMPOSABLES[j]; break; } return nomEscH(s ? (s.num_nom || s.code_ref_produit) : k); });
+      h += ' ; cette fiche est elle-même composant de ' + noms.join(', ') + (ctx.anc.length > 3 ? '…' : '') + ' (' + ctx.haut + ' niveau' + (ctx.haut !== 1 ? 'x' : '') + ' au-dessus)';
+    }
+    h += '.</div>';
+    if (total > NOM_PROF_MAX) h += '<div style="color:#b91c1c;font-weight:800;"><i class="fas fa-ban" style="margin-right:5px;"></i>Imbrication trop profonde : ' + total + ' niveaux pour ' + NOM_PROF_MAX + ' au plus — l’enregistrement sera refusé. Retirez une sous-mère.</div>';
+    el.innerHTML = h;
+  }
+
+  // ── Saisie : quantité, déplacement, choix d'une nomenclature ─────────────────────────────────────
+  // Quantité : saisie en continu → on ne réécrit QUE le total de la ligne (un re-rendu ferait perdre le focus).
+  function nomCmpSetQte(i, v){
+    var c = nomComposants[i]; if (!c) return;
+    var q = parseFloat(String(v==null?'':v).replace(',','.'));
+    // Correctif H2 : vide ou ≤ 0 ⇒ 1, À L'ÉCRAN COMME À L'ENVOI (le serveur enregistre 1 : normaliserComposants). Avant,
+    // la ligne affichait 0,00 € et le prix de revient de la mère omettait un composant que la production lance × 1.
+    var valide = isFinite(q) && q > 0;
+    c.qte = valide ? q : 1;
     nomComposantsModifies = true;
-    nomComposants[i].nom_id = id;
-    nomComposants[i].num_nom = s ? (s.num_nom||'') : '';
-    nomComposants[i].code = s ? (s.code_ref_produit||'') : '';
-    nomComposants[i].prix = s ? (s.prix_revient_unitaire||0) : 0;
+    var box = document.getElementById('nom-f-composants-list'); if (!box) return;
+    var inp = box.querySelector('[data-cmp-qte="'+i+'"]');
+    if (inp) { inp.style.borderColor = valide ? '' : '#dc2626'; inp.style.background = valide ? '' : '#fef2f2'; inp.title = valide ? 'Quantité de ce composant pour UNE mère' : 'Quantité invalide : 1 sera enregistré'; inp.setAttribute('aria-invalid', valide ? 'false' : 'true'); }
+    var t = box.querySelector('[data-cmp-tot="'+i+'"]'); if (t) t.textContent = nomFmtEur((parseFloat(c.prix)||0) * c.qte, 2);
+    var a = box.querySelector('[data-cmp-arbre="'+i+'"]'); if (a) a.outerHTML = nomCmpArbreHtml(c, i, nomCmpContexte());
+    var tot = document.getElementById('nom-composants-total'); if (tot) tot.textContent = nomFmtEur(nomComposantTotal(), 2);
+    nomCalcTotaux();
+  }
+  // Déplacement (miroir de deplacerComposant) : l'ordre du tableau EST l'ordre de fabrication ; les rangs
+  // 1..n sont réécrits à l'envoi (nomComposantsPourEnvoi) et par le serveur (normaliserComposants).
+  // focusAct : bouton à re-focaliser sur la ligne déplacée (clavier : on garde la main sur la même ligne).
+  function nomCmpDeplacer(de, vers, focusAct){
+    var n = nomComposants.length;
+    if (!(de >= 0 && de < n && vers >= 0 && vers < n) || de === vers) return;
+    var x = nomComposants.splice(de, 1)[0];
+    nomComposants.splice(vers, 0, x);
+    nomComposantsModifies = true; nomComposantsErreur = null;
     nomRenderComposants(); nomCalcTotaux();
+    nomCmpAnnoncer('« ' + (nomCmpLibelle(x) || 'Composant') + ' » placé au rang ' + (vers + 1) + ' sur ' + n + '.');
+    if (focusAct) {
+      var box = document.getElementById('nom-f-composants-list');
+      var b = box ? box.querySelector('[data-cmp-act="'+focusAct+'"][data-ci="'+vers+'"]') : null;
+      if (!b || b.disabled) b = box ? box.querySelector('[data-cmp-act="drag"][data-ci="'+vers+'"]') : null;
+      if (b && b.focus) { try { b.focus(); } catch(e) {} }
+    }
+  }
+
+  // ── Recherche d'une nomenclature fille : UN popup pour toutes les lignes, deux groupes ───────────
+  // « Nomenclatures filles (standards) » puis « Nomenclatures mères ». Recherche sur n°, code, description et
+  // indice, casse et accents ignorés (normaliserReference, module partagé). Clavier : ↑ ↓ Entrée Échap.
+  var NOM_CPOP = { i: -1, input: null, res: null, opts: [], actif: -1, ctx: null };
+  var NOM_CPOP_MAX = 80;   // options affichées par groupe (au-delà : préciser la recherche)
+  function nomCmpPopFermer(restaurer){
+    if (!NOM_CPOP) return;   // appel avant l'initialisation du script (var hissée, pas encore affectée)
+    var p = document.getElementById('nom-cmp-pop');
+    if (p) { p.style.display = 'none'; p.innerHTML = ''; }
+    var inp = NOM_CPOP.input, i = NOM_CPOP.i;
+    if (inp && inp.setAttribute) {
+      inp.setAttribute('aria-expanded', 'false');
+      inp.removeAttribute('aria-activedescendant');
+      // Texte de recherche abandonné : le champ reprend le libellé du composant (rien n'a changé).
+      if (restaurer && nomComposants[i]) inp.value = nomCmpLibelleAffiche(nomComposants[i], nomCmpEtat(nomComposants[i], NOM_CPOP.ctx || nomCmpContexte()));
+    }
+    NOM_CPOP.input = null; NOM_CPOP.i = -1; NOM_CPOP.res = null; NOM_CPOP.opts = []; NOM_CPOP.actif = -1; NOM_CPOP.ctx = null;
+  }
+  function nomCmpTexte(s){ return normaliserReference([s.num_nom, s.code_ref_produit, s.description, 'ind. ' + s.indice].join(' ')); }
+  function nomCmpCherche(q, ctx){
+    var mots = normaliserReference(q).split(' ').filter(function(m){ return !!m; });
+    var res = { std: [], mere: [], soi: 0, ancetre: 0 };
+    NOM_COMPOSABLES.forEach(function(s){
+      if (mots.length) { var t = nomCmpTexte(s), k; for (k = 0; k < mots.length; k++) if (t.indexOf(mots[k]) < 0) return; }
+      var ex = nomCmpExclusion(s, ctx);
+      if (ex === 'soi' || ex === 'ancetre') { res[ex]++; return; }
+      (s.type_nom === 'mere' ? res.mere : res.std).push({ s: s, ex: ex });
+    });
+    return res;
+  }
+  function nomCmpPremierActif(de, pas){
+    var n = NOM_CPOP.opts.length, k;
+    for (k = 0; k < n; k++) { var j = (((de + pas * k) % n) + n) % n; if (!NOM_CPOP.opts[j].ex) return j; }
+    return -1;
+  }
+  function nomCmpPopRendre(){
+    var p = document.getElementById('nom-cmp-pop'); if (!p || !NOM_CPOP.res) return;
+    var r = NOM_CPOP.res, ctx = NOM_CPOP.ctx, h = '', idx = 0;
+    var groupe = function(titre, liste, gid){
+      h += '<div role="group" aria-labelledby="'+gid+'"><div class="ncp-gh" id="'+gid+'">'+nomEscH(titre)+' · '+liste.length+'</div>';
+      if (!liste.length) h += '<div class="ncp-vide">Aucune ne correspond.</div>';
+      liste.slice(0, NOM_CPOP_MAX).forEach(function(o){
+        var s = o.s, on = (idx === NOM_CPOP.actif);
+        var info = 'ind. ' + (s.indice || 'A') + (s.type_nom === 'mere' ? ' · ' + s.nb_composants + ' comp.' : '') + ' · ' + nomFmtEur(s.prix_revient_unitaire, 2);
+        var titre2 = (s.num_nom || '') + (s.code_ref_produit && nomCmpCle(s.code_ref_produit) !== nomCmpCle(s.num_nom) ? ' · ' + s.code_ref_produit : '') + (s.description ? '\\n' + s.description : '') + (o.ex ? '\\n' + nomCmpRaison(s, o.ex, ctx) : '');
+        h += '<div class="ncp-o'+(on?' on':'')+'" role="option" id="ncp-'+idx+'" data-j="'+idx+'" aria-selected="'+(on?'true':'false')+'"'+(o.ex?' aria-disabled="true"':'')+' title="'+nomEscA(titre2)+'">'
+          + '<span class="ncp-n">'+nomEscH(s.num_nom || s.code_ref_produit)+'</span>'
+          + '<span class="ncp-d">'+nomEscH(o.ex === 'profond' ? 'trop profond' : (s.description || (s.code_ref_produit !== s.num_nom ? s.code_ref_produit : '')))+'</span>'
+          + '<span class="ncp-x">'+nomEscH(info)+'</span>'
+          + '</div>';
+        idx++;
+      });
+      if (liste.length > NOM_CPOP_MAX) h += '<div class="ncp-vide">… '+(liste.length - NOM_CPOP_MAX)+' de plus : précisez la recherche.</div>';
+      h += '</div>';
+    };
+    groupe('Nomenclatures filles (standards)', r.std, 'ncp-g1');
+    groupe('Nomenclatures mères', r.mere, 'ncp-g2');
+    if (r.soi || r.ancetre) h += '<div class="ncp-vide"><i class="fas fa-circle-info" style="margin-right:4px;"></i>Non proposées : la nomenclature ouverte' + (r.ancetre ? ' et ' + r.ancetre + ' mère' + (r.ancetre > 1 ? 's' : '') + ' qui la contien' + (r.ancetre > 1 ? 'nent' : 't') + ' déjà' : '') + ' (une mère ne peut pas se contenir elle-même). Seules les révisions validées sont proposées.</div>';
+    p.innerHTML = h;
+    var inp = NOM_CPOP.input;
+    if (inp && inp.setAttribute) { if (NOM_CPOP.actif >= 0) inp.setAttribute('aria-activedescendant', 'ncp-' + NOM_CPOP.actif); else inp.removeAttribute('aria-activedescendant'); }
+    var a = document.getElementById('ncp-' + NOM_CPOP.actif);
+    if (a && a.scrollIntoView) a.scrollIntoView({ block: 'nearest' });
+  }
+  function nomCmpPopPlacer(){
+    var p = document.getElementById('nom-cmp-pop'), inp = NOM_CPOP.input;
+    if (!p || !inp || !inp.getBoundingClientRect) return;
+    var r = inp.getBoundingClientRect(), vw = window.innerWidth || 1024, vh = window.innerHeight || 768;
+    if (r.bottom < 0 || r.top > vh || !inp.isConnected) { nomCmpPopFermer(true); return; }
+    p.style.minWidth = Math.max(340, Math.round(r.width)) + 'px';
+    p.style.maxWidth = Math.max(360, Math.min(640, vw - 12)) + 'px';
+    var w = p.offsetWidth || 360, hh = p.offsetHeight || 240;
+    p.style.left = Math.max(6, Math.min(Math.round(r.left), vw - w - 6)) + 'px';
+    p.style.top  = ((vh - r.bottom) > (hh + 8) ? Math.round(r.bottom) + 4 : Math.max(6, Math.round(r.top) - hh - 4)) + 'px';
+  }
+  // garderTexte : false à l'entrée dans le champ (toute la liste, le texte est sélectionné), true en frappe.
+  function nomCmpPopOuvrir(input, garderTexte){
+    var p = document.getElementById('nom-cmp-pop'); if (!p || !input) return;
+    var i = parseInt(input.getAttribute('data-cmp-inp'), 10);
+    if (!(i >= 0) || !nomComposants[i]) return;
+    if (NOM_CPOP.input && NOM_CPOP.input !== input) nomCmpPopFermer(true);
+    NOM_CPOP.i = i; NOM_CPOP.input = input;
+    NOM_CPOP.ctx = NOM_CPOP.ctx || nomCmpContexte();
+    NOM_CPOP.res = nomCmpCherche(garderTexte ? input.value : '', NOM_CPOP.ctx);
+    NOM_CPOP.opts = NOM_CPOP.res.std.slice(0, NOM_CPOP_MAX).concat(NOM_CPOP.res.mere.slice(0, NOM_CPOP_MAX));
+    // Actif : la nomenclature déjà choisie si elle est dans la liste, sinon la première proposable.
+    var cur = String(nomComposants[i].nom_id || ''), j;
+    NOM_CPOP.actif = -1;
+    if (cur && !garderTexte) for (j = 0; j < NOM_CPOP.opts.length; j++) if (String(NOM_CPOP.opts[j].s.id) === cur && !NOM_CPOP.opts[j].ex) { NOM_CPOP.actif = j; break; }
+    if (NOM_CPOP.actif < 0) NOM_CPOP.actif = nomCmpPremierActif(0, 1);
+    p.style.display = 'block';
+    nomCmpPopRendre();
+    nomCmpPopPlacer();
+    input.setAttribute('aria-expanded', 'true');
+  }
+  function nomCmpBouger(d){
+    if (!NOM_CPOP.opts.length) return;
+    var dep = NOM_CPOP.actif < 0 ? (d > 0 ? 0 : NOM_CPOP.opts.length - 1) : NOM_CPOP.actif + d;
+    NOM_CPOP.actif = nomCmpPremierActif(dep, d > 0 ? 1 : -1);
+    nomCmpPopRendre();
+  }
+  function nomCmpChoisir(j){
+    var o = NOM_CPOP.opts[j]; if (!o) return;
+    if (o.ex) { beNotif('err', 'fa-sitemap', nomEscH(nomCmpRaison(o.s, o.ex, NOM_CPOP.ctx || nomCmpContexte()))); return; }
+    var i = NOM_CPOP.i, s = o.s, c = nomComposants[i];
+    nomCmpPopFermer(false);
+    if (!c) return;
+    c.nom_id = String(s.id); c.num_nom = s.num_nom || ''; c.code = s.code_ref_produit || '';
+    c.prix = Number(s.prix_revient_unitaire) || 0; c.type_nom = s.type_nom; c.indice = s.indice || 'A'; c._ouvert = false;
+    nomComposantsModifies = true; nomComposantsErreur = null;
+    nomRenderComposants(); nomCalcTotaux();
+    nomCmpAnnoncer('« ' + nomCmpLibelle(c) + ' » choisi au rang ' + (i + 1) + '.');
+    // Suite logique de la saisie : la quantité de la même ligne.
+    var q = document.querySelector('#nom-f-composants-list [data-cmp-qte="'+i+'"]');
+    if (q && q.focus) { try { q.focus(); if (q.select) q.select(); } catch(e) {} }
+  }
+
+  // ── Glisser-déposer par la poignée (même effet que ▲ ▼) ──────────────────────────────────────────
+  // La ligne n'est « draggable » que le temps d'un appui sur la poignée : ailleurs (champs), la souris
+  // sélectionne du texte comme d'habitude.
+  var NOM_CMP_DRAG = -1;
+  function nomCmpFinDrag(){
+    NOM_CMP_DRAG = -1;
+    document.querySelectorAll('#nom-f-composants-list .nom-cmp-row').forEach(function(r){ r.classList.remove('nom-cmp-src', 'nom-cmp-avant', 'nom-cmp-apres'); r.setAttribute('draggable', 'false'); });
+  }
+  function nomCmpCibleDrop(e){
+    if (NOM_CMP_DRAG < 0) return null;
+    var row = (e.target && e.target.closest) ? e.target.closest('#nom-f-composants-list .nom-cmp-row') : null;
+    if (!row) return null;
+    var b = row.getBoundingClientRect();
+    return { row: row, i: parseInt(row.getAttribute('data-ci'), 10), apres: (e.clientY - b.top) > b.height / 2 };
+  }
+
+  // ── Délégation d'événements (une seule fois) : la liste est re-rendue en permanence ────────────────
+  if (!window.__nomCmpBound) { window.__nomCmpBound = true;
+    document.addEventListener('click', function(e){
+      var b = (e.target && e.target.closest) ? e.target.closest('#nom-f-composants-list [data-cmp-act]') : null;
+      if (!b || b.disabled) return;
+      var act = b.getAttribute('data-cmp-act'), i = parseInt(b.getAttribute('data-ci'), 10);
+      if (!(i >= 0)) return;
+      if (act === 'up') nomCmpDeplacer(i, i - 1, 'up');
+      else if (act === 'down') nomCmpDeplacer(i, i + 1, 'down');
+      else if (act === 'del') nomRemoveComposant(i);
+      else if (act === 'tree' && nomComposants[i]) {
+        nomComposants[i]._ouvert = !nomComposants[i]._ouvert;
+        nomRenderComposants();
+        var t = document.querySelector('#nom-f-composants-list [data-cmp-act="tree"][data-ci="'+i+'"]');
+        if (t && t.focus) { try { t.focus(); } catch(x) {} }
+      }
+    });
+    document.addEventListener('focusin', function(e){
+      var t = e.target;
+      if (t && t.getAttribute && t.getAttribute('data-cmp-inp') != null) {
+        if (NOM_CPOP.input === t) return;
+        nomCmpPopOuvrir(t, false);
+        try { t.select(); } catch(x) {}
+      }
+    });
+    document.addEventListener('focusout', function(e){
+      var t = e.target;
+      if (t && t.getAttribute && t.getAttribute('data-cmp-inp') != null && NOM_CPOP.input === t) nomCmpPopFermer(true);
+    });
+    document.addEventListener('input', function(e){
+      var t = e.target; if (!(t && t.getAttribute)) return;
+      if (t.getAttribute('data-cmp-inp') != null) { nomCmpPopOuvrir(t, true); return; }
+      if (t.getAttribute('data-cmp-qte') != null) nomCmpSetQte(parseInt(t.getAttribute('data-cmp-qte'), 10), t.value);
+    });
+    document.addEventListener('keydown', function(e){
+      var t = e.target; if (!(t && t.getAttribute)) return;
+      // Poignée au clavier : flèche haut / bas = monter / descendre la ligne.
+      if (t.classList && t.classList.contains('nom-cmp-poignee') && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault();
+        var i = parseInt(t.getAttribute('data-ci'), 10);
+        nomCmpDeplacer(i, i + (e.key === 'ArrowUp' ? -1 : 1), 'drag');
+        return;
+      }
+      if (t.getAttribute('data-cmp-inp') == null) return;
+      var key = e.key;
+      if (key === 'ArrowDown') { e.preventDefault(); if (NOM_CPOP.input === t) nomCmpBouger(1); else nomCmpPopOuvrir(t, false); return; }
+      if (key === 'ArrowUp')   { if (NOM_CPOP.input === t) { e.preventDefault(); nomCmpBouger(-1); } return; }
+      if (key === 'Enter')     { if (NOM_CPOP.input === t && NOM_CPOP.actif >= 0) { e.preventDefault(); nomCmpChoisir(NOM_CPOP.actif); } return; }
+      if (key === 'Escape')    { if (NOM_CPOP.input === t) { e.preventDefault(); nomCmpPopFermer(true); try { t.select(); } catch(x) {} } return; }
+      if (key === 'Tab')       { nomCmpPopFermer(true); return; }
+    });
+    document.addEventListener('mousedown', function(e){
+      var t = e.target;
+      if (t && t.closest && t.closest('#nom-cmp-pop')) {
+        e.preventDefault();   // le champ garde le focus (sinon son focusout fermerait la liste avant le choix)
+        var o = t.closest('.ncp-o');
+        if (o) nomCmpChoisir(parseInt(o.getAttribute('data-j'), 10) || 0);
+        return;
+      }
+      var h = (t && t.closest) ? t.closest('#nom-f-composants-list .nom-cmp-poignee') : null;
+      if (h) { var row = h.closest('.nom-cmp-row'); if (row) row.setAttribute('draggable', 'true'); }
+    });
+    document.addEventListener('mouseup', function(){ if (NOM_CMP_DRAG < 0) nomCmpFinDrag(); });
+    document.addEventListener('dragstart', function(e){
+      var row = (e.target && e.target.closest) ? e.target.closest('#nom-f-composants-list .nom-cmp-row') : null;
+      if (!row) return;
+      if (row.getAttribute('draggable') !== 'true') { e.preventDefault(); return; }
+      nomCmpPopFermer(true);
+      NOM_CMP_DRAG = parseInt(row.getAttribute('data-ci'), 10);
+      row.classList.add('nom-cmp-src');
+      try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(NOM_CMP_DRAG)); } catch(x) {}
+    });
+    document.addEventListener('dragover', function(e){
+      var c = nomCmpCibleDrop(e); if (!c) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = 'move'; } catch(x) {}
+      document.querySelectorAll('#nom-f-composants-list .nom-cmp-row').forEach(function(r){ if (r !== c.row) r.classList.remove('nom-cmp-avant', 'nom-cmp-apres'); });
+      c.row.classList.toggle('nom-cmp-apres', c.apres);
+      c.row.classList.toggle('nom-cmp-avant', !c.apres);
+    });
+    document.addEventListener('drop', function(e){
+      var c = nomCmpCibleDrop(e); if (!c) return;
+      e.preventDefault();
+      var de = NOM_CMP_DRAG, vers = c.i + (c.apres ? 1 : 0);
+      if (de < vers) vers--;
+      nomCmpFinDrag();
+      nomCmpDeplacer(de, vers, 'drag');
+    });
+    document.addEventListener('dragend', function(){ nomCmpFinDrag(); });
+    window.addEventListener('resize', function(){ if (NOM_CPOP.input) nomCmpPopPlacer(); });
+    // Défilement de la page : la liste suit son champ (elle ne se ferme que si le champ sort de l'écran).
+    document.addEventListener('scroll', function(e){
+      var t = e.target;
+      if (t && t.closest && t.closest('#nom-cmp-pop')) return;
+      if (NOM_CPOP.input) nomCmpPopPlacer();
+    }, true);
   }
 
   // « + Nouvelle mère » → formulaire mère vierge
@@ -2252,6 +2920,7 @@ ${BE_ETAPE_COUT_JS}
     // Type → standard par défaut ; composants vidés
     nomComposants = [];
     nomComposantsModifies = false;
+    nomComposantsErreur = null;
     nomTypeCharge = 'standard';
     nomSetType('standard');
     document.getElementById('nom-form-title').textContent = 'Nouvelle nomenclature';
@@ -2343,11 +3012,19 @@ ${BE_ETAPE_COUT_JS}
     document.getElementById('nom-f-notes').value = nom.notes || '';
     // Type standard / mère + composants (pour une mère)
     var nt = (nom.type_nom === 'mere') ? 'mere' : 'standard';
-    // Lot H0 : lecture tolérante (tableau ou chaîne JSON) — sinon une mère rouverte perdait ses composants
+    // Lot H0 : lecture tolérante (tableau ou chaîne JSON) — sinon une mère rouverte perdait ses composants.
+    // Lot H2 : ordre de fabrication = rang (nomCmpOrdonnes, miroir de composantsOrdonnes). Une ligne d'avant H2
+    // n'a ni indice ni type : on les recopie de la révision choisie (le journal les trace en UNE entrée « recalcul »).
     nomComposants = (nt === 'mere')
-      ? nomComposantsDe(nom.composants).filter(function(c){ return c && typeof c === 'object'; }).map(function(c){ return { nom_id:c.nom_id||'', num_nom:c.num_nom||'', code:c.code||'', prix:c.prix||0, qte:c.qte!=null?c.qte:1 }; })
+      ? nomCmpOrdonnes(nom.composants).map(function(c){
+          var r = c.nom_id ? NOM_BY_ID[String(c.nom_id)] : null;
+          var t = (c.type_nom === 'mere' || c.type_nom === 'standard') ? c.type_nom : (r ? (r.type_nom === 'mere' ? 'mere' : 'standard') : '');
+          var ind = (c.indice != null && c.indice !== '') ? String(c.indice) : (r ? String(r.indice || 'A') : '');
+          return { nom_id:c.nom_id||'', num_nom:c.num_nom||'', code:c.code||'', prix:c.prix||0, qte:c.qte!=null?c.qte:1, type_nom:t, indice:ind, _ouvert:false };
+        })
       : [];
     nomComposantsModifies = false;
+    nomComposantsErreur = null;
     nomTypeCharge = nt;
     nomSetType(nt);
     document.getElementById('nom-form-title').textContent = nom.num_nom || 'Nomenclature';
@@ -2886,19 +3563,24 @@ ${BE_ETAPE_COUT_JS}
       + '<span class="nom-prix-badge" style="color:'+b.col+';">'+nomEscH(b.txt)+'</span>'
       + '</div>';
   }
-  // Bouton « demande de prix » (colonne dédiée) : disponible À TOUT MOMENT (lot H0), orange quand
-  // elle est conseillée (prix périmé, hors catalogue ou absent), sablier quand une demande est en cours.
+  // Bouton « Demande de prix » (colonne dédiée) : disponible À TOUT MOMENT (lot H0).
+  // Lot H2 : « le bouton de demande de prix n'a pas été remis » — depuis H0/H1 ce n'était plus qu'une
+  // icône grise de 26 px sans libellé. C'est de nouveau un VRAI bouton libellé « Demande / de prix »
+  // (texte visible, pas une icône seule) : bleu = prix récent (demande possible), ORANGE = demande
+  // conseillée (prix périmé, hors catalogue ou absent), AMBRE « En attente / vérifier » = demande
+  // envoyée (un clic relit la réponse des Achats). data-rfq / data-nk : nomFourMajLigne le remplace.
   function nomFourRfqBtnHtml(k, l, i){
     var kk = (k?1:0);
+    var refLib = String(l.ref || l.designation || (k ? 'matière' : 'accessoire'));
     if (l._statut === 'pending') {
-      return '<button type="button" class="nom-rfq-ico" data-rfq="'+i+'" data-nk="'+kk+'" onclick="nomLigneRFQCheck('+kk+','+i+')" title="Demande de prix envoyée — vérifier la réponse des Achats" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;"><i class="fas fa-hourglass-half"></i></button>';
+      return '<button type="button" class="nom-rfq-btn" data-rfq="'+i+'" data-nk="'+kk+'" onclick="nomLigneRFQCheck('+kk+','+i+')" title="Demande de prix envoyée — cliquez pour vérifier la réponse des Achats" aria-label="'+nomEscA('Demande de prix en attente — vérifier la réponse — '+refLib)+'" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;"><i class="fas fa-hourglass-half" aria-hidden="true"></i><span class="nom-rfq-lib">En attente<br>vérifier</span></button>';
     }
     var conseil = (l._statut !== 'ok');
-    var style = conseil ? 'background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;' : 'background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;';
+    var style = conseil ? 'background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;' : 'background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;';
     var titre = conseil
       ? 'Demande de prix conseillée (prix absent, hors catalogue ou de plus de '+NOM_PRIX_VALIDITE_LIB+') — envoyer aux Achats'
-      : 'Prix de moins de '+NOM_PRIX_VALIDITE_LIB+' — vous pouvez tout de même demander un nouveau prix';
-    return '<button type="button" class="nom-rfq-ico" data-rfq="'+i+'" data-nk="'+kk+'" onclick="nomLigneRFQ('+kk+','+i+')" title="'+nomEscA(titre)+'" style="'+style+'"><i class="fas fa-file-invoice-dollar"></i></button>';
+      : 'Prix de moins de '+NOM_PRIX_VALIDITE_LIB+' — vous pouvez tout de même demander un nouveau prix aux Achats';
+    return '<button type="button" class="nom-rfq-btn" data-rfq="'+i+'" data-nk="'+kk+'" onclick="nomLigneRFQ('+kk+','+i+')" title="'+nomEscA(titre)+'" aria-label="'+nomEscA('Demande de prix — '+refLib)+'" style="'+style+'"><i class="fas fa-file-invoice-dollar" aria-hidden="true"></i><span class="nom-rfq-lib">Demande<br>de prix</span></button>';
   }
 
   // ── Détail du prix moyen (clic sur la cellule) ─────────────────────────────────────────────────
@@ -2912,7 +3594,7 @@ ${BE_ETAPE_COUT_JS}
       var enr = nombrePositif(k ? l.prix_tole_enr : l.prix_piece_enr);
       h += '<div style="color:#b91c1c;font-weight:700;">Aucun prix au catalogue pour cette référence — le coût de revient est incomplet (la validation reste permise).</div>';
       if (enr !== null) h += '<div style="margin-top:6px;color:#c2410c;">Prix enregistré dans la nomenclature, <strong>conservé</strong> : '+nomEscH(nomFmtEur(enr,dec))+' / '+uni+'.</div>';
-      h += '<div style="margin-top:8px;font-size:.7rem;color:#64748b;">Le bouton « demande de prix » de la ligne envoie la référence aux Achats ; à la validation de leur réponse, le prix de chaque fournisseur chiffré entre dans la moyenne.</div>';
+      h += '<div style="margin-top:8px;font-size:.7rem;color:#64748b;">Le bouton « Demande de prix » de la ligne envoie la référence aux Achats ; à la validation de leur réponse, le prix de chaque fournisseur chiffré entre dans la moyenne.</div>';
       return h;
     }
     h += '<div style="margin-bottom:8px;">Prix moyen de <strong>'+det.length+' fournisseur(s)</strong> : <strong>'+nomEscH(nomFmtEur(pm.prix_base, dec))+'</strong> / '+uni
@@ -3677,7 +4359,16 @@ ${BE_ETAPE_COUT_JS}
   //  - standard : null ; + vider_composants si la fiche était une mère à l'ouverture (bascule explicite du type).
   function nomComposantsPourEnvoi(isMere){
     if (!isMere) return (nomCurrentId && nomTypeCharge === 'mere') ? { composants: null, vider: true } : { composants: null };
-    var liste = nomComposants.filter(function(c){ return c && c.nom_id; }).map(function(c){ return { nom_id:c.nom_id, num_nom:c.num_nom, code:c.code, prix:c.prix, qte:parseFloat(c.qte)||1 }; });
+    // Lot H2 : DANS L'ORDRE AFFICHÉ (= ordre de fabrication), rang 1..n réécrit ici ; type et indice de la
+    // révision choisie. Une ligne sans nom_id mais qui désigne une fiche (code / n°, donnée ancienne) est
+    // gardée : le serveur la garde aussi (composantsOrdonnes) — seule une ligne encore vide est ignorée.
+    var liste = nomComposants.filter(function(c){ return c && (c.nom_id || c.code || c.num_nom); }).map(function(c, i){
+      var o = { nom_id: String(c.nom_id || ''), code: c.code || '', num_nom: c.num_nom || '', qte: parseFloat(c.qte) || 1, rang: i + 1 };
+      if (c.type_nom === 'mere' || c.type_nom === 'standard') o.type_nom = c.type_nom;
+      if (c.indice != null && c.indice !== '') o.indice = String(c.indice);
+      o.prix = Number(c.prix) || 0;
+      return o;
+    });
     if (liste.length) return { composants: liste };
     if (!nomCurrentId) return { composants: [] };
     if (nomTypeCharge !== 'mere') return { composants: [] };   // standard devenu mère : aucune liste en base à protéger
@@ -3772,6 +4463,14 @@ ${BE_ETAPE_COUT_JS}
         // 409 du serveur : la même référence figure deux fois. Refus AVANT toute écriture — les
         // fournitures de la fiche sont intactes. Le message est celui du module partagé.
         pushNotif('err','fa-clone', data.error || 'Doublon de référence dans les fournitures.', 12000);
+      } else if (data.code === 'cycle_composants' || data.code === 'profondeur_max') {
+        // Lot H2 : refus AVANT toute écriture (rien n'est enregistré). Le message du serveur contient le chemin
+        // (« A › B › A ») ; la ligne fautive est encadrée en rouge et le formulaire reste ouvert.
+        nomComposantsErreur = { code: data.code, chemin: Array.isArray(data.chemin) ? data.chemin : [] };
+        nomRenderComposants();
+        pushNotif('err', 'fa-sitemap', nomEscH(data.error || (data.code === 'cycle_composants' ? 'Enregistrement refusé : une nomenclature mère ne peut pas se contenir elle-même.' : 'Enregistrement refusé : imbrication trop profonde (' + NOM_PROF_MAX + ' niveaux au plus).')), 12000);
+        var _mb = document.getElementById('nom-f-mere-block');
+        if (_mb && _mb.scrollIntoView) { try { _mb.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch(e) {} }
       } else if (data.code === 'fournitures_vides') {
         // 409 du serveur : la fiche a des fournitures en base et l'écran en envoyait zéro (lecture
         // ratée, onglet resté ouvert). Rien n'a été effacé — il faut rouvrir la fiche.
@@ -3805,6 +4504,12 @@ ${BE_ETAPE_COUT_JS}
         data = await envoyer(motif);
       }
       if (!data.ok) {
+        // Lot H2 : une nomenclature composant d'une mère n'est pas supprimée (409 composant_utilise).
+        if (data.code === 'composant_utilise') {
+          var _meres = Array.isArray(data.meres) ? data.meres.join(', ') : '';
+          pushNotif('err','fa-sitemap', nomEscH(data.error || ('Suppression refusée : cette nomenclature est un composant de ' + (_meres || 'une mère') + '. Retirez-la d’abord de ces mères.')), 10000);
+          return;
+        }
         pushNotif('err','fa-exclamation-triangle','Erreur suppression: ' + (data.error || 'inconnu'), 5000);
         return;
       }

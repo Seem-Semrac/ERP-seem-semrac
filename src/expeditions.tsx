@@ -6,6 +6,9 @@ import { escX, layout, serviceHeader, demandeAchatModal, buildValDirMap } from '
 import type { BonDeLivraison, BonDeCommande, Commande, DemandeAchat, FournisseurSt } from './types'
 import { MODES_ARRIVEE } from './reception'
 import { GRAVITES_NC, GRAVITE_DEFAUT, OBS_GENERALE_MAX } from './pv_reception'
+// Lot H2 (18/09/2026) : un sous-lot (LOT-…-01.02, lot_parent) est un sous-ensemble INTERNE d'une pièce mère — ni libéré
+// seul, ni expédié : la libération et le BL portent sur le lot RACINE (arbitrage A8). Module pur, rendu serveur.
+import { parentDuLot } from './nomenclature_arbre'
 
 
 const AMB   = '#f59e0b'
@@ -911,7 +914,9 @@ export const pageServiceExpeditions = (
     const q = (dbQuar ?? []).find((x: any) => _qOpen(x.statut) && (lotIds.has(String(x.lot_id)) || String(x.lot_id || '').indexOf(aff) !== -1))
     if (q) return 'Quarantaine ' + (q.id || '')
     // Porte LIBÉRATION : tous les lots de la commande doivent avoir été libérés (contrôle qualité final) avant expédition.
-    const lotsC = (dbLots ?? []).filter((l: any) => String(l.cmd_id) === String(c.id) || String(l.id || '').indexOf(aff) !== -1)
+    // Lot H2 : lots RACINES seulement — un sous-lot n'est jamais libéré seul (il suit son lot racine). Les quarantaines
+    // ci-dessus, elles, comptent aussi les sous-lots (voulu : un sous-ensemble en quarantaine bloque l'affaire).
+    const lotsC = (dbLots ?? []).filter((l: any) => !parentDuLot(l) && (String(l.cmd_id) === String(c.id) || String(l.id || '').indexOf(aff) !== -1))
     const nonLib = lotsC.filter((l: any) => l.statut !== 'libere' && l.statut !== 'expedie')
     if (lotsC.length > 0 && nonLib.length > 0) return nonLib.length + ' lot(s) à libérer'
     return null
@@ -947,7 +952,8 @@ export const pageServiceExpeditions = (
     infos_col: ('num_bl_fournisseur' in l),
   }]))).replace(/</g, '\\u003c')
   // Lots & commandes (pour le BL partiel) : SEULS les lots LIBÉRÉS (contrôle qualité final passé) sont expédiables.
-  const LOTS_EXP = (dbLots ?? []).filter((l:any) => l.statut === 'libere')
+  // Lot H2 : et seulement les lots RACINES — un sous-lot s'expédie avec son lot racine (le serveur refuse : 409 sous_lot_non_expediable).
+  const LOTS_EXP = (dbLots ?? []).filter((l:any) => l.statut === 'libere' && !parentDuLot(l))
   const LOTS_JSON = JSON.stringify((LOTS_EXP as any[]).map((l:any) => ({ id:l.id, cmd_id:l.cmd_id||'', client:l.client_nom||'', piece:l.piece||'', qte:l.qte!=null?l.qte:null })))
   const CMDS_JSON = JSON.stringify((CMDS as any[]).map((c:any) => ({ id:c.id, num_affaire:c.num_affaire||c.id, client:c.client_nom||'', montant:c.montant||0 })))
   const FLBL = 'display:block;font-size:.66rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;'

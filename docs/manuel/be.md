@@ -7,7 +7,7 @@ Définition technique des pièces : nomenclatures (matières + gamme d'opératio
 ![be-noms](../assets/be-noms.png)
 
 ## Les onglets
-- **Nomenclatures** — BOM : composants matière (masse en g), gamme d'opérations (temps en millièmes d'heure), prix de revient calculé.
+- **Nomenclatures** — BOM : composants matière (masse en g), gamme d'opérations (temps en millièmes d'heure), prix de revient calculé. Les **mères** listent leurs composants dans l'**ordre de fabrication** (colonne « n composants dont m mère(s) »).
 - **Analyse DT** — Transforme une DT en dossier technique.
 - **Préparations tech.** — Fichiers plan / programme CN par étape.
 - **Références** — Catalogue des références, des prix et de la **quantité par paquet** des accessoires.
@@ -27,7 +27,7 @@ Définition technique des pièces : nomenclatures (matières + gamme d'opératio
 
 ![Éditeur de nomenclature : identification à gauche ; à droite, en haut, les compartiments Matière (tôle) et Accessoires avec leur « Prix estimé / pièce », puis les étapes](../assets/form-be-nomenclature.png)
 
-> Sur cette capture, l'écrou `136290` montre le cas à corriger : sa quantité par paquet n'est pas encore déclarée (« cond. ? » en orange), donc son prix de paquet (10,40 €) est compté comme un prix à la pièce. Les lignes de l'exemple sont posées à l'écran pour la capture, rien n'est enregistré.
+> Sur cette capture (18/09/2026), l'écrou `136290` a sa quantité par paquet déclarée au catalogue (100) : 10,40 € le paquet = **0,1040 € la pièce**, 0,42 € pour 4 écrous. Sans quantité par paquet déclarée, la mention orange « cond. ? » apparaît et le prix du paquet est compté comme un prix à la pièce. Chaque ligne a son bouton **« Demande de prix »**. Les lignes de l'exemple sont posées à l'écran pour la capture, rien n'est enregistré.
 
 ### Comprendre le « prix estimé / pièce » (prix moyen des fournisseurs)
 
@@ -49,12 +49,12 @@ Le prix d'une fourniture n'est plus celui d'**un** fournisseur choisi à la main
 - Une ancienne nomenclature (avec fournisseur et qté/paquet sur la ligne) s'affiche **avec le nouveau calcul** ; elle ne bascule réellement qu'au **prochain enregistrement** que vous ferez. Rien n'est converti en masse.
 
 ### Demander un prix (à tout moment)
-1. Dans le compartiment **Matière (tôle)** ou **Accessoires**, chaque ligne a son bouton de demande de prix :
-   - **prix récent** (moins de 6 mois) : petit bouton **gris** à côté du prix, pour redemander quand même ;
-   - **prix ancien** ou introuvable au catalogue : prix **orange** conservé + bouton **orange** (demande conseillée) ;
-   - **aucun prix** : bouton orange **« demande de prix »**.
+1. Dans le compartiment **Matière (tôle)** ou **Accessoires**, chaque ligne a son bouton **« Demande de prix »** (colonne du même nom, juste avant la croix), visible à toutes les largeurs d'écran :
+   - **bleu** : le prix est récent (moins de 6 mois) — vous pouvez quand même redemander ;
+   - **orange** : demande **conseillée** — prix ancien, absent ou introuvable au catalogue (le dernier prix connu reste affiché en orange) ;
+   - **ambre « En attente / vérifier »** : une demande est déjà partie (voir l'étape 3).
 2. Une **référence ou une désignation** suffit : il n'y a **pas de fournisseur à désigner**. La fenêtre s'ouvre pré-remplie (référence, désignation, quantité, catégorie, n° de nomenclature) avec un bloc **Destinataires** : tous les fournisseurs qui **portent déjà cette référence** sont **cochés d'avance** ; si aucun ne la porte, choisissez librement parmi les fournisseurs.
-3. Après l'envoi, un sablier **« vérifier »** remplace le bouton. Il reste affiché tant que les **Achats** n'ont pas validé la demande. Cliquez-le pour récupérer la réponse : les prix validés entrent au catalogue et **la moyenne de la ligne se recalcule** (le badge passe de « 1 fourn. » à « 2 fourn. », etc.). Une demande validée sans prix récent laisse le prix actuel en place.
+3. Après l'envoi, le bouton passe en ambre **« En attente / vérifier »** (sablier). Il reste affiché tant que les **Achats** n'ont pas validé la demande. Cliquez-le pour récupérer la réponse : les prix validés entrent au catalogue et **la moyenne de la ligne se recalcule** (le badge passe de « 1 fourn. » à « 2 fourn. », etc.). Une demande validée sans prix récent laisse le prix actuel en place.
 4. Onglet **Références** : le bouton **« Demande de prix »** est présent sur **chaque** ligne (orange si le prix manque ou a plus de 6 mois, gris sinon).
 
 > Plus vous consultez de fournisseurs pour une même référence, plus le prix estimé est juste : les Achats enregistrent **tous** les prix chiffrés, pas seulement celui du fournisseur retenu.
@@ -71,10 +71,32 @@ Le prix d'une fourniture n'est plus celui d'**un** fournisseur choisi à la main
 > Rappel : le prix d'un accessoire au catalogue est le **prix du PAQUET**, celui d'une matière le **prix d'UNE TÔLE**. Le prix à la pièce est toujours **calculé**, jamais saisi.
 > Si votre base n'est pas encore à jour, l'ERP répond « *Référence enregistrée, sauf la quantité par paquet…* » : la référence est bien enregistrée, prévenez l'administrateur (script `cloud-13` à appliquer).
 
-### Nomenclature mère et nouvel indice
-- À chaque ouverture, la fiche est **relue en base** : les composants d'une mère et la dernière saisie réapparaissent, même juste après un enregistrement. Enregistrer sans toucher aux composants les conserve.
+### Créer une nomenclature mère (assemblage) et ordonner ses composants
+
+Une **mère** assemble des pièces : des nomenclatures **filles** (standards) et, depuis le 18/09/2026, **d'autres mères**. **L'ordre des composants est l'ordre de fabrication, lu du haut vers le bas** : le 1ᵉʳ composant est fabriqué en premier, puis le 2ᵉ…, puis la mère est assemblée avec ses propres étapes.
+
+1. Sous-onglet **Mères**, **« + Nouvelle mère »** (ou type **« Mère (assemblage) »** dans le formulaire). Le bloc **« Composants — ordre de fabrication (du haut vers le bas) »** s'affiche **en haut de la colonne de droite** (les compartiments Matière / Accessoires disparaissent : une mère n'a pas de fournitures propres).
+2. **« Ajouter un composant »** → tapez quelques lettres (n°, code ou description, sans souci des accents ni des majuscules) : la liste propose deux groupes, **« Nomenclatures filles (standards) »** et **« Nomenclatures mères »**, avec la **dernière révision validée** de chaque pièce. Saisissez la **quantité par mère** (vide ou 0 = 1, le champ est alors encadré de rouge).
+3. **Remettre dans l'ordre** : boutons **▲ ▼** de la ligne, ou glisser la ligne par sa **poignée** ⠿, ou flèches ↑ ↓ du clavier sur la poignée. La pastille orange donne le **rang** ; sous chaque ligne, le **n° de sous-lot** qu'aura le composant en production (`.01`, `.02`…), son type (standard / mère) et son prix unitaire. Pour une sous-mère, « **n composants — arborescence** » déplie ses propres composants.
+4. Lisez le **résumé** sous la liste : « Fabrication : 1. … → 2. … → assemblage de la mère » et « N sous-lots à la mise en production, sur K niveaux (mère comprise ; 5 au plus) ».
+5. Enregistrez puis validez, comme une standard. Le **prix de revient** d'une mère = somme (prix × quantité) de ses composants ; ⚠ ses étapes propres (assemblage) n'y sont pas ajoutées.
+
+![Nomenclature mère : composants dans l'ordre de fabrication, rang, ▲ ▼, n° de sous-lot, sous-mère dépliable et résumé de fabrication](../assets/form-be-nomenclature-mere.png)
+
+![Sous-onglet Mères : « 2 composants dont 1 mère »](../assets/be-noms-meres.png)
+
+> **Ce qui se passe en production** : à l'acceptation de l'offre, le lot de la mère reçoit **un sous-lot par composant**, dans cet ordre (`LOT-…-01.01`, `LOT-…-01.02`…) ; si un composant est lui-même une mère, **ses** composants deviennent des **sous-sous-lots** (`LOT-…-01.02.01`). Chaque sous-lot a sa gamme, sa préparation technique et ses achats de matière. La production prend la **dernière révision validée** de chaque composant : un composant sans révision validée n'est pas lancé (un avertissement le dit). Voir le manuel **Production**.
+
+**Ce que l'ERP refuse**
+- Une mère **ne peut pas se contenir elle-même**, même indirectement (A contient B qui contient A) : la fiche ouverte et les mères qui la contiennent déjà ne sont **pas proposées** ; si l'enregistrement le détecte quand même : « *Enregistrement refusé : une nomenclature mère ne peut pas se contenir elle-même. Chemin : A › B › A. Retirez « B » des composants.* »
+- **5 niveaux au plus**, mère comprise : un composant qui ferait dépasser est grisé « **trop profond** » ; sinon « *Enregistrement refusé : imbrication trop profonde (6 niveaux, 5 au plus). Chemin le plus long : …* ». La ligne fautive est encadrée en rouge, le formulaire reste ouvert : rien n'est enregistré.
+- **Supprimer une nomenclature encore composant d'une mère** : « *Suppression refusée : « X » est un composant de la nomenclature mère : M1. Retirez-le d'abord de leurs composants.* »
+
+**Nomenclature mère et nouvel indice**
+- À chaque ouverture, la fiche est **relue en base** : les composants d'une mère (dans leur ordre) et la dernière saisie réapparaissent, même juste après un enregistrement. Enregistrer sans toucher aux composants les conserve.
 - Pour retirer des composants : leur **croix**, puis Enregistrer. Message « *Enregistrement refusé : cette nomenclature compte N composant(s) en base et la liste envoyée est vide* » → fermer et rouvrir la fiche.
 - **« Incrémenter l'indice »** crée une révision **« En cours »**, même depuis une nomenclature validée : la relire puis la **valider**. D'ici là, les nouvelles commandes et l'OF gardent l'indice validé précédent (un OF sans aucun indice validé affiche « **GAMME NON VALIDÉE** » à côté de l'indice).
+- Le **journal EN 9100** trace un changement d'ordre en **une seule** ligne « Ordre de fabrication des composants » (« A, B, C » → « B, A, C »), ainsi que chaque composant ajouté, retiré, changé de quantité ou de révision. Il occupe **toute la largeur** de l'écran, sous le formulaire : une modification par ligne, « avant → après » à droite.
 
 ### Supprimer une nomenclature validée
 1. Cliquer **« Supprimer »** sur la ligne. Une nomenclature **validée** (ou qui l’a été puis a été dévalidée) demande un **motif**, saisi dans une fenêtre dédiée.

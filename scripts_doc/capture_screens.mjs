@@ -33,6 +33,8 @@ const MANIFEST = [
   { file: 'commercial-cmd',        path: '/commercial/service', clicks: ['#svc-tab-cmd'] },
   // Bureau d'études
   { file: 'be-noms',               path: '/be/service' },
+  // Lot H2 (18/09/2026) : sous-onglet Mères — colonne « n composants dont m mère(s) » (mère dans mère).
+  { file: 'be-noms-meres',         path: '/be/service', clicks: ['#nom-subtab-btn-meres'], wait: 600 },
   { file: 'be-analyse',            path: '/be/service', clicks: ['#be-tab-analyse'] },
   { file: 'form-be-analyse',       path: '/be/analyse?dt=DT-2026-0001', wait: 3000, fullPage: true },   // formulaire d'analyse (tableau série ×q + paquets)
   { file: 'be-refs',               path: '/be/service', clicks: ['#be-tab-refs'] },
@@ -114,6 +116,13 @@ const MANIFEST = [
   { file: 'production-gantt-bst',  path: '/production/service', clicks: ['#ptab-gantt-bst'], eval: "(function(){ function plus(d,n){ var x=new Date(d+'T00:00:00Z'); x.setUTCDate(x.getUTCDate()+n); return x.toISOString().slice(0,10); } var b=BDTS.find(function(z){ return z.id==='BDT-2026-0001-01-04'; }); var pr=PROCESS.filter(function(x){ return x.poste_id && !isOasProc(x); })[0]; if(!b||!pr||!BST_FOURN.length) return; b.process=pr.id; b.statut='programme'; b.datePrevue=plus(bstStartDate,1); b.debut=8; b.sansHeure=false; var base={lot_id:b.cleLot, lot_ref:b.cleLot, piece:b.piece, qte:4260, seq:Number(b.seq||0)+1, operation:'Traitement de surface', cmd_ref:null}; BST_DATA.push(Object.assign({id:'BST-2026-0001-06-01', statut:'a_planifier', sous_traitant_id:null, date_debut:null, date_envoi:null, duree_days:3}, base)); BST_DATA.push(Object.assign({id:'BST-2026-0001-06-02', statut:'a_envoyer', sous_traitant_id:BST_FOURN[0].id, date_debut:bstStartDate, date_envoi:bstStartDate, duree_days:3}, base)); bstBuildAll(); })()", wait: 1200 },   // lot C (14/09/2026) : DANS LE NAVIGATEUR seulement (aucune écriture) — l'étape d'atelier précédente posée demain, un BST à planifier « Dispo le … » et un BST planifié trop tôt (liseré rouge)
   { file: 'production-presence',   path: '/production/service', clicks: ['#ptab-presence'], eval: "setTimeout(function(){ var b=[].slice.call(document.getElementById('presGrid').querySelectorAll('button[data-pres-op]')).filter(function(x){ return !x.disabled; })[2]; if(b) b.click(); },500);", wait: 1300 },   // lot C (14/09/2026) : menu de créneau ouvert sur une case (aucune écriture)
   { file: 'production-commandes',  path: '/production/service', clicks: ['#ptab-commandes'], wait: 700 },
+  // Lot H2 (18/09/2026) : vue Lots EN ARBRE (pièce mère, sous-lots et sous-sous-lots en retrait) et fiche du lot d'une
+  //   pièce mère (section « Sous-lots », avancement de l'arbre, vigilance). Il faut une base avec cloud-14 / 018 et au moins
+  //   une pièce mère lancée : sinon la vue Lots est plate et `suivre` ne trouve rien (la fiche n'est pas capturée).
+  { file: 'production-lots',       path: '/production/service', clicks: ['#ptab-commandes', '#subBtn-lots'], wait: 800 },
+  { file: 'production-lot-sous-lots', path: '/production/lots', fullPage: true, wait: 900,
+    // 1er lot RACINE (sans point dans son n°) qui a au moins un sous-lot listé (id + '.') : on ouvre sa fiche.
+    suivre: "(function(){ var ids=[].slice.call(document.querySelectorAll('tr[data-id^=\"LOT-\"]')).map(function(t){ return t.getAttribute('data-id'); }); var r=ids.filter(function(i){ return i.indexOf('.')<0 && ids.some(function(j){ return j.indexOf(i+'.')===0; }); })[0]; return r ? '/production/lot/'+encodeURIComponent(r) : null; })()" },
   { file: 'production-process',    path: '/production/service', clicks: ['#ptab-machines'], wait: 800 },
   { file: 'production-dash-prog',  path: '/production/service', clicks: ['#ptab-dash-prog'], wait: 1200, fullPage: true },
   { file: 'production-dash-prod',  path: '/production/service', clicks: ['#ptab-dash-prod'], wait: 1200, fullPage: true },
@@ -237,6 +246,13 @@ for (const m of jobs) {
   const page = await ctx.newPage()
   try {
     await page.goto(BASE + m.path, { waitUntil: 'networkidle', timeout: 30000 })
+    // `suivre` (lot H2) : expression JS évaluée sur la page d'arrivée, qui rend le CHEMIN de la page à capturer (ex. la
+    // fiche du premier lot de pièce mère trouvé dans une liste). null ⇒ rien à capturer : le PNG existant est conservé.
+    if (m.suivre) {
+      const cible = await page.evaluate(m.suivre).catch(() => null)
+      if (!cible) { console.warn('  ⚠ ' + m.file + ' : aucune cible trouvée par « suivre » — PNG conservé'); ko++; continue }
+      await page.goto(BASE + cible, { waitUntil: 'networkidle', timeout: 30000 })
+    }
     for (const sel of (m.clicks || [])) {
       const el = await page.$(sel)
       if (el) { await el.click(); await page.waitForTimeout(350) }

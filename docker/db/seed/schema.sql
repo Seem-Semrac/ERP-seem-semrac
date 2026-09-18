@@ -1403,8 +1403,24 @@ CREATE TABLE public.lots (
     updated_at timestamp with time zone DEFAULT now(),
     created_at timestamp with time zone DEFAULT now(),
     libere_le timestamp with time zone,
-    libere_par text
+    libere_par text,
+    lot_parent text,
+    rang integer,
+    niveau integer DEFAULT 0 NOT NULL,
+    nomenclature_id text,
+    qte_par_parent numeric
 );
+
+
+--
+-- Sous-lots des nomenclatures meres (= migration 018, lot H2 du 18/09/2026)
+--
+
+COMMENT ON COLUMN public.lots.lot_parent IS 'Id du lot parent (sous-lot d une piece mere). NULL = lot racine. Lien souple, sans cle etrangere. Numerotation : parent + .RR (src/nomenclature_arbre.ts).';
+COMMENT ON COLUMN public.lots.rang IS 'Position parmi les freres = ordre de fabrication, du haut vers le bas de la nomenclature mere (racine : son numero ZZ). NULL = lot anterieur au lot H2 (suffixe de l id).';
+COMMENT ON COLUMN public.lots.niveau IS 'Profondeur dans l arbre : 0 = racine, 1 = sous-lot, 2 = sous-sous-lot, 4 au plus (5 niveaux, racine comprise).';
+COMMENT ON COLUMN public.lots.nomenclature_id IS 'Nomenclature VALIDEE retenue au lancement pour ce lot (derniere revision validee du code de la piece). Tracabilite EN 9100.';
+COMMENT ON COLUMN public.lots.qte_par_parent IS 'Quantite du composant par unite du lot parent (NULL = racine). qte du sous-lot = arrondi superieur de qte parent x qte_par_parent.';
 
 
 --
@@ -2519,6 +2535,20 @@ ALTER TABLE ONLY public.lots
 
 
 --
+-- Name: lots lots_niveau_valide, lots_rang_valide, lots_parent_distinct; Type: CHECK CONSTRAINT (= migration 018, NOT VALID)
+--
+
+ALTER TABLE public.lots
+    ADD CONSTRAINT lots_niveau_valide CHECK (((niveau >= 0) AND (niveau <= 4))) NOT VALID;
+
+ALTER TABLE public.lots
+    ADD CONSTRAINT lots_rang_valide CHECK (((rang IS NULL) OR (rang >= 1))) NOT VALID;
+
+ALTER TABLE public.lots
+    ADD CONSTRAINT lots_parent_distinct CHECK (((lot_parent IS NULL) OR (lot_parent <> id))) NOT VALID;
+
+
+--
 -- Name: machines_opex machines_opex_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2857,6 +2887,13 @@ CREATE INDEX idx_import_staging_batch ON public.import_staging USING btree (batc
 --
 
 CREATE INDEX idx_import_staging_status ON public.import_staging USING btree (status);
+
+
+--
+-- Name: ix_lots_lot_parent; Type: INDEX; Schema: public; Owner: - (= migration 018)
+--
+
+CREATE INDEX ix_lots_lot_parent ON public.lots USING btree (lot_parent);
 
 
 --

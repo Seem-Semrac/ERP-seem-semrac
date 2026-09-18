@@ -18,6 +18,7 @@ Vous vous connectez avec votre **matricule + PIN** (voir *Prise en main*). La ba
 1. Expéditions › **Bons de Livraison**, sélectionner la commande.
 2. Quantités expédiées (BL partiel possible).
 3. ⚠ Bloqué si quarantaine/NC : voir Qualité. Validation → facture.
+4. Pièce mère : seul le **lot de la mère** est proposé ; ses sous-lots (`LOT-…-01.01`…) sont des sous-ensembles internes, ils partent avec lui (un BL sur un sous-lot est refusé).
 
 ![expeditions](../assets/expeditions.png)
 
