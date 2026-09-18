@@ -1849,6 +1849,7 @@ CREATE TABLE public.produits_fournisseurs (
     delai_jours text,
     mini_commande text,
     conditionnement text,
+    qte_paquet numeric,
     categorie text,
     statut text,
     activite text,
@@ -4214,6 +4215,7 @@ create table if not exists public.demandes_prix_reponses (
   commentaire text,
   date_reponse timestamptz,
   retenu boolean,
+  qte_paquet numeric,
   created_at timestamptz default now()
 );
 alter table public.demandes_prix_reponses enable row level security;
@@ -5545,6 +5547,60 @@ begin
     create index if not exists idx_bdt_remis_goulotte on public.bons_de_travail (remis_goulotte_le) where remis_goulotte_le is not null;
     -- Horodatage complet de la réception (revue du 16/09/2026) : debut_reel n'est qu'une heure « HH:MM ».
     alter table public.bons_de_travail add column if not exists recu_le timestamptz;
+  end if;
+end
+$$;
+
+
+-- ── produits_fournisseurs : qte par paquet + unicite normalisee de la reference (= migration 017) ──
+do $$
+declare
+  doublons bigint;
+begin
+  if to_regclass('public.produits_fournisseurs') is null then
+    return;
+  end if;
+  comment on column public.produits_fournisseurs.qte_paquet is
+    'Nombre de PIECES par paquet pour ce couple (fournisseur, reference). Le prix catalogue d un accessoire est le prix du PAQUET : prix a la piece = prix / qte_paquet (src/prix_moyen.ts). NULL = conditionnement non declare (compte 1 et signale a l ecran). La colonne texte conditionnement reste un libelle libre.';
+  if not exists (
+    select 1 from pg_constraint
+     where conrelid = 'public.produits_fournisseurs'::regclass
+       and conname = 'produits_fournisseurs_qte_paquet_positive') then
+    alter table public.produits_fournisseurs
+      add constraint produits_fournisseurs_qte_paquet_positive
+      check (qte_paquet is null or qte_paquet > 0) not valid;
+  end if;
+  if to_regclass('public.ux_produits_fournisseurs_ref_norm') is not null then
+    return;
+  end if;
+  select count(*) into doublons from (
+    select 1 from public.produits_fournisseurs
+     where reference is not null and btrim(reference) <> '' and fournisseur_id is not null
+     group by fournisseur_id, lower(btrim(reference)) having count(*) > 1) d;
+  if doublons > 0 then
+    raise warning '017 : % couple(s) (fournisseur, reference a la casse pres) en double : index unique ux_produits_fournisseurs_ref_norm NON cree (rien n est efface). Lister : select fournisseur_id, lower(btrim(reference)), count(*), array_agg(id) from public.produits_fournisseurs where reference is not null and btrim(reference) <> '''' and fournisseur_id is not null group by 1, 2 having count(*) > 1;', doublons;
+    return;
+  end if;
+  create unique index if not exists ux_produits_fournisseurs_ref_norm
+    on public.produits_fournisseurs (fournisseur_id, lower(btrim(reference)))
+    where reference is not null and btrim(reference) <> '' and fournisseur_id is not null;
+end
+$$;
+
+do $$
+begin
+  if to_regclass('public.demandes_prix_reponses') is null then
+    return;
+  end if;
+  comment on column public.demandes_prix_reponses.qte_paquet is
+    'Accessoires : nombre de PIECES par paquet auquel se rapporte le prix chiffre par ce fournisseur. Recopie sur produits_fournisseurs.qte_paquet a la validation de la demande. NULL = non precise.';
+  if not exists (
+    select 1 from pg_constraint
+     where conrelid = 'public.demandes_prix_reponses'::regclass
+       and conname = 'demandes_prix_reponses_qte_paquet_positive') then
+    alter table public.demandes_prix_reponses
+      add constraint demandes_prix_reponses_qte_paquet_positive
+      check (qte_paquet is null or qte_paquet > 0) not valid;
   end if;
 end
 $$;

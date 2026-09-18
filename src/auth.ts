@@ -190,6 +190,21 @@ const API_FAM_SERVICE: Record<string, string> = {
   // (interlocuteurs = contacts clients ET fournisseurs → cas particulier multi-services dans canAccess)
   direction: 'direction', 'kpi-objectifs': 'direction',
 }
+// ─── Catalogue fournisseurs + demandes de prix : ÉCRITURE partagée BE ↔ Achats (lot H1, 17/09/2026)
+// Le catalogue `produits_fournisseurs` (référence, désignation, qté par paquet, prix) et les
+// demandes de prix sont alimentés par les DEUX services : le BE déclare et demande, les Achats
+// saisissent les réponses et valident les prix. La famille reste rattachée au service `be`
+// (serviceFor inchangé : la LECTURE ne bouge pas, personne ne gagne un accès en lecture) ; seule
+// l'ÉCRITURE est ouverte à « be OU achats », comme /api/interlocuteurs l'est à
+// « commercial OU achats OU be ». Jetons de la fiche salarié : ils priment, l'union porte alors sur
+// `ecrire:be` / `ecrire:achats`.
+// ⚠ Liste FERMÉE : rien d'autre de la famille `be` (nomenclatures, GED, prépa technique) n'est ouvert.
+const CATALOGUE_ACHATS_RE: RegExp[] = [
+  /^\/api\/produits-fournisseurs(\/|$)/,
+  /^\/api\/demandes-prix(\/|$)/,
+]
+const estEcritureCatalogue = (clean: string): boolean => CATALOGUE_ACHATS_RE.some((re) => re.test(clean))
+
 // Routes API réellement neutres, ouvertes à tout compte connecté (liste blanche explicite).
 const NEUTRAL_API = (clean: string): boolean =>
   clean === '/api/me' ||
@@ -272,6 +287,12 @@ export function canAccess(user: SessionUser | null, path: string, method: string
     return ex.actif ? ['commercial', 'achats', 'be'].some(s => niveau.has(s))
                     : hasAnyLevel(user, ['commercial', 'achats', 'be'], method)
   }
+  // Catalogue fournisseurs / demandes de prix : ÉCRITURE ouverte au BE ET aux Achats (lot H1).
+  // La lecture n'est pas concernée — elle retombe sur le service `be`, comme avant.
+  if (isW && estEcritureCatalogue(path.split('?')[0])) {
+    return ex.actif ? (niveau.has('be') || niveau.has('achats'))
+                    : hasAnyLevel(user, ['be', 'achats'], method)
+  }
   const svc = serviceFor(path)
   if (svc === '__neutral__') return true                 // route API explicitement neutre (liste blanche)
   if (!svc) return !path.startsWith('/api/')             // FAIL-CLOSED : /api inconnu = refusé ; page inconnue = ouverte au connecté
@@ -311,6 +332,14 @@ export function peutEcrireService(user: SessionUser | null | undefined, svc: str
   }
   if (ex.actif) return ex.ecrire.has(svc)                          // jetons de la fiche salarié : ils font foi
   return rolesOf(user).some(r => (ROLE_MATRIX[r] || {})[svc] === 'rw')
+}
+
+// Droit d'ÉCRITURE sur le catalogue fournisseurs et les demandes de prix (lot H1) : BE OU Achats.
+// Même règle que l'exception de chemin de canAccess, pour un handler qui doit revérifier le droit
+// (message clair, AUTH_ENFORCE=off) — équivalent de
+//   canAccess(u, '/api/produits-fournisseurs', 'POST') === peutEcrireCatalogue(u).
+export function peutEcrireCatalogue(user: SessionUser | null | undefined): boolean {
+  return peutEcrireService(user, 'be') || peutEcrireService(user, 'achats')
 }
 
 // Services LISIBLES par l'utilisateur (pour filtrer le menu côté client).

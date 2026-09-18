@@ -132,18 +132,21 @@
 ⚠️ **Attention :** Sans raison sociale, la création est refusée.
 
 ## Traiter une demande de prix (RFQ)
-**Quand l'utiliser :** Pour saisir les prix reçus des fournisseurs consultés et choisir l'offre retenue. Valider met à jour le **prix officiel** du fournisseur.
+**Quand l'utiliser :** Pour saisir les prix reçus des fournisseurs consultés. Valider écrit le **prix officiel de chaque fournisseur** au catalogue — c'est ce qui alimente le **prix moyen** des nomenclatures du BE.
 **Où le trouver :** Onglet « Demandes de prix », bouton « Traiter » sur la ligne de la demande.
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
 | Fournisseur (par ligne de réponse) | liste déroulante (liste des fournisseurs en base) | Non | Le fournisseur qui a répondu pour cette ligne. Pour une réponse déjà rattachée, le nom est fixe. | Aluminium de France |
-| Prix unit. | nombre | Non | Le prix unitaire hors taxes proposé par ce fournisseur. | 12.50 |
+| Prix unit. / **Prix du paquet** | nombre | Non | Le prix hors taxes proposé par ce fournisseur. Pour un **accessoire**, l'en-tête devient « Prix du paquet » : saisissez le prix **du paquet entier**, jamais le prix à la pièce. | 10,40 |
+| Qté / paquet | nombre | Non | **Accessoires seulement** (colonne encadrée d'orange) : le nombre de **pièces** contenues dans le paquet auquel se rapporte ce prix. Sous la case, l'ERP affiche « = 0,1040 €/pièce » ; laissée vide, il affiche « **conditionnement non déclaré** » et le prix sera compris comme un prix **à la pièce**. | 100 |
 | Délai (j) | nombre | Non | Le délai de livraison annoncé, en jours. | 8 |
-| Retenu | case à cocher (un seul par ligne) | Non | Cochez la réponse choisie pour cette ligne. C'est ce prix qui deviendra le prix officiel à la validation. | cochée |
+| Préféré | bouton radio (un seul par ligne) | Non | Le fournisseur chez qui commander. ⚠ Il **n'écarte aucun prix** : tous les prix chiffrés sont enregistrés. | coché |
 
 💡 **Astuce :** « Ajouter un fournisseur » ajoute une ligne de réponse pour comparer plusieurs offres sur la même référence. « Marquer envoyée » sert à noter que la consultation est partie.
-⚠️ **Attention :** « Valider & mettre à jour les prix » exige au moins un prix « retenu » avec un prix saisi, sinon la validation est refusée. Après validation, la RFQ est clôturée et le prix officiel du fournisseur est mis à jour.
+⚠️ **« Valider & enregistrer tous les prix »** écrit le prix de **CHAQUE** réponse chiffrée sur la ligne catalogue de **son** fournisseur (prix, date, source « rfq », et la quantité par paquet si elle est saisie), puis clôture la demande. Sans au moins un prix saisi, la validation est refusée.
+⚠️ **Accessoires sans quantité par paquet :** un avertissement les liste avant l'écriture — leurs prix seront comptés à la pièce dans le prix moyen. En cas d'échec partiel, la demande **reste ouverte** et le détail s'affiche ligne par ligne dans la fenêtre.
+💡 **Base pas encore à jour :** le message « la quantité par paquet n'a pas été conservée » ne bloque rien (les prix, eux, sont enregistrés) — prévenez l'administrateur (script `cloud-13`).
 
 ## Fiche fournisseur / sous-traitant — Identité & paramètres
 **Quand l'utiliser :** Pour compléter ou modifier les informations détaillées d'un fournisseur ou d'un sous-traitant existant.
@@ -170,39 +173,25 @@
 💡 **Astuce :** L'indicateur « OTD — ponctualité (calculé) » est affiché automatiquement à partir des réceptions ; vous ne le saisissez pas.
 ⚠️ **Attention :** Nom, Catégorie et Activité portent une étoile (*) : ce sont les repères indispensables. Cliquez « Enregistrer la fiche » pour sauvegarder.
 
-## Fiche fournisseur — Catalogue produits (politique de prix)
-**Quand l'utiliser :** Pour lister les références que ce fournisseur vous fournit et leur politique de prix (matière, accessoires).
-**Où le trouver :** Fiche fournisseur, bloc « Catalogue produits — politique de prix », bouton « Ajouter une référence » (une ligne = une référence).
+## Fiche fournisseur — Références fournies (le catalogue de ce fournisseur)
+**Quand l'utiliser :** Pour déclarer ce que ce fournisseur peut fournir, à quel prix, et — pour un accessoire — **combien de pièces il y a dans un paquet**. C'est **le seul** tableau de références de la fiche : le bloc « Catalogue produits — politique de prix » (qui faisait doublon et n'était jamais rempli) a été retiré le 17/09/2026.
+**Où le trouver :** Fiche fournisseur (Achats › Fournisseurs / ST › bouton « Fiche »), bloc « Références fournies », barre de saisie en haut du tableau.
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
-| Réf. | texte | Non | La référence article chez ce fournisseur. | REF-ALU-2017 |
-| Désignation | texte | Non | Le libellé du produit. | Tôle alu 2017 ép. 5 mm |
-| Catégorie | liste déroulante (—, Matière, Accessoire) | Non | Le type de produit : matière (prix de la tôle) ou accessoire (prix du paquet). | Matière |
-| Unité | texte | Non | L'unité de vente. | kg |
-| Prix tôle/paquet | nombre | Non | Le prix de la tôle (matière) ou du paquet (accessoire). | 42.00 |
-| Quantité unitaire | nombre | Non | Le nombre de pièces par conditionnement / paquet. | 100 |
-| Mini cde HT | nombre | Non | Le montant minimum de commande hors taxes exigé par le fournisseur. | 250.00 |
-| Délai (j) | nombre | Non | Le délai de livraison de cette référence, en jours. | 7 |
-| Notes / conditions | texte | Non | Conditions particulières (MOQ, palette…). | Palette non reprise |
+| Référence | texte | Oui | La référence article chez ce fournisseur. | 136290 |
+| Désignation | texte | Oui | Le libellé de la référence. | Écrou CLS M3-1 |
+| Catégorie | liste déroulante (Matière, Accessoires, Outils, Chimique, Consommable, Autres) | Non | La famille du produit. Elle décide de ce qu'on attend dans « Prix » (une aide s'affiche sous la barre de saisie). | Accessoires |
+| Qté / paquet | nombre | Non | **Accessoires** : le nombre de **pièces** contenues dans le conditionnement auquel se rapporte le prix. Sans elle, le prix du paquet est compris comme un prix **à la pièce** dans toutes les nomenclatures (badge orange « non déclaré »). | 100 |
+| Unité | texte | Non | L'unité de vente. | pce |
+| Délai (j) | nombre | Non | Le délai de livraison de cette référence, en jours. | 5 |
+| Prix HT (optionnel) | nombre | Non | **Matière : prix d'UNE TÔLE · Accessoire : prix du PAQUET** — jamais le prix à la pièce, qui est calculé. Vide = la ligne reste « en attente de prix », à compléter par une demande de prix. | 10,40 |
 
-💡 **Astuce :** Une ligne n'est enregistrée que si elle a au moins une référence ou une désignation. Ces références alimentent les nomenclatures du BE.
-⚠️ **Attention :** Pensez à cliquer « Enregistrer la fiche » en haut : les lignes ajoutées ne sont pas sauvegardées tant que la fiche n'est pas enregistrée.
-
-## Fiche fournisseur — Références fournies (déclaration rapide)
-**Quand l'utiliser :** Pour déclarer rapidement une référence que le fournisseur peut fournir, même sans connaître encore le prix.
-**Où le trouver :** Fiche fournisseur, bloc « Références fournies », barre de saisie en haut du tableau, bouton « Déclarer ».
-
-| Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
-|---|---|---|---|---|
-| Référence | texte | Oui | La référence article. | REF-JOINT-12 |
-| Désignation | texte | Oui | Le libellé de la référence. | Joint torique Ø12 |
-| Catégorie | liste déroulante (Matière, Accessoires, Outils, Chimique, Consommable, Autres) | Non | La famille du produit. | Accessoires |
-| Prix (optionnel) | nombre | Non | Le prix, si connu. Sinon laissez vide : il se remplira via une demande de prix. | 0.35 |
-| Délai (j) | nombre | Non | Le délai de livraison, en jours. | 5 |
-
-💡 **Astuce :** Référence + désignation suffisent ; le prix officiel se renseigne ensuite via une demande de prix (RFQ), pas ici.
-⚠️ **Attention :** Sans référence ET désignation, la déclaration est refusée. Ce bloc n'existe que pour les fournisseurs (pas pour les sous-traitants).
+💡 **Un seul formulaire pour créer ET modifier :** « Modifier » sur une ligne pré-remplit cette même barre de saisie ; « Annuler » revient en création. Une case laissée **vide ne change rien** — un prix déjà en base n'est **jamais** effacé.
+💡 **Ce que montre le tableau :** la **Qté / paquet** (« non déclaré » en orange pour un accessoire sans conditionnement), le prix, et sous le prix d'un accessoire chiffré son équivalent `≈ 0,1040 €/pièce`. Une horloge signale un prix de plus de 6 mois (demande de prix conseillée).
+⚠️ **Référence déjà déclarée chez ce fournisseur :** l'ERP refuse le doublon, le dit, et **bascule le formulaire en modification** de la ligne existante sans perdre votre saisie. En revanche la **même référence chez plusieurs fournisseurs est normale** : c'est elle qui permet le prix moyen.
+💡 **C'est le même catalogue que BE › Références.** Une référence déclarée ici est utilisable immédiatement dans les nomenclatures. Le prix officiel, lui, se fixe par une **demande de prix** (RFQ).
+💡 **Accès :** ce bloc est ouvert **aux Achats comme au BE** depuis le 17/09/2026. Il n'existe que pour les fournisseurs (un sous-traitant a des opérations, pas des références).
 
 ## Fiche sous-traitant — Opérations sous-traitées (forfait & prix unitaire)
 **Quand l'utiliser :** Pour saisir les tarifs d'un sous-traitant, opération par opération (forfait minimum et prix par pièce).

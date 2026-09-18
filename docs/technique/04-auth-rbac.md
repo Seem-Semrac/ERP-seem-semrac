@@ -16,6 +16,7 @@ Le middleware appelle `canAccess(user, path, method)` sur **chaque** requête (h
 2. Route **self-service** atelier (PIN dans le corps) → autorisé (`isSelfService`, liste `SELF_SERVICE_RE` : pointage, `bdt/:id/(recu|solder)`, clôture de balancelle OAS, cote contrôlée, et depuis le 15/09/2026 **demande d'achat** et **PV de non-conformité** de la Production — `/api/production/demande-achat-operateur`, `/api/production/nc`). ⚠ **Depuis le 14/09/2026 (lot D), la réception fournisseur et son PV n'en font plus partie** (`/api/expeditions/bc/:id/(receptionner|pv)`) : aucun appelant n'envoyait de PIN, ils étaient donc ouverts à **tout compte connecté**. Ils exigent maintenant l'écriture Expéditions (règle 7). ⚠ **Depuis le 15/09/2026, `/api/production/non-conformites` (formulaire NC de la Qualité) non plus** : PIN facultatif, aucun contrôle dans le handler — une borne en lecture seule créait une NC Bloquante. `serviceFor` le classe `qualite` (écriture Qualité) et le handler le revérifie. **Règle** : une route n'est self-service que si son handler juge lui-même le salarié du matricule + PIN (voir « Signature d'atelier » ci-dessous).
 3. `accesExplicites(perms)` est calculé **ici**, avant tout le reste : dès que la personne porte au moins un jeton `lire:`/`ecrire:`, ces jetons décident seuls — **y compris** pour `interlocuteurs`, `plans` et `habilitations`, qui les ignoraient jusqu'au 09/09/2026.
 4. `interlocuteurs` (contacts clients ET fournisseurs), **à défaut de jeton** → autorisé si écriture `rw` sur **commercial/achats/be** (cas multi-services).
+4 bis. **Catalogue fournisseurs et demandes de prix, en ÉCRITURE seulement** (lot H1, 17/09/2026) : `/api/produits-fournisseurs…` et `/api/demandes-prix…` sont autorisées si l'utilisateur a l'écriture sur **`be` OU `achats`** — jetons `ecrire:be` / `ecrire:achats` s'ils sont posés, sinon la matrice des rôles. Voir la section « Lot H1 » plus bas.
 5. `serviceFor(path)` déduit le **service** de la route :
    - `/api/<famille>/…` → `API_FAM_SERVICE[famille]`
    - `/<segment>/…` (page) → `PAGE_SEG_SERVICE[segment]`
@@ -142,6 +143,36 @@ de non-conformité (401). Il peut ouvrir les pages et les formulaires.
   droit d'écrire sur ces routes : ce sont des règles métier, pas des droits.
 - **Lectures ajoutées à des pages d'autres services** : `/rh/temps` (RH) et `/oas/service` (OAS) lisent la cadence côté
   serveur ; aucun appel navigateur vers `/api/production/cadence` depuis ces pages (pas de 403 pour un lecteur RH ou OAS).
+
+## Catalogue fournisseurs et demandes de prix : écriture partagée BE ↔ Achats (lot H1, 17/09/2026)
+
+Le catalogue `produits_fournisseurs` (référence, désignation, **quantité par paquet**, prix) et les demandes de prix sont
+alimentés par **les deux** services : le BE déclare une référence et demande un prix, les Achats saisissent les réponses et
+**valident** les prix — c'est cette validation qui alimente le prix moyen multi-fournisseurs des nomenclatures. Or la famille
+`produits-fournisseurs` est mappée sur le service **`be`** : un acheteur prenait un `403 Accès refusé` sur son propre bouton
+« Déclarer » de la fiche fournisseur.
+
+**Correctif — une exception de chemin dans `canAccess`, en ÉCRITURE seulement** (`src/auth.ts`) :
+
+```ts
+const CATALOGUE_ACHATS_RE = [ /^\/api\/produits-fournisseurs(\/|$)/, /^\/api\/demandes-prix(\/|$)/ ]
+// méthode d'écriture + chemin de cette liste  →  autorisé si « be » OU « achats »
+```
+
+- **`serviceFor` est inchangé** : la **lecture** retombe sur `be` exactement comme avant — personne ne gagne un accès en
+  lecture qu'il n'avait pas. Seules les méthodes d'écriture (POST / PATCH / PUT / DELETE) passent par l'exception.
+- Même mécanisme que `/api/interlocuteurs` (ouvert à « commercial OU achats OU be »), et même priorité : si la personne porte
+  au moins un jeton `lire:` / `ecrire:`, **ce sont les jetons qui décident** — l'union porte alors sur `ecrire:be` /
+  `ecrire:achats`.
+- ⚠ **Liste fermée** : rien d'autre de la famille `be` (nomenclatures, GED, préparation technique) n'est ouvert aux Achats.
+- Nouvel export **`peutEcrireCatalogue(user)`** = `peutEcrireService(u,'be') || peutEcrireService(u,'achats')`, pour un
+  handler qui voudrait revérifier le droit (message clair, `AUTH_ENFORCE=off`). Invariant :
+  `peutEcrireCatalogue(u) === canAccess(u, '/api/produits-fournisseurs', 'POST')`. Aucun handler ne l'appelle aujourd'hui —
+  l'équivalence est exacte, une seconde garde pourrait dériver et refuser un acheteur autorisé.
+
+**Effet concret** : le rôle `achats` peut déclarer / modifier une référence du catalogue depuis la fiche fournisseur et depuis
+BE › Références, saisir les réponses d'une demande de prix et la valider. Le rôle `bei` gardait déjà `be` **et** `achats` en
+écriture : rien ne change pour lui. Le rôle `logistique` (écriture `stock`) n'est **pas** concerné.
 
 ## Cas particuliers
 - **`plans` (Plan/Bâtiment)** : **sans jeton**, lecture ouverte à tout connecté et écriture BE/Production/Maintenance/Qualité/Direction. **Avec jetons**, `lire:plans` / `ecrire:plans` décident seuls.

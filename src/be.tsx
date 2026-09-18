@@ -2,7 +2,7 @@
 // BUREAU D'ÉTUDES – ERP Seem Semrac v2.0
 // Nomenclatures · Analyse DT · Prépa technique · Dashboard
 // ══════════════════════════════════════════════════════════════
-import { escX, layout, pageHeader, serviceHeader, bulkToolbar, bulkSelectAssets, PRIX_VALIDITE_JOURS, composantsDe } from './shared'
+import { escX, layout, pageHeader, serviceHeader, bulkToolbar, bulkSelectAssets, PRIX_VALIDITE_JOURS, composantsDe, prixMoyenClientJs, qtePaquetDe } from './shared'
 import type { DemandeTravaux, Commande, Nomenclature, Offre } from './types'
 
 const sjX = (v: any) => JSON.stringify(v).replace(/</g, '\\u003c')
@@ -236,7 +236,10 @@ type BeRefs = {
     type?: 'machine' | 'manuel' | 'oas'; taux_horaire_machine?: number | null; taux_machine?: number; taux_source?: string }>
   postes?: Array<{ id: string; nom: string; code?: string | null; activite?: string | null; couleur?: string | null }>
   sous_traitants?: Array<{ id: string; nom: string; tarifs?: Array<{ operation: string; forfait_ht?: number; prix_unitaire_piece_ht?: number }>; prestations?: string[] }>
-  fournisseurs?: Array<{ id: string; nom: string; categorie?: string | null; activite?: string; familles_fourniture?: string[]; catalogue?: any[] }>
+  // Lot H1 : le jsonb `fournisseurs.catalogue` n'est PLUS lu par cette page (il était vide sur les
+  // 155 fournisseurs, sonde du 17/09/2026). La seule source du catalogue est `produits_fournisseurs`
+  // (→ PRODUITS_NOM / NOM_PRODUITS). Ne pas le rebrancher ici.
+  fournisseurs?: Array<{ id: string; nom: string; categorie?: string | null; activite?: string; familles_fourniture?: string[] }>
 }
 
 export const pageServiceBE = (
@@ -256,11 +259,32 @@ export const pageServiceBE = (
   const OFFS = dbOffres ?? []
   const NOMS = dbNoms ?? []
   const REFS_STOCK: any[] = dbRefsStock ?? []
-  // Catalogue commercial (produits_fournisseurs) pour la sélection matière en nomenclature
+  // ── Catalogue fournisseurs injecté au navigateur (lot H1, contrat §3) ──────────────────────────
+  // `produits_fournisseurs` lu en `select('*')` : c'est la SOURCE UNIQUE du prix moyen
+  // multi-fournisseurs (une ligne de nomenclature ne porte plus de fournisseur).
+  // ⚠ `qte_paquet` reste `null` quand la colonne n'existe pas encore (cloud sans cloud-13) :
+  //   `qtePaquetDe()` retombe alors sur l'ancien libellé `conditionnement`, puis sur « non déclaré »
+  //   (compté 1 ET signalé en orange). Aucun affichage n'est conditionné à l'existence de la colonne.
+  // `fournisseur_nom` est nécessaire (badge « n fournisseur(s) », « conditionnement non déclaré chez X ») :
+  //   à défaut de la colonne dénormalisée, on le résout par l'id depuis les référentiels.
+  const FOURN_NOM_PAR_ID: Record<string, string> = {}
+  for (const f of ((dbRefs?.fournisseurs ?? []) as any[])) if (f && f.id != null) FOURN_NOM_PAR_ID[String(f.id)] = String(f.nom || '')
   const PRODUITS_NOM = (dbProduits ?? []).map((p: any) => ({
-    fournisseur_id: p.fournisseur_id, reference: p.reference, designation: p.designation,
-    prix: p.prix, date_prix: p.date_prix, categorie: p.categorie, conditionnement: p.conditionnement,
+    fournisseur_id: p.fournisseur_id,
+    fournisseur_nom: p.fournisseur_nom || FOURN_NOM_PAR_ID[String(p.fournisseur_id ?? '')] || '',
+    reference: p.reference, designation: p.designation,
+    prix: p.prix, qte_paquet: p.qte_paquet ?? null, conditionnement: p.conditionnement,
+    date_prix: p.date_prix, categorie: p.categorie, source_prix: p.source_prix ?? null,
   }))
+  // Qté/paquet par id de ligne catalogue — colonne de l'onglet « Références » et pré-remplissage de
+  // la modale « Entrée catalogue ». Lue via `qtePaquetDe` (repli `conditionnement`), donc compatible
+  // avec une base sans la colonne.
+  const QTE_PAQUET_PAR_ID: Record<string, number | null> = {}
+  for (const p of ((dbProduits ?? []) as any[])) if (p && p.id != null) QTE_PAQUET_PAR_ID[String(p.id)] = qtePaquetDe(p)
+  // Accessoires chiffrés dont le conditionnement n'est pas déclaré : leur prix entre dans la moyenne
+  // « à la pièce ». C'est la donnée qui fausse un coût d'un facteur 100 → on l'affiche en tête d'onglet.
+  const ACC_SANS_QP = ((dbProduits ?? []) as any[]).filter((p: any) =>
+    p && /accessoire/i.test(String(p.categorie || '')) && Number(p.prix) > 0 && qtePaquetDe(p) === null).length
   // Validité d'un prix catalogue : constante UNIQUE de shared.ts (lot H0) — libellé dérivé pour les infobulles
   const PRIX_VALIDITE_LIB = `${Math.round(PRIX_VALIDITE_JOURS / 30.44)} mois`
   // ── Versionnage par indice (A, B, C…) ──
@@ -665,7 +689,7 @@ export const pageServiceBE = (
 
       <div style="display:grid;grid-template-columns:minmax(340px,0.78fr) minmax(0,1.22fr);gap:20px;">
 
-        <!-- COL GAUCHE : IDENTITÉ + FOURNITURES -->
+        <!-- COL GAUCHE : IDENTITÉ (les compartiments Matière / Accessoires sont passés en tête de la colonne DROITE, lot H1 §10) -->
         <div style="display:flex;flex-direction:column;gap:16px;">
 
           <!-- Identité -->
@@ -782,25 +806,34 @@ export const pageServiceBE = (
             </div>
           </div>
 
-          <!-- Fournitures : 2 compartiments (Matière / Accessoires) -->
+        </div>
+
+        <!-- COL DROITE : FOURNITURES + TEMPS + CALCULS -->
+        <div style="display:flex;flex-direction:column;gap:16px;">
+
+          <!-- ═══ FOURNITURES : 2 compartiments (Matière / Accessoires) ═══════════════════════════
+               Lot H1 §10 : déplacés EN TÊTE de la colonne droite (la colonne gauche, étroite depuis
+               le commit d8028d4414, faisait déborder les lignes : à 1600 px et moins la croix de
+               suppression passait SOUS les cartes de droite et n'était plus cliquable).
+               Une ligne ne porte plus ni fournisseur ni qté/paquet : elle porte une RÉFÉRENCE, et son
+               prix est la MOYENNE de tous les fournisseurs qui la portent au catalogue.
+               En-tête et lignes partagent la même classe de grille (.nom-mat-grid / .nom-acc-grid). -->
           <div id="nom-fournitures-block">
 
             <!-- COMPARTIMENT MATIÈRE -->
-            <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);padding:20px;margin-bottom:16px;">
+            <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);padding:20px;">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
                 <div style="font-size:.72rem;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;flex:1;"><i class="fas fa-layer-group" style="color:#0ea5e9;margin-right:6px;"></i>Matière (tôle)</div>
                 <button onclick="nomAddMatiere()" style="padding:5px 12px;background:linear-gradient(135deg,#0ea5e9,#0369a1);color:white;border:none;border-radius:7px;cursor:pointer;font-size:.75rem;font-weight:700;display:flex;align-items:center;gap:5px;"><i class="fas fa-plus"></i>Ajouter matière</button>
               </div>
-              <div style="font-size:.64rem;color:#94a3b8;margin-bottom:10px;">Fournisseur « matière » + réf catalogue → prix tôle <strong>auto si &lt; ${PRIX_VALIDITE_LIB}</strong> ; au-delà le prix reste affiché en orange (« périmé ») avec la demande de prix conseillée. Demande de prix possible à tout moment sur chaque ligne. Prix tôle ÷ Pc/tôle = prix matière / pièce.</div>
-              <!-- Filet lot H0 : en-tête et lignes partagent la même grille (.nom-mat-grid) et défilent ensemble -->
+              <div style="font-size:.64rem;color:#94a3b8;margin-bottom:10px;">Cherchez par <strong>référence ou désignation</strong> (tout le catalogue, tous fournisseurs) : le prix de la tôle est la <strong>moyenne des fournisseurs</strong> qui portent la référence. Prix de plus de ${PRIX_VALIDITE_LIB} : orange, demande de prix conseillée. Aucun prix : rouge (« coût incomplet »), la validation reste permise. Prix tôle ÷ Pc/tôle = prix matière / pièce.</div>
               <div class="nom-grid-scroll">
               <div class="nom-mat-grid nom-grid-head">
-                <span title="Réf. matière" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Réf. matière</span>
-                <span title="Désignation" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Désignation</span>
-                <span title="Fournisseur" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Fournisseur</span>
-                <span title="Prix tôle" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Prix tôle</span>
-                <span title="Pièces par tôle" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Pc/tôle</span>
-                <span title="Prix matière par pièce" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">€/pièce</span>
+                <span title="Référence catalogue de la matière (sans fournisseur)" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Réf. matière</span>
+                <span title="Désignation — la recherche fonctionne aussi ici" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Désignation</span>
+                <span title="Nombre de pièces découpées dans une tôle (dépend de l'imbrication, saisi au BE)" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Pc/tôle</span>
+                <span title="Prix estimé par pièce = prix moyen d'une tôle ÷ Pc/tôle" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Prix estimé / pièce</span>
+                <span title="Demande de prix aux Achats (possible à tout moment)"></span>
                 <span></span>
               </div>
               <div id="nom-matieres-list"></div>
@@ -816,17 +849,14 @@ export const pageServiceBE = (
                 <div style="font-size:.72rem;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;flex:1;"><i class="fas fa-screwdriver-wrench" style="color:#8b5cf6;margin-right:6px;"></i>Accessoires</div>
                 <button onclick="nomAddAccessoire()" style="padding:5px 12px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:white;border:none;border-radius:7px;cursor:pointer;font-size:.75rem;font-weight:700;display:flex;align-items:center;gap:5px;"><i class="fas fa-plus"></i>Ajouter accessoire</button>
               </div>
-              <div style="font-size:.64rem;color:#94a3b8;margin-bottom:10px;">(Prix paquet ÷ quantité par paquet) × nombre par pièce = prix accessoire / pièce.</div>
-              <!-- Filet lot H0 : en-tête et lignes partagent la même grille (.nom-acc-grid) et défilent ensemble -->
+              <div style="font-size:.64rem;color:#94a3b8;margin-bottom:10px;">Cherchez par <strong>référence ou désignation</strong> ; le prix à la pièce est la <strong>moyenne des fournisseurs</strong>, chacun ramené à la pièce par sa <strong>quantité par paquet</strong>. Celle-ci se déclare au <strong>catalogue</strong> (BE › Références ou fiche fournisseur), plus ici. Non déclarée chez un fournisseur : son prix est compté à la pièce et signalé en orange.</div>
               <div class="nom-grid-scroll">
               <div class="nom-acc-grid nom-grid-head">
-                <span title="Réf catalogue" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Réf catalogue</span>
-                <span title="Désignation" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Désignation</span>
-                <span title="Fournisseur" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Fournisseur</span>
-                <span title="Prix paquet" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Prix paquet</span>
-                <span title="Quantité par paquet" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Qté/paq</span>
-                <span title="Nombre par pièce" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Nb/pc</span>
-                <span title="Prix accessoire par pièce" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">€/pièce</span>
+                <span title="Référence catalogue de l'accessoire (sans fournisseur)" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Réf catalogue</span>
+                <span title="Désignation — la recherche fonctionne aussi ici" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;">Désignation</span>
+                <span title="Nombre d'accessoires par pièce fabriquée" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Nb/pièce</span>
+                <span title="Prix estimé par pièce fabriquée = prix moyen d'UNE pièce d'accessoire × Nb/pièce" style="font-size:.6rem;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Prix estimé / pièce</span>
+                <span title="Demande de prix aux Achats (possible à tout moment)"></span>
                 <span></span>
               </div>
               <div id="nom-accessoires-list"></div>
@@ -836,11 +866,6 @@ export const pageServiceBE = (
               </div>
             </div>
           </div>
-
-        </div>
-
-        <!-- COL DROITE : TEMPS + CALCULS -->
-        <div style="display:flex;flex-direction:column;gap:16px;">
 
           <!-- Étapes de production -->
           <div style="background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07);padding:20px;">
@@ -1328,6 +1353,15 @@ export const pageServiceBE = (
   const refRows = REFS_STOCK.map((r: any) => {
     const grp = famGroup(r.famille || ''); const act = r.activite || 'both'
     const prix = r.prix != null ? Number(r.prix).toFixed(2) + ' €' : '—'
+    // Lot H1 : la qté/paquet d'un accessoire se déclare ICI (catalogue), plus ligne par ligne dans
+    // chaque nomenclature. Non déclarée sur un accessoire = prix compris « à la pièce » (signalé
+    // en orange dans l'éditeur) : on le dit dès la liste.
+    const qpv = QTE_PAQUET_PAR_ID[String(r.id ?? '')] ?? null
+    const qpCell = grp === 'accessoire'
+      ? (qpv != null
+        ? `<span title="Le prix catalogue est celui d'un paquet de ${qpv} pièce(s)" style="font-weight:800;color:#6d28d9;">${escX(String(qpv))}</span>`
+        : `<span title="Conditionnement non déclaré : le prix catalogue sera compris comme un prix à la pièce. Cliquez « Éditer » pour saisir la quantité par paquet." style="color:#c2410c;font-weight:700;">non déclarée</span>`)
+      : '<span style="color:#cbd5e1;">—</span>'
     // Prix « à re-demander » = absent, ou daté de plus de PRIX_VALIDITE_JOURS (6 mois) — constante de shared.ts
     const _dd = r.derniere_date ? Date.parse(r.derniere_date) : NaN
     const needsRfq = (r.prix == null) || isNaN(_dd) || (Date.now() - _dd) >= PRIX_VALIDITE_JOURS * 86400000
@@ -1339,8 +1373,9 @@ export const pageServiceBE = (
       <td style="padding:7px 10px;"><span style="background:#eef2ff;color:#4338ca;border-radius:6px;padding:1px 8px;font-size:.64rem;font-weight:700;">${refEsc(famLabel(r.famille || ''))}${r.categorie && grp === 'matiere_premiere' ? ' · ' + refEsc(r.categorie) : ''}</span></td>
       <td style="padding:7px 10px;"><span style="background:${act === 'Seem' ? '#dbeafe' : act === 'Semrac' ? '#fce7f3' : '#f1f5f9'};color:${act === 'Seem' ? '#1d4ed8' : act === 'Semrac' ? '#9d174d' : '#475569'};border-radius:6px;padding:1px 8px;font-size:.64rem;font-weight:700;">${refEsc(act)}</span></td>
       <td style="padding:7px 10px;font-size:.76rem;color:#64748b;">${refEsc(r.fournisseur_nom || '—')}</td>
+      <td style="padding:7px 10px;text-align:right;font-size:.74rem;">${qpCell}</td>
       <td style="padding:7px 10px;text-align:right;font-weight:800;color:#0f766e;font-size:.8rem;">${prix}</td>
-      <td style="padding:7px 10px;text-align:center;white-space:nowrap;"><button onclick="beEditCatalog('${refJs(r.id)}','${refJs(r.fournisseur_id||'')}','${refJs(r.reference)}','${refJs(r.designation)}','${grp}','${refJs(act)}')" title="Modifier cette référence" style="background:#ecfdf5;color:#047857;border:none;border-radius:6px;padding:4px 9px;font-size:.68rem;font-weight:700;cursor:pointer;margin-right:5px;"><i class="fas fa-pen" style="margin-right:4px;"></i>Éditer</button><button onclick="refEvol('${refEsc(r.reference)}',this)" data-desig="${refEsc(r.designation)}" style="background:#eef2ff;color:#4338ca;border:none;border-radius:6px;padding:4px 9px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-chart-line" style="margin-right:4px;"></i>Évolution</button>${rfqBtn}</td>
+      <td style="padding:7px 10px;text-align:center;white-space:nowrap;"><button onclick="beEditCatalog('${refJs(r.id)}','${refJs(r.fournisseur_id||'')}','${refJs(r.reference)}','${refJs(r.designation)}','${grp}','${refJs(act)}','${refJs(qpv == null ? '' : String(qpv))}','${refJs(r.prix == null ? '' : String(r.prix))}')" title="Modifier cette référence" style="background:#ecfdf5;color:#047857;border:none;border-radius:6px;padding:4px 9px;font-size:.68rem;font-weight:700;cursor:pointer;margin-right:5px;"><i class="fas fa-pen" style="margin-right:4px;"></i>Éditer</button><button onclick="refEvol('${refEsc(r.reference)}',this)" data-desig="${refEsc(r.designation)}" style="background:#eef2ff;color:#4338ca;border:none;border-radius:6px;padding:4px 9px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-chart-line" style="margin-right:4px;"></i>Évolution</button>${rfqBtn}</td>
     </tr>`
   }).join('')
   const catPill = (cat: string, lbl: string) => `<button onclick="refSetCat('${cat}')" id="refcat-${cat}" class="ref-pill" style="border:1.5px solid #e2e8f0;background:white;color:#475569;border-radius:999px;padding:5px 13px;font-size:.74rem;font-weight:700;cursor:pointer;">${lbl}</button>`
@@ -1350,7 +1385,8 @@ export const pageServiceBE = (
       <span style="font-weight:800;font-size:1rem;color:#1e293b;"><i class="fas fa-boxes" style="color:#6366f1;margin-right:7px;"></i>Références — matières, fournitures &amp; outils</span>
       <span style="color:#94a3b8;font-size:.74rem;">${REFS_STOCK.length} référence(s)</span>
     </div>
-    <div style="font-size:.74rem;color:#64748b;margin-bottom:10px;">Catalogue des références achetées. « Évolution » montre le prix unitaire au fil des bons de commande. Le catalogue s'alimente automatiquement à la validation des BC, des demandes de prix, et <strong>depuis les nomenclatures du BE</strong>.</div>
+    <div style="font-size:.74rem;color:#64748b;margin-bottom:10px;">Catalogue des références achetées. « Évolution » montre le prix unitaire au fil des bons de commande. Le catalogue s'alimente automatiquement à la validation des BC, des demandes de prix, et <strong>depuis les nomenclatures du BE</strong>. La <strong>quantité par paquet</strong> d'un accessoire se déclare ici (« Éditer ») : c'est elle qui ramène le prix d'un paquet au prix d'une pièce dans les nomenclatures.</div>
+    ${ACC_SANS_QP > 0 ? `<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:.72rem;color:#9a3412;"><i class="fas fa-triangle-exclamation" style="margin-right:6px;"></i><strong>${ACC_SANS_QP} accessoire(s)</strong> n'ont pas de quantité par paquet déclarée : leur prix catalogue est compris <strong>à la pièce</strong> dans le prix moyen des nomenclatures (signalé en orange). Cliquez « Éditer » sur la ligne pour la saisir.</div>` : ''}
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
       <button onclick="beOpenFournModal()" style="background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;border-radius:8px;padding:6px 12px;font-size:.75rem;font-weight:700;cursor:pointer;"><i class="fas fa-plus" style="margin-right:5px;"></i>Fournisseur / Sous-traitant</button>
       <button onclick="beOpenCatalogModal()" style="background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;border-radius:8px;padding:6px 12px;font-size:.75rem;font-weight:700;cursor:pointer;"><i class="fas fa-plus" style="margin-right:5px;"></i>Entrée catalogue</button>
@@ -1369,8 +1405,8 @@ export const pageServiceBE = (
     <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;">
       <div style="overflow-x:auto;max-height:640px;overflow-y:auto;">
         <table id="be-refs-table" style="width:100%;border-collapse:collapse;">
-          <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;position:sticky;top:0;">${['Réf.', 'Désignation', 'Catégorie', 'Activité', 'Fournisseur', 'Dernier PU', 'Évolution'].map(h => `<th style="padding:8px 10px;text-align:left;font-size:.62rem;text-transform:uppercase;color:#6b7280;font-weight:700;">${h}</th>`).join('')}</tr></thead>
-          <tbody>${refRows || '<tr><td colspan="7" style="text-align:center;padding:30px;color:#cbd5e1;font-size:.8rem;">Aucune référence.</td></tr>'}</tbody>
+          <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;position:sticky;top:0;">${[['Réf.', ''], ['Désignation', ''], ['Catégorie', ''], ['Activité', ''], ['Fournisseur', ''], ['Qté/paquet', "Accessoires : nombre de pièces par paquet, auquel se rapporte le prix catalogue. C'est ICI qu'il se déclare (plus dans chaque nomenclature)."], ['Dernier PU', ''], ['Évolution', '']].map(([h, t]) => `<th${t ? ` title="${escX(t)}"` : ''} style="padding:8px 10px;text-align:left;font-size:.62rem;text-transform:uppercase;color:#6b7280;font-weight:700;">${h}</th>`).join('')}</tr></thead>
+          <tbody>${refRows || '<tr><td colspan="8" style="text-align:center;padding:30px;color:#cbd5e1;font-size:.8rem;">Aucune référence.</td></tr>'}</tbody>
         </table>
       </div>
     </div>
@@ -1432,6 +1468,19 @@ export const pageServiceBE = (
           <tbody id="be-rfq-lines"></tbody>
         </table>
         <button onclick="beRfqAddLine()" style="margin-top:8px;background:#eef2ff;color:#4338ca;border:none;border-radius:7px;padding:5px 11px;font-size:.72rem;font-weight:700;cursor:pointer;"><i class="fas fa-plus" style="margin-right:4px;"></i>Ajouter un article</button>
+        <!-- Lot H1 §6 : destinataires. Une ligne de nomenclature n'a plus de fournisseur ; on propose
+             donc TOUS ceux qui portent la référence au catalogue (cochés d'office), sinon le choix libre. -->
+        <div id="be-rfq-dest-wrap" style="display:none;margin-top:14px;border-top:1px solid #f1f5f9;padding-top:12px;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+            <span style="font-size:.66rem;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;"><i class="fas fa-paper-plane" style="margin-right:5px;color:#0ea5e9;"></i>Destinataires</span>
+            <span id="be-rfq-dest-info" style="font-size:.68rem;color:#94a3b8;"></span>
+            <span style="margin-left:auto;display:inline-flex;gap:6px;">
+              <button type="button" onclick="beRfqDestAll(true)" style="background:#f0f9ff;color:#0369a1;border:1px solid #bae6fd;border-radius:6px;padding:3px 9px;font-size:.66rem;font-weight:700;cursor:pointer;">Tout cocher</button>
+              <button type="button" onclick="beRfqDestAll(false)" style="background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;border-radius:6px;padding:3px 9px;font-size:.66rem;font-weight:700;cursor:pointer;">Tout décocher</button>
+            </span>
+          </div>
+          <div id="be-rfq-dest" style="display:flex;flex-wrap:wrap;gap:6px 14px;max-height:170px;overflow-y:auto;"></div>
+        </div>
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;border-top:1px solid #f1f5f9;padding-top:14px;">
           <button onclick="document.getElementById('be-rfq-overlay').style.display='none'" style="background:#f1f5f9;color:#374151;border:none;border-radius:8px;padding:8px 16px;font-weight:600;cursor:pointer;">Annuler</button>
           <button onclick="beRfqSubmit()" style="background:linear-gradient(135deg,#0ea5e9,#0369a1);color:white;border:none;border-radius:8px;padding:8px 16px;font-weight:800;cursor:pointer;"><i class="fas fa-paper-plane" style="margin-right:5px;"></i>Envoyer aux Achats</button>
@@ -1468,12 +1517,13 @@ export const pageServiceBE = (
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div style="grid-column:1/-1;"><label style="display:block;font-size:.64rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px;">Fournisseur</label><select id="becat-fourn" style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:.82rem;box-sizing:border-box;"></select></div>
         <div><label style="display:block;font-size:.64rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px;">Référence *</label><input id="becat-ref" placeholder="réf. catalogue" style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:.82rem;box-sizing:border-box;"/></div>
-        <div><label style="display:block;font-size:.64rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px;">Catégorie</label><select id="becat-cat" style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:.82rem;box-sizing:border-box;"><option value="matiere_premiere">Matière</option><option value="accessoire">Accessoire</option><option value="outillage">Outillage</option><option value="consommable">Consommable</option><option value="chimique">Chimique</option></select></div>
+        <div><label style="display:block;font-size:.64rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px;">Catégorie</label><select id="becat-cat" onchange="beCatMaj()" style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:.82rem;box-sizing:border-box;"><option value="matiere_premiere">Matière</option><option value="accessoire">Accessoire</option><option value="outillage">Outillage</option><option value="consommable">Consommable</option><option value="chimique">Chimique</option><option value="autre">Autres</option></select></div>
         <div style="grid-column:1/-1;"><label style="display:block;font-size:.64rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px;">Désignation *</label><input id="becat-desig" placeholder="libellé produit" style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:.82rem;box-sizing:border-box;"/></div>
         <div><label style="display:block;font-size:.64rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px;">Prix HT (optionnel)</label><input id="becat-prix" type="number" step="0.01" placeholder="sinon « en attente »" style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:.82rem;box-sizing:border-box;"/></div>
         <div><label style="display:block;font-size:.64rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px;">Activité</label><select id="becat-act" style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:.82rem;box-sizing:border-box;"><option value="both">Les deux</option><option value="Seem">Seem</option><option value="Semrac">Semrac</option></select></div>
+        <div id="becat-qtepaq-wrap" style="grid-column:1/-1;"><label style="display:block;font-size:.64rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px;">Quantité par paquet <span style="font-weight:500;text-transform:none;color:#94a3b8;">(accessoires — nb de pièces auquel se rapporte le prix ci-dessus)</span></label><input id="becat-qtepaq" type="number" step="1" min="1" placeholder="ex : 100 (vide = non déclarée)" title="Le prix catalogue d'un accessoire est le prix du PAQUET. Sans cette quantité, il sera compris comme un prix à la pièce." style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:.82rem;box-sizing:border-box;"/></div>
       </div>
-      <div style="font-size:.66rem;color:#94a3b8;margin-top:8px;">Sans prix, l'entrée reste « en attente de prix » (à compléter via une demande de prix).</div>
+      <div id="becat-note" style="font-size:.66rem;color:#94a3b8;margin-top:8px;">Sans prix, l'entrée reste « en attente de prix » (à compléter via une demande de prix). La quantité par paquet se déclare <strong>uniquement ici</strong> : les nomenclatures n'en portent plus.</div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;border-top:1px solid #f1f5f9;padding-top:14px;">
         <button onclick="document.getElementById('be-catalog-overlay').style.display='none'" style="background:#f1f5f9;color:#374151;border:none;border-radius:8px;padding:8px 16px;font-weight:600;cursor:pointer;">Annuler</button>
         <button onclick="beSaveCatalog()" style="background:linear-gradient(135deg,#059669,#047857);color:white;border:none;border-radius:8px;padding:8px 16px;font-weight:800;cursor:pointer;"><i class="fas fa-check" style="margin-right:5px;"></i>Enregistrer</button>
@@ -1481,27 +1531,74 @@ export const pageServiceBE = (
     </div>
   </div>
 
+  <!-- Lot H1 : liste déroulante filtrée « réf OU désignation » (un seul popup pour toutes les lignes) -->
+  <div id="nom-ref-pop" role="listbox" aria-label="Références du catalogue"></div>
+  <!-- Lot H1 : détail du prix moyen d'une référence (clic sur la cellule « Prix estimé / pièce ») -->
+  <div id="nom-prix-detail"></div>
+
   <style>
-  /* Compartiments Matière / Accessoires (filet lot H0, 17/09/2026) : UNE grille par compartiment, partagée par
-     l'en-tête et les lignes (JS nomRenderMatieres / nomRenderAccessoires). La piste Désignation a un minimum FIXE
-     (minmax(30px,1fr)) : avec « 1fr » seul, le libellé d'en-tête et le champ de la ligne imposaient des minimums
-     différents et décalaient toutes les colonnes suivantes. Le conteneur défile horizontalement : la croix de
-     suppression reste dans la carte et cliquable quand la colonne est trop étroite. Le vrai gabarit viendra au lot suivant. */
-  .nom-mat-grid{display:grid;grid-template-columns:130px minmax(30px,1fr) 150px 104px 56px 64px 24px;gap:4px;align-items:center;}
-  .nom-acc-grid{display:grid;grid-template-columns:130px minmax(30px,1fr) 150px 92px 58px 54px 70px 24px;gap:4px;align-items:center;}
-  .nom-grid-head{margin-bottom:4px;}
+  /* ── Compartiments Matière / Accessoires (lot H1 §10, 17/09/2026) ────────────────────────────────
+     UNE classe de grille par compartiment, partagée TELLE QUELLE par l'en-tête et par les lignes
+     (nomRenderMatieres / nomRenderAccessoires) : deux gabarits recopiés à la main décalaient les
+     colonnes de 38 à 50 px. Six pistes seulement depuis le retrait des colonnes Fournisseur et
+     Qté/paquet : Réf · Désignation · Pc-tôle ou Nb-pièce · Prix estimé/pièce · demande de prix · croix.
+     La piste Désignation a un minimum FIXE (minmax(96px,1fr)) : avec « 1fr » seul, le libellé de
+     l'en-tête et le champ de la ligne imposent des minimums différents et tout glisse à partir de là.
+     L'en-tête n'a AUCUN padding horizontal (2 px suffisaient à décaler les mesures).
+     .nom-grid-scroll = filet : à 1280 px la grille défile DANS la carte, la croix reste dedans et
+     cliquable (avant le lot H1 elle passait sous les cartes voisines et ne répondait plus).
+     Pistes 3 et 4 (relecture 17/09/2026) : elles étaient FIXES (52 px et 132 px) et coupaient leur
+     contenu à TOUTES les largeurs — « 120 » pièces par tôle s'affichait « 1… », « 0,125 » accessoire
+     par pièce « 0… », et le badge multi-fournisseurs (la raison d'être du lot) était tronqué dès
+     2 fournisseurs, si bien que le marqueur « · cond. ? » n'était JAMAIS visible. Elles ont désormais
+     un minimum réaliste et grandissent avec la place (c'est la piste Désignation, en 1fr, qui
+     absorbait tout : 189 px à 1280 et 441 px à 1920).
+     Somme des minimums = 104+96+64+190+26+24 + 5 gaps de 4 px = 524 px : la grille tient toujours
+     dans la carte à 1280 px, et .nom-grid-scroll reste le filet au-delà. */
+  #nom-fournitures-block{display:flex;flex-direction:column;gap:16px;}
+  .nom-mat-grid{display:grid;grid-template-columns:minmax(104px,.55fr) minmax(96px,1fr) minmax(64px,.16fr) minmax(190px,.42fr) 26px 24px;gap:4px;align-items:center;}
+  .nom-acc-grid{display:grid;grid-template-columns:minmax(104px,.55fr) minmax(96px,1fr) minmax(64px,.16fr) minmax(190px,.42fr) 26px 24px;gap:4px;align-items:center;}
+  .nom-grid-head{margin-bottom:4px;padding:0;}
   .nom-grid-head > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .nom-grid-scroll{overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;padding-bottom:2px;}
-  .nom-prix-cell{display:flex;align-items:center;justify-content:flex-end;gap:3px;min-width:0;}
-  .nom-prix-val{flex:1 1 auto;min-width:0;text-align:right;font-size:.76rem;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 0;}
-  .nom-rfq-ico{flex:0 0 auto;width:22px;height:22px;border-radius:6px;cursor:pointer;font-size:.66rem;padding:0;line-height:1;}
+  /* Cellule « prix estimé » : valeur sur UNE ligne (nowrap : « 10,4000 € » passait sur deux lignes et
+     faisait monter la ligne de 27,8 à 45,5 px) + une ligne de badge « n fourn. · min–max ». */
+  .nom-prix-cell{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:0;min-width:0;padding:2px 0;cursor:pointer;}
+  .nom-prix-val{max-width:100%;min-width:0;text-align:right;font-size:.78rem;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25;}
+  .nom-prix-badge{max-width:100%;min-width:0;text-align:right;font-size:.58rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;}
+  .nom-rfq-ico{flex:0 0 auto;width:26px;height:24px;border-radius:6px;cursor:pointer;font-size:.66rem;padding:0;line-height:1;}
   .nom-f-inp{border:1.5px solid #e2e8f0;border-radius:6px;padding:5px 8px;font-size:.76rem;background:#f8fafc;outline:none;width:100%;min-width:0;text-overflow:ellipsis;box-sizing:border-box;}
   #nom-etapes-list > div, #nom-matieres-list > div, #nom-accessoires-list > div{min-width:0;}
   #nom-etapes-list > div > *, #nom-matieres-list > div > *, #nom-accessoires-list > div > *{min-width:0;}
+  .nom-mat-grid > *, .nom-acc-grid > *{min-width:0;}
   .nom-f-inp:focus{border-color:#8b5cf6;background:white;}
+  /* Liste déroulante « réf OU désignation » : filtrée par chercherReferences (module partagé), donc
+     casse ET accents ignorés — ce qu'une <datalist> du navigateur ne sait pas faire. */
+  #nom-ref-pop{position:fixed;z-index:2500;display:none;max-height:288px;overflow-y:auto;background:#fff;border:1.5px solid #cbd5e1;border-radius:10px;box-shadow:0 18px 44px rgba(15,23,42,.22);padding:4px;}
+  #nom-ref-pop .nrp{display:flex;gap:10px;align-items:baseline;padding:5px 8px;border-radius:7px;cursor:pointer;white-space:nowrap;}
+  #nom-ref-pop .nrp:hover, #nom-ref-pop .nrp.on{background:#eef2ff;}
+  #nom-ref-pop .nrp-r{flex:0 0 auto;font-family:monospace;font-weight:800;color:#4338ca;font-size:.74rem;}
+  #nom-ref-pop .nrp-d{flex:1 1 auto;min-width:0;color:#374151;font-size:.74rem;overflow:hidden;text-overflow:ellipsis;}
+  #nom-ref-pop .nrp-n{flex:0 0 auto;font-size:.62rem;color:#94a3b8;font-weight:700;}
+  #nom-ref-pop .nrp-vide{padding:8px 10px;color:#94a3b8;font-size:.72rem;white-space:normal;}
+  /* Détail du prix moyen (clic sur la cellule) : fournisseur, prix catalogue, conditionnement, date. */
+  #nom-prix-detail{position:fixed;z-index:2400;display:none;max-width:460px;background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;box-shadow:0 18px 44px rgba(15,23,42,.22);padding:12px 14px;font-size:.74rem;color:#374151;}
+  #nom-prix-detail table{width:100%;border-collapse:collapse;}
+  #nom-prix-detail th{text-align:left;font-size:.56rem;text-transform:uppercase;color:#9ca3af;font-weight:700;padding:3px 6px;}
+  #nom-prix-detail td{padding:3px 6px;font-size:.72rem;border-top:1px solid #f1f5f9;white-space:nowrap;}
   </style>
 
   <script>
+  // ══ PRIX MOYEN MULTI-FOURNISSEURS — code du serveur, ré-émis tel quel (lot H1, contrat §3) ══
+  // «prixMoyenClientJs()» rend le TEXTE des fonctions de src/prix_moyen.ts (Function.toString) :
+  // normaliserReference, memeReference, categorieFourniture, categorieCompatible, nombrePositif,
+  // arrondiPrix, qtePaquetDe, prixPerime, prixMoyenReference, chercherReferences, optionsReferences,
+  // doublonsFournitures, premierDoublonFourniture, messageDoublonFourniture, recalculerFournitures.
+  // Aucun échappement à faire dessus (ce n'est pas une donnée : pur ASCII, sans backtick, sans « \${ »,
+  // sans « </ »). ⚠ NE JAMAIS recopier une règle de prix à la main ici : le navigateur et le serveur
+  // doivent rendre le même chiffre (l'écart écran / analyse DT est déjà arrivé au lot H0).
+  // Injecté tout en haut du bloc : la modale « Entrée catalogue » l'utilise aussi (nombrePositif).
+  ${prixMoyenClientJs()}
   var BE_TABS = ['noms','analyse','prep','refs','dashboard'];
   function beNotif(t,i,m){ if(typeof pushNotif==='function') pushNotif(t,i,m,5000); else alert(String(m).replace(/<[^>]+>/g,'')); }
   // ── GED : documents (plan client / plan CAO / programmes FAO) de la nomenclature courante ──
@@ -1657,24 +1754,55 @@ export const pageServiceBE = (
     sel.innerHTML='<option value="">— fournisseur —</option>'+((BE_REFS_JS&&BE_REFS_JS.fournisseurs)||[]).map(function(f){return '<option value="'+f.id+'">'+String(f.nom||'').replace(/</g,'&lt;')+'</option>';}).join('');
     sel.value=selected||'';
   }
+  // Modale catalogue : ce que la fenêtre annonce doit correspondre à ce que le serveur fait.
+  //   • « Quantité par paquet » ne sert QU'AUX ACCESSOIRES (son propre libellé le dit) : elle était
+  //     pourtant affichée pour une matière ou un produit chimique — la liste n'avait aucun onchange.
+  //   • Le champ Prix et la note de bas de modale disaient « sinon en attente de prix » MÊME en
+  //     modification, où laisser le prix vide ne l'efface pas : l'utilisateur venu déclarer une
+  //     quantité par paquet croyait effacer le prix. Mêmes textes que la fiche fournisseur (pfHint).
+  function beCatMaj(){
+    var cat=(document.getElementById('becat-cat')||{}).value||'';
+    var w=document.getElementById('becat-qtepaq-wrap'); if(w) w.style.display=(cat==='accessoire')?'block':'none';
+    var edition=!!((document.getElementById('becat-id')||{}).value||'').trim();
+    var p=document.getElementById('becat-prix');
+    if(p) p.placeholder = edition ? 'laisser vide = garder le prix actuel' : 'sinon « en attente »';
+    var n=document.getElementById('becat-note');
+    if(n) n.innerHTML = (edition
+      ? 'Laisser le prix vide <strong>n\\'efface jamais</strong> le prix en base (il est piloté par les demandes de prix).'
+      : 'Sans prix, l\\'entrée reste « en attente de prix » (à compléter via une demande de prix).')
+      + ' ' + (cat==='accessoire'
+        ? '« Prix HT » = prix du <strong>paquet</strong> et « Quantité par paquet » = nombre de <strong>pièces</strong> dedans ; sans elle, le prix sera compris comme un prix à la pièce.'
+        : (cat==='matiere_premiere'
+          ? '« Prix HT » = prix d\\'<strong>une tôle</strong> ; le nombre de pièces par tôle dépend de la géométrie et reste saisi dans la nomenclature.'
+          : '« Prix HT » est le prix de l\\'unité de commande. La quantité par paquet ne sert qu\\'aux accessoires.'));
+  }
   function beOpenCatalogModal(){
     document.getElementById('becat-id').value='';
     var t=document.getElementById('becat-title'); if(t)t.innerHTML='<i class="fas fa-book" style="color:#047857;margin-right:6px;"></i>Nouvelle entrée catalogue';
-    ['becat-ref','becat-desig','becat-prix'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
+    ['becat-ref','becat-desig','becat-prix','becat-qtepaq'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
     document.getElementById('becat-cat').value='matiere_premiere'; document.getElementById('becat-act').value='both';
-    beCatFillFourn('');
+    beCatFillFourn(''); beCatMaj();
     document.getElementById('be-catalog-overlay').style.display='flex';
   }
   // Édition en place d'une référence depuis BE › Références (réutilise le même modal)
-  function beEditCatalog(id, fid, ref, desig, cat, act){
+  // Lot H1 : «qtepaq» = quantité par paquet déjà au catalogue (vide = non déclarée) ; «prix» = prix
+  // actuel, pré-rempli comme sur la fiche fournisseur (le serveur ne « rajeunit » pas un prix inchangé).
+  function beEditCatalog(id, fid, ref, desig, cat, act, qtepaq, prix){
     document.getElementById('becat-id').value=id||'';
     var t=document.getElementById('becat-title'); if(t)t.innerHTML='<i class="fas fa-pen" style="color:#047857;margin-right:6px;"></i>Modifier la référence';
     document.getElementById('becat-ref').value=ref||'';
     document.getElementById('becat-desig').value=desig||'';
-    document.getElementById('becat-cat').value=cat||'matiere_premiere';
+    // Catégorie inconnue de la liste (« autre » avant qu'elle n'y figure, valeur d'import) : on ne
+    // laisse JAMAIS le select vide (selectedIndex = -1) — le geste naturel « choisir la 1re entrée »
+    // reclassait la référence en Matière et la sortait du compartiment qui la propose.
+    var cs=document.getElementById('becat-cat');
+    cs.value=cat||'matiere_premiere';
+    if(cs.selectedIndex<0) cs.value='autre';
+    if(cs.selectedIndex<0) cs.value='matiere_premiere';
     document.getElementById('becat-act').value=act||'both';
-    document.getElementById('becat-prix').value='';   // vide = ne change pas le prix (piloté par RFQ)
-    beCatFillFourn(fid||'');
+    document.getElementById('becat-prix').value=(prix==null?'':String(prix));
+    var q=document.getElementById('becat-qtepaq'); if(q) q.value=(qtepaq==null?'':String(qtepaq));
+    beCatFillFourn(fid||''); beCatMaj();
     document.getElementById('be-catalog-overlay').style.display='flex';
   }
   async function beSaveCatalog(){
@@ -1685,13 +1813,26 @@ export const pageServiceBE = (
     var sel=document.getElementById('becat-fourn'); var fid=sel.value||null;
     var fnom=(fid&&sel.options[sel.selectedIndex])?sel.options[sel.selectedIndex].text:null;
     var prixV=parseFloat(document.getElementById('becat-prix').value);
+    // Qté/paquet : nombre > 0 seulement (nombrePositif, module partagé). Vide / 0 / texte => champ
+    // OMIS du corps : le serveur n'écrase jamais une valeur existante par du vide (contrat §6).
+    // ...et seulement pour un ACCESSOIRE : la quantité par paquet n'a pas de sens ailleurs (le champ
+    // est d'ailleurs masqué par beCatMaj hors accessoire, mais sa valeur survit à un changement de catégorie).
+    var qp=(document.getElementById('becat-cat').value==='accessoire')
+      ? nombrePositif((document.getElementById('becat-qtepaq')||{}).value) : null;
     var payload={ fournisseur_id:fid, fournisseur_nom:fnom, reference:ref, designation:desig,
       categorie:document.getElementById('becat-cat').value, prix:(isFinite(prixV)&&prixV>0)?prixV:null,
       activite:document.getElementById('becat-act').value, source_prix:'be' };
+    if(qp!==null) payload.qte_paquet=qp;
     var url=id?('/api/produits-fournisseurs/'+encodeURIComponent(id)):'/api/produits-fournisseurs';
     var method=id?'PUT':'POST';
     try{ var r=await fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); var j=await r.json();
-      if(j&&j.ok){ beNotif('ok','fa-check', id?'Référence modifiée — actualisation…':'Entrée catalogue enregistrée — actualisation…'); setTimeout(function(){softReload();},700); }
+      if(j&&j.ok){
+        // Contrat §6 / §12 : base sans la colonne «qte_paquet» (cloud avant cloud-13) => le reste est
+        // enregistré et le serveur le DIT (avertissement, statut 200). Jamais une erreur bloquante.
+        if(j.avertissement) beNotif('warn','fa-triangle-exclamation', String(j.avertissement));
+        beNotif('ok','fa-check', id?'Référence modifiée — actualisation…':'Entrée catalogue enregistrée — actualisation…');
+        setTimeout(function(){softReload();}, j.avertissement?2600:700);
+      }
       else beNotif('err','fa-times',(j&&j.error)||'Échec de l\\'enregistrement.'); }
     catch(e){ beNotif('err','fa-times','Erreur réseau.'); }
   }
@@ -1704,9 +1845,75 @@ export const pageServiceBE = (
     +'</tr>'; }
   function beRfqAddLine(){ document.getElementById('be-rfq-lines').insertAdjacentHTML('beforeend', beRfqLineHtml()); }
   function beRfqDelLine(b){ var tr=b.closest('tr'); if(tr) tr.remove(); }
-  function beRfqOpen(origine){ document.getElementById('be-rfq-origine').value=origine||'libre'; var b=document.getElementById('be-rfq-lines'); if(b && !b.querySelector('.berfq-line')) beRfqAddLine(); document.getElementById('be-rfq-overlay').style.display='flex'; }
+  // ── Destinataires (lot H1 §6) ─────────────────────────────────────────────────────────────────
+  // Une ligne de nomenclature n'a plus de fournisseur : on propose TOUS ceux qui portent la référence
+  // au catalogue (cochés d'office). Référence nouvelle (aucun porteur) → choix libre, rien de coché.
+  var BE_RFQ_APRES = null;   // rappel après envoi (marque la ligne « demande en cours »)
+  function beRfqDestVider(){
+    BE_RFQ_APRES = null;
+    var w=document.getElementById('be-rfq-dest-wrap'), d=document.getElementById('be-rfq-dest'), n=document.getElementById('be-rfq-dest-info');
+    if(w) w.style.display='none';
+    if(d) d.innerHTML='';
+    if(n) n.textContent='';
+  }
+  function beRfqDestRemplir(porteurs, info){
+    var w=document.getElementById('be-rfq-dest-wrap'), d=document.getElementById('be-rfq-dest'), n=document.getElementById('be-rfq-dest-info');
+    if(!w||!d) return;
+    var liste = (porteurs && porteurs.length) ? porteurs : (typeof nomFournAll==='function' ? nomFournAll().map(function(f){ return { id:f.id, nom:f.nom }; }) : []);
+    var coches = !!(porteurs && porteurs.length);
+    d.innerHTML = liste.map(function(f,i){
+      return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:.74rem;color:#374151;cursor:pointer;">'
+        + '<input type="checkbox" class="berfq-dest" data-fid="'+((f.id==null)?'':String(f.id).replace(/"/g,'&quot;'))+'" data-fnom="'+String(f.nom||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')+'"'+(coches?' checked':'')+'/>'
+        + String(f.nom||'(sans nom)').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        + '</label>';
+    }).join('');
+    if(n) n.textContent = info || (coches
+      ? (liste.length+' fournisseur(s) portent cette référence au catalogue — tous cochés.')
+      : 'Aucun fournisseur ne porte encore cette référence : choisissez librement (sans coche, les Achats décideront).');
+    w.style.display='';
+  }
+  function beRfqDestAll(on){ document.querySelectorAll('#be-rfq-dest .berfq-dest').forEach(function(c){ c.checked=!!on; }); }
+  function beRfqDestCollect(){
+    var out=[];
+    document.querySelectorAll('#be-rfq-dest .berfq-dest').forEach(function(c){
+      if(!c.checked) return;
+      out.push({ id:c.getAttribute('data-fid')||null, nom:c.getAttribute('data-fnom')||null });
+    });
+    return out;
+  }
+  function beRfqOpen(origine){ beRfqDestVider(); document.getElementById('be-rfq-origine').value=origine||'libre'; var b=document.getElementById('be-rfq-lines'); if(b && !b.querySelector('.berfq-line')) beRfqAddLine(); document.getElementById('be-rfq-overlay').style.display='flex'; }
   // Depuis la liste catalogue : ouvre le modal pré-rempli avec la référence dont le prix est absent/périmé
-  function beRfqForRef(ref, desig, cat){ document.getElementById('be-rfq-origine').value='catalogue'; var d=document.getElementById('be-rfq-dtref'); if(d)d.value=''; var b=document.getElementById('be-rfq-lines'); if(b) b.innerHTML=''; beRfqAddLine(); var tr=document.querySelector('#be-rfq-lines .berfq-line'); if(tr){ tr.querySelector('.br-ref').value=ref||''; tr.querySelector('.br-des').value=desig||ref||''; var cs=tr.querySelector('.br-cat'); if(cs&&cat)cs.value=cat; } document.getElementById('be-rfq-overlay').style.display='flex'; }
+  function beRfqForRef(ref, desig, cat){
+    beRfqDestVider();
+    document.getElementById('be-rfq-origine').value='catalogue';
+    var d=document.getElementById('be-rfq-dtref'); if(d)d.value='';
+    var b=document.getElementById('be-rfq-lines'); if(b) b.innerHTML='';
+    beRfqAddLine();
+    var tr=document.querySelector('#be-rfq-lines .berfq-line');
+    if(tr){ tr.querySelector('.br-ref').value=ref||''; tr.querySelector('.br-des').value=desig||ref||''; var cs=tr.querySelector('.br-cat'); if(cs&&cat)cs.value=cat; }
+    if(typeof nomFournisseursDeRef==='function') beRfqDestRemplir(nomFournisseursDeRef(ref, cat));
+    document.getElementById('be-rfq-overlay').style.display='flex';
+  }
+  // Depuis une LIGNE de nomenclature (spec §6) : réf, désignation, quantité et destinataires pré-remplis.
+  function beRfqOuvrirLigne(o){
+    o = o || {};
+    beRfqDestVider();
+    BE_RFQ_APRES = (typeof o.apres === 'function') ? o.apres : null;
+    document.getElementById('be-rfq-origine').value='nomenclature';
+    var d=document.getElementById('be-rfq-dtref'); if(d) d.value=o.dtref||'';
+    var nt=document.getElementById('be-rfq-notes'); if(nt) nt.value='';
+    var b=document.getElementById('be-rfq-lines'); if(b) b.innerHTML='';
+    beRfqAddLine();
+    var tr=document.querySelector('#be-rfq-lines .berfq-line');
+    if(tr){
+      tr.querySelector('.br-ref').value=o.reference||'';
+      tr.querySelector('.br-des').value=o.designation||o.reference||'';
+      tr.querySelector('.br-qte').value=(o.quantite!=null?String(o.quantite):'');
+      var cs=tr.querySelector('.br-cat'); if(cs&&o.categorie) cs.value=o.categorie;
+    }
+    beRfqDestRemplir(o.fournisseurs);
+    document.getElementById('be-rfq-overlay').style.display='flex';
+  }
   function beRfqCollect(){ var out=[]; document.querySelectorAll('#be-rfq-lines .berfq-line').forEach(function(tr){ var des=tr.querySelector('.br-des').value.trim(); if(!des) return; var q=tr.querySelector('.br-qte').value; out.push({ reference:tr.querySelector('.br-ref').value.trim()||null, designation:des, quantite_estimee:(q!==''?parseFloat(q):null), categorie:tr.querySelector('.br-cat').value }); }); return out; }
   function beRfqSubmit(){
     var lignes=beRfqCollect();
@@ -1714,11 +1921,19 @@ export const pageServiceBE = (
     var origine=document.getElementById('be-rfq-origine').value;
     var dtref=document.getElementById('be-rfq-dtref').value.trim()||null;
     var notes=document.getElementById('be-rfq-notes').value.trim()||null;
+    var cibles=beRfqDestCollect();   // fournisseurs_cibles : une réponse vide est créée par fournisseur coché
+    var apres=BE_RFQ_APRES;
     // §6 : une demande de prix PAR référence
-    var calls=lignes.map(function(l){ return fetch('/api/demandes-prix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ origine:origine, dt_ref:dtref, notes:notes, demandeur:'BE', lignes:[l] })}).then(function(r){return r.json();}).catch(function(){return {ok:false};}); });
+    var calls=lignes.map(function(l){ return fetch('/api/demandes-prix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ origine:origine, dt_ref:dtref, notes:notes, demandeur:'BE', fournisseurs_cibles:cibles, lignes:[l] })}).then(function(r){return r.json();}).catch(function(){return {ok:false};}); });
     Promise.all(calls).then(function(res){
       var ok=res.filter(function(j){return j&&j.ok;});
-      if(ok.length){ document.getElementById('be-rfq-overlay').style.display='none'; document.getElementById('be-rfq-lines').innerHTML=''; beNotif('ok','fa-paper-plane', ok.length>1 ? (ok.length+' demandes de prix envoyées aux Achats (une par référence).') : ('Demande de prix '+ok[0].numero+' envoyée aux Achats.')); }
+      if(ok.length){
+        document.getElementById('be-rfq-overlay').style.display='none';
+        document.getElementById('be-rfq-lines').innerHTML='';
+        beRfqDestVider();
+        if(apres) { try { apres(ok[0]); } catch(e) {} }
+        beNotif('ok','fa-paper-plane', ok.length>1 ? (ok.length+' demandes de prix envoyées aux Achats (une par référence).') : ('Demande de prix '+ok[0].numero+' envoyée aux Achats'+(cibles.length?(' — '+cibles.length+' fournisseur(s) destinataire(s)'):'')+'.'));
+      }
       else beNotif('err','fa-ban','Échec de l\\'envoi.');
     });
   }
@@ -1761,8 +1976,17 @@ export const pageServiceBE = (
 
   // ── NOMENCLATURE FORM ──────────────────────────────────────
   var nomFournitures = [];   // legacy (conservé pour compat ; remplacé par matières + accessoires)
-  var nomMatieres    = [];   // [{ ref, designation, fournisseur, source_id, prix_tole, nb_par_tole }]
-  var nomAccessoires = [];   // [{ ref, designation, fournisseur, source_id, prix_paquet, qte_paquet, nb_par_piece }]
+  // Lot H1 : une ligne de fourniture porte une RÉFÉRENCE, plus de fournisseur ni de qté/paquet.
+  // «prix_*_enr» = copie enregistrée dans la nomenclature, repli quand la référence n'a aucun prix
+  // au catalogue (détail complet en tête du bloc « FOURNITURES »).
+  var nomMatieres    = [];   // [{ ref, designation, nb_par_tole,  prix_tole_enr }]
+  var nomAccessoires = [];   // [{ ref, designation, nb_par_piece, prix_piece_enr }]
+  // État de la lecture des fournitures de la fiche ouverte (relecture 17/09/2026) :
+  //   'ok'      = ce qui est à l'écran EST l'état de la base (fiche neuve, ou lecture réussie) ;
+  //   'attente' = fiche existante dont la lecture n'est pas revenue ;
+  //   'erreur'  = lecture en ÉCHEC (503 PostgREST / RLS) — l'écran affiche « Aucune matière » alors
+  //               que la base en a : tout enregistrement est BLOQUÉ (il effacerait les fournitures).
+  var nomFournituresEtat = 'ok';
   var nomEtapes      = [];
   var nomCurrentId   = null;
   var nomCurrentStatut = 'brouillon';
@@ -1775,13 +1999,14 @@ export const pageServiceBE = (
   // Bouton « Incrémenter l'indice » : crée une nouvelle révision sans effacer l'ancienne
   async function nomCreerNouvelIndice(){
     if(!nomCurrentId){ pushNotif('err','fa-exclamation-triangle','Enregistrez d\\'abord la nomenclature avant d\\'incrémenter l\\'indice.'); return; }
-    if (nomTauxIllisibles()) return;
+    if (nomTauxIllisibles() || nomFournituresIllisibles()) return;
     // Lot H0 : une révision NAÎT en cours (comme depuis la liste), jamais « valide » par recopie du statut courant.
     // La validation repasse par « Enregistrer et valider » (événement « validation » + instantané au journal EN 9100).
     var payload = nomCollectPayload('en_cours');
     payload.statut = 'en_cours';
-    // La révision est une INSERTION (pas de composants existants à protéger) : le drapeau n'est pas une colonne.
-    delete payload.vider_composants;
+    // La révision est une INSERTION (pas de composants ni de fournitures existants à protéger) :
+    // ces drapeaux ne sont pas des colonnes.
+    delete payload.vider_composants; delete payload.vider_fournitures;
     if(!payload.num_nom){ pushNotif('err','fa-exclamation-triangle','Le N° de nomenclature (réf. pièce) est obligatoire.'); return; }
     if(!await appConfirm('Créer la révision '+nomNextIndice(nomCurrentIndice)+' ? L\\'indice '+nomCurrentIndice+' actuel sera conservé.')) return;
     try{
@@ -1811,6 +2036,13 @@ ${BE_ETAPE_COUT_JS}
   function nomTauxIllisibles(){
     if (!BE_REFS_JS || !BE_REFS_JS.taux_erreur) return false;
     pushNotif('err','fa-ban','Enregistrement bloqué : taux de l\\'atelier illisibles ('+String(BE_REFS_JS.taux_erreur).replace(/</g,'&lt;')+'). Rechargez la page quand la base répond.', 9000);
+    return true;
+  }
+  // Même principe pour les FOURNITURES : tant que leur lecture a échoué, l'écran ne reflète pas la
+  // base et l'enregistrement les effacerait (upsertFournitures supprime puis réinsère).
+  function nomFournituresIllisibles(){
+    if (nomFournituresEtat !== 'erreur') return false;
+    pushNotif('err','fa-ban','Enregistrement bloqué : les matières et accessoires de cette fiche n\\'ont pas pu être relus. Les enregistrer maintenant les effacerait. Refermez puis rouvrez la fiche.', 12000);
     return true;
   }
 
@@ -1926,7 +2158,9 @@ ${BE_ETAPE_COUT_JS}
     if (mb) mb.style.display = (t === 'mere') ? 'block' : 'none';
     // Une mère est un assemblage : la matière/fournitures propres ne s'appliquent pas.
     var fourBlock = document.getElementById('nom-fournitures-block');
-    if (fourBlock) fourBlock.style.display = (t === 'mere') ? 'none' : 'block';
+    // '' rend la main à la feuille de style (#nom-fournitures-block = flex colonne + gap) : 'block'
+    // écraserait la mise en page et recollerait les deux compartiments.
+    if (fourBlock) fourBlock.style.display = (t === 'mere') ? 'none' : '';
     if (t === 'mere') nomRenderComposants();
     nomCalcTotaux();
   }
@@ -1997,6 +2231,7 @@ ${BE_ETAPE_COUT_JS}
     nomFournitures = [];
     nomMatieres    = [];
     nomAccessoires = [];
+    nomFournituresEtat = 'ok';   // fiche neuve : la liste affichée EST la liste à enregistrer
     nomEtapes      = [];
     // Nouveau produit → indice A, pas de bandeau de révision (bouton inutile tant que non enregistré)
     var rb=document.getElementById('nom-revision-banner'); if(rb) rb.style.display='none';
@@ -2081,6 +2316,7 @@ ${BE_ETAPE_COUT_JS}
     nomFournitures = [];
     nomMatieres    = [];
     nomAccessoires = [];
+    nomFournituresEtat = nom.id ? 'attente' : 'ok';   // fiche existante : l'écran ne fait pas foi tant que la relecture n'a pas répondu
     nomEtapes      = Array.isArray(nom.etapes_production) ? nom.etapes_production.slice() : [];
     // Le site pilote le taux homme des étapes : il est posé AVANT la mise en forme des anciennes étapes.
     var _entOpen = document.getElementById('nom-f-entite'); if (_entOpen) _entOpen.value = (nom.entite === 'Semrac') ? 'Semrac' : 'Seem';
@@ -2132,25 +2368,47 @@ ${BE_ETAPE_COUT_JS}
       .then(function(r){ return r.json(); })
       .then(function(j){
         if (jeton !== nomOuvertureJeton || String(nomCurrentId || '') !== String(id)) return;
-        if (!j || !j.ok || !Array.isArray(j.fournitures)) return;
+        // ⚠ Lecture en ÉCHEC : l'écran affiche deux compartiments VIDES alors que la base a peut-être
+        //   des fournitures. Le retour silencieux d'avant laissait croire à une fiche sans matière et
+        //   l'« Enregistrer » suivant les effaçait vraiment. On le DIT et on bloque l'enregistrement
+        //   jusqu'à la réouverture de la fiche (même patron que nomTauxIllisibles).
+        if (!j || !j.ok || !Array.isArray(j.fournitures)) {
+          nomFournituresEtat = 'erreur';
+          beNotif('err','fa-triangle-exclamation','Matières et accessoires de cette fiche ILLISIBLES ('+String((j&&j.error)||'aucune réponse').replace(/[<>]/g,'')+'). Les compartiments affichés sont vides mais la base ne l\\'est pas forcément : l\\'enregistrement est bloqué. Refermez puis rouvrez la fiche quand la base répond.', 14000);
+          return;
+        }
+        nomFournituresEtat = 'ok';
         nomMatieres = []; nomAccessoires = [];
-        // Résout l'id fournisseur depuis le nom enregistré → re-sélectionne la liste déroulante
-        var _fid = function(nom){ var f = (NOM_FOURNISSEURS||[]).find(function(x){ return String(x.nom||'').toLowerCase().trim() === String(nom||'').toLowerCase().trim(); }); return f?f.id:''; };
+        // Lot H1 (contrat §4) : lecture compatible des DEUX modèles. Une ANCIENNE ligne porte encore
+        // «fournisseur» + «qte_paquet» et un «prix_unitaire» qui est le prix du PAQUET : on ramène sa
+        // copie au prix d'UNE pièce pour l'affichage, et on la marque «_ancien_modele».
+        // Rien n'est réécrit en base ici : la bascule au nouveau modèle n'a lieu qu'au prochain
+        // enregistrement VOLONTAIRE (aucune reprise en masse). Le champ «fournisseur» n'est plus lu :
+        // la ligne est chiffrée par le prix moyen de sa référence, tous fournisseurs confondus.
         j.fournitures.forEach(function(f){
-          if (f.categorie === 'matiere') {
-            nomMatieres.push({ ref:f.ref_stock||'', designation:f.designation||'', fournisseur:f.fournisseur||'', source_id:_fid(f.fournisseur),
-              prix_tole: parseFloat(f.prix_unitaire)||0, nb_par_tole: parseFloat(f.nb_par_tole)||1 });
+          var cat = categorieFourniture((f.categorie != null && f.categorie !== '') ? f.categorie : f.type_fourniture);
+          var pu = nombrePositif(f.prix_unitaire);
+          if (cat === 'matiere') {
+            var npt = nombrePositif(f.nb_par_tole);
+            nomMatieres.push({ ref:f.ref_stock||'', designation:f.designation||'',
+              nb_par_tole: (npt===null ? 1 : npt), prix_tole_enr: pu });
           } else {
             // accessoire (ou ancienne fourniture sans catégorie → traitée en accessoire)
-            nomAccessoires.push({ ref:f.ref_stock||'', designation:f.designation||'', fournisseur:f.fournisseur||'', source_id:_fid(f.fournisseur),
-              prix_paquet: parseFloat(f.prix_unitaire)||0,
-              qte_paquet: (f.qte_paquet!=null ? parseFloat(f.qte_paquet)||1 : 1),
-              nb_par_piece: parseFloat(f.quantite_par_piece)||1 });
+            var qp  = nombrePositif(f.qte_paquet);
+            var nbp = nombrePositif(f.quantite_par_piece);
+            nomAccessoires.push({ ref:f.ref_stock||'', designation:f.designation||'',
+              nb_par_piece: (nbp===null ? 1 : nbp),
+              prix_piece_enr: (pu===null ? null : (qp===null ? pu : arrondiPrix(pu/qp))),
+              _ancien_modele: (qp !== null || (f.fournisseur != null && String(f.fournisseur) !== '')) });
           }
         });
         nomRenderMatieres(); nomRenderAccessoires(); nomCalcTotaux();
       })
-      .catch(function(){ /* silent */ });
+      .catch(function(){
+        if (jeton !== nomOuvertureJeton || String(nomCurrentId || '') !== String(id)) return;
+        nomFournituresEtat = 'erreur';
+        beNotif('err','fa-triangle-exclamation','Matières et accessoires de cette fiche non chargés (erreur réseau) : l\\'enregistrement est bloqué pour ne pas les effacer. Rouvrez la fiche.', 12000);
+      });
   }
 
   function nomCloseForm() {
@@ -2160,19 +2418,43 @@ ${BE_ETAPE_COUT_JS}
     document.getElementById('nom-list-view').style.display = 'block';
   }
 
-  // ── FOURNITURES : Matière (tôle) + Accessoires ───────────────
+  // ══ FOURNITURES : Matière (tôle) + Accessoires — lot H1 (17/09/2026) ═══════════════════════════
+  // Une ligne ne porte plus de FOURNISSEUR ni de QTÉ/PAQUET : elle porte une RÉFÉRENCE.
+  // Son prix est la MOYENNE des prix de tous les fournisseurs qui portent cette référence au
+  // catalogue (produits_fournisseurs → NOM_PRODUITS), calculée par «prixMoyenReference» — LA MÊME
+  // fonction que le serveur (injectée en tête de ce <script>). Aucune règle de prix n'est recopiée ici.
+  //   matière    : prix moyen d'UNE TÔLE ÷ Pc/tôle = prix matière par pièce (Pc/tôle reste saisi au BE).
+  //   accessoire : prix moyen d'UNE PIÈCE (chaque fournisseur ramené à la pièce par sa qté/paquet,
+  //                déclarée au CATALOGUE) × Nb/pièce.
+  // Conventions des deux listes :
+  //   nomMatieres[i]    = { ref, designation, nb_par_tole,  prix_tole_enr,  rfq_pending, _rfqId, _rfqAt, _rfqClos, _pm, _prixTole, _prixPiece, _statut }
+  //   nomAccessoires[i] = { ref, designation, nb_par_piece, prix_piece_enr, rfq_pending, …,      _pm, _prixPiece, _prixTotal, _statut, _ancien_modele }
+  //   «prix_*_enr» = COPIE ENREGISTRÉE dans la nomenclature. Elle ne sert que de repli quand la
+  //   référence n'a AUCUN prix au catalogue : le prix affiché n'est alors jamais remis à 0 (règle du
+  //   lot H0), exactement comme «recalculerFournitures» côté serveur laisse la copie telle quelle.
+  // Argument «k» des fonctions ci-dessous : 1 = matière, 0 = accessoire (un nombre, pas une chaîne :
+  // il part dans des attributs onclick/oninput, où une chaîne imposerait un échappement de plus).
+
+  function nomFourListe(k){ return k ? nomMatieres : nomAccessoires; }
+  function nomFourCat(k){ return k ? 'matiere' : 'accessoire'; }
+  function nomFourRendre(k){ if(k) nomRenderMatieres(); else nomRenderAccessoires(); }
+  function nomEscH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function nomEscA(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+  function nomFmt(v,d){ var n=Number(v); if(!isFinite(n)) n=0; return n.toLocaleString('fr-FR',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+  function nomFmtEur(v,d){ return nomFmt(v,d)+' €'; }
+
   function nomAddMatiere() {
-    nomMatieres.push({ ref:'', designation:'', fournisseur:'', source_id:'', prix_tole:0, nb_par_tole:1 });
+    nomMatieres.push({ ref:'', designation:'', nb_par_tole:1, prix_tole_enr:null });
     nomRenderMatieres();
   }
-  function nomRemoveMatiere(idx) { nomMatieres.splice(idx,1); nomRenderMatieres(); nomCalcTotaux(); }
   function nomAddAccessoire() {
-    nomAccessoires.push({ ref:'', designation:'', fournisseur:'', source_id:'', prix_paquet:0, qte_paquet:1, nb_par_piece:1 });
+    nomAccessoires.push({ ref:'', designation:'', nb_par_piece:1, prix_piece_enr:null });
     nomRenderAccessoires();
   }
-  function nomRemoveAccessoire(idx) { nomAccessoires.splice(idx,1); nomRenderAccessoires(); nomCalcTotaux(); }
+  function nomFourRemove(k, i) { nomFourListe(k).splice(i,1); nomPopFermer(); nomPrixDetailFermer(); nomFourRendre(k); nomCalcTotaux(); }
 
-  // ── Fournisseurs (réels) pour l'autocomplétion nomenclature — SOURCE d'abord ──
+  // ── Fournisseurs (réels) : plus aucun choix de fournisseur sur une ligne ; ils ne servent plus
+  //    qu'aux DESTINATAIRES d'une demande de prix (§6) et au nom affiché dans le détail du prix.
   var NOM_FOURNISSEURS = (BE_REFS_JS.fournisseurs || []);
   var NOM_PRODUITS = ${sjX(PRODUITS_NOM)};
   // ── Temps réel (polling ~7 s) : la liste des nomenclatures se rafraîchit quand elle change — jamais pendant une édition ──
@@ -2184,340 +2466,603 @@ ${BE_ETAPE_COUT_JS}
       if(j && j.ok && j.sig && j.sig!==NOM_SIG){ NOM_SIG=j.sig; if(window.pushNotif)pushNotif('info','fa-sync','Nomenclatures mises à jour — actualisation…',2500); setTimeout(function(){softReload();},900); }
     }).catch(function(){});
   }, 7000);
-  // Prix « frais » = daté de moins de PRIX_VALIDITE_JOURS (6 mois, constante de shared.ts) ET non nul (au-delà -> demande de prix conseillée)
+  // Prix « frais » = daté de moins de PRIX_VALIDITE_JOURS (6 mois, constante de shared.ts) ET non nul.
+  // Ne sert plus qu'à juger UNE ligne catalogue (réponse à une demande de prix) : le chiffrage d'une
+  // ligne de nomenclature passe par prixMoyenReference / prixPerime (module partagé).
   var NOM_PRIX_VALIDITE_JOURS = ${JSON.stringify(PRIX_VALIDITE_JOURS)};
   var NOM_PRIX_VALIDITE_LIB = ${sjX(PRIX_VALIDITE_LIB)};
-  function nomPrixFrais(datePrix, prix){ if(prix==null||prix==='') return false; if(!((parseFloat(prix)||0) > 0)) return false; if(!datePrix) return false; var t=Date.parse(datePrix); if(isNaN(t)) return false; return (Date.now()-t) < (NOM_PRIX_VALIDITE_JOURS*86400000); }
+  function nomPrixFrais(datePrix, prix){ if(nombrePositif(prix)===null) return false; return !prixPerime(datePrix, NOM_PRIX_VALIDITE_JOURS); }
   // Lot H0 : une demande peut viser une ligne dont le prix est DÉJÀ frais. Elle n'est « répondue » que par un prix daté
   // du jour de la demande ou après ; sinon l'attente disparaîtrait aussitôt (le prix frais existant la solderait).
-  // Relecture H0 : date_prix n'est qu'un JOUR — un prix déjà daté du jour de la demande la soldait aussitôt (« redemander »
-  // n'affichait jamais l'attente). Une demande connue du serveur (_rfqId) n'est répondue qu'une fois VALIDÉE par les Achats
-  // (statut « cloturee », constaté par nomRfqVerifier) ; la règle de date ne reste qu'en repli (demande sans identifiant).
+  // Une demande connue du serveur (_rfqId) n'est répondue qu'une fois VALIDÉE par les Achats (statut
+  // « cloturee », constaté par nomRfqVerifier) ; la règle de date ne reste qu'en repli.
   function nomRfqRepondue(item, datePrix){ if(!item || !item._rfqAt) return true; if(item._rfqClos) return true; if(item._rfqId) return false; var t=Date.parse(datePrix); if(isNaN(t)) return false; return t >= Math.floor(item._rfqAt/86400000)*86400000; }
-  // Relecture H0 : le catalogue local (NOM_PRODUITS, rendu serveur) suit un prix reçu, sinon le rendu suivant le jugeait périmé.
+  // Le catalogue local (NOM_PRODUITS, rendu serveur) suit un prix reçu, sinon le rendu suivant le
+  // jugerait encore absent. Écriture TOLÉRANTE de qte_paquet : la route /api/produit-prix peut ne pas
+  // rendre ce champ (cloud sans cloud-13, ou route pas encore étendue) — on ne l'écrase alors jamais.
   function nomMajProduitLocal(l, cat){
-    if (!l || l.fournisseur_id == null || !l.reference) return;
-    var p = NOM_PRODUITS.find(function(x){ return String(x.fournisseur_id)===String(l.fournisseur_id) && String(x.reference)===String(l.reference); });
-    if (p) { p.prix = l.prix; p.date_prix = l.date_prix; if (!p.designation) p.designation = l.designation || ''; if (!p.categorie && l.categorie) p.categorie = l.categorie; return; }
-    NOM_PRODUITS.push({ fournisseur_id: l.fournisseur_id, reference: l.reference, designation: l.designation || '', prix: l.prix, date_prix: l.date_prix, categorie: l.categorie || cat, conditionnement: l.conditionnement });
+    if (!l || !l.reference) return;
+    var p = null, i;
+    for (i=0;i<NOM_PRODUITS.length;i++){
+      var x = NOM_PRODUITS[i];
+      if (String(x.fournisseur_id==null?'':x.fournisseur_id) === String(l.fournisseur_id==null?'':l.fournisseur_id) && memeReference(x.reference, l.reference)) { p = x; break; }
+    }
+    if (p) {
+      p.prix = l.prix; p.date_prix = l.date_prix;
+      if (nombrePositif(l.qte_paquet) !== null) p.qte_paquet = l.qte_paquet;
+      if (l.conditionnement != null && l.conditionnement !== '') p.conditionnement = l.conditionnement;
+      if (!p.designation) p.designation = l.designation || '';
+      if (!p.fournisseur_nom && l.fournisseur_nom) p.fournisseur_nom = l.fournisseur_nom;
+      if (!p.categorie && (l.categorie || cat)) p.categorie = l.categorie || cat;
+      return;
+    }
+    NOM_PRODUITS.push({ fournisseur_id: l.fournisseur_id, fournisseur_nom: l.fournisseur_nom || '', reference: l.reference,
+      designation: l.designation || '', prix: l.prix, qte_paquet: (nombrePositif(l.qte_paquet)!==null ? l.qte_paquet : null),
+      conditionnement: l.conditionnement, date_prix: l.date_prix, categorie: l.categorie || cat, source_prix: l.source_prix || 'rfq' });
   }
-  // Relecture H0 : vérifie la réponse à la demande de prix d'une ligne (matière ou accessoire).
-  //  1) demande connue (_rfqId) : attend sa VALIDATION par les Achats ; 2) relit le prix au catalogue (fournisseur de la
-  //  ligne, sinon toutes les lignes chiffrées de la réf / de la désignation) ; 3) met à jour NOM_PRODUITS ;
-  //  fini(etat, ligne, n) : 'attente' | 'recu' (une seule réponse) | 'choix' (plusieurs fournisseurs) | 'sans_prix' (validée sans prix récent)
+  // Vérifie la réponse à la demande de prix d'une ligne. Plus de fournisseur sur la ligne : on relit
+  // TOUTES les lignes chiffrées de la référence (elles entrent toutes dans la moyenne).
+  //  1) demande connue (_rfqId) : attend sa VALIDATION par les Achats ; 2) relecture du catalogue ;
+  //  3) mise à jour de NOM_PRODUITS → la moyenne se recalcule au rendu suivant.
+  //  fini(etat, n) : 'attente' | 'recu' (n prix récents) | 'sans_prix' (validée sans prix récent)
   function nomRfqVerifier(item, cat, fini){
     var statut = (item._rfqId && !item._rfqClos)
       ? fetch('/api/demandes-prix/'+encodeURIComponent(item._rfqId), { cache:'no-store' }).then(function(r){ return r.json(); }).then(function(j){ if (j && j.ok && j.demande && j.demande.statut === 'cloturee') item._rfqClos = true; })
       : Promise.resolve();
     return statut.then(function(){
-      if (item._rfqId && !item._rfqClos) { fini('attente', null, 0); return; }
-      var q = 'fournisseur='+encodeURIComponent(item.source_id||'')+'&reference='+encodeURIComponent(item.ref||'')+(item.ref ? '' : '&designation='+encodeURIComponent(item.designation||''));
+      if (item._rfqId && !item._rfqClos) { fini('attente', 0); return; }
+      // La CATÉGORIE part toujours : sans elle la route se rabattait sur « accessoire » et publiait,
+      // pour une ligne matière, un prix moyen de sémantique accessoire (prix de la TÔLE annoncé
+      // comme prix à la pièce). Pour la matière on joint aussi le nb de pièces par tôle (géométrie).
+      var mat = (categorieFourniture(cat) === 'matiere');
+      var q = (item.ref ? ('reference='+encodeURIComponent(item.ref)) : ('designation='+encodeURIComponent(item.designation||'')))
+        + '&categorie=' + (mat ? 'matiere' : 'accessoire')
+        + (mat && nombrePositif(item.nb_par_tole) !== null ? ('&nb_par_tole=' + encodeURIComponent(item.nb_par_tole)) : '');
       return fetch('/api/produit-prix?'+q, { cache:'no-store' }).then(function(r){ return r.json(); }).then(function(j){
         var lignes = (j && j.ok && Array.isArray(j.lignes)) ? j.lignes : [];
         var ok = lignes.filter(function(l){ return nomPrixFrais(l.date_prix, l.prix) && nomRfqRepondue(item, l.date_prix); });
-        ok.forEach(function(l){ nomMajProduitLocal(l, cat); });
-        if (!ok.length) { fini(item._rfqClos ? 'sans_prix' : 'attente', null, 0); return; }
-        if (ok.length > 1) { fini('choix', null, ok.length); return; }
-        fini('recu', ok[0], 1);
+        ok.forEach(function(l){
+          nomMajProduitLocal(l, cat);
+          if (!item.ref && l.reference) item.ref = l.reference;
+          if (!item.designation && l.designation) item.designation = l.designation;
+        });
+        fini(ok.length ? 'recu' : (item._rfqClos ? 'sans_prix' : 'attente'), ok.length);
       });
     }).catch(function(){});
   }
-  // Applique le résultat de nomRfqVerifier à une ligne ; bruit = clic explicite (message « pas encore de réponse »).
-  function nomRfqAppliquer(item, etat, l, n, champPrix, rendre, bruit){
-    if (!item.rfq_pending) return;   // demande abandonnée entre-temps (réf / fournisseur changés par l'utilisateur)
+  // Applique le résultat de nomRfqVerifier ; bruit = clic explicite (message « pas encore de réponse »).
+  function nomRfqAppliquer(item, etat, n, rendre, bruit){
+    if (!item.rfq_pending) return;   // demande abandonnée entre-temps (référence changée par l'utilisateur)
     if (etat === 'attente') { if (bruit) beNotif('ok','fa-clock','Pas encore de réponse validée par les Achats pour cette ligne.'); return; }
     item.rfq_pending = false; item._rfqAt = null;
-    if (etat === 'recu') {
-      if (!item.source_id) { item.source_id = l.fournisseur_id; var f = nomFournById(l.fournisseur_id); item.fournisseur = f ? (f.nom||'') : (l.fournisseur_nom||''); }
-      if (!item.ref && l.reference) item.ref = l.reference;
-      if (!item.designation && l.designation) item.designation = l.designation;
-      item[champPrix] = parseFloat(l.prix)||0; item._prixStatus = 'fresh';
-      rendre(); nomCalcTotaux();
-      beNotif('ok','fa-check','Prix reçu : '+(parseFloat(l.prix)||0).toFixed(2)+' € — coûts recalculés.');
+    rendre(); nomCalcTotaux();
+    if (etat === 'recu') beNotif('ok','fa-check', (n>1 ? ('Prix reçus de '+n+' fournisseurs') : 'Prix reçu') + ' — prix moyen et coûts recalculés.');
+    else beNotif('warn','fa-exclamation-circle','Demande de prix validée, mais aucun prix récent pour cette référence (prix actuel conservé).');
+  }
+
+  // ── Chiffrage d'une ligne — prix moyen du catalogue (module partagé) ────────────────────────────
+  // Référence absente du catalogue, ou sans aucun prix : «incomplet». On GARDE alors la copie
+  // enregistrée (jamais de remise à 0 au rendu, lot H0) et la ligne passe en orange « hors
+  // catalogue » ; sans copie non plus, elle passe en ROUGE « coût incomplet » (la validation de la
+  // nomenclature reste permise, spec §3).
+  function nomMatiereAppliquer(m){
+    var pm = prixMoyenReference(NOM_PRODUITS, m.ref||'', 'matiere', { nbParTole: m.nb_par_tole, validiteJours: NOM_PRIX_VALIDITE_JOURS });
+    m._pm = pm;
+    if (m.rfq_pending && !pm.incomplet && nomRfqRepondue(m, pm.date_plus_recente)) { m.rfq_pending = false; m._rfqAt = null; }
+    var enr = nombrePositif(m.prix_tole_enr);
+    if (pm.incomplet) { m._prixTole = (enr===null ? 0 : enr); m._statut = m.rfq_pending ? 'pending' : (enr===null ? 'incomplet' : 'garde'); }
+    else { m._prixTole = pm.prix_base; m._statut = m.rfq_pending ? 'pending' : (pm.perime ? 'perime' : 'ok'); }
+    var npt = nombrePositif(m.nb_par_tole);
+    m._prixPiece = (npt===null) ? 0 : arrondiPrix(m._prixTole / npt);
+    return pm;
+  }
+  function nomAccAppliquer(a){
+    var pm = prixMoyenReference(NOM_PRODUITS, a.ref||'', 'accessoire', { validiteJours: NOM_PRIX_VALIDITE_JOURS });
+    a._pm = pm;
+    if (a.rfq_pending && !pm.incomplet && nomRfqRepondue(a, pm.date_plus_recente)) { a.rfq_pending = false; a._rfqAt = null; }
+    var enr = nombrePositif(a.prix_piece_enr);
+    if (pm.incomplet) { a._prixPiece = (enr===null ? 0 : enr); a._statut = a.rfq_pending ? 'pending' : (enr===null ? 'incomplet' : 'garde'); }
+    else { a._prixPiece = pm.prix_unitaire; a._statut = a.rfq_pending ? 'pending' : ((pm.perime || pm.sans_conditionnement.length) ? 'perime' : 'ok'); }
+    var nbp = nombrePositif(a.nb_par_piece);
+    // §8 : plus jamais 0 quand la qté/paquet manque — c'est « prix moyen à la pièce × nb par pièce ».
+    a._prixTotal = (nbp===null) ? 0 : arrondiPrix(a._prixPiece * nbp);
+    return pm;
+  }
+  // Recalculées à chaque appel (le prix moyen dépend de NOM_PRODUITS, qu'une réponse de RFQ met à jour).
+  function nomMatierePrixPiece(m){ nomMatiereAppliquer(m); return Number(m._prixPiece)||0; }
+  function nomAccPrixPiece(a){ nomAccAppliquer(a); return Number(a._prixTotal)||0; }
+
+  // ── Recherche « réf OU désignation » sans fournisseur (spec §1) ─────────────────────────────────
+  // Liste déroulante filtrée, accessible au clavier (↑ ↓ Entrée Échap, clic). Pourquoi pas une
+  // <datalist> : le navigateur refiltre NOS options avec sa propre comparaison LITTÉRALE, qui ne sait
+  // pas ignorer les accents (« tole » ne proposait pas « Tôle aluminium »). Le filtrage est donc fait
+  // par «chercherReferences» (module partagé : sous-chaîne sur la référence OU la désignation, casse
+  // et accents ignorés, une entrée par référence, tous fournisseurs) et la liste est rendue ici.
+  // UN seul popup pour toutes les lignes : aucun DOM par ligne, aucune fuite au re-rendu.
+  var NOM_POP = { k:1, i:-1, mode:'ref', opts:[], actif:-1, input:null };
+  var NOM_POP_MAX = 60;
+  function nomPopFermer(){
+    var p = document.getElementById('nom-ref-pop');
+    if (p) { p.style.display='none'; p.innerHTML=''; }
+    if (NOM_POP.input && NOM_POP.input.setAttribute) {
+      NOM_POP.input.setAttribute('aria-expanded','false');
+      // Le champ est annoncé comme un combobox ARIA : sans aria-activedescendant, un lecteur d'écran
+      // n'entend RIEN changer quand on parcourt la liste avec ↑ / ↓.
+      NOM_POP.input.removeAttribute('aria-activedescendant');
+    }
+    NOM_POP.input = null; NOM_POP.opts = []; NOM_POP.actif = -1;
+  }
+  function nomPopMajActiveDescendant(){
+    if (!NOM_POP.input || !NOM_POP.input.setAttribute) return;
+    if (NOM_POP.actif >= 0 && NOM_POP.opts.length) NOM_POP.input.setAttribute('aria-activedescendant','nrp-'+NOM_POP.actif);
+    else NOM_POP.input.removeAttribute('aria-activedescendant');
+  }
+  function nomPopRendre(){
+    var p = document.getElementById('nom-ref-pop'); if(!p) return;
+    if (!NOM_POP.opts.length) {
+      p.innerHTML = '<div class="nrp-vide">Aucune référence du catalogue ne correspond. La saisie libre est permise : la ligne restera en « coût incomplet » jusqu\\'à une demande de prix.</div>';
+      nomPopMajActiveDescendant();
       return;
     }
-    rendre(); nomCalcTotaux();
-    if (etat === 'choix') beNotif('info','fa-hand-pointer', n+' fournisseurs ont un prix récent pour cette ligne : choisissez le fournisseur pour reprendre son prix.');
-    else beNotif('warn','fa-exclamation-circle','Demande de prix validée, mais sans prix récent pour cette ligne (prix actuel conservé).');
-  }
-  // Lot H0 : cellule « prix » d'une ligne matière / accessoire. Le prix chargé n'est JAMAIS remis à 0 au rendu :
-  //  - frais    : prix (couleur du compartiment) + bouton discret « redemander un prix » (disponible à tout moment) ;
-  //  - périmé   : prix gardé en ORANGE (plus de 6 mois, fournisseur non résolu ou réf absente du catalogue) + bouton conseillé ;
-  //  - absent   : bouton « demande de prix » conseillé (orange) ;
-  //  - en cours : prix éventuel + « vérifier la réponse ».
-  function nomPrixCellHtml(statut, prix, couleur, aIdentite, fnRfq, fnCheck, i){
-    var p = parseFloat(prix) || 0;
-    var val = p.toFixed(2) + ' €';
-    var orange = 'background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;';
-    if (statut === 'pending') {
-      if (p > 0) return '<div class="nom-prix-cell"><span class="nom-prix-val" style="color:#92400e;" title="Demande de prix envoyée — prix actuel conservé">'+val+'</span><button type="button" class="nom-rfq-ico" onclick="'+fnCheck+'('+i+')" title="Demande envoyée — vérifier la réponse" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;"><i class="fas fa-hourglass-half"></i></button></div>';
-      return '<button type="button" onclick="'+fnCheck+'('+i+')" title="Demande envoyée — vérifier la réponse" style="font-size:.62rem;font-weight:700;border:none;border-radius:6px;padding:5px 3px;background:#fef3c7;color:#92400e;cursor:pointer;line-height:1.1;"><i class="fas fa-hourglass-half"></i> vérifier</button>';
+    var h = '', j;
+    for (j=0;j<NOM_POP.opts.length;j++){
+      var o = NOM_POP.opts[j];
+      h += '<div class="nrp'+(j===NOM_POP.actif?' on':'')+'" role="option" id="nrp-'+j+'" data-j="'+j+'" aria-selected="'+(j===NOM_POP.actif?'true':'false')+'" title="'+nomEscA((o.fournisseurs||[]).join(', '))+'">'
+        + '<span class="nrp-r">'+nomEscH(o.reference)+'</span>'
+        + '<span class="nrp-d">'+nomEscH(o.designation||'(sans désignation)')+'</span>'
+        + '<span class="nrp-n">'+o.nb_fournisseurs+' fourn.</span>'
+        + '</div>';
     }
-    if (!aIdentite) return '<div style="text-align:right;color:#cbd5e1;padding:5px 4px;">—</div>';
-    if (statut === 'fresh') return '<div class="nom-prix-cell"><span class="nom-prix-val" style="color:'+couleur+';" title="Prix catalogue de moins de '+NOM_PRIX_VALIDITE_LIB+'">'+val+'</span><button type="button" class="nom-rfq-ico" onclick="'+fnRfq+'('+i+')" title="Prix de moins de '+NOM_PRIX_VALIDITE_LIB+' — redemander un prix aux Achats quand même" style="background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;"><i class="fas fa-file-invoice-dollar"></i></button></div>';
-    if (p > 0) return '<div class="nom-prix-cell"><span class="nom-prix-val" style="color:#c2410c;" title="Prix périmé : plus de '+NOM_PRIX_VALIDITE_LIB+', ou non vérifiable au catalogue (fournisseur ou référence introuvable). Valeur conservée — demande de prix conseillée.">'+val+'</span><button type="button" class="nom-rfq-ico" onclick="'+fnRfq+'('+i+')" title="Prix périmé — demande de prix conseillée" style="'+orange+'"><i class="fas fa-file-invoice-dollar"></i></button></div>';
-    return '<button type="button" onclick="'+fnRfq+'('+i+')" title="Aucun prix — demande de prix conseillée" style="font-size:.58rem;font-weight:700;border-radius:6px;padding:4px 3px;cursor:pointer;line-height:1.05;'+orange+'"><i class="fas fa-file-invoice-dollar"></i> demande<br>de prix</button>';
+    p.innerHTML = h;
+    nomPopMajActiveDescendant();
+    var a = document.getElementById('nrp-'+NOM_POP.actif);
+    if (a && a.scrollIntoView) a.scrollIntoView({ block:'nearest' });
   }
-  function nomMatProds(sid){ return NOM_PRODUITS.filter(function(p){ return String(p.fournisseur_id)===String(sid) && p.categorie==='matiere_premiere'; }); }
-  function nomMatProdByRef(sid, ref){ return nomMatProds(sid).find(function(p){ return String(p.reference)===String(ref); }) || null; }
-  function nomMatProdByDes(sid, des){ return nomMatProds(sid).find(function(p){ return String(p.designation||'').trim()===String(des||'').trim(); }) || null; }
-  // §4 : sélection RÉF d'abord (tous fournisseurs visibles), PUIS le fournisseur
-  function nomMatProdsAll(){
-    var vis={}; nomFournVisibles('matiere').forEach(function(f){ vis[String(f.id)]=1; });
-    return NOM_PRODUITS.filter(function(p){ return p.categorie==='matiere_premiere' && vis[String(p.fournisseur_id)]; });
+  function nomPopOuvrir(input){
+    var p = document.getElementById('nom-ref-pop'); if(!p || !input) return;
+    NOM_POP.k = parseInt(input.getAttribute('data-nk'),10) ? 1 : 0;
+    NOM_POP.i = parseInt(input.getAttribute('data-ni'),10) || 0;
+    NOM_POP.mode = input.getAttribute('data-nm') || 'ref';
+    NOM_POP.input = input;
+    NOM_POP.opts = chercherReferences(NOM_PRODUITS, input.value, nomFourCat(NOM_POP.k), NOM_POP_MAX);
+    NOM_POP.actif = NOM_POP.opts.length ? 0 : -1;
+    var r = input.getBoundingClientRect();
+    var vw = window.innerWidth || 1024, vh = window.innerHeight || 768;
+    p.style.display = 'block';
+    p.style.minWidth = Math.max(260, Math.round(r.width)) + 'px';
+    p.style.maxWidth = Math.max(280, Math.min(560, vw-12)) + 'px';
+    nomPopRendre();
+    var w = p.offsetWidth || 300, hh = p.offsetHeight || 200;
+    p.style.left = Math.max(6, Math.min(Math.round(r.left), vw - w - 6)) + 'px';
+    p.style.top  = ((vh - r.bottom) > (hh + 8) ? Math.round(r.bottom) + 4 : Math.max(6, Math.round(r.top) - hh - 4)) + 'px';
+    input.setAttribute('aria-expanded','true');
   }
-  function nomMatProdByRefAny(ref){ return nomMatProdsAll().find(function(p){ return String(p.reference)===String(ref); }) || null; }
-  function nomMatProdByDesAny(des){ return nomMatProdsAll().find(function(p){ return String(p.designation||'').trim()===String(des||'').trim(); }) || null; }
-  function nomMatSuppliersForRef(ref){
-    var seen={}, out=[];
-    nomMatProdsAll().forEach(function(p){ if(String(p.reference)===String(ref) && !seen[String(p.fournisseur_id)]){ seen[String(p.fournisseur_id)]=1; var f=nomFournById(p.fournisseur_id); if(f) out.push(f); } });
+  function nomPopBouger(d){
+    if (!NOM_POP.opts.length) return;
+    NOM_POP.actif = (NOM_POP.actif + d + NOM_POP.opts.length) % NOM_POP.opts.length;
+    nomPopRendre();
+  }
+  function nomPopChoisir(j){
+    var o = NOM_POP.opts[j]; if(!o) return;
+    var k = NOM_POP.k, i = NOM_POP.i, mode = NOM_POP.mode, inp = NOM_POP.input;
+    nomPopFermer();
+    // ⚠ Le champ va disparaître au re-rendu, et le navigateur envoie alors son « change » — avec le
+    // TEXTE TAPÉ (« tole alu »), qui écraserait la référence choisie. On aligne donc sa valeur, puis
+    // on provoque le change TOUT DE SUITE (blur) pendant qu'il est inoffensif.
+    if (inp) {
+      try { inp.value = (mode === 'des') ? (o.designation || o.reference) : o.reference; inp.blur(); } catch(e) {}
+    }
+    nomFourSetRefDes(k, i, o.reference, o.designation);   // choisir remplit LES DEUX champs
+    // Après le blur ci-dessus le focus est sur <body> et le Tab suivant repartait du haut de la page.
+    // Choisir une entrée remplit DÉJÀ la référence ET la désignation : le champ suivant à remplir est
+    // la quantité (elle n'a pas de liste déroulante, donc aucun popup ne se rouvre sous les doigts).
+    var c = document.getElementById(k ? 'nom-matieres-list' : 'nom-accessoires-list');
+    if (c) {
+      var suiv = c.querySelector('[data-nq="'+i+'"][data-nk="'+(k?1:0)+'"]');
+      if (suiv && suiv.focus) { try { suiv.focus(); if (suiv.select) suiv.select(); } catch(e) {} }
+    }
+  }
+  // Délégation d'événements (une seule fois) : les lignes sont re-rendues en permanence.
+  if (!window.__nomPopBound) { window.__nomPopBound = true;
+    document.addEventListener('input', function(e){
+      var t = e.target; if (t && t.getAttribute && t.getAttribute('data-nm')) nomPopOuvrir(t);
+    });
+    document.addEventListener('focusin', function(e){
+      var t = e.target;
+      if (t && t.getAttribute && t.getAttribute('data-nm')) { nomPopOuvrir(t); return; }
+      if (!(t && t.closest && t.closest('#nom-ref-pop'))) nomPopFermer();
+    });
+    document.addEventListener('keydown', function(e){
+      var t = e.target;
+      // La cellule de prix est atteignable au clavier (tabindex) : Entrée / Espace ouvre son détail.
+      if (t && t.classList && t.classList.contains('nom-prix-cell') && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        nomPrixDetail(parseInt(t.getAttribute('data-nk'),10)?1:0, parseInt(t.getAttribute('data-prix'),10)||0, t);
+        return;
+      }
+      if (!(t && t.getAttribute && t.getAttribute('data-nm'))) return;
+      var key = e.key;
+      if (key === 'ArrowDown') { if (NOM_POP.input) nomPopBouger(1); else nomPopOuvrir(t); e.preventDefault(); return; }
+      if (key === 'ArrowUp')   { if (NOM_POP.input) { nomPopBouger(-1); e.preventDefault(); } return; }
+      if (key === 'Enter')     { if (NOM_POP.input && NOM_POP.actif >= 0) { e.preventDefault(); nomPopChoisir(NOM_POP.actif); } return; }
+      if (key === 'Escape')    { if (NOM_POP.input) { e.preventDefault(); nomPopFermer(); } return; }
+      if (key === 'Tab')       { nomPopFermer(); return; }
+    });
+    document.addEventListener('mousedown', function(e){
+      var t = e.target;
+      var row = (t && t.closest) ? t.closest('#nom-ref-pop .nrp') : null;
+      if (row) { e.preventDefault(); nomPopChoisir(parseInt(row.getAttribute('data-j'),10)||0); return; }   // avant le blur
+      if (!(t && t.closest && t.closest('#nom-ref-pop')) && !(t && t.getAttribute && t.getAttribute('data-nm'))) nomPopFermer();
+      if (!(t && t.closest && (t.closest('#nom-prix-detail') || t.closest('.nom-prix-cell')))) nomPrixDetailFermer();
+    });
+    window.addEventListener('resize', function(){ nomPopFermer(); nomPrixDetailFermer(); });
+    document.addEventListener('scroll', function(e){
+      var t = e.target;
+      if (t && t.closest && (t.closest('#nom-ref-pop') || t.closest('#nom-prix-detail'))) return;   // le popup défile : il ne se ferme pas
+      nomPopFermer(); nomPrixDetailFermer();
+    }, true);
+  }
+  // Entrée du catalogue correspondant EXACTEMENT à une référence / une désignation saisie.
+  function nomOptionDeRef(ref, cat){
+    if (normaliserReference(ref) === '') return null;
+    var l = chercherReferences(NOM_PRODUITS, ref, cat, 0), i;
+    for (i=0;i<l.length;i++) if (memeReference(l[i].reference, ref)) return l[i];
+    return null;
+  }
+  function nomOptionDeDes(des, cat){
+    var n = normaliserReference(des);
+    if (n === '') return null;
+    var l = chercherReferences(NOM_PRODUITS, des, cat, 0), i;
+    for (i=0;i<l.length;i++) if (normaliserReference(l[i].designation) === n) return l[i];
+    return null;
+  }
+
+  // ── Doublons (spec §4 / contrat §5) : une même référence normalisée ne peut figurer qu'UNE fois
+  //    dans la nomenclature, matière et accessoires CONFONDUS. Mêmes fonctions que le serveur
+  //    (doublonsFournitures / messageDoublonFourniture) : message identique, ligne refusée, rien envoyé.
+  function nomFournituresPourDoublons(){
+    var out = [];
+    nomMatieres.forEach(function(m){ out.push({ ref_stock:m.ref||'', designation:m.designation||'', categorie:'matiere' }); });
+    nomAccessoires.forEach(function(a){ out.push({ ref_stock:a.ref||'', designation:a.designation||'', categorie:'accessoire' }); });
     return out;
   }
-  function nomMatFournSelect(i, m){
-    if(!(m.ref||m.designation)) return '<select class="nom-f-inp" disabled><option>— choisir une référence —</option></select>';
-    var sups = m.ref ? nomMatSuppliersForRef(m.ref) : [];
-    var list = sups.length ? sups : nomFournVisibles('matiere');
-    var opts = list.map(function(f){ return '<option value="'+f.id+'"'+(String(m.source_id)===String(f.id)?' selected':'')+'>'+String(f.nom||'?').replace(/</g,'&lt;')+'</option>'; }).join('');
-    return '<select class="nom-f-inp" onchange="nomMatiereSetFourn('+i+',this.value)"><option value="">'+(sups.length?'— Fournisseur —':'— Fournisseur (à chiffrer) —')+'</option>'+opts+'</select>';
+  // Rang GLOBAL d'une ligne dans la liste envoyée au serveur (matières d'abord, puis accessoires).
+  function nomFourRang(k, i){ return k ? i : (nomMatieres.length + i); }
+  function nomDoublonSurLigne(k, i){
+    var gs = doublonsFournitures(nomFournituresPourDoublons());
+    var r = nomFourRang(k, i), g, j;
+    for (g=0;g<gs.length;g++) for (j=0;j<gs[g].indices.length;j++) if (gs[g].indices[j] === r) return gs[g];
+    return null;
   }
+  // ⚠ RELECTURE 17/09/2026 — le doublon se teste AVANT de toucher à la ligne. L'ordre précédent était
+  //   : (1) écrire la nouvelle référence, (2) puisqu'elle a changé, EFFACER la copie de prix
+  //   enregistrée (prix_*_enr) et annuler la demande de prix en cours, (3) constater le doublon et
+  //   ne remettre QUE ref et designation. La copie de prix et la demande de prix n'étaient jamais
+  //   restaurées : une ligne hors catalogue repassait en « coût incomplet », affichait 0,0000 € et
+  //   l'« Enregistrer » suivant écrivait prix_unitaire = 0 en base (la remise à 0 interdite par H0,
+  //   tracée à jamais au journal EN 9100) — alors que la saisie de l'utilisateur avait été REFUSÉE.
+  //   On simule donc la ligne candidate sur une COPIE et on ne modifie rien si elle fait doublon.
+  function nomDoublonSiCle(k, i, ref, des){
+    var lignes = nomFournituresPourDoublons();
+    var r = nomFourRang(k, i);
+    if (!lignes[r]) return null;
+    lignes[r] = { ref_stock: String(ref==null?'':ref), designation: String(des==null?'':des), categorie: nomFourCat(k) };
+    var gs = doublonsFournitures(lignes), g, j;
+    for (g=0;g<gs.length;g++) for (j=0;j<gs[g].indices.length;j++) if (gs[g].indices[j] === r) return gs[g];
+    return null;
+  }
+  // Rafraîchit UNE ligne SANS réécrire la liste. Réécrire tout le compartiment en innerHTML détruit le
+  // champ que l'utilisateur vient d'atteindre : en frappe normale (taper une réf, cliquer dans le
+  // champ de la ligne suivante) le focus retombait sur <body> et les caractères tapés étaient PERDUS
+  // — invisible en test lent, systématique à vitesse humaine. Ici aucun champ de saisie n'est
+  // remplacé : on aligne leur valeur et on ne re-rend que la cellule de prix et le bouton de demande
+  // de prix. Rend false si la ligne n'est pas à l'écran (le rendu complet reste le secours).
+  function nomFourMajLigne(k, i){
+    var c = document.getElementById(k ? 'nom-matieres-list' : 'nom-accessoires-list'); if(!c) return false;
+    var l = nomFourListe(k)[i]; if(!l) return false;
+    var kk = (k?1:0);
+    var iRef = c.querySelector('[data-nk="'+kk+'"][data-ni="'+i+'"][data-nm="ref"]');
+    var iDes = c.querySelector('[data-nk="'+kk+'"][data-ni="'+i+'"][data-nm="des"]');
+    if (!iRef || !iDes) return false;
+    if (k) nomMatiereAppliquer(l); else nomAccAppliquer(l);
+    if (iRef.value !== String(l.ref||'')) iRef.value = String(l.ref||'');
+    if (iDes.value !== String(l.designation||'')) iDes.value = String(l.designation||'');
+    iRef.setAttribute('title', (l.ref?(l.ref+'\\n'):'')+'Cherchez par référence OU par désignation (casse et accents ignorés) — la saisie libre est permise');
+    iDes.setAttribute('title', (l.designation?(l.designation+'\\n'):'')+'Cherchez aussi ici : choisir une entrée remplit la référence');
+    var cel = c.querySelector('[data-prix="'+i+'"]');
+    if (cel) cel.outerHTML = nomFourPrixCellHtml(k, l, i);
+    var btn = c.querySelector('[data-rfq="'+i+'"][data-nk="'+kk+'"]');
+    if (btn) btn.outerHTML = nomFourRfqBtnHtml(k, l, i);
+    return true;
+  }
+  function nomFourRafraichir(k, i){ if (!nomFourMajLigne(k, i)) nomFourRendre(k); nomCalcTotaux(); }
+
+  // ── Saisie d'une ligne ─────────────────────────────────────────────────────────────────────────
+  // Changer la RÉFÉRENCE change l'identité de la ligne : la copie de prix enregistrée et la demande
+  // de prix en cours ne la concernent plus (règle du lot H0).
+  function nomFourSetRefDes(k, i, ref, des){
+    var l = nomFourListe(k)[i]; if(!l) return;
+    var avRef = l.ref || '';
+    var nRef = String(ref==null?'':ref).replace(/^\\s+|\\s+$/g,'').replace(/\\s+/g,' ');
+    var nDes = (des != null && String(des) !== '') ? String(des) : (l.designation || '');
+    // Doublon : refus AVANT toute écriture (rien n'est ni modifié ni effacé), comme le serveur refuse
+    // en 409 avant upsertFournitures. Le rendu remet le champ sur la valeur réellement retenue.
+    var d = nomDoublonSiCle(k, i, nRef, nDes);
+    if (d) { beNotif('err','fa-clone', messageDoublonFourniture(d)); nomFourRafraichir(k, i); return; }
+    l.ref = nRef;
+    if (des != null && String(des) !== '') l.designation = String(des);
+    if (!memeReference(avRef, l.ref)) {
+      l.rfq_pending = false; l._rfqId = null; l._rfqAt = null; l._rfqClos = false;
+      if (k) l.prix_tole_enr = null; else { l.prix_piece_enr = null; l._ancien_modele = false; }
+    }
+    nomFourRafraichir(k, i);
+  }
+  function nomFourSetRef(k, i, ref){
+    var l = nomFourListe(k)[i]; if(!l) return;
+    var o = nomOptionDeRef(ref, nomFourCat(k));
+    // Référence connue du catalogue : on reprend son orthographe et on remplit la désignation si elle est vide.
+    nomFourSetRefDes(k, i, o ? o.reference : ref, (o && !(l.designation||'')) ? o.designation : null);
+  }
+  // Désignation tapée librement : elle reste un libellé. Elle ne fixe la référence que si la ligne
+  // n'en a pas encore (sinon changer le libellé d'une ligne référencée changerait l'article chiffré).
+  function nomFourSetDes(k, i, des){
+    var l = nomFourListe(k)[i]; if(!l) return;
+    var nDes = String(des==null?'':des).replace(/^\\s+|\\s+$/g,'');
+    if (!(l.ref||'')) {
+      var o = nomOptionDeDes(nDes, nomFourCat(k));
+      if (o) { nomFourSetRefDes(k, i, o.reference, o.designation); return; }
+    }
+    // Même règle qu'en saisie de référence : on teste le doublon AVANT d'écrire (une ligne sans
+    // référence est comparée sur sa désignation), sinon un refus laissait la ligne à moitié modifiée.
+    var d = nomDoublonSiCle(k, i, l.ref||'', nDes);
+    if (d) { beNotif('err','fa-clone', messageDoublonFourniture(d)); nomFourRafraichir(k, i); return; }
+    l.designation = nDes;
+    nomFourRafraichir(k, i);
+  }
+  // Pc/tôle (matière) ou Nb/pièce (accessoire) : saisie en continu → on ne re-rend QUE la cellule de
+  // prix (un re-rendu complet ferait perdre le focus au champ en cours de frappe).
+  function nomFourSetQte(k, i, v){
+    var l = nomFourListe(k)[i]; if(!l) return;
+    var n = parseFloat(String(v==null?'':v).replace(',','.'));
+    if (!isFinite(n) || n < 0) n = 0;
+    if (k) l.nb_par_tole = n; else l.nb_par_piece = n;
+    if (k) nomMatiereAppliquer(l); else nomAccAppliquer(l);   // sans ce recalcul la cellule resterait sur l'ancienne quantité
+    var cel = document.querySelector('#'+(k?'nom-matieres-list':'nom-accessoires-list')+' [data-prix="'+i+'"]');
+    if (cel) cel.outerHTML = nomFourPrixCellHtml(k, l, i);
+    nomCalcTotaux();
+  }
+
+  // ── Cellule « Prix estimé / pièce » ────────────────────────────────────────────────────────────
+  // Valeur (€ par pièce de nomenclature) + badge « n fournisseur(s) · min–max ». Couleurs :
+  //   compartiment (bleu / violet) = prix moyen frais · ORANGE = au moins un prix de plus de 6 mois,
+  //   conditionnement non déclaré, ou référence hors catalogue (copie enregistrée conservée) ·
+  //   ROUGE = aucun prix du tout (« coût incomplet ») · AMBRE = demande de prix en cours.
+  function nomFourCouleur(k, statut){
+    if (statut === 'incomplet') return '#dc2626';
+    if (statut === 'garde' || statut === 'perime') return '#c2410c';
+    if (statut === 'pending') return '#92400e';
+    return k ? '#0ea5e9' : '#8b5cf6';
+  }
+  function nomFourBadge(k, l){
+    var pm = l._pm || {}, det = pm.detail || [], dec = k ? 2 : 4;
+    if (l._statut === 'incomplet') return { txt:'coût incomplet', col:'#dc2626' };
+    if (l._statut === 'garde')     return { txt:'hors catalogue', col:'#c2410c' };
+    // Le badge chiffre la BASE (€/tôle en matière, €/pièce d'accessoire) : ce n'est pas la valeur de
+    // la colonne (€ par pièce fabriquée), d'où l'unité rappelée. Fourchette seulement si elle existe.
+    var t = det.length + ' fourn. · ';
+    t += (det.length > 1 && pm.min !== pm.max)
+      ? (nomFmt(pm.min, dec) + '–' + nomFmt(pm.max, dec) + ' €')
+      : nomFmtEur(pm.prix_base, dec);
+    t += k ? '/tôle' : '/pce';
+    if (pm.sans_conditionnement && pm.sans_conditionnement.length) t += ' · cond. ?';
+    return { txt:t, col:(l._statut === 'ok' ? '#94a3b8' : '#c2410c') };
+  }
+  // Infobulle (survol) : la même information que le détail, en texte.
+  function nomFourTitre(k, l){
+    var pm = l._pm || {}, det = pm.detail || [], dec = k ? 2 : 4, j;
+    if (!det.length) {
+      var enr = nombrePositif(k ? l.prix_tole_enr : l.prix_piece_enr);
+      return (enr===null
+        ? 'Aucun prix au catalogue pour cette référence : coût de revient incomplet (la validation reste possible).'
+        : 'Référence absente du catalogue (ou sans prix) : le prix enregistré dans la nomenclature est conservé ('+nomFmtEur(enr,dec)+' / '+(k?'tôle':'pièce')+').')
+        + '\\nCliquez pour le détail — le bouton à droite envoie une demande de prix aux Achats.';
+    }
+    var t = det.length+' fournisseur(s) — prix moyen '+nomFmtEur(pm.prix_base, dec)+' / '+(k?'tôle':'pièce');
+    for (j=0;j<det.length && j<8;j++){
+      var d = det[j];
+      t += '\\n· '+(d.fournisseur_nom||'(fournisseur inconnu)')+' : '+nomFmtEur(d.prix_catalogue,2)
+        + (k ? '' : (' le paquet de '+(d.qte_paquet==null?'? (non déclaré)':nomFmt(d.qte_paquet,0))+' → '+nomFmtEur(d.prix_converti,4)+'/pce'))
+        + (d.date_prix ? (' ('+String(d.date_prix).slice(0,10)+(d.perime?', périmé':'')+')') : ' (sans date)');
+    }
+    if (det.length > 8) t += '\\n· … (' + (det.length-8) + ' de plus)';
+    t += '\\nCliquez pour le détail complet.';
+    return t;
+  }
+  function nomFourPrixCellHtml(k, l, i){
+    var val = nomFmtEur(k ? l._prixPiece : l._prixTotal, 4);
+    var b = nomFourBadge(k, l);
+    return '<div class="nom-prix-cell" data-prix="'+i+'" data-nk="'+(k?1:0)+'" role="button" tabindex="0" aria-label="Prix estimé — détail du prix moyen" title="'+nomEscA(nomFourTitre(k,l))+'" onclick="nomPrixDetail('+(k?1:0)+','+i+',this)">'
+      + '<span class="nom-prix-val" style="color:'+nomFourCouleur(k, l._statut)+';">'+nomEscH(val)+'</span>'
+      + '<span class="nom-prix-badge" style="color:'+b.col+';">'+nomEscH(b.txt)+'</span>'
+      + '</div>';
+  }
+  // Bouton « demande de prix » (colonne dédiée) : disponible À TOUT MOMENT (lot H0), orange quand
+  // elle est conseillée (prix périmé, hors catalogue ou absent), sablier quand une demande est en cours.
+  function nomFourRfqBtnHtml(k, l, i){
+    var kk = (k?1:0);
+    if (l._statut === 'pending') {
+      return '<button type="button" class="nom-rfq-ico" data-rfq="'+i+'" data-nk="'+kk+'" onclick="nomLigneRFQCheck('+kk+','+i+')" title="Demande de prix envoyée — vérifier la réponse des Achats" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;"><i class="fas fa-hourglass-half"></i></button>';
+    }
+    var conseil = (l._statut !== 'ok');
+    var style = conseil ? 'background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;' : 'background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;';
+    var titre = conseil
+      ? 'Demande de prix conseillée (prix absent, hors catalogue ou de plus de '+NOM_PRIX_VALIDITE_LIB+') — envoyer aux Achats'
+      : 'Prix de moins de '+NOM_PRIX_VALIDITE_LIB+' — vous pouvez tout de même demander un nouveau prix';
+    return '<button type="button" class="nom-rfq-ico" data-rfq="'+i+'" data-nk="'+kk+'" onclick="nomLigneRFQ('+kk+','+i+')" title="'+nomEscA(titre)+'" style="'+style+'"><i class="fas fa-file-invoice-dollar"></i></button>';
+  }
+
+  // ── Détail du prix moyen (clic sur la cellule) ─────────────────────────────────────────────────
+  function nomPrixDetailFermer(){ var p=document.getElementById('nom-prix-detail'); if(p){ p.style.display='none'; p.innerHTML=''; p.removeAttribute('data-cle'); } }
+  function nomPrixDetailHtml(k, l){
+    var pm = l._pm || {}, det = pm.detail || [], dec = k ? 2 : 4, j;
+    var uni = k ? 'la tôle' : 'la pièce';
+    var h = '<div style="font-weight:800;color:#1e293b;font-family:monospace;">'+nomEscH(l.ref||'(sans référence)')+'</div>'
+      + '<div style="font-size:.7rem;color:#64748b;margin-bottom:8px;">'+nomEscH(l.designation||'')+'</div>';
+    if (!det.length) {
+      var enr = nombrePositif(k ? l.prix_tole_enr : l.prix_piece_enr);
+      h += '<div style="color:#b91c1c;font-weight:700;">Aucun prix au catalogue pour cette référence — le coût de revient est incomplet (la validation reste permise).</div>';
+      if (enr !== null) h += '<div style="margin-top:6px;color:#c2410c;">Prix enregistré dans la nomenclature, <strong>conservé</strong> : '+nomEscH(nomFmtEur(enr,dec))+' / '+uni+'.</div>';
+      h += '<div style="margin-top:8px;font-size:.7rem;color:#64748b;">Le bouton « demande de prix » de la ligne envoie la référence aux Achats ; à la validation de leur réponse, le prix de chaque fournisseur chiffré entre dans la moyenne.</div>';
+      return h;
+    }
+    h += '<div style="margin-bottom:8px;">Prix moyen de <strong>'+det.length+' fournisseur(s)</strong> : <strong>'+nomEscH(nomFmtEur(pm.prix_base, dec))+'</strong> / '+uni
+      + (det.length>1 ? ' (de '+nomEscH(nomFmtEur(pm.min,dec))+' à '+nomEscH(nomFmtEur(pm.max,dec))+')' : '') + '</div>';
+    if (k) h += '<div style="margin:-4px 0 8px;font-size:.72rem;color:#64748b;">÷ '+nomEscH(nomFmt(nombrePositif(l.nb_par_tole)||0,0))+' pièce(s) par tôle = <strong>'+nomEscH(nomFmtEur(l._prixPiece,4))+'</strong> par pièce.</div>';
+    else h += '<div style="margin:-4px 0 8px;font-size:.72rem;color:#64748b;">× '+nomEscH(nomFmt(nombrePositif(l.nb_par_piece)||0,3))+' par pièce fabriquée = <strong>'+nomEscH(nomFmtEur(l._prixTotal,4))+'</strong> par pièce.</div>';
+    h += '<table><thead><tr><th>Fournisseur</th><th style="text-align:right;">Prix catalogue</th>'
+      + (k ? '' : '<th style="text-align:right;">Qté/paquet</th><th style="text-align:right;">€/pièce</th>')
+      + '<th>Date</th></tr></thead><tbody>';
+    for (j=0;j<det.length;j++){
+      var d = det[j];
+      h += '<tr><td>'+nomEscH(d.fournisseur_nom||'(fournisseur inconnu)')+'</td>'
+        + '<td style="text-align:right;">'+nomEscH(nomFmtEur(d.prix_catalogue,2))+'</td>';
+      if (!k) h += '<td style="text-align:right;'+(d.sans_conditionnement?'color:#c2410c;font-weight:700;':'')+'">'+(d.qte_paquet==null?'non déclarée':nomEscH(nomFmt(d.qte_paquet,0)))+'</td>'
+        + '<td style="text-align:right;font-weight:800;">'+nomEscH(nomFmtEur(d.prix_converti,4))+'</td>';
+      h += '<td style="'+(d.perime?'color:#c2410c;font-weight:700;':'color:#64748b;')+'">'+nomEscH(String(d.date_prix||'—').slice(0,10))+'</td></tr>';
+    }
+    h += '</tbody></table>';
+    if (pm.sans_conditionnement && pm.sans_conditionnement.length) h += '<div style="margin-top:8px;color:#c2410c;font-size:.7rem;">Conditionnement non déclaré chez <strong>'+nomEscH(pm.sans_conditionnement.join(', '))+'</strong> : leur prix est compté <strong>à la pièce</strong>. Déclarez la quantité par paquet dans BE › Références (« Éditer ») ou sur la fiche fournisseur.</div>';
+    if (pm.perime) h += '<div style="margin-top:6px;color:#c2410c;font-size:.7rem;">Au moins un prix a plus de '+NOM_PRIX_VALIDITE_LIB+' — demande de prix conseillée.</div>';
+    if (l._ancien_modele) h += '<div style="margin-top:6px;font-size:.7rem;color:#6d28d9;">Cette ligne a été enregistrée à l\\'ancien modèle (fournisseur + quantité par paquet dans la nomenclature). Elle est <strong>affichée</strong> au prix moyen ; elle ne passera au nouveau modèle qu\\'au prochain enregistrement de la nomenclature.</div>';
+    return h;
+  }
+  function nomPrixDetail(k, i, el){
+    var l = nomFourListe(k)[i]; if(!l) return;
+    var p = document.getElementById('nom-prix-detail'); if(!p) return;
+    var cle = (k?1:0)+':'+i;
+    if (p.style.display === 'block' && p.getAttribute('data-cle') === cle) { nomPrixDetailFermer(); return; }
+    p.setAttribute('data-cle', cle);
+    p.innerHTML = nomPrixDetailHtml(k, l);
+    p.style.display = 'block';
+    var r = el.getBoundingClientRect(), vw = window.innerWidth || 1024, vh = window.innerHeight || 768;
+    var w = p.offsetWidth || 360, hh = p.offsetHeight || 180;
+    p.style.left = Math.max(6, Math.min(Math.round(r.right) - w, vw - w - 6)) + 'px';
+    p.style.top  = ((vh - r.bottom) > (hh + 8) ? Math.round(r.bottom) + 4 : Math.max(6, Math.round(r.top) - hh - 4)) + 'px';
+  }
+
+  // ── Demande de prix d'une LIGNE (spec §6) ──────────────────────────────────────────────────────
+  // La modale s'ouvre PRÉ-REMPLIE (référence, désignation, quantité) et propose comme destinataires
+  // tous les fournisseurs qui portent la référence au catalogue, cochés d'office ; aucun ne la porte
+  // (référence nouvelle) → choix libre parmi les fournisseurs de l'entité.
+  function nomFournisseursDeRef(ref, cat){
+    var out = [], vus = {}, i;
+    if (normaliserReference(ref) === '') return out;
+    for (i=0;i<NOM_PRODUITS.length;i++){
+      var p = NOM_PRODUITS[i];
+      if (!p || !memeReference(p.reference, ref)) continue;
+      if (!categorieCompatible(p.categorie, cat)) continue;
+      var id = (p.fournisseur_id==null) ? '' : String(p.fournisseur_id);
+      var f = id ? nomFournById(id) : null;
+      var nom = String(p.fournisseur_nom || (f ? f.nom : '') || '');
+      var cle = id || ('nom:'+normaliserReference(nom));
+      if (!id && !nom) continue;
+      if (vus[cle]) continue;
+      vus[cle] = 1;
+      out.push({ id: id || null, nom: nom });
+    }
+    return out;
+  }
+  function nomLigneRFQ(k, i){
+    var l = nomFourListe(k)[i]; if(!l) return;
+    if (!(l.ref || l.designation)) { beNotif('err','fa-exclamation-circle','Saisissez une référence ou une désignation avant de demander un prix.'); return; }
+    var qte = nombrePositif(k ? l.nb_par_tole : l.nb_par_piece);
+    beRfqOuvrirLigne({
+      reference: l.ref || '',
+      designation: l.designation || l.ref || (k ? 'Matière' : 'Accessoire'),
+      categorie: k ? 'matiere_premiere' : 'accessoire',
+      quantite: qte,
+      dtref: (document.getElementById('nom-f-num')||{}).value || '',
+      fournisseurs: nomFournisseursDeRef(l.ref, nomFourCat(k)),
+      apres: function(j){
+        l.rfq_pending = true; l._rfqAt = Date.now(); l._rfqNum = j.numero; l._rfqId = j.id || null; l._rfqClos = false;
+        nomFourRendre(k);
+      }
+    });
+  }
+  function nomLigneRFQCheck(k, i){
+    var l = nomFourListe(k)[i]; if(!l) return;
+    if (!l.ref && !l.designation) return;
+    nomRfqVerifier(l, k ? 'matiere_premiere' : 'accessoire', function(etat, n){ nomRfqAppliquer(l, etat, n, function(){ nomFourRendre(k); }, true); });
+  }
+  // Au retour sur l'onglet, rafraîchit automatiquement les lignes en attente (matière ET accessoires).
+  if (!window.__nomFourFocusBound) { window.__nomFourFocusBound = true; window.addEventListener('focus', function(){
+    [1,0].forEach(function(k){
+      var lst = nomFourListe(k);
+      if (!Array.isArray(lst)) return;
+      lst.forEach(function(l){
+        if (!(l.rfq_pending && (l.ref || l.designation))) return;
+        nomRfqVerifier(l, k ? 'matiere_premiere' : 'accessoire', function(etat, n){ nomRfqAppliquer(l, etat, n, function(){ nomFourRendre(k); }, false); });
+      });
+    });
+  }); }
+
+  // ── Fournisseurs visibles (destinataires de RFQ seulement) ─────────────────────────────────────
   function nomEntiteActuelle(){ var ent=document.getElementById('nom-f-entite'); return ent?ent.value:''; }
-  // Un fournisseur "fournit" une famille (matiere/accessoire) s'il est tagué (familles_fourniture) OU s'il a une réf de cette catégorie
-  function nomFournFournit(f, cat){
-    var fam = (f && Array.isArray(f.familles_fourniture)) ? f.familles_fourniture : [];
-    if(cat === 'matiere') return fam.indexOf('matiere') >= 0;  // §1 : uniquement les fournisseurs avec la case « matière » cochée
-    if(fam.indexOf(cat) >= 0) return true;
-    var c = (f && Array.isArray(f.catalogue)) ? f.catalogue : [];
-    if(c.some(function(it){ return it && it.categorie===cat; })) return true;
-    // Accessoire : un fournisseur « fournit » aussi la famille s'il porte une réf de cette catégorie au catalogue produits_fournisseurs
-    return !!(f && NOM_PRODUITS.some(function(p){ return String(p.fournisseur_id)===String(f.id) && p.categorie===cat; }));
-  }
-  // Tous les fournisseurs de l'entité courante (toutes familles) — pour assigner un accessoire NOUVEAU (réf absente de tout catalogue)
+  function nomFournById(id){ return NOM_FOURNISSEURS.find(function(f){ return String(f.id)===String(id); }) || null; }
+  // Tous les fournisseurs compatibles avec l'entité courante. Le jsonb «fournisseurs.catalogue» n'est
+  // PLUS lu (vide sur les 155 fournisseurs) : la seule source du catalogue est NOM_PRODUITS.
   function nomFournAll(){
     var actv = nomEntiteActuelle();
     return NOM_FOURNISSEURS.filter(function(f){ var a=f.activite; return !actv || actv==='both' || !a || a==='both' || a===actv; });
   }
-  function nomFournVisibles(cat){
-    var actv = nomEntiteActuelle();
-    return NOM_FOURNISSEURS.filter(function(f){
-      var a=f.activite; var actOk = !actv || actv==='both' || !a || a==='both' || a===actv;
-      return actOk && nomFournFournit(f, cat);
-    });
-  }
-  function nomFournById(id){ return NOM_FOURNISSEURS.find(function(f){ return String(f.id)===String(id); }) || null; }
-  function nomFournItems(f, cat){ var c=(f&&Array.isArray(f.catalogue))?f.catalogue:[]; return c.filter(function(it){ return it && (it.categorie===cat || !it.categorie); }); }
-  // Case 1 : liste déroulante des FOURNISSEURS de la famille
-  function nomFournSelect(cat, selId, onchange){
-    var opts = nomFournVisibles(cat).map(function(f){ return '<option value="'+f.id+'"'+(String(selId)===String(f.id)?' selected':'')+'>'+String(f.nom||'?').replace(/</g,'&lt;')+'</option>'; }).join('');
-    return '<select class="nom-f-inp" onchange="'+onchange+'"><option value="">— Fournisseur —</option>'+opts+'</select>';
-  }
-  // Case 2 : liste déroulante des RÉFS au catalogue du fournisseur choisi (filtrées par famille)
-  function nomRefSelect(f, cat, selRef, onchange){
-    if(!f) return '<select class="nom-f-inp" disabled><option value="">— choisir fournisseur —</option></select>';
-    var seen={}; var items = nomFournItems(f,cat).filter(function(it){ if(!it.ref||seen[it.ref])return false; seen[it.ref]=1; return true; });
-    if(items.length===0) return '<select class="nom-f-inp" disabled><option value="">(aucune réf au catalogue)</option></select>';
-    var opts = items.map(function(it){ return '<option value="'+(it.ref||'').replace(/"/g,'&quot;')+'"'+(selRef===it.ref?' selected':'')+'>'+((it.ref||'')+' — '+(it.designation||'')).replace(/</g,'&lt;')+'</option>'; }).join('');
-    return '<select class="nom-f-inp" onchange="'+onchange+'"><option value="">— Réf catalogue —</option>'+opts+'</select>';
-  }
-  // Re-render quand l'entité (Seem/Semrac) change → re-filtre les fournisseurs visibles
+
+  // Re-render quand l'entité (Seem/Semrac) change → re-filtre les fournisseurs proposés en RFQ
   document.addEventListener('change', function(e){ if(e.target && e.target.id === 'nom-f-entite'){ nomRenderMatieres(); nomRenderAccessoires(); nomRenderEtapes(); } });
   if(document.readyState !== 'loading'){ setTimeout(function(){ nomRenderMatieres(); nomRenderAccessoires(); }, 0); }
   else document.addEventListener('DOMContentLoaded', function(){ nomRenderMatieres(); nomRenderAccessoires(); });
 
-  // ── Matière (§4) : RÉF/désignation d'abord → fournisseur(s) possibles → prix ──
-  // Lot H0 : un prix appartient à (réf, fournisseur). Il n'est remis à 0 que si l'UTILISATEUR change cette identité ;
-  // le rendu, lui, ne l'efface jamais (nomMatiereApplyPrix).
-  function nomMatiereSetRef(i, ref){
-    var m=nomMatieres[i]; if(String(ref||'')!==String(m.ref||'')) m.prix_tole=0; m.ref=ref; m.rfq_pending=false;
-    var p=nomMatProdByRefAny(ref); if(p && !m.designation) m.designation=p.designation||'';
-    var sups=nomMatSuppliersForRef(ref);
-    if(sups.length===1){ m.source_id=sups[0].id; m.fournisseur=sups[0].nom; }
-    else if(!sups.some(function(f){return String(f.id)===String(m.source_id);})){ m.source_id=''; m.fournisseur=''; }
-    nomMatiereApplyPrix(m); nomRenderMatieres(); nomCalcTotaux();
+  // ── Rendu d'une ligne — MÊME grille que l'en-tête (.nom-mat-grid / .nom-acc-grid) ──────────────
+  // 6 colonnes : Réf · Désignation · Pc/tôle ou Nb/pièce · Prix estimé/pièce · demande de prix · croix.
+  function nomFourLigneHtml(k, l, i){
+    var kk = (k?1:0);
+    if (k) nomMatiereAppliquer(l); else nomAccAppliquer(l);
+    // La colonne est étroite : l'infobulle rappelle d'abord la VALEUR saisie (« 0,125 », « 120 »),
+    // sinon l'utilisateur ne peut pas relire ce qu'il a tapé sans cliquer dans le champ.
+    var qChamp = k
+      ? '<input class="nom-f-inp" data-nq="'+i+'" data-nk="'+kk+'" type="number" step="1" min="1" placeholder="Pc" title="'+nomEscA((l.nb_par_tole==null||l.nb_par_tole===''?'':(l.nb_par_tole+'\\n'))+'Nombre de pièces découpées dans une tôle')+'" value="'+nomEscA(l.nb_par_tole==null?'':l.nb_par_tole)+'" oninput="nomFourSetQte(1,'+i+',this.value)" style="text-align:right;"/>'
+      : '<input class="nom-f-inp" data-nq="'+i+'" data-nk="'+kk+'" type="number" step="0.001" min="0" placeholder="Nb" title="'+nomEscA((l.nb_par_piece==null||l.nb_par_piece===''?'':(l.nb_par_piece+'\\n'))+'Nombre d\\'accessoires par pièce fabriquée')+'" value="'+nomEscA(l.nb_par_piece==null?'':l.nb_par_piece)+'" oninput="nomFourSetQte(0,'+i+',this.value)" style="text-align:right;"/>';
+    return '<div style="margin-bottom:4px;">'
+      + '<div class="'+(k?'nom-mat-grid':'nom-acc-grid')+'">'
+      // Le champ est étroit : son infobulle rappelle d'abord la valeur complète (elle peut être coupée).
+      + '<input class="nom-f-inp" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="nom-ref-pop" autocomplete="off" data-nk="'+kk+'" data-ni="'+i+'" data-nm="ref" placeholder="'+(k?'Réf. matière':'Réf. ou nouvelle')+'" title="'+nomEscA((l.ref?(l.ref+'\\n'):'')+'Cherchez par référence OU par désignation (casse et accents ignorés) — la saisie libre est permise')+'" value="'+nomEscA(l.ref||'')+'" onchange="nomFourSetRef('+kk+','+i+',this.value)"/>'
+      + '<input class="nom-f-inp" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="nom-ref-pop" autocomplete="off" data-nk="'+kk+'" data-ni="'+i+'" data-nm="des" placeholder="Désignation" title="'+nomEscA((l.designation?(l.designation+'\\n'):'')+'Cherchez aussi ici : choisir une entrée remplit la référence')+'" value="'+nomEscA(l.designation||'')+'" onchange="nomFourSetDes('+kk+','+i+',this.value)"/>'
+      + qChamp
+      + nomFourPrixCellHtml(k, l, i)
+      + nomFourRfqBtnHtml(k, l, i)
+      + '<button type="button" onclick="nomFourRemove('+kk+','+i+')" title="Supprimer cette ligne" style="width:24px;height:24px;border-radius:6px;border:none;background:#fee2e2;color:#dc2626;cursor:pointer;font-weight:700;line-height:1;padding:0;">×</button>'
+      + '</div>'
+      + '</div>';
   }
-  function nomMatiereSetDes(i, des){
-    var m=nomMatieres[i]; if(!m.ref && String(des||'')!==String(m.designation||'')) m.prix_tole=0; m.designation=des; m.rfq_pending=false;
-    var p=nomMatProdByDesAny(des);
-    if(p){ if(!m.ref) m.ref=p.reference||''; var sups=nomMatSuppliersForRef(p.reference); if(sups.length===1){ m.source_id=sups[0].id; m.fournisseur=sups[0].nom; } }
-    nomMatiereApplyPrix(m); nomRenderMatieres(); nomCalcTotaux();
+  // ⚠ GARDE DE RÉ-ENTRANCE. Réécrire la liste supprime le champ en cours d'édition ; le navigateur
+  // envoie alors son « change », dont le gestionnaire redemande un rendu — EN PLEIN MILIEU de
+  // l'affectation innerHTML en cours. Chrome lève « The node to be removed is no longer a child of
+  // this node. Perhaps it was moved in a blur event handler? » et la ligne reste à moitié rendue.
+  // On mémorise donc la demande et on la rejoue au tour d'événement suivant (jamais en cascade).
+  var NOM_RENDU_EN_COURS = 0, NOM_RENDU_A_REFAIRE = 0;
+  function nomRenderMatieres(){ nomFourRendreProtege(1); }
+  function nomRenderAccessoires(){ nomFourRendreProtege(0); }
+  function nomFourRendreProtege(k){
+    if (NOM_RENDU_EN_COURS) { NOM_RENDU_A_REFAIRE = NOM_RENDU_A_REFAIRE | (k ? 1 : 2); return; }
+    NOM_RENDU_EN_COURS = 1;
+    try { nomFourRendreListe(k); } finally { NOM_RENDU_EN_COURS = 0; }
+    var reste = NOM_RENDU_A_REFAIRE; NOM_RENDU_A_REFAIRE = 0;
+    if (reste) setTimeout(function(){ if (reste & 1) nomFourRendreProtege(1); if (reste & 2) nomFourRendreProtege(0); }, 0);
   }
-  function nomMatiereSetFourn(i, fId){
-    var f=nomFournById(fId); var m=nomMatieres[i];
-    if(String(fId||'')!==String(m.source_id||'')) m.prix_tole=0;
-    m.source_id=fId; m.fournisseur=f?f.nom:''; m.rfq_pending=false;
-    nomMatiereApplyPrix(m); nomRenderMatieres(); nomCalcTotaux();
-  }
-  // §3 : prix tôle = prix catalogue si < 6 mois. Lot H0 : sinon le prix CHARGÉ / ENREGISTRÉ est GARDÉ (jamais remis à 0
-  // au rendu), statut « stale » (orange, demande de prix conseillée) : prix de plus de 6 mois, fournisseur non résolu,
-  // ou réf absente du catalogue. Aucun prix n'est inventé : sans prix frais ni prix enregistré, la ligne reste à 0 (« none »).
-  function nomMatiereApplyPrix(m){
-    m._prixDate = null;
-    var aPrix = (parseFloat(m.prix_tole)||0) > 0;
-    if(m.source_id && (m.ref || m.designation)){
-      var p = m.ref ? nomMatProdByRef(m.source_id, m.ref) : nomMatProdByDes(m.source_id, m.designation);
-      if(p){ m._prixDate = p.date_prix; if(!m.designation) m.designation = p.designation||''; if(!m.ref && p.reference) m.ref = p.reference;
-        if(nomPrixFrais(p.date_prix, p.prix)){ m.prix_tole = parseFloat(p.prix)||0;
-          if(m.rfq_pending && !nomRfqRepondue(m, p.date_prix)){ m._prixStatus='pending'; return; }
-          m._prixStatus='fresh'; m.rfq_pending=false; m._rfqAt=null; return; }
-      }
-    }
-    m._prixStatus = m.rfq_pending ? 'pending' : (aPrix ? 'stale' : 'none');
-  }
-  // §3 cas 2 : créer une demande de prix pour cette ligne (réf + désignation + quantité de la ligne)
-  function nomMatiereRFQ(i){
-    var m = nomMatieres[i];
-    // Lot H0 : demande possible à tout moment, même sans fournisseur choisi (la demande ne porte que la réf / désignation)
-    if(!(m.ref || m.designation)){ beNotif('err','fa-exclamation-circle','Choisissez une référence ou une désignation.'); return; }
-    var nref = (document.querySelector('#nom-f-ref,#nom-f-designation,#nom-f-piece,#nom-f-nom,#nom-f-libelle')||{}).value || '';
-    var payload = { origine:'nomenclature', dt_ref:nref||null, demandeur:'BE',
-      lignes:[{ reference:m.ref||null, designation:m.designation||m.ref||'Matière', quantite_estimee:(parseFloat(m.nb_par_tole)||null), categorie:'matiere_premiere' }] };
-    fetch('/api/demandes-prix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
-      .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ m.rfq_pending=true; m._rfqAt=Date.now(); m._rfqNum=j.numero; m._rfqId=j.id||null; m._rfqClos=false; nomMatiereApplyPrix(m); nomRenderMatieres(); beNotif('ok','fa-paper-plane','Demande de prix '+j.numero+' envoyée aux Achats.'); } else beNotif('err','fa-ban','Échec de la demande.'); })
-      .catch(function(){ beNotif('err','fa-exclamation-circle','Erreur réseau.'); });
-  }
-  // §5 : vérifier si la réponse RFQ est arrivée → MAJ prix + recalcul
-  function nomMatiereCheckPrix(i){
-    var m = nomMatieres[i]; if(!m.ref && !m.designation) return;
-    nomRfqVerifier(m, 'matiere_premiere', function(etat, l, n){ nomRfqAppliquer(m, etat, l, n, 'prix_tole', nomRenderMatieres, true); });
-  }
-  // §5 : au retour sur l'onglet, rafraîchit automatiquement les lignes en attente
-  if(!window.__nomMatFocusBound){ window.__nomMatFocusBound=true; window.addEventListener('focus', function(){
-    if(!Array.isArray(nomMatieres)) return;
-    nomMatieres.forEach(function(m){ if(!(m.rfq_pending && (m.ref||m.designation))) return;
-      nomRfqVerifier(m, 'matiere_premiere', function(etat, l, n){ nomRfqAppliquer(m, etat, l, n, 'prix_tole', nomRenderMatieres, false); });
-    });
-  }); }
-  function nomMatierePrixPiece(m){ var n=parseFloat(m.nb_par_tole)||0; return n>0 ? ((parseFloat(m.prix_tole)||0)/n) : 0; }
-  function nomRenderMatieres(){
-    var c = document.getElementById('nom-matieres-list'); if(!c) return;
-    if(nomMatieres.length===0){ c.innerHTML = '<div style="text-align:center;padding:14px;color:#9ca3af;font-size:.76rem;border:1.5px dashed #e2e8f0;border-radius:8px;">Aucune matière — cliquez « Ajouter matière »</div>'; return; }
-    c.innerHTML = nomMatieres.map(function(m,i){
-      nomMatiereApplyPrix(m);
-      var pp = nomMatierePrixPiece(m).toFixed(4);
-      var all = nomMatProdsAll();
-      var refDl='matdl-ref-'+i, desDl='matdl-des-'+i, seenR={}, seenD={};
-      var refOpts = all.filter(function(p){ if(!p.reference||seenR[p.reference])return false; seenR[p.reference]=1; return true; }).map(function(p){ return '<option value="'+(p.reference||'').replace(/"/g,'&quot;')+'">'+(p.designation||'').replace(/"/g,'&quot;')+'</option>'; }).join('');
-      var desOpts = all.filter(function(p){ var d=(p.designation||'').trim(); if(!d||seenD[d])return false; seenD[d]=1; return true; }).map(function(p){ return '<option value="'+(p.designation||'').replace(/"/g,'&quot;')+'">'+(p.reference||'').replace(/"/g,'&quot;')+'</option>'; }).join('');
-      // Lot H0 : prix jamais effacé au rendu ; demande de prix disponible sur chaque ligne (orange si prix périmé ou absent)
-      var priceCell = nomPrixCellHtml(m._prixStatus, m.prix_tole, '#0ea5e9', !!(m.ref||m.designation), 'nomMatiereRFQ', 'nomMatiereCheckPrix', i);
-      return '<div style="margin-bottom:4px;">'
-        + '<div class="nom-mat-grid">'
-        + '<input class="nom-f-inp" list="'+refDl+'" placeholder="Réf. matière" value="'+(m.ref||'').replace(/"/g,'&quot;')+'" onchange="nomMatiereSetRef('+i+',this.value)"/>'
-        + '<input class="nom-f-inp" list="'+desDl+'" placeholder="Désignation" value="'+(m.designation||'').replace(/"/g,'&quot;')+'" onchange="nomMatiereSetDes('+i+',this.value)"/>'
-        + nomMatFournSelect(i, m)
-        + priceCell
-        + '<input class="nom-f-inp" type="number" step="1" min="1" placeholder="Pc" value="'+(m.nb_par_tole||1)+'" oninput="nomMatieres['+i+'].nb_par_tole=parseFloat(this.value)||0;nomCalcTotaux();" onchange="nomRenderMatieres()" style="text-align:right;"/>'
-        + '<div style="text-align:right;font-size:.74rem;font-weight:700;color:#0ea5e9;padding:5px 4px;">'+pp+' €</div>'
-        + '<button onclick="nomRemoveMatiere('+i+')" title="Supprimer" style="width:24px;height:24px;border-radius:6px;border:none;background:#fee2e2;color:#dc2626;cursor:pointer;font-weight:700;">×</button>'
-        + '</div>'
-        + '<datalist id="'+refDl+'">'+refOpts+'</datalist><datalist id="'+desDl+'">'+desOpts+'</datalist>'
-        + '</div>';
-    }).join('');
-    nomCalcTotaux();
-  }
-
-  // ── Accessoires : RÉF d'abord (catalogue produits_fournisseurs, comme la matière) → fournisseurs qui l'ont → prix/qté auto ──
-  function nomAccProds(sid){ return NOM_PRODUITS.filter(function(p){ return String(p.fournisseur_id)===String(sid) && p.categorie==='accessoire'; }); }
-  // TOUTES les réfs accessoires existantes (déroulement complet dans la datalist) — non filtré par « fournisseur visible »
-  // (sinon un fournisseur non tagué « accessoire » masquait ses réfs). Filtre d'activité indulgent : garde si activité inconnue/compatible.
-  function nomAccProdsAll(){
-    var actv = nomEntiteActuelle();
-    return NOM_PRODUITS.filter(function(p){
-      if(p.categorie!=='accessoire') return false;
-      if(!actv) return true;
-      var f = nomFournById(p.fournisseur_id); var a = f ? f.activite : null;
-      return !a || a==='both' || a===actv;
-    });
-  }
-  function nomAccProdByRefAny(ref){ return nomAccProdsAll().find(function(p){ return String(p.reference)===String(ref); }) || null; }
-  function nomAccProdByDesAny(des){ return nomAccProdsAll().find(function(p){ return String(p.designation||'').trim()===String(des||'').trim(); }) || null; }
-  function nomAccSuppliersForRef(ref){
-    var seen={}, out=[];
-    nomAccProdsAll().forEach(function(p){ if(String(p.reference)===String(ref) && !seen[String(p.fournisseur_id)]){ seen[String(p.fournisseur_id)]=1; var f=nomFournById(p.fournisseur_id); if(f) out.push(f); } });
-    return out;
-  }
-  function nomAccFournSelect(i, a){
-    if(!(a.ref||a.designation)) return '<select class="nom-f-inp" disabled><option>— choisir une référence —</option></select>';
-    // Réf connue → seuls les fournisseurs qui portent cette réf au catalogue ; réf nouvelle → tous les fournisseurs de l'entité
-    var sups = a.ref ? nomAccSuppliersForRef(a.ref) : [];
-    var list = sups.length ? sups : nomFournAll();
-    var opts = list.map(function(f){ return '<option value="'+f.id+'"'+(String(a.source_id)===String(f.id)?' selected':'')+'>'+String(f.nom||'?').replace(/</g,'&lt;')+'</option>'; }).join('');
-    return '<select class="nom-f-inp" onchange="nomAccSetFourn('+i+',this.value)"><option value="">'+(sups.length?'— Fournisseur —':'— Fournisseur (à chiffrer) —')+'</option>'+opts+'</select>';
-  }
-  // Lot H0 : seul un prix catalogue FRAIS remplace le prix de la ligne (un prix périmé n'écrase ni n'invente rien :
-  // la ligne garde son prix, affiché orange). Le prix n'est remis à 0 que si l'utilisateur change la réf / le fournisseur.
-  function nomAccApplyProd(a, p){ if(!p) return; if(!a.designation) a.designation = p.designation||''; if(!a.ref && p.reference) a.ref = p.reference; if(p.prix!=null && nomPrixFrais(p.date_prix, p.prix)) a.prix_paquet = parseFloat(p.prix)||a.prix_paquet||0; if(p.conditionnement!=null && parseFloat(p.conditionnement)>0) a.qte_paquet = parseFloat(p.conditionnement); }
-  function nomAccSetRef(i, ref){
-    var a = nomAccessoires[i]; if(String(ref||'')!==String(a.ref||'')) a.prix_paquet = 0; a.ref = ref;
-    var sups = nomAccSuppliersForRef(ref);
-    if(sups.length===1){ a.source_id = sups[0].id; a.fournisseur = sups[0].nom; }   // une seule source → auto-sélection
-    var p = a.source_id ? nomAccProds(a.source_id).find(function(x){ return String(x.reference)===String(ref); }) : nomAccProdByRefAny(ref);
-    nomAccApplyProd(a, p);
-    nomRenderAccessoires(); nomCalcTotaux();
-  }
-  function nomAccSetDes(i, des){
-    var a = nomAccessoires[i]; if(!a.ref && String(des||'')!==String(a.designation||'')) a.prix_paquet = 0; a.designation = des;
-    if(!a.ref){ var p = nomAccProdByDesAny(des); if(p){ a.ref = p.reference||''; var sups=nomAccSuppliersForRef(a.ref); if(sups.length===1){ a.source_id=sups[0].id; a.fournisseur=sups[0].nom; } nomAccApplyProd(a, p); } }
-    nomRenderAccessoires(); nomCalcTotaux();
-  }
-  function nomAccSetFourn(i, fId){
-    var a = nomAccessoires[i]; var f = nomFournById(fId); if(String(fId||'')!==String(a.source_id||'')) a.prix_paquet = 0; a.source_id = fId; a.fournisseur = f ? f.nom : '';
-    if(a.ref){ var p = nomAccProds(fId).find(function(x){ return String(x.reference)===String(a.ref); }); nomAccApplyProd(a, p); }
-    nomRenderAccessoires(); nomCalcTotaux();
-  }
-  function nomAccPrixPiece(a){ var q=parseFloat(a.qte_paquet)||0; return q>0 ? (((parseFloat(a.prix_paquet)||0)/q)*(parseFloat(a.nb_par_piece)||0)) : 0; }
-  // Prix accessoire = prix CATALOGUE si < 6 mois (PAS de saisie manuelle du prix). Lot H0 : sinon le prix CHARGÉ /
-  // ENREGISTRÉ est GARDÉ (jamais remis à 0 au rendu) avec le statut « stale » (orange, demande de prix conseillée) ;
-  // sans aucun prix, statut « none » (demande de prix conseillée).
-  function nomAccApplyPrixStatus(a){
-    var aPrix = (parseFloat(a.prix_paquet)||0) > 0;
-    if(!(a.ref||a.designation)){ a._prixStatus = a.rfq_pending ? 'pending' : (aPrix ? 'stale' : 'none'); return; }
-    var p = a.source_id ? nomAccProds(a.source_id).find(function(x){ return String(x.reference)===String(a.ref); }) : nomAccProdByRefAny(a.ref);
-    if(!p && a.designation) p = nomAccProdByDesAny(a.designation);
-    if(p && nomPrixFrais(p.date_prix, p.prix)){ a.prix_paquet=parseFloat(p.prix)||0;
-      if(a.rfq_pending && !nomRfqRepondue(a, p.date_prix)){ a._prixStatus='pending'; return; }
-      a._prixStatus='fresh'; a.rfq_pending=false; a._rfqAt=null; return; }
-    a._prixStatus = a.rfq_pending ? 'pending' : (aPrix ? 'stale' : 'none');
-  }
-  function nomAccRFQ(i){
-    var a = nomAccessoires[i];
-    if(!(a.ref || a.designation)){ beNotif('err','fa-exclamation-circle','Choisissez une référence ou une désignation.'); return; }
-    var nref = (document.querySelector('#nom-f-ref,#nom-f-designation,#nom-f-piece,#nom-f-nom,#nom-f-libelle')||{}).value || '';
-    var payload = { origine:'nomenclature', dt_ref:nref||null, demandeur:'BE',
-      lignes:[{ reference:a.ref||null, designation:a.designation||a.ref||'Accessoire', quantite_estimee:(parseFloat(a.nb_par_piece)||null), categorie:'accessoire' }] };
-    fetch('/api/demandes-prix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
-      .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ a.rfq_pending=true; a._rfqAt=Date.now(); a._rfqNum=j.numero; a._rfqId=j.id||null; a._rfqClos=false; nomRenderAccessoires(); beNotif('ok','fa-paper-plane','Demande de prix '+j.numero+' envoyée aux Achats.'); } else beNotif('err','fa-ban','Échec de la demande.'); })
-      .catch(function(){ beNotif('err','fa-exclamation-circle','Erreur réseau.'); });
-  }
-  function nomAccRFQCheck(i){
-    var a = nomAccessoires[i]; if(!a.ref && !a.designation) return;
-    nomRfqVerifier(a, 'accessoire', function(etat, l, n){ nomRfqAppliquer(a, etat, l, n, 'prix_paquet', nomRenderAccessoires, true); });
-  }
-  function nomRenderAccessoires(){
-    var c = document.getElementById('nom-accessoires-list'); if(!c) return;
-    if(nomAccessoires.length===0){ c.innerHTML = '<div style="text-align:center;padding:14px;color:#9ca3af;font-size:.76rem;border:1.5px dashed #e2e8f0;border-radius:8px;">Aucun accessoire — cliquez « Ajouter accessoire »</div>'; return; }
-    var all = nomAccProdsAll();
-    c.innerHTML = nomAccessoires.map(function(a,i){
-      nomAccApplyPrixStatus(a);
-      var pp = nomAccPrixPiece(a).toFixed(4);
-      var refDl='accdl-ref-'+i, desDl='accdl-des-'+i, seenR={}, seenD={};
-      var refOpts = all.filter(function(p){ if(!p.reference||seenR[p.reference])return false; seenR[p.reference]=1; return true; }).map(function(p){ return '<option value="'+(p.reference||'').replace(/"/g,'&quot;')+'">'+(p.designation||'').replace(/"/g,'&quot;')+'</option>'; }).join('');
-      var desOpts = all.filter(function(p){ var d=(p.designation||'').trim(); if(!d||seenD[d])return false; seenD[d]=1; return true; }).map(function(p){ return '<option value="'+(p.designation||'').replace(/"/g,'&quot;')+'">'+(p.reference||'').replace(/"/g,'&quot;')+'</option>'; }).join('');
-      // Lot H0 : prix jamais effacé au rendu ; demande de prix disponible sur chaque ligne (orange si prix périmé ou absent)
-      var priceCell = nomPrixCellHtml(a._prixStatus, a.prix_paquet, '#8b5cf6', !!(a.ref||a.designation), 'nomAccRFQ', 'nomAccRFQCheck', i);
-      return '<div style="margin-bottom:4px;">'
-        + '<div class="nom-acc-grid">'
-        + '<input class="nom-f-inp" list="'+refDl+'" placeholder="Réf. (ou nouvelle)" value="'+(a.ref||'').replace(/"/g,'&quot;')+'" onchange="nomAccSetRef('+i+',this.value)"/>'
-        + '<input class="nom-f-inp" list="'+desDl+'" placeholder="Désignation" value="'+(a.designation||'').replace(/"/g,'&quot;')+'" onchange="nomAccSetDes('+i+',this.value)"/>'
-        + nomAccFournSelect(i, a)
-        + priceCell
-        + '<input class="nom-f-inp" type="number" step="0.001" min="0" placeholder="Qté" value="'+(a.qte_paquet||1)+'" oninput="nomAccessoires['+i+'].qte_paquet=parseFloat(this.value)||0;nomCalcTotaux();" onchange="nomRenderAccessoires()" style="text-align:right;"/>'
-        + '<input class="nom-f-inp" type="number" step="0.001" min="0" placeholder="Nb" value="'+(a.nb_par_piece||1)+'" oninput="nomAccessoires['+i+'].nb_par_piece=parseFloat(this.value)||0;nomCalcTotaux();" onchange="nomRenderAccessoires()" style="text-align:right;"/>'
-        + '<div style="text-align:right;font-size:.74rem;font-weight:700;color:#8b5cf6;padding:5px 6px;">'+pp+' €</div>'
-        + '<button onclick="nomRemoveAccessoire('+i+')" title="Supprimer" style="width:24px;height:24px;border-radius:6px;border:none;background:#fee2e2;color:#dc2626;cursor:pointer;font-weight:700;">×</button>'
-        + '</div>'
-        + '<datalist id="'+refDl+'">'+refOpts+'</datalist><datalist id="'+desDl+'">'+desOpts+'</datalist>'
-        + '</div>';
-    }).join('');
+  function nomFourRendreListe(k){
+    var c = document.getElementById(k ? 'nom-matieres-list' : 'nom-accessoires-list'); if(!c) return;
+    var lst = nomFourListe(k);
+    if (lst.length === 0) c.innerHTML = '<div style="text-align:center;padding:14px;color:#9ca3af;font-size:.76rem;border:1.5px dashed #e2e8f0;border-radius:8px;">'+(k ? 'Aucune matière — cliquez « Ajouter matière »' : 'Aucun accessoire — cliquez « Ajouter accessoire »')+'</div>';
+    else c.innerHTML = lst.map(function(l,i){ return nomFourLigneHtml(k, l, i); }).join('');
     nomCalcTotaux();
   }
 
@@ -3085,20 +3630,34 @@ ${BE_ETAPE_COUT_JS}
       notes:            document.getElementById('nom-f-notes')?.value || null,
       cree_par:         document.getElementById('nom-f-createur')?.value || null,
       statut:           statut,
+      // ── Fournitures au NOUVEAU modèle (lot H1, contrat §4) ────────────────────────────────────
+      // «fournisseur» et «qte_paquet» ne sont PLUS envoyés (colonnes conservées en base, pas de DROP) :
+      // la ligne porte une référence, son prix est le prix moyen du catalogue. Les OMETTRE (plutôt que
+      // les envoyer vides) laisse le journal EN 9100 tracer la bascule en une seule entrée « recalcul ».
+      // ⚠ «prix_unitaire» = prix moyen d'UNE TÔLE (matière) / d'UNE PIÈCE (accessoire), et
+      //   «prix_total_par_piece» est OBLIGATOIRE : sans «qte_paquet», «computeNomCostForQty» passe au
+      //   calcul LINÉAIRE prix_total_par_piece × qté (« linéaire au BE, paquets au BC »).
       fournitures:      [].concat(
         nomMatieres.filter(function(m){ return m.ref || m.designation; }).map(function(m){
-          var n = parseFloat(m.nb_par_tole)||0;
+          nomMatiereAppliquer(m);
+          var n = nombrePositif(m.nb_par_tole);
           return { type_fourniture:'matiere', categorie:'matiere', designation:m.designation||'', ref_stock:m.ref||'',
-            quantite_par_piece: (n>0 ? +(1/n).toFixed(6) : null), nb_par_tole: n||null, qte_paquet: null,
-            prix_unitaire: parseFloat(m.prix_tole)||0, prix_total_par_piece: +nomMatierePrixPiece(m).toFixed(4), fournisseur:m.fournisseur||'' };
+            quantite_par_piece: (n!==null ? +(1/n).toFixed(6) : null), nb_par_tole: n,
+            prix_unitaire: Number(m._prixTole)||0, prix_total_par_piece: +(Number(m._prixPiece)||0).toFixed(4) };
         }),
         nomAccessoires.filter(function(a){ return a.ref || a.designation; }).map(function(a){
+          nomAccAppliquer(a);
+          var nbp = nombrePositif(a.nb_par_piece);
           return { type_fourniture:'accessoire', categorie:'accessoire', designation:a.designation||'', ref_stock:a.ref||'',
-            quantite_par_piece: parseFloat(a.nb_par_piece)||0, nb_par_tole: null, qte_paquet: parseFloat(a.qte_paquet)||null,
-            prix_unitaire: parseFloat(a.prix_paquet)||0, prix_total_par_piece: +nomAccPrixPiece(a).toFixed(4), fournisseur:a.fournisseur||'' };
+            quantite_par_piece: (nbp===null ? 0 : nbp), nb_par_tole: null,
+            prix_unitaire: Number(a._prixPiece)||0, prix_total_par_piece: +(Number(a._prixTotal)||0).toFixed(4) };
         })
       )
     };
+    // Relecture 17/09/2026 : une liste de fournitures VIDE n'efface celles de la base que si l'écran
+    // fait FOI (fiche neuve, ou relecture réussie). Sinon le serveur refuse en 409 (« fournitures_vides »)
+    // — même protection que vider_composants pour les mères.
+    if (payload.fournitures.length === 0 && nomFournituresEtat === 'ok') payload.vider_fournitures = true;
     // Lot H0 : composants — jamais une liste vide qui écraserait ceux de la base sans action explicite
     var envoi = nomComposantsPourEnvoi(isMere);
     if (envoi.omettre) {
@@ -3142,7 +3701,12 @@ ${BE_ETAPE_COUT_JS}
     // Une nomenclature DEJA validee reste validee quand on l'enregistre. Le bouton
     // Enregistrer envoyait en_cours et la devalidait en silence : elle quittait la liste
     // des faites et la cascade de production. Le serveur applique la meme regle.
-    if (nomTauxIllisibles()) return;
+    if (nomTauxIllisibles() || nomFournituresIllisibles()) return;
+    // Lot H1 §4 : garde-fou des DOUBLONS avant tout envoi — même fonction que le serveur
+    // (premierDoublonFourniture / messageDoublonFourniture), donc même message. Côté serveur le
+    // refus (409) arrive AVANT l'effacement des fournitures ; ici on n'envoie rien du tout.
+    var _dbl = premierDoublonFourniture(nomFournituresPourDoublons());
+    if (_dbl) { pushNotif('err','fa-clone', messageDoublonFourniture(_dbl), 10000); return; }
     var dejaValidee = (nomCurrentStatut === 'valide');
     var statutEffectif = (statut !== 'valide' && dejaValidee) ? 'valide' : statut;
     var payload = nomCollectPayload(statutEffectif);
@@ -3204,6 +3768,15 @@ ${BE_ETAPE_COUT_JS}
         if (_b) _b.innerHTML = '<span style="background:#dbeafe;color:#1d4ed8;border-radius:999px;padding:2px 10px;font-size:.68rem;font-weight:800;">Enregistrée · à valider</span>';
         if (typeof gedRefreshUi === 'function') gedRefreshUi();   // les pièces jointes deviennent possibles dès qu'un id existe
         if (typeof nomJournalLoad === 'function') nomJournalLoad();
+      } else if (data.code === 'doublon_reference') {
+        // 409 du serveur : la même référence figure deux fois. Refus AVANT toute écriture — les
+        // fournitures de la fiche sont intactes. Le message est celui du module partagé.
+        pushNotif('err','fa-clone', data.error || 'Doublon de référence dans les fournitures.', 12000);
+      } else if (data.code === 'fournitures_vides') {
+        // 409 du serveur : la fiche a des fournitures en base et l'écran en envoyait zéro (lecture
+        // ratée, onglet resté ouvert). Rien n'a été effacé — il faut rouvrir la fiche.
+        nomFournituresEtat = 'erreur';
+        pushNotif('err','fa-ban', data.error || 'Enregistrement refusé : la liste des fournitures envoyée est vide.', 14000);
       } else {
         pushNotif('err','fa-ban', data.error || 'Enregistrement refusé.', 8000);
       }

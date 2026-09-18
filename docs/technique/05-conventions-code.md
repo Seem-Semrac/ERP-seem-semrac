@@ -31,6 +31,16 @@ Le JS client est écrit dans des chaînes TSX. Deux passes d'échappement se sup
 
 **Ces règles sont vérifiées automatiquement** par `node scripts_doc/harness_all_pages.mjs` (rend chaque page, `new Function` sur chaque `<script>`). ⚠ Il ne couvre pas les pages **inline dans `index.tsx`** (non exportées) — les relire à la main.
 
+### Partager une règle métier entre le serveur et le navigateur (lot H1, 17/09/2026)
+
+Plutôt qu'un **miroir écrit à la main** (`BE_ETAPE_COUT_JS`, `CADENCE_CLIENT_JS`… : deux copies à faire évoluer ensemble), un module pur peut **générer sa propre copie navigateur** par `Function.toString` — c'est ce que fait `prixMoyenClientJs()` (`src/prix_moyen.ts`). Le texte produit s'injecte tel quel (`${prixMoyenClientJs()}`) : ce n'est pas une donnée, il n'y a **rien à échapper**. Conditions à respecter dans un tel module, sinon la page casse **en production seulement** (le bundle Cloudflare est minifié) :
+
+- aucun `import`, aucune référence à une constante de module, pas de `let`/`const` de portée module — chaque fonction doit être **autonome** ;
+- syntaxe **ES5**, texte **pur ASCII** (`\\u…` pour les accents), sans accent grave, sans `${`, sans `</` ;
+- un test qui rejoue la suite **sur le bundle minifié** et compare serveur ⟷ client (`scripts_doc/test_prix_moyen.mjs` : 220 assertions, JSON identique des deux côtés).
+
+**Lancer les tests** : `node scripts_doc/test_prix_moyen.mjs` depuis la racine du dépôt (utilise l'`esbuild` du `node_modules` local, aucune dépendance à installer, aucune base touchée) → attendu `220 PASS · 0 FAIL`. Il couvre le prix moyen (1 fournisseur, paquets de 100 et de 50, fournisseur sans prix, conditionnement non déclaré, prix périmé au jour près, casse / espaces / accents, matière avec pièces par tôle, base sans `qte_paquet`), la recherche, les doublons (dont `constructor` / `__proto__`) et le journal EN 9100 (bascule ancien → nouveau modèle). **À relancer après toute modification** de `src/prix_moyen.ts` ou de `src/nomenclature_journal.ts`, et avant `erp-verify`. Un nouveau module partagé de ce type doit venir avec son propre test sur le même modèle.
+
 **XSS** : ne jamais injecter une donnée base/utilisateur via `innerHTML` sans échappement côté client. Les scripts définissent au besoin un échappeur local (`pEsc`, `rtEsc`, `esc`) — l'utiliser sur `client_nom`, `piece`, `operation`, noms de salariés, libellés libres.
 
 ## Helpers réutilisables (ne pas réinventer)
@@ -54,12 +64,14 @@ Le JS client est écrit dans des chaînes TSX. Deux passes d'échappement se sup
 | Bandeau « coût réel non calculable / incomplet » (fiches 360) | `alerteCoutReel(kpi)` + `LIBELLES_MANQUANTS_COUT` (shared.ts) |
 | **Composants d'une mère** (lot H0) | `composantsDe(fiche \| valeur)` (shared.ts) → **toujours un tableau** (la colonne a été `text` sur Docker, `jsonb` sur le cloud). **Ne jamais lire `n.composants` directement** ni tester `Array.isArray` à la main. Navigateur BE : `nomComposantsDe`. |
 | **Fraîcheur d'un prix catalogue** (lot H0) | `PRIX_VALIDITE_JOURS` (shared.ts, 183 j = 6 mois) ; page BE : `NOM_PRIX_VALIDITE_JOURS` injecté, libellé dérivé. Un prix ≤ 0 n'est jamais frais. Ne plus écrire 92 / 183 / « 3 mois » en dur. |
+| **Prix d'une référence, recherche, doublons** (lot H1) | `src/prix_moyen.ts` (réexporté par shared.ts) : `prixMoyenReference`, `normaliserReference`, `memeReference`, `categorieFourniture`, `nombrePositif`, `arrondiPrix`, `qtePaquetDe`, `prixPerime`, `chercherReferences`, `doublonsFournitures` / `messageDoublonFourniture`, `recalculerFournitures`. **Ne jamais recoder une normalisation de référence, un test de catégorie ni une division par un conditionnement.** Côté navigateur : injecter `${prixMoyenClientJs()}` en tête du `<script>` — **mêmes noms, même code** (pas de miroir à maintenir). |
 | **En-tête de téléchargement d'un fichier** (lot H0) | `dispositionFichier(nom, 'inline' \| 'attachment')` (index.tsx) : repli ASCII + `filename*=UTF-8''…`. **Jamais** de nom brut dans `Content-Disposition` : sous Node, un caractère > U+00FF lève une TypeError. |
 
 ## Accès données (`queries.ts`)
 - Une fonction par opération : `getX()` (lecture, retourne `[]` en fallback), `createX/updateX/deleteX` (retournent `{data, error}` supabase-js).
 - **supabase-js ne lève pas d'exception** sur erreur DB → **toujours vérifier `error`** (ne pas faire `.catch(()=>{})` qui masque un échec partiel — cf. audit R4).
 - **Lecture stricte avant écriture** (lot H0) : quand une décision d'écriture dépend d'une lecture, utiliser une lecture qui rend `{ data, error }` et **refuser** en cas d'erreur (une panne n'est jamais « absent ») — ex. `getProduitFournisseurCouple`, `getProduitFournisseurParId`, `getRefPrixHistoriqueRfq`, `getClesBonsStrictes`, `getCleBonParId`, `getNomenclatureStricte`. Pour « créer si absent » : `insertProduitFournisseurSiAbsent` (pas d'upsert complet qui écraserait une ligne existante), puis relecture en cas de course.
+- **Écriture tolérante à une colonne absente en cloud** (lot H1) : quand une colonne vient d'être ajoutée par une migration Docker et que son script `cloud-N` n'est pas encore joué, l'écriture passe par un helper `…Tolerant(...)` qui rend `{ data, error, <colonne>_ignoree }` — il réessaie **sans** le champ sur `42703` / `PGRST204` (`erreurQtePaquetAbsente`) ; la route répond alors **200** + `avertissement` (« … jouez `cloud-N` »), **jamais** 500. Côté lecture : `select('*')` **uniquement**, jamais de projection, de filtre ni d'`order` nommant la colonne — sinon la page entière tombe en 42703. Exemples : `updateProduitFournisseurTolerant`, `insertProduitFournisseurSiAbsentTolerant`, `create/updateDemandePrixReponseTolerant`.
 - Ids texte lisibles générés côté serveur (pas de séquence auto pour la plupart).
 
 ## Routes (`index.tsx`)

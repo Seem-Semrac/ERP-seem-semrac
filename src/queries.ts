@@ -5,7 +5,7 @@
 import { supabase } from './db'
 import { verifyPin, hashPin, isHashedPin } from './auth'
 import { computeExpositionSante, normQuantiteChimique } from './qref'
-import { construireTauxAtelier, coutReelBdt, typeProcess } from './shared'
+import { construireTauxAtelier, coutReelBdt, typeProcess, normaliserReference } from './shared'
 import type { TauxAtelier } from './shared'
 
 // Migration paresseuse : si le PIN stocké est en clair (legacy), le remplacer
@@ -207,6 +207,120 @@ export async function updateProduitFournisseur(id: string, payload: Record<strin
   const { data, error } = await supabase.from('produits_fournisseurs').update(payload).eq('id', id).select().single()
   return { data, error }
 }
+
+// ─── Catalogue fournisseurs : qté par paquet et lecture par référence (lot H1, 17/09/2026) ─────
+// ⚠ COMPATIBILITÉ CLOUD : la colonne `produits_fournisseurs.qte_paquet` n'existe en ligne
+//   qu'APRÈS que l'utilisateur a joué `docker/db/cloud/cloud-13-catalogue-qte-paquet.sql` à la main.
+//   Règles, valables pour TOUT le code qui touche à cette colonne :
+//     • LECTURE : toujours `select('*')` — la colonne manquante rend simplement `undefined` (les
+//       helpers de src/prix_moyen.ts retombent alors sur l'ancien libellé `conditionnement`).
+//       Ne JAMAIS la nommer dans une projection ni dans un filtre (`42703` sinon : page cassée).
+//     • ÉCRITURE : passer par les helpers « tolérants » ci-dessous, qui réessaient SANS le champ
+//       et signalent l'omission (`qte_paquet_ignoree`) au lieu d'échouer.
+const COLONNE_ABSENTE = (e: any): boolean => {
+  if (!e) return false
+  const code = String((e as any).code || '')
+  const msg = String((e as any).message || '')
+  return code === '42703' || code === 'PGRST204' || (/qte_paquet/i.test(msg) && /(column|colonne|schema cache)/i.test(msg))
+}
+/** `true` si l'erreur vient de l'absence de la colonne qte_paquet (cloud sans cloud-13). */
+export const erreurQtePaquetAbsente = (e: any, payload?: Record<string, any>): boolean =>
+  COLONNE_ABSENTE(e) && (!payload || Object.prototype.hasOwnProperty.call(payload, 'qte_paquet'))
+
+// Patch privé de sa seule colonne `qte_paquet`.
+const sansQtePaquet = (payload: Record<string, any>): Record<string, any> => {
+  const out: Record<string, any> = {}
+  for (const k of Object.keys(payload)) if (k !== 'qte_paquet') out[k] = payload[k]
+  return out
+}
+// ⚠ Relecture du 17/09/2026 : un patch qui ne portait QUE `qte_paquet` (ex. la qté chiffrée d'une
+//   réponse de demande de prix NON préférée, dans POST /api/demandes-prix/:id/valider) devenait,
+//   une fois la colonne retirée, un PATCH VIDE. PostgREST ne met alors à jour aucune ligne et
+//   `.single()` rend PGRST116 (« 0 rows ») : sur le cloud sans cloud-13, la validation d'une
+//   demande de prix repartait en 500 « demande laissée ouverte » ALORS QUE tous les prix étaient
+//   déjà écrits — et chaque revalidation refaisait la même erreur. « Plus rien à écrire » n'est pas
+//   un échec : on relit simplement la ligne (pour que l'appelant ait son `data`) et on signale
+//   l'omission. Une seule requête de plus, et seulement dans ce chemin dégradé.
+const releveLigne = async (table: string, id: string): Promise<any> => {
+  const { data } = await supabase.from(table).select('*').eq('id', id).maybeSingle()
+  return data ?? null
+}
+
+/**
+ * Mise à jour d'une ligne catalogue TOLÉRANTE à l'absence de `qte_paquet` (cloud sans cloud-13) :
+ * en cas d'échec sur cette seule colonne, le reste du patch est appliqué et `qte_paquet_ignoree`
+ * vaut true — l'appelant l'annonce (« conditionnement non enregistré : jouez cloud-13 »).
+ */
+export async function updateProduitFournisseurTolerant(id: string, payload: Record<string, any>): Promise<{ data: any; error: any; qte_paquet_ignoree: boolean }> {
+  const r1 = await updateProduitFournisseur(id, payload)
+  if (!r1.error || !erreurQtePaquetAbsente(r1.error, payload)) return { data: r1.data, error: r1.error, qte_paquet_ignoree: false }
+  const sansQte = sansQtePaquet(payload)
+  if (!Object.keys(sansQte).length) return { data: await releveLigne('produits_fournisseurs', id), error: null, qte_paquet_ignoree: true }
+  const r2 = await updateProduitFournisseur(id, sansQte)
+  return { data: r2.data, error: r2.error, qte_paquet_ignoree: !r2.error }
+}
+
+/** Insertion SI ABSENT tolérante à l'absence de `qte_paquet` (même règle que ci-dessus). */
+export async function insertProduitFournisseurSiAbsentTolerant(payload: Record<string, any>): Promise<{ data: any; error: any; qte_paquet_ignoree: boolean }> {
+  const r1 = await insertProduitFournisseurSiAbsent(payload)
+  if (!r1.error || !erreurQtePaquetAbsente(r1.error, payload)) return { data: r1.data, error: r1.error, qte_paquet_ignoree: false }
+  const r2 = await insertProduitFournisseurSiAbsent(sansQtePaquet(payload))
+  return { data: r2.data, error: r2.error, qte_paquet_ignoree: !r2.error }
+}
+
+/**
+ * TOUT le catalogue, lecture STRICTE et paginée (une panne ne doit jamais passer pour « catalogue
+ * vide », ce qui afficherait « aucun prix » puis proposerait de re-demander tous les prix).
+ * `select('*')` : fonctionne avec ou sans la colonne `qte_paquet`.
+ */
+export async function getProduitsFournisseursStrict(): Promise<{ data: any[]; error: string | null }> {
+  const out: any[] = []
+  const PAGE = 1000
+  for (let from = 0; from < 200_000; from += PAGE) {
+    const { data, error } = await supabase.from('produits_fournisseurs').select('*')
+      .order('reference', { ascending: true }).order('id', { ascending: true }).range(from, from + PAGE - 1)
+    if (error) return { data: [], error: error.message }
+    for (const p of (data ?? []) as any[]) out.push(p)
+    if (!data || data.length < PAGE) break
+  }
+  return { data: out, error: null }
+}
+
+/**
+ * Toutes les lignes catalogue d'une RÉFÉRENCE, tous fournisseurs confondus — base du prix moyen.
+ * Le rapprochement se fait sur la référence NORMALISÉE (accents, casse, espaces multiples), donc
+ * côté application : PostgREST ne sait pas comparer sans accents. Un premier filtre `ilike` réduit
+ * le volume ; en cas d'échec de ce filtre (ou de référence à caractères spéciaux), on retombe sur
+ * la lecture complète paginée. Lecture STRICTE : l'erreur est rendue, jamais avalée.
+ */
+export async function getProduitsFournisseursParReference(reference: string): Promise<{ data: any[]; error: string | null }> {
+  const refNorm = normaliserReference(reference)
+  if (!refNorm) return { data: [], error: null }
+  // ⚠ RELECTURE 17/09/2026 — le pré-filtre `ilike` ne plie QUE la casse : PostgreSQL ne replie pas
+  //   les diacritiques (`'Réf A' ILIKE '%ref%a%'` = faux), alors que `normaliserReference` retire les
+  //   accents. Deux conséquences si l'on fait confiance au pré-filtre :
+  //     • une référence dont les accents diffèrent entre la saisie et la base rendait [] SANS repli
+  //       (« aucun prix » pour une réf pourtant chiffrée, et surtout garde de doublon aveugle : la
+  //       ligne en double accentué était CRÉÉE, puis l'un des deux prix disparaissait de la moyenne) ;
+  //     • un `\` ou un motif très permissif (référence courte) tronquait en silence à 1000 lignes.
+  //   Règle désormais : le pré-filtre n'est tenté que sur une référence purement ASCII, et un
+  //   résultat VIDE retombe sur la lecture complète paginée (coût négligeable : le catalogue fait
+  //   quelques centaines de lignes). Le rapprochement final reste toujours applicatif et normalisé.
+  const brut = String(reference || '').trim()
+  const asciiSur = /^[\x20-\x7E]*$/.test(brut) && brut.indexOf('\\') < 0
+  const motif = brut.replace(/[%,()*]/g, ' ').replace(/\s+/g, '%')
+  if (asciiSur && motif) {
+    const { data, error } = await supabase.from('produits_fournisseurs').select('*').ilike('reference', `%${motif}%`).limit(1000)
+    if (!error) {
+      const trouve = (data ?? []).filter((p: any) => normaliserReference(p?.reference) === refNorm)
+      if (trouve.length) return { data: trouve, error: null }
+      // 0 ligne : le pré-filtre a pu passer à côté (accents, troncature) → lecture complète.
+    }
+  }
+  const tout = await getProduitsFournisseursStrict()
+  if (tout.error) return { data: [], error: tout.error }
+  return { data: tout.data.filter((p: any) => normaliserReference(p?.reference) === refNorm), error: null }
+}
 export async function deleteProduitFournisseur(id: string) {
   const { error } = await supabase.from('produits_fournisseurs').delete().eq('id', id)
   return { error }
@@ -332,6 +446,26 @@ export async function updateDemandePrix(id: string, payload: Record<string, any>
 export async function updateDemandePrixReponse(id: string, payload: Record<string, any>) {
   const { data, error } = await supabase.from('demandes_prix_reponses').update(payload).eq('id', id).select().single()
   return { data, error }
+}
+// Réponses de demande de prix : la colonne `qte_paquet` (conditionnement chiffré par le fournisseur,
+// migration 017 / cloud-13) peut manquer en cloud. Mêmes règles que pour le catalogue : on réessaie
+// SANS le champ et on le signale, plutôt que de perdre la saisie du prix (lot H1, 17/09/2026).
+export async function createDemandePrixReponseTolerant(payload: Record<string, any>): Promise<{ data: any; error: any; qte_paquet_ignoree: boolean }> {
+  const r1 = await createDemandePrixReponse(payload)
+  if (!r1.error || !erreurQtePaquetAbsente(r1.error, payload)) return { data: r1.data, error: r1.error, qte_paquet_ignoree: false }
+  const r2 = await createDemandePrixReponse(sansQtePaquet(payload))
+  return { data: r2.data, error: r2.error, qte_paquet_ignoree: !r2.error }
+}
+export async function updateDemandePrixReponseTolerant(id: string, payload: Record<string, any>): Promise<{ data: any; error: any; qte_paquet_ignoree: boolean }> {
+  const r1 = await updateDemandePrixReponse(id, payload)
+  if (!r1.error || !erreurQtePaquetAbsente(r1.error, payload)) return { data: r1.data, error: r1.error, qte_paquet_ignoree: false }
+  const sansQte = sansQtePaquet(payload)
+  // Patch réduit à rien (réponse dont on ne voulait écrire QUE la qté par paquet) : ce n'est pas un
+  // échec — voir la note de `releveLigne`. Sans cela, la validation d'une demande de prix rendait
+  // 500 sur le cloud sans cloud-13 alors que tous les prix catalogue étaient écrits.
+  if (!Object.keys(sansQte).length) return { data: await releveLigne('demandes_prix_reponses', id), error: null, qte_paquet_ignoree: true }
+  const r2 = await updateDemandePrixReponse(id, sansQte)
+  return { data: r2.data, error: r2.error, qte_paquet_ignoree: !r2.error }
 }
 export async function deleteDemandePrix(id: string) {
   const { error } = await supabase.from('demandes_prix').delete().eq('id', id)

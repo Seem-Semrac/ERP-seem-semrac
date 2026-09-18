@@ -29,7 +29,7 @@ Demandes de prix (RFQ), demandes d'achat, bons de commande, fournisseurs & sous-
 <!-- /auto -->
 ## Points d'attention
 <!-- auto:notes -->
-RFQ = source de vérité des prix → catalogue. BC n'écrit jamais le prix. Scorecard fournisseur/ST. Onglet Avoirs fournisseurs = ce que fournisseurs et sous-traitants NOUS doivent (table avoirs_fournisseurs, distincte des avoirs CLIENTS de la table credits, service Commercial) : né d’une décision Qualité sur un lot reçu non conforme, ou saisi à la main ; cycle à recevoir → reçu → partiel → soldé ; annulable avec motif tant qu’il n’est pas imputé ; jamais supprimé (la base ne donne pas le droit DELETE).
+RFQ = source de vérité des prix → catalogue. BC n'écrit jamais le prix. Lot H1 (17/09/2026) : catalogue UNIQUE = table produits_fournisseurs (le jsonb fournisseurs.catalogue, vide partout, a été retiré de la fiche) ; la quantité par paquet d'un accessoire s'y déclare (colonne qte_paquet, migration 017 / cloud-13) ; valider une demande de prix écrit le prix de CHAQUE réponse chiffrée sur la ligne catalogue de SON fournisseur — c'est ce qui alimente le prix moyen multi-fournisseurs du BE ; l'écriture de /api/produits-fournisseurs et /api/demandes-prix est ouverte au BE ET aux Achats. Scorecard fournisseur/ST. Onglet Avoirs fournisseurs = ce que fournisseurs et sous-traitants NOUS doivent (table avoirs_fournisseurs, distincte des avoirs CLIENTS de la table credits, service Commercial) : né d’une décision Qualité sur un lot reçu non conforme, ou saisi à la main ; cycle à recevoir → reçu → partiel → soldé ; annulable avec motif tant qu’il n’est pas imputé ; jamais supprimé (la base ne donne pas le droit DELETE).
 <!-- /auto -->
 
 ## Numérotation des BC et des BL — alignée sur l'affaire (09/09/2026)
@@ -285,6 +285,105 @@ non vérifiées sur le cloud.
   qu'ils attendent encore (le manque ne compte plus deux fois).
 - **Base sans 013** (cloud avant `cloud-11`) : le BC de reliquat est créé **sans** `bc_parent_id` ni `date_a_valider`
   (avertissement « fixez sa date d'arrivée aux Achats ») — pas de badge ; base sans la colonne certificat (012) : créé sans.
+
+## Lot H1 (17/09/2026) — catalogue unique, quantité par paquet, toutes les réponses chiffrées alimentent le prix moyen
+
+> « Dans les fournisseurs, il y a **deux moyens de créer une nouvelle référence dans le catalogue dans la même fenêtre**, il
+> faut uniformiser ça […] ça va être uniquement là-dedans qu'on va devoir déclarer pour un accessoire le **nombre de pièces
+> par paquet**. »
+
+Le BE ne choisit plus de fournisseur sur une ligne de nomenclature : son prix est la **moyenne des fournisseurs** du
+catalogue (règle et module partagé : [be.md](be.md), section « Lot H1 »). Les Achats en sont la **source** — c'est la
+validation d'une demande de prix qui remplit le catalogue, et la quantité par paquet qui rend le prix comparable.
+
+### Le catalogue, c'est `produits_fournisseurs` — le jsonb a été retiré
+
+La fiche fournisseur portait **deux** formulaires : le bloc jsonb « Catalogue produits — politique de prix »
+(`fournisseurs.catalogue`, 9 colonnes) et « Références fournies » (table `produits_fournisseurs`). Sonde en lecture seule du
+17/09/2026, **cloud et Docker** :
+
+| Base | `fournisseurs` | `sous_traitants` | Articles réellement stockés dans le jsonb |
+|---|---|---|---|
+| Cloud (REST anon) | 155 lignes, 123 `catalogue` non nul | 20 lignes, 12 non nuls | **0** (123 × `[]`, 32 × `null`) |
+| Docker local (SQL) | idem | idem | **0** |
+
+Rien à migrer : le bloc jsonb a été **supprimé de la fiche** (tbody, colonnes, `catalogueRowsHtml`, `_catRows`, `addCatRow`,
+`removeCatRow`, `collectCatalogue`, et la clé `catalogue` du `PATCH /api/fournisseurs/:id`). La colonne reste en base, plus
+personne ne l'écrit depuis la fiche. Le KPI menteur « Références au catalogue = `catalogue.length` » devient **« Références
+fournies » = nombre de lignes `produits_fournisseurs`**. `parseCatalogue` reste exporté pour relire une donnée héritée.
+
+**Lecteurs rebranchés sur la table** : `/api/catalogue-fournisseurs` (le jsonb n'est plus qu'un complément pour les
+références absentes de la table — 0 article constaté), la pastille « n réf. » de l'onglet Fournisseurs / ST, le bloc
+« Catalogue fournisseurs par catégorie » de **Stock › Gestion** (il affichait l'état vide en permanence ;
+`pageServiceStock` reçoit un 5ᵉ argument `dbProduits`), et `NOM_PRODUITS` côté BE. Les **sous-traitants** gardent leur jsonb
+(pas de table équivalente) : leur pastille compte désormais les **opérations** (tarifs + prestations + ancien jsonb,
+dédoublonnés), en-tête « Opérations ».
+
+### Fiche fournisseur : un seul formulaire, « Références fournies »
+
+Création **et** modification dans la même barre de saisie : `Référence*`, `Désignation*`, `Catégorie`, **`Qté / paquet`**
+(accessoires), `Unité`, `Délai (j)`, `Prix HT` — titre du champ : « Matière : prix d'**UNE TÔLE** · Accessoire : prix du
+**PAQUET** » —, bouton **Annuler** pour sortir du mode édition, et une aide contextuelle recalculée à chaque changement de
+catégorie (`pfHint()`), qui rappelle qu'un prix laissé vide n'efface jamais le prix en base.
+
+Tableau enrichi : colonnes **Qté / paquet** et **Unité** ; un accessoire sans quantité porte le badge orange
+**« non déclaré »** ; un prix d'accessoire chiffré affiche **`≈ 0,1040 €/pièce`** sous le prix du paquet ; un prix de plus de
+183 j porte l'horloge « demande de prix conseillée ». Calculs pris au module partagé (`qtePaquetDe`, `nombrePositif`,
+`arrondiPrix`, `prixPerime`) — aucune règle de prix recopiée.
+
+**Doublon** : `prixMoyenClientJs()` est injecté dans la page, donc le client utilise le **vrai** `normaliserReference`.
+Déclarer une référence déjà présente chez **ce** fournisseur ne crée rien : l'écran l'explique et **bascule le formulaire en
+modification de la ligne existante en conservant la saisie en cours**. Les codes serveur `doublon_catalogue` /
+`doublon_reference` sont affichés tels quels ; l'`avertissement` (base sans `cloud-13`) est relayé **sans bloquer**.
+
+Durcissements au passage : `pfEsc` échappe aussi `>` et `'`, les boutons passent par `data-id` / `data-ref` + `PF_LIGNES`
+(`sjX`) au lieu d'interpoler des valeurs dans du JS inline, l'id du fournisseur passe par un champ caché.
+
+⚠ La colonne texte **`conditionnement`** n'est plus écrite par personne. Elle reste **lue** : reprise comme nombre par
+`qtePaquetDe` si elle en contient un, sinon affichée en italique gris avec l'infobulle « à ressaisir dans Qté / paquet »
+(ex. `boite de 25`). 0 ligne concernée dans les deux bases au 17/09/2026.
+
+### Demandes de prix : la qté/paquet à côté du prix, et **tous** les prix écrits
+
+- **Saisie des réponses** — pour une ligne d'**accessoire** seulement, une colonne **« Qté / paquet »** (bordure orange)
+  s'ajoute à côté du prix, avec une cellule vivante `= x,xxxx €/pièce` ou **« conditionnement non déclaré »**. L'en-tête
+  devient « Prix du paquet ». La catégorie est jugée par le vrai `categorieFourniture` (module partagé injecté dans la page).
+- **Validation** — `rfqCollectRetenus` (une seule réponse cochée par ligne) est remplacé par **`rfqCollectChiffrees`** : on
+  envoie **chaque** réponse dont le prix est > 0, avec sa `qte_paquet`, son `reponse_id` et `retenu`. Le radio est renommé
+  **« Préféré »** : il ne désigne plus que le fournisseur à commander, **il n'écarte aucun prix**. Bouton
+  « **Valider & enregistrer tous les prix** ». La clé du payload reste `retenus`.
+- **Pourquoi** : sans cela, `nb_fournisseurs` vaudrait 1 partout et la « moyenne » du BE serait le prix d'un seul fournisseur.
+- **Erreurs** : refus de partir sans aucun prix chiffré ; **avertissement** quand des accessoires chiffrés n'ont pas de
+  quantité par paquet (« comptés comme des prix à la pièce ») ; le `{ ok }` de l'étape `/reponses` est lu **avant**
+  d'enchaîner sur `/valider` (l'ancien code enchaînait à l'aveugle) ; `j.echecs` est rendu **ligne par ligne** dans un
+  encadré de la modale (la notification tronquait) — ce qui solde la limite « `rfqValider` affiche Échec de la validation
+  sans détail » du lot H0.
+
+### Droits : écriture du catalogue et des demandes de prix ouverte aux Achats
+
+`/api/produits-fournisseurs…` et `/api/demandes-prix…` restent de la famille `be` en **lecture**, mais leur **écriture** est
+autorisée à « **be OU achats** » (exception de chemin dans `canAccess`, `src/auth.ts`, même mécanisme que
+`/api/interlocuteurs`). Détail et garde-fous : [`04-auth-rbac.md`](../04-auth-rbac.md), section « Lot H1 ». Un acheteur peut
+donc enfin déclarer une référence depuis la fiche fournisseur, saisir les réponses **et** valider une demande de prix.
+
+### Base et compatibilité cloud
+
+Migration Docker **017** / script **`cloud-13-catalogue-qte-paquet.sql`** (à jouer à la main dans Supabase Studio) :
+`produits_fournisseurs.qte_paquet`, `demandes_prix_reponses.qte_paquet`, index unique `ux_produits_fournisseurs_ref_norm`,
+reprise sans écrasement de la qté/paquet des nomenclatures. **Tant que `cloud-13` n'est pas joué** : aucune page cassée —
+toutes les lectures sont en `select('*')`, le prix d'un accessoire est estimé en comptant « 1 pièce par paquet » et signalé
+en orange, et une écriture de `qte_paquet` répond **200** avec `avertissement` (« la quantité par paquet n'a pas été
+conservée ») au lieu d'une erreur. Détail : [`03-base-de-donnees.md`](../03-base-de-donnees.md).
+
+⚠ Sondes du 17/09/2026 : `produits_fournisseurs` = **144 lignes** (cloud et Docker), 0 sans fournisseur, `conditionnement`
+renseigné sur **0** ligne, **0 doublon** de référence normalisée par fournisseur (l'index a donc pu être créé) ;
+`demandes_prix_reponses` = 0 ligne. Le multi-sourcing reste à construire : au 18/09/2026, une seule référence du catalogue
+en ligne (`510056`) est portée par deux fournisseurs — la moyenne ne prendra tout son sens qu'au fil des demandes de prix
+validées à plusieurs.
+
+**Captures de la doc** (18/09/2026, serveur local sur le catalogue en ligne, donc **sans `cloud-13`** : la quantité par paquet
+n'y apparaît jamais renseignée) : `achats-fiche-fournisseur.png` (manifeste `capture_screens.mjs` : bouton « Fiche » de
+l'onglet Fournisseurs / ST, pleine page) et `form-achats-rfq-reponses.png` (`capture_forms.mjs`, première RFQ en base).
 
 ---
 > Fiche générée. Manuel utilisateur correspondant : `docs/manuel/achats.md`. Voir aussi `04-auth-rbac.md`, `07-api-reference.md`.

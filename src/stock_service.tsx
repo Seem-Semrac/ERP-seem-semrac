@@ -252,7 +252,7 @@ function panelTempsReel(arts: ArticleStock[]) {
 // PANEL 2 – GESTION DU STOCK (supply chain expert)
 // ══════════════════════════════════════════════════════════════
 
-function panelGestion(arts: ArticleStock[], mvts: MouvementStock[], fourn: any[] = [], mes: Mes = normMes(null)) {
+function panelGestion(arts: ArticleStock[], mvts: MouvementStock[], produits: any[] = [], mes: Mes = normMes(null)) {
   const recentMvts = mvts.slice(0, 8)
   const ecrit = mes.peutEcrire
   const typesActifs = mes.types.filter(t => t.actif !== false)
@@ -263,25 +263,29 @@ function panelGestion(arts: ArticleStock[], mvts: MouvementStock[], fourn: any[]
   const artOptions = arts.map(a => `${a.nom} (${a.quantite} ${a.unite})`).join('|')
   const artIds     = arts.map(a => a.nom).join('|')
 
-  // Catalogue fournisseurs (jsonb) agrégé puis groupé par catégorie, avec le niveau de stock temps réel (match par réf)
-  const catParse = (raw: any): any[] => {
-    if (Array.isArray(raw)) return raw
-    if (typeof raw === 'string' && raw.trim()) { try { const o = JSON.parse(raw); return Array.isArray(o) ? o : (o?.items || []) } catch { return [] } }
-    return []
-  }
+  // Catalogue fournisseurs groupé par catégorie, avec le niveau de stock temps réel (match par réf).
+  // Lot H1 (17/09/2026) : la source est la table `produits_fournisseurs` (une ligne par couple
+  // fournisseur + référence), plus l'ancien jsonb `fournisseurs.catalogue` — vide partout (sonde en
+  // lecture du 17/09/2026 : 0 item, cloud ET Docker) et remplacé par « Références fournies » de la
+  // fiche fournisseur. Lecture volontairement tolérante : `qte_paquet` peut manquer (cloud sans
+  // cloud-13) sans que rien ne casse, la colonne n'est jamais nommée dans une projection.
   const stockByRef: Record<string, ArticleStock> = {}
   arts.forEach(a => { if (a.reference) stockByRef[String(a.reference).toLowerCase().trim()] = a })
   const catByCat: Record<string, any[]> = {}
-  ;(fourn || []).forEach((f: any) => {
-    catParse(f.catalogue).forEach((it: any) => {
-      if (!it || (!it.ref && !it.designation)) return
-      const cat = String(it.categorie || f.categorie || 'Autres')
-      const st = stockByRef[String(it.ref || '').toLowerCase().trim()]
-      ;(catByCat[cat] = catByCat[cat] || []).push({ ref: it.ref || '', designation: it.designation || '', prix: it.prix_moyen_ht, unite: it.unite || (st ? st.unite : ''), fournisseur: f.nom, stock: st ? st.quantite : null })
+  ;(produits || []).forEach((p: any) => {
+    if (!p || (!p.reference && !p.designation)) return
+    const cat = String(p.categorie || 'Autres')
+    const st = stockByRef[String(p.reference || '').toLowerCase().trim()]
+    ;(catByCat[cat] = catByCat[cat] || []).push({
+      ref: p.reference || '', designation: p.designation || '',
+      prix: p.prix != null && p.prix !== '' ? Number(p.prix) : null,
+      unite: p.unite || (st ? st.unite : ''), fournisseur: p.fournisseur_nom || '',
+      stock: st ? st.quantite : null,
     })
   })
+  Object.keys(catByCat).forEach(k => catByCat[k].sort((a: any, b: any) => String(a.ref).localeCompare(String(b.ref), 'fr')))
   const catKeys = Object.keys(catByCat).sort()
-  const catLbl: Record<string,string> = { matiere: 'Matière', accessoire: 'Accessoires' }
+  const catLbl: Record<string, string> = { matiere: 'Matière', matiere_premiere: 'Matière', accessoire: 'Accessoires', outillage: 'Outils', chimique: 'Chimique', consommable: 'Consommable', autre: 'Autres' }
 
   return `
   <div id="stk-panel-gestion" style="display:none;">
@@ -434,7 +438,7 @@ function panelGestion(arts: ArticleStock[], mvts: MouvementStock[], fourn: any[]
       </div>
 
       <!-- F : catalogue de tous les fournisseurs, classé par catégorie, avec stock temps réel -->
-      <div style="font-size:.85rem;font-weight:800;color:#111827;margin:24px 0 12px;display:flex;align-items:center;gap:8px;"><i class="fas fa-layer-group" style="color:#8b5cf6;"></i>Catalogue fournisseurs par catégorie<span style="font-size:.68rem;color:#9ca3af;font-weight:600;">· toutes les références fournisseurs · stock temps réel</span></div>
+      <div style="font-size:.85rem;font-weight:800;color:#111827;margin:24px 0 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><i class="fas fa-layer-group" style="color:#8b5cf6;"></i>Catalogue fournisseurs par catégorie<span style="font-size:.68rem;color:#9ca3af;font-weight:600;">· références fournies déclarées dans les fiches fournisseurs · stock temps réel</span></div>
       ${catKeys.length ? catKeys.map(cat => `
       <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden;margin-bottom:12px;">
         <div style="padding:10px 16px;background:#faf5ff;border-bottom:1px solid #f1f5f9;font-weight:800;color:#6b21a8;font-size:.78rem;"><i class="fas fa-tag" style="margin-right:6px;"></i>${escX(catLbl[cat]||cat)}<span style="color:#a78bda;font-weight:600;"> (${catByCat[cat].length})</span></div>
@@ -448,7 +452,7 @@ function panelGestion(arts: ArticleStock[], mvts: MouvementStock[], fourn: any[]
             <td style="padding:6px 12px;text-align:right;font-weight:800;">${it.stock!=null?`<span style="color:#15803d;">${it.stock}</span>`:'<span style="color:#cbd5e1;font-weight:600;">non stocké</span>'}</td>
           </tr>`).join('')}</tbody>
         </table></div>
-      </div>`).join('') : `<div style="background:white;border-radius:12px;padding:28px;text-align:center;color:#9ca3af;font-size:.82rem;box-shadow:0 1px 3px rgba(0,0,0,.07);">Aucune référence au catalogue fournisseurs. Renseignez le catalogue dans les fiches fournisseurs (Achats › Fournisseurs).</div>`}
+      </div>`).join('') : `<div style="background:white;border-radius:12px;padding:28px;text-align:center;color:#9ca3af;font-size:.82rem;box-shadow:0 1px 3px rgba(0,0,0,.07);">Aucune référence fournie déclarée. Elles se saisissent dans <strong>Achats › Fournisseurs</strong> → fiche du fournisseur → bloc « <strong>Références fournies</strong> ».</div>`}
     </div>
   </div>`
 }
@@ -974,14 +978,22 @@ function panelDashboard(arts: ArticleStock[], mvts: MouvementStock[]) {
 export const pageServiceStock = (
   dbArts?: ArticleStock[],
   dbMvts?: MouvementStock[],
+  /**
+   * Lot H1 — conservé pour ne pas déplacer les arguments de l'appelant, mais PLUS UTILISÉ : le
+   * catalogue ne se lit plus dans `fournisseurs.catalogue` (jsonb vide partout, sonde du
+   * 17/09/2026) mais dans `produits_fournisseurs` → 5ᵉ argument `dbProduits`.
+   */
   dbFournisseurs?: any[],
   dbMes?: DonneesMiseEnStock,
+  /** Lignes de `produits_fournisseurs` (`select('*')`, jamais de projection nommant `qte_paquet`). */
+  dbProduits?: any[],
 ) => {
   // Stock RÉEL : si la DB renvoie des articles on les utilise (même tableau vide = pas de démo).
   const ARTS = Array.isArray(dbArts) ? dbArts : []
   const MVTS = Array.isArray(dbMvts) ? dbMvts : []
-  const FOURN = Array.isArray(dbFournisseurs) ? dbFournisseurs : []
+  const PRODUITS = Array.isArray(dbProduits) ? dbProduits : []
   const MES = normMes(dbMes)
+  void dbFournisseurs
 
   const TABS = [
     ['mes',      'Rangement / Mise en stock',  'fa-dolly'],
@@ -1012,7 +1024,7 @@ export const pageServiceStock = (
     <div class="stk-root" style="padding:22px 30px;">
       ${panelMiseEnStock(ARTS, MVTS, MES)}
       ${panelTempsReel(ARTS)}
-      ${panelGestion(ARTS, MVTS, FOURN, MES)}
+      ${panelGestion(ARTS, MVTS, PRODUITS, MES)}
       ${panelMouvements(MVTS)}
       ${panelAlertes(ARTS)}
       ${panelDashboard(ARTS, MVTS)}

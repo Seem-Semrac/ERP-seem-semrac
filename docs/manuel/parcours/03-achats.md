@@ -22,7 +22,9 @@ Sur cet écran, vous renseignez :
 - **Délai moyen (j)** — le nombre de jours habituels entre commande et livraison, utile pour anticiper les réceptions.
 - **Certifications / Conditions de paiement** — les repères qualité et commerciaux du partenaire.
 
-Depuis la fiche détaillée, vous pouvez aussi remplir le **catalogue produits** (références et politique de prix) et, pour un sous-traitant, les **opérations sous-traitées** (forfait minimum + prix à la pièce). Ces informations alimentent directement les nomenclatures du bureau d'études.
+Depuis la fiche détaillée, vous remplissez les **« Références fournies »** — un **seul** tableau depuis le 17/09/2026 : référence, désignation, catégorie, **quantité par paquet** (accessoires), unité, délai et prix (*matière : prix d'UNE TÔLE · accessoire : prix du PAQUET*). Pour un sous-traitant, ce sont les **opérations sous-traitées** (forfait minimum + prix à la pièce). Ces informations alimentent directement les nomenclatures du bureau d'études — et la **quantité par paquet** est ce qui permet de comparer un paquet de 100 et un paquet de 50.
+
+![Fiche fournisseur : identité, puis le bloc « Références fournies » avec sa barre de saisie (référence, désignation, catégorie, quantité par paquet, unité, délai, prix)](../../assets/achats-fiche-fournisseur.png)
 
 **➡️ Ensuite :** le fournisseur / sous-traitant devient sélectionnable partout où l'on commande (RFQ, DA, BC). Ses références et prix nourrissent les nomenclatures du BE.
 
@@ -32,17 +34,23 @@ Depuis la fiche détaillée, vous pouvez aussi remplir le **catalogue produits**
 
 **⬅️ Avant :** Vous avez un fournisseur au référentiel et un besoin dont vous ne connaissez pas encore le prix, ou dont le prix est à réactualiser. Avant d'engager une dépense, on consulte le marché.
 
-**📝 Ici, vous :** créez une consultation, saisissez les prix reçus des fournisseurs, et **retenez** l'offre choisie.
+**📝 Ici, vous :** créez une consultation, saisissez les prix reçus des fournisseurs (et, pour un accessoire, **la quantité de pièces par paquet** à laquelle chaque prix se rapporte), puis désignez l'offre **préférée**.
 
-![Onglet Demandes de prix — consultations fournisseurs et prix retenus](../../assets/achats-rfq.png)
+![Onglet Demandes de prix — la liste des consultations fournisseurs et leur statut](../../assets/achats-rfq.png)
+
+Le bouton **« Traiter »** d'une demande ouvre la fenêtre de saisie des réponses :
+
+![Fenêtre « Traiter » une demande de prix : une ligne par fournisseur consulté, prix, délai, bouton « Préféré » et « Valider & enregistrer tous les prix »](../../assets/form-achats-rfq-reponses.png)
+
+*La capture montre une demande portant sur une tôle : la colonne « Qté / paquet » n'apparaît que pour une ligne d'accessoire.*
 
 Sur cet écran, vous renseignez :
 - **Fournisseur (par ligne de réponse)** — le fournisseur qui a répondu ; « Ajouter un fournisseur » crée une ligne de plus pour comparer plusieurs offres sur la même référence.
-- **Prix unit.** — le prix unitaire HT proposé ; c'est lui qui deviendra le prix officiel s'il est retenu.
+- **Prix unit. / Prix du paquet** — le prix HT proposé. Pour un **accessoire**, c'est le prix **du paquet** ; la colonne orange **« Qté / paquet »** à côté dit combien de pièces il contient (l'ERP affiche « = 0,1040 €/pièce » en dessous).
+- **Préféré** — le fournisseur chez qui commander. ⚠ Il **n'écarte aucun prix** : **tous** les prix chiffrés sont enregistrés au catalogue.
 - **Délai (j)** — le délai de livraison annoncé, pour départager les offres.
-- **Retenu** — la case à cocher sur l'offre choisie (une seule par ligne).
 
-**➡️ Ensuite :** « Valider & mettre à jour les prix » (qui exige au moins une offre retenue avec un prix) **clôture la RFQ** et inscrit le prix retenu comme **prix officiel du fournisseur**. Ce prix remonte alors dans le catalogue et les nomenclatures.
+**➡️ Ensuite :** « **Valider & enregistrer tous les prix** » (qui exige au moins un prix saisi) **clôture la RFQ** et inscrit **chaque** prix chiffré comme **prix officiel de SON fournisseur** au catalogue, avec sa quantité par paquet. Le bureau d'études ne choisit plus de fournisseur sur une nomenclature : il en lit la **moyenne** — plus vous enregistrez de prix, plus son estimation est juste.
 
 > 📋 Le détail de **chaque case** : [guide des formulaires](../formulaires/achats.md).
 

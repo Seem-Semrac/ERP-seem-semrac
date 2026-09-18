@@ -39,6 +39,15 @@ const M = [
       + "var pm=L.filter(function(p){return p.type==='machine'&&p.taux_source==='process'&&!/oxyd|surtec|sox|lavage|anodis/i.test(String(p.nom||''));})[0];var ph=L.filter(function(p){return p.type==='manuel';})[0];"
       + "if(pm){nomAddEtape();var i=nomEtapes.length-1;nomOnEtapeProcessChange(i,pm.id);var e=nomEtapes[i];e.temps_reglage_min=30;e.temps_reglage_machine_min=60;e.temps_mo_min=6;e.temps_machine_min=12;}"
       + "if(ph){nomAddEtape();var j=nomEtapes.length-1;nomOnEtapeProcessChange(j,ph.id);nomEtapes[j].temps_mo_min=3;}"
+      // Lot H1 (17/09/2026) : une ligne MATIÈRE et une ligne ACCESSOIRE prises dans le VRAI catalogue
+      //   (NOM_PRODUITS), pour montrer les compartiments réels : recherche par réf/désignation, badge
+      //   « n fourn. · min–max » et cellule « Prix estimé / pièce ». Rien n'est enregistré (navigateur seul).
+      + "var P=(typeof NOM_PRODUITS!=='undefined'?NOM_PRODUITS:[]);"
+      + "function pk(c){var l=P.filter(function(p){return categorieFourniture(p.categorie)===c&&Number(p.prix)>0;});return l[0];}"
+      + "var mm=pk('matiere'),aa=pk('accessoire');"
+      + "if(mm){nomAddMatiere();var im=nomMatieres.length-1;nomFourSetRefDes(1,im,mm.reference,mm.designation);nomFourSetQte(1,im,12);}"
+      + "if(aa){nomAddAccessoire();var ia=nomAccessoires.length-1;nomFourSetRefDes(0,ia,aa.reference,aa.designation);nomFourSetQte(0,ia,4);}"
+      + "nomRenderMatieres();nomRenderAccessoires();"
       + "nomRenderEtapes();if(typeof nomCalcTotaux==='function') nomCalcTotaux();})()" },
   // Achats
   //   BC direct : case « Certificat matière requis » cochée DANS LE NAVIGATEUR (lot D, 14/09/2026) — rien n'est envoyé.

@@ -11,6 +11,8 @@
 // version listait les champs d'étape « à suivre » : le sous-traitant, son opération, son prix et le
 // prix OAS lui échappaient — la revue adverse du 11/09/2026 l'a montré.)
 
+import { categorieFourniture, normaliserReference } from './prix_moyen'
+
 export type Changement = { bloc: 'fiche' | 'gamme' | 'fourniture' | 'recalcul' | 'document' | 'reference_client'; champ: string; cle?: string; avant: unknown; apres: unknown; detail?: unknown }
 
 // Champs de la fiche, dans l'ordre d'affichage. Toute AUTRE colonne est comparée aussi (colonne
@@ -171,12 +173,32 @@ export function diffEtapes(avant: any, apres: any): Changement[] {
 
 // ── Fournitures ───────────────────────────────────────────────────
 // Remplacées EN BLOC à chaque enregistrement, avec un nouvel id : l'id ne vaut rien comme clé.
-// Clé = catégorie + référence (ou désignation), doublons appariés dans l'ordre. Toutes les autres
-// colonnes sont comparées ; le prix par pièce, calculé, part en « recalcul ».
+// Clé = catégorie + référence NORMALISÉE (ou désignation), doublons appariés dans l'ordre. Toutes
+// les autres colonnes sont comparées ; les valeurs CALCULÉES partent en « recalcul ».
+//
+// Lot H1 (17/09/2026) — nouveau modèle de ligne : référence + désignation, SANS fournisseur ni
+// qté/paquet, avec un prix unitaire ESTIMÉ (moyenne des prix catalogue de tous les fournisseurs
+// portant la référence, cf. src/prix_moyen.ts). Deux conséquences ici :
+//   1. `prix_unitaire` rejoint les DÉRIVÉES : ce n'est plus une saisie mais une copie datée d'un
+//      calcul. Il reste tracé, dans le bloc « recalcul » — comme les taux d'atelier.
+//   2. La BASCULE de l'ancien modèle vers le nouveau (le même article perd son fournisseur et sa
+//      qté/paquet) est tracée par UNE entrée lisible, au lieu de « fournisseur BOSSARD → ∅ » +
+//      « qte_paquet 100 → 0 » qui laisseraient croire à une saisie effacée. Le journal étant en
+//      AJOUT SEUL, ces lignes parasites ne s'effaceraient jamais.
+// Une qté/paquet RÉELLEMENT modifiée (100 → 50, fournisseur conservé) reste une saisie : bloc
+// « fourniture », comme avant.
 const horsFourn = (k: string) => k === 'id' || k === 'created_at' || k === 'nomenclature_id'
-const DERIVES_FOURN = ['prix_total_par_piece']
+const DERIVES_FOURN = ['prix_total_par_piece', 'prix_unitaire']
+// Champs de l'ANCIEN modèle de ligne (avant le lot H1) : le fournisseur choisi sur la ligne et le
+// conditionnement recopié dans la nomenclature. Ils vivent désormais au catalogue fournisseur.
+const CHAMPS_ANCIEN_MODELE = ['fournisseur', 'qte_paquet']
+const LIB_ANCIEN_MODELE: Record<string, string> = { fournisseur: 'fournisseur', qte_paquet: 'qté par paquet' }
 export function diffFournitures(avant: any[] | null, apres: any[] | null): Changement[] {
-  const cleF = (f: any) => String(f?.categorie || f?.type_fourniture || '') + ' | ' + String(f?.ref_stock || f?.designation || '').toLowerCase().trim()
+  const catF = (f: any) => {
+    const brut = (f && f.categorie != null && f.categorie !== '') ? f.categorie : (f ? f.type_fourniture : '')
+    return categorieFourniture(brut) || normaliserReference(brut)
+  }
+  const cleF = (f: any) => catF(f) + ' | ' + normaliserReference((f && f.ref_stock != null && String(f.ref_stock) !== '') ? f.ref_stock : (f ? f.designation : ''))
   const grouper = (l: any[]) => { const m = new Map<string, any[]>(); for (const f of (l || [])) { const k = cleF(f); if (!m.has(k)) m.set(k, []); m.get(k)!.push(f) } return m }
   const mA = grouper(avant || []), mB = grouper(apres || [])
   const cles: string[] = []
@@ -190,7 +212,24 @@ export function diffFournitures(avant: any[] | null, apres: any[] | null): Chang
       const nomF = String((fb || fa)?.ref_stock || (fb || fa)?.designation || '?')
       if (!fa) { out.push({ bloc: 'fourniture', champ: 'fourniture ajoutée', cle: k, avant: null, apres: nomF, detail: resume(fb, horsFourn) }); continue }
       if (!fb) { out.push({ bloc: 'fourniture', champ: 'fourniture retirée', cle: k, avant: nomF, apres: null, detail: resume(fa, horsFourn) }); continue }
-      for (const f of clesDe(fa, fb, horsFourn)) if (!pareil(fa[f], fb[f])) out.push({ bloc: DERIVES_FOURN.includes(f) ? 'recalcul' : 'fourniture', champ: nomF + ' · ' + f, cle: k, avant: normaliser(fa[f]), apres: normaliser(fb[f]) })
+      // Bascule vers le modèle « prix moyen » (lot H1) : l'ancienne ligne portait un fournisseur
+      // et/ou une qté par paquet, la nouvelle n'en porte plus aucun → UNE entrée « recalcul ».
+      const bascule = CHAMPS_ANCIEN_MODELE.some((c) => !vide(fa?.[c])) && CHAMPS_ANCIEN_MODELE.every((c) => vide(fb?.[c]))
+      if (bascule) {
+        const perdus: any = {}
+        for (const c of CHAMPS_ANCIEN_MODELE) if (!vide(fa?.[c])) perdus[LIB_ANCIEN_MODELE[c] || c] = normaliser(fa[c])
+        out.push({ bloc: 'recalcul', champ: nomF + ' · passage au prix moyen du catalogue (ancien modèle retiré)', cle: k, avant: perdus, apres: null })
+      }
+      for (const f of clesDe(fa, fb, horsFourn)) {
+        if (bascule && CHAMPS_ANCIEN_MODELE.includes(f)) continue   // déjà résumé par l'entrée de bascule
+        // La RÉFÉRENCE est l'identité de la ligne, et cette identité est normalisée (c'est la clé
+        // d'appariement, et l'unicité imposée à l'écran comme au catalogue) : « T1 » re-choisie dans
+        // la liste sous la forme « t1 » n'est pas une modification de la définition, juste une
+        // écriture. Un vrai changement de référence donne une ligne retirée + une ligne ajoutée.
+        if (f === 'ref_stock' && normaliserReference(fa[f]) === normaliserReference(fb[f])) continue
+        if (pareil(fa[f], fb[f])) continue
+        out.push({ bloc: DERIVES_FOURN.includes(f) ? 'recalcul' : 'fourniture', champ: nomF + ' · ' + f, cle: k, avant: normaliser(fa[f]), apres: normaliser(fb[f]) })
+      }
     }
   }
   return out

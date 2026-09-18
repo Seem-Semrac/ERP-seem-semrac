@@ -2,6 +2,139 @@
 
 > Tenu à jour par le skill `erp-doc-sync` (voir `.claude/skills/`). Le plus récent en haut.
 
+## 2026-09-17 — Lot H1 : prix moyen multi-fournisseurs, quantité par paquet au catalogue, recherche sans fournisseur, catalogue unique
+
+> « pour le moment on va aller sur le fait de faire un **prix moyen de tous les fournisseurs** pour la dite référence (et faire
+> la conversion quand le nombre de pièces dans un paquet par exemple diffère selon le fournisseur) » · « il faut être capable
+> d'aller retrouver les refs de produits à commander **sans mettre le fournisseur** et le remplir par la désignation » ·
+> « Retirer le nombre de pièces dans un paquet et le gérer **uniquement au niveau du catalogue fournisseurs** […] on ne doit
+> pas pouvoir mettre **deux fois la même référence** » · « il y a **deux moyens de créer une nouvelle référence dans le
+> catalogue dans la même fenêtre**, il faut uniformiser ça » · « pour les matières premières, les différentes sections il faut
+> les **redécaler au-dessus de la bonne case** ; pour les accessoires on a des **croix qui sortent de l'encadré** ».
+
+**⚠ Script cloud à jouer dans Supabase Studio : `docker/db/cloud/cloud-13-catalogue-qte-paquet.sql`** (équivalent de la
+migration Docker **017**). Mode opératoire, aperçu `begin; … rollback;` et vérifications : `technique/02-exploitation-runbook.md`.
+Tant qu'il n'est pas joué, **rien n'est cassé** : le prix d'un accessoire est estimé en comptant « 1 pièce par paquet » et
+signalé en orange, et l'enregistrement d'une quantité par paquet est accepté puis annoncé comme non conservé. ⚠ **Le jouer
+AVANT de déployer** : sans lui, l'accessoire `136290` (BOSSARD, 10,40 € le paquet de 100) sort à 10,40 € **la pièce** dans
+l'éditeur et dans l'analyse DT — constaté le 18/09/2026 sur `DT-2026-0001` (serveur local sur la base en ligne) : 177 216 €
+d'accessoires au lieu d'environ 1 772 €.
+
+**Ce qui change**
+- **Prix d'une fourniture = moyenne des fournisseurs du catalogue.** Une ligne de nomenclature ne porte plus ni fournisseur ni
+  quantité par paquet : elle porte une **référence**, cherchée par **référence ou désignation** (casse et accents ignorés) dans
+  tout le catalogue. Accessoire : chaque fournisseur est ramené au prix d'**une pièce** (`prix / qte_paquet`) avant la moyenne
+  — 10 € le paquet de 100 chez A et 6 € le paquet de 50 chez B → **0,11 €/pièce** ; matière : moyenne du prix d'une **tôle**,
+  divisée par `Pc/tôle`. Un prix de plus de 6 mois met la case en **orange** (il reste compté), aucun prix la met en **rouge**
+  « coût incomplet » (la validation reste permise), un fournisseur sans conditionnement déclaré est **signalé** (« cond. ? »).
+  Badge « n fourn. · min–max », détail par fournisseur au survol et au clic.
+- **Un seul module de calcul** — `src/prix_moyen.ts` (réexporté par `shared.ts`), dont la copie navigateur est **générée
+  depuis la même source** (`prixMoyenClientJs()`, `Function.toString`) : serveur, éditeur BE, fiche fournisseur et écran
+  Achats exécutent le **même** code. `scripts_doc/test_prix_moyen.mjs` : **220 assertions**, rejouées sur le **bundle
+  minifié** et comparées serveur ⟷ client.
+- **Quantité par paquet au catalogue** (`produits_fournisseurs.qte_paquet`, 017 / `cloud-13`) : déclarée par couple
+  (fournisseur, référence) dans **BE › Références** et dans la **fiche fournisseur** — plus dans chaque nomenclature. La
+  migration **reprend sans écraser** la valeur des nomenclatures (Docker : 1 ligne, `136290`/BOSSARD = 100 — sans quoi cet
+  accessoire passait de 0,104 € à 10,40 € la pièce). `demandes_prix_reponses.qte_paquet` ajoutée pour la saisie des réponses.
+- **Doublons interdits** : une même référence normalisée ne peut figurer qu'**une fois** par nomenclature, matière et
+  accessoires confondus — refus **à la saisie** côté écran et **409 `doublon_reference`** côté serveur, **avant**
+  `upsertFournitures` (qui efface puis réinsère). Au catalogue, la même référence deux fois chez le **même** fournisseur est
+  refusée (**409 `doublon_catalogue`**, à la casse et aux espaces près, index `ux_produits_fournisseurs_ref_norm`) ; chez
+  **plusieurs** fournisseurs elle reste normale — c'est la base de la moyenne.
+- **Catalogue unique** : le bloc jsonb « Catalogue produits — politique de prix » est **retiré** de la fiche fournisseur après
+  sonde en lecture seule (cloud **et** Docker : 0 article dans `fournisseurs.catalogue` / `sous_traitants.catalogue`). Reste
+  « **Références fournies** », formulaire **unique** création + modification (référence, désignation, catégorie, **qté/paquet**,
+  unité, délai, prix). Lecteurs du jsonb rebranchés sur la table : `/api/catalogue-fournisseurs`, pastille « n réf. » (et
+  « n op. » pour les sous-traitants), **Stock › Gestion** (bloc qui affichait l'état vide en permanence), `NOM_PRODUITS` du BE.
+- **Demandes de prix** : saisie de la **qté/paquet à côté du prix** pour un accessoire (« = 0,1040 €/pièce » en direct, sinon
+  « conditionnement non déclaré ») ; **« Valider & enregistrer tous les prix »** écrit le prix de **CHAQUE** réponse chiffrée
+  sur la ligne catalogue de **son** fournisseur — le radio devient « **Préféré** » (fournisseur à commander, il n'écarte aucun
+  prix). Sans cela, `nb_fournisseurs` vaudrait 1 partout. Les échecs s'affichent **ligne par ligne** dans la fenêtre (limite du
+  lot H0 soldée) et la demande reste **ouverte**.
+- **Demande de prix sans fournisseur** : la fenêtre s'ouvre pré-remplie avec un bloc **Destinataires** = tous les fournisseurs
+  qui portent la référence, **cochés d'office** (sinon choix libre), via le champ existant `fournisseurs_cibles`.
+- **Unités** : un accessoire se compte en **PIÈCES** au BE (DA de la cascade, `besoin_unite`, coût série linéaire) ; le passage
+  en paquets se fait au **BC**, par les Achats, qui connaissent le fournisseur. ⚠ Changement assumé : le coût série d'un
+  accessoire n'est plus arrondi au paquet, y compris pour une fiche restée à l'ancien modèle (les analyses déjà acceptées
+  restent figées).
+- **Mise en page** (demande du 17/09) : compartiments Matière / Accessoires **en tête de la colonne de droite**, au-dessus des
+  Étapes ; **un seul gabarit** de grille partagé en-tête et lignes ; Désignation large (190 → 442 px selon la largeur, contre
+  18 px) ; croix **dans** le cadre et cliquable. Mesuré à 1280 / 1366 / 1600 / 1920 px : écart en-tête ↔ case **0 px**,
+  `elementFromPoint(croix)` = le bouton, **0 px** de défilement interne, 0 erreur JS.
+- **Fournitures jamais perdues** : `GET /api/nomenclature/:id/fournitures` passe en **lecture stricte** (503) ; l'écran bloque
+  l'enregistrement tant qu'il n'a pas lu ses fournitures, et le serveur (`PUT /api/nomenclature/:id`) refuse **409
+  `fournitures_vides`** une liste vide sur une fiche qui en a, sauf drapeau explicite `vider_fournitures` (même modèle que
+  `composants_vides` du lot H0).
+- **Journal EN 9100** : appariement sur référence **normalisée** ; un prix qui bouge parce que la moyenne a bougé part en bloc
+  « **recalcul** » ; la bascule ancien → nouveau modèle produit **une** entrée « *passage au prix moyen du catalogue (ancien
+  modèle retiré)* » au lieu de « fournisseur → ∅ » + « qte_paquet 100 → 0 ».
+- **Droits** : l'**écriture** de `/api/produits-fournisseurs…` et `/api/demandes-prix…` est ouverte à « **be OU achats** »
+  (exception de chemin dans `canAccess`, `serviceFor` **inchangé** : la lecture ne bouge pas). Un acheteur peut enfin déclarer
+  une référence et valider une demande de prix. Nouvel export `peutEcrireCatalogue(user)`.
+
+**Défauts corrigés en relecture** (22 constats, **aucun faux positif**) — refus de doublon **après** avoir effacé le prix
+enregistré et la demande de prix en cours (remise à 0 en base) ; fournitures effacées après un 503 ; **caractères perdus à la
+frappe** (tout `change` re-rendait la liste en `innerHTML`) ; colonnes figées (« 120 » → « 1… », badge tronqué dès 2
+fournisseurs) ; deux lignes du même fournisseur comptées deux fois dans la moyenne ; libellé « 25 kg » pris pour un
+conditionnement ; moyenne connue mais non convertible qui écrasait la copie enregistrée ; `constructor` / `__proto__` en
+référence (500 → 409 propre) ; catégorie supposée « accessoire » par `GET /api/produit-prix` ; pastille « n réf. » des
+sous-traitants toujours à 0 ; avertissements affichés comme des erreurs bloquantes ; `aria-activedescendant` ; accents et
+virgule décimale dans la saisie des réponses RFQ.
+
+**Vérifications** : `npx tsc --noEmit` 0 erreur · `node scripts_doc/test_prix_moyen.mjs` **220 PASS / 0 FAIL** (module et
+bundle **minifié**, serveur et client) · `npm run build` ✓ · harnais toutes pages **60 PASS / 0 FAIL / 1 SKIP** ·
+`erp-docker.sh maj` ✓ (017 appliquée) · **e2e Docker local 16/16** (catégorie déduite, référence accentuée reconnue sans
+accents **sans créer de doublon**, 409 `fournitures_vides` avec fournitures **relues intactes**, 409 `doublon_reference`, 409
+propre sur `__proto__`, besoin d'accessoire en « pièce ») · **navigateur Chromium 44/44** (frappe ligne 1 → clic ligne 2 →
+frappe sans perte de caractère, doublon refusé sans perdre le prix ni la RFQ en cours, aucune colonne coupée de 1280 à
+1920 px, aucune exception JS) · 017 / `cloud-13` testées à blanc **deux fois** en `begin; … rollback;` (idempotence, base
+intacte) · sondes cloud **en lecture seule** (144 lignes de catalogue, `qte_paquet` absente = 42703, jsonb `catalogue` vide) ·
+données `-TEST-` supprimées **et relues** (0 restante).
+
+**Scripts à jouer**
+- **Cloud** : **`cloud-13-catalogue-qte-paquet.sql`** dans Supabase Studio → SQL Editor (d'abord entre `begin;` et
+  `rollback;`, lire l'onglet **Messages** : un NOTICE par quantité reprise, WARNING si des doublons empêchent l'index), puis
+  `npm run build` + déploiement (`erp-deploy`).
+- **Docker / VM** : `~/erp/docker/scripts/erp-docker.sh maj` applique **017** (déjà fait sur le Docker local le 17/09/2026).
+- **Ensuite** : déclarer les quantités par paquet manquantes (bandeau de BE › Références), et prévenir les Achats que
+  « Préféré » remplace « Retenu » — il désigne le fournisseur à commander et **n'écarte plus aucun prix** : **tous** les
+  prix chiffrés sont désormais enregistrés au catalogue.
+
+**Reste à faire / limites connues**
+- `src/kpi.ts` (tableau de bord BE) chiffre encore sur la **copie enregistrée** des fournitures, pas sur le prix moyen du jour.
+- L'index SQL d'unicité ignore la casse et les espaces mais **pas les accents** ; c'est l'unicité **applicative** (409) qui
+  tranche — passer l'index en `unaccent(...)` demanderait l'extension côté cloud.
+- Le **multi-sourcing** reste à construire : au 18/09/2026, une seule référence du catalogue en ligne (`510056`) est portée
+  par deux fournisseurs — la moyenne ne prendra tout son sens qu'au fil des demandes de prix validées à plusieurs.
+- ~~Page `/be/analyse` : note « tôles / paquets » sous le tableau de chiffrage~~ — corrigé dans le même lot : « Matière en
+  tôles entières (arrondi supérieur) ; accessoires en pièces (le passage en paquets se fait au bon de commande) ».
+- Hors lot (en attente de l'utilisateur) : ordre et imbrication des nomenclatures mères, propagation d'un indice aux commandes
+  en cours, restauration des mères endommagées sur la VM.
+
+- Fichiers : `src/prix_moyen.ts` (nouveau), `src/shared.ts`, `src/queries.ts`, `src/auth.ts`, `src/nomenclature_journal.ts`,
+  `src/index.tsx`, `src/be.tsx`, `src/achats.tsx`, `src/fournisseur_fiche.tsx`, `src/stock_service.tsx`,
+  `docker/db/migrations/017-catalogue-qte-paquet.sql`, `docker/db/cloud/cloud-13-catalogue-qte-paquet.sql`,
+  `docker/db/seed/schema.sql`, les deux `README.md` de `docker/db/`, `scripts_doc/test_prix_moyen.mjs`,
+  `scripts_doc/gen_module_fiches.mjs`, `scripts_doc/gen_fiches_poste.mjs` (manifeste `bei` / `achats` aligné : la fiche
+  régénérée = la fiche écrite), `scripts_doc/capture_screens.mjs`, `scripts_doc/capture_forms.mjs` · Migration DB :
+  **oui** (Docker **017**, cloud **`cloud-13` à jouer à la main**)
+- Doc mise à jour : `technique/06-modules/be.md`, `technique/06-modules/achats.md`, `technique/03-base-de-donnees.md`,
+  `technique/04-auth-rbac.md`, `technique/05-conventions-code.md`, `technique/02-exploitation-runbook.md`,
+  `technique/07-api-reference.md` (régénérée + contrats « Lot H1 »), `manuel/be.md`, `manuel/achats.md`,
+  `manuel/formulaires/be.md`, `manuel/formulaires/achats.md`, `manuel/parcours/02-be.md`, `manuel/parcours/03-achats.md`,
+  `manuel/html/be.html`, `manuel/html/achats.html`, `fiches-poste/bei.md`, `fiches-poste/achats.md` · `src/manuels_contenu.ts`
+  (manuels intégrés à l'ERP) est **régénéré par le `prebuild`** de `npm run build` à partir de `docs/manuel/html/`.
+- Captures (serveur local sur la base **en ligne**, donc **sans `cloud-13`** : aucune quantité par paquet n'y est déclarée) —
+  **refaites** : `be-noms`, `be-refs` (bandeau « accessoire(s) sans quantité par paquet », colonne Qté/paquet), `be-analyse`,
+  `be-prep`, `be-dashboard`, `achats-rfq` (texte « Valider écrit le prix de CHAQUE réponse chiffrée »), `achats-fournisseurs`,
+  `achats-da`, `achats-bc`, `achats-avoirs`, `achats-scorecard`, `achats-dashboard` ; **nouvelle** : `achats-fiche-fournisseur`
+  (bloc « Références fournies » seul, barre de saisie avec Qté / paquet) ; formulaires : `form-be-nomenclature`
+  (compartiments en tête de la colonne droite, badge « 1 fourn. », « cond. ? » orange sur `136290`) et
+  `form-achats-rfq-reponses` (« Préféré », « Valider & enregistrer tous les prix » ; ligne de tôle, donc sans colonne Qté /
+  paquet). ⚠ **`form-be-analyse` volontairement NON refaite** : sans `cloud-13`, `136290` y sortirait à 10,40 € la pièce
+  (177 216 € d'accessoires sur `DT-2026-0001`) — l'ancienne capture est gardée avec l'avertissement « capture à rafraîchir »
+  (besoin en paquets) ; à refaire, avec une vue accessoire de `form-achats-rfq-reponses`, **après** `cloud-13`.
+
 ## 2026-09-17 — Lot H0 : composants des mères, nouvel indice « en cours », prix jamais remis à 0, demande de prix à tout moment, catalogue fournisseur, ouverture GED, génération des BDT
 
 **Correctifs sans arbitrage métier.** Non traités, en attente des réponses de l'utilisateur : ligne de nomenclature sans

@@ -42,6 +42,10 @@ const MANIFEST = [
   { file: 'achats-bc',             path: '/achats/service', clicks: ['#ach-tab-bc'], wait: 500 },
   { file: 'achats-avoirs',         path: '/achats/service', clicks: ['#ach-tab-avoirs'], wait: 500 },
   { file: 'achats-fournisseurs',   path: '/achats/service', clicks: ['#ach-tab-fourn'] },
+  //   Fiche d'un fournisseur (lot H1, 17/09/2026) : bloc « Références fournies » = SEUL catalogue de la fiche
+  //   (colonnes Qté / paquet et Unité, badge « non déclaré », prix à la pièce). Le bouton « Fiche » est un <a href>,
+  //   le clic navigue : d'où le wait long avant la capture.
+  { file: 'achats-fiche-fournisseur', path: '/achats/service', clicks: ['#ach-tab-fourn', '#ach-panel-fourn a[href^="/achats/fournisseur/"]'], wait: 2500, fullPage: true },
   // Production + planning
   { file: 'production-service',    path: '/production/service' },
   { file: 'production-postes',     path: '/production/service', eval: "var g=document.getElementById('ppanel-gantt-bdt'); if(g) g.style.display='none'; var mp=document.getElementById('ppanel-machines'); if(mp) mp.style.display=''; var vm=document.getElementById('vol-mach'); if(vm) vm.style.display='none'; var vp=document.getElementById('vol-pp'); if(vp) vp.style.display=''; [].slice.call(document.querySelectorAll('#vol-pp button[id^=postexp-]')).slice(0,3).forEach(function(b){ b.click(); });", wait: 700, fullPage: true },   // onglet Process Ateliers → volet Postes & Process, 3 postes dépliés : taux horaire machine de chaque process (« X €/h », « taux à saisir », « coût RH ») — 14/09/2026

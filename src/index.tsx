@@ -24,6 +24,9 @@ import {
   pageReferencesPiecesACreer
 } from './listes'
 import { layout, pageHeader, afterBox, SIDEBAR_V2, APP_VERSION, computeNomCostForQty, etapeDecomp, etapeLibreVersEtape, construireTauxAtelier, typeProcess, seemMark, STATUT_ANNULE, estAnnule, etapeTempsMin, dureeBdtDepuisTemps, reglageBdtHeures, racineBdt, rangMorceauBdt, lireHeuresSaisie, reglageBdtDepuisGamme, planDecoupeBdt, blocagesRecollage, cibleRecollage, ajusterRecollagePartiel, PRIX_VALIDITE_JOURS, composantsDe } from './shared'
+// Prix moyen multi-fournisseurs (lot H1, 17/09/2026) — module PUR partagé serveur ↔ navigateur :
+// c'est la SEULE source du calcul (aucune règle de prix recopiée ici), voir src/prix_moyen.ts.
+import { prixMoyenReference, recalculerFournitures, normaliserReference, memeReference, nombrePositif, categorieFourniture, qtePaquetDe, premierDoublonFourniture, messageDoublonFourniture } from './shared'
 import { brandBlockHTML, BRAND, BRAND_PRINT_CSS, SOCIETE } from './brand'
 import { buildXlsx } from './xlsx'
 import { computeRisqueChimique, computeExpositionSante, computeExpositionIncendie, computeExpositionEnv, normQuantiteChimique, SEIRICH_NIVEAUX, EXPO_PROCEDE_LBL, EXPO_FREQ_LBL, EXPO_PROT_LBL, EXPO_VOLAT_LBL, codeDechetDangereux, computeBilanGES, ISO14001_DIAGNOSTIC, ISO26000_QUESTIONS, computeEcmePV, ecmeTypeLabel as _ecmeTypeLabel, ecmeStatutLive as _ecmeStatutLive } from './qref'
@@ -145,6 +148,9 @@ import { pageRapport8D } from './rapport8d'
 // Présences opérateur (lot C · C1, 14/09/2026) : lectures strictes + règles pures
 import { getPresencesFenetre, deletePresence, getSalarieCible, getCongeCible, majCongeSiStatut, getSalarieCompletCible, lireBDTOperateurPeriode } from './queries'
 import { getProduitFournisseurCouple, insertProduitFournisseurSiAbsent, getProduitFournisseurParId, getRefPrixHistoriqueRfq, getClesBonsStrictes, getCleBonParId } from './queries'
+// Catalogue fournisseurs (lot H1) : lectures STRICTES (une panne ≠ catalogue vide) et écritures
+// TOLÉRANTES à l'absence de la colonne `qte_paquet` (cloud tant que cloud-13 n'est pas joué).
+import { getProduitsFournisseursStrict, getProduitsFournisseursParReference, updateProduitFournisseurTolerant, insertProduitFournisseurSiAbsentTolerant, createDemandePrixReponseTolerant, updateDemandePrixReponseTolerant } from './queries'
 import { validerCorpsPresence, validerFenetre, fenetreChargementPresences, messageEchecUpsert, CRENEAUX, libelleCreneau } from './presences'
 import { validerModelesNiveau, planModeles, validerChangementCadence, decisionChangementCadence, controlePresenceCadence, calendrierCadence, segmentsDuJour, plageOuverteCalendrier, estDateIso as estDateIsoCadence, isoPlusJours as isoPlusJoursCadence, niveauDuSite, ligneCadenceDuSite, jourEffetCadence, changementsPrevusCadence, NIVEAU_DEFAUT, MSG_CLOUD12, MSG_CADENCE_RESERVE } from './cadence'
 import { lireDonneesCadence, insererCadenceSite, insererModeleHoraire, majModeleHoraireSi } from './cadence_db'
@@ -1099,8 +1105,15 @@ async function cascadeDAManques(dt: any, cmdId: string, byCode: Record<string, a
       const cat = String(f.categorie || '')
       if (cat !== 'matiere' && cat !== 'accessoire') continue
       const isMat = cat === 'matiere'
-      const qpp = Number(f.quantite_par_piece) || 0, npt = Number(f.nb_par_tole) || 0, qtePaq = Number(f.qte_paquet) || 0
-      const besoin = isMat ? (npt > 0 ? Math.ceil(qte / npt) : Math.ceil(qpp * qte)) : (qtePaq > 0 ? Math.ceil((qpp * qte) / qtePaq) : Math.ceil(qpp * qte))
+      const qpp = Number(f.quantite_par_piece) || 0, npt = Number(f.nb_par_tole) || 0
+      // Lot H1 (17/09/2026) : un ACCESSOIRE est demandé en PIÈCES, jamais en paquets.
+      //   « Le passage en paquets se fait au BC, par les Achats, qui connaissent alors le fournisseur
+      //     et donc son conditionnement. » Le conditionnement est désormais porté par le couple
+      //   fournisseur + référence du catalogue (`produits_fournisseurs.qte_paquet`) et non plus par
+      //   la ligne de nomenclature : diviser ici par l'ancien `f.qte_paquet` d'une fiche non
+      //   réenregistrée sous-commandait la matière (100 vis demandées → 1 « paquet » comparé à un
+      //   stock compté en vis). La matière reste en TÔLES (unité d'achat connue au BE, géométrie).
+      const besoin = isMat ? (npt > 0 ? Math.ceil(qte / npt) : Math.ceil(qpp * qte)) : Math.ceil(qpp * qte)
       if (besoin <= 0) continue
       const refStock = String(f.ref_stock || '').toLowerCase().trim()
       const st = refStock ? stockByRef[refStock] : null
@@ -2058,22 +2071,58 @@ app.delete('/api/sous-traitants/:id', async (c) => {
 
 // API : catalogue agrégé pour la liste déroulante des nomenclatures
 //  Filtre par activité (Seem / Semrac / both). Retourne aussi le type (F/ST).
+// ⚠ Lot H1 (17/09/2026) : le catalogue d'un FOURNISSEUR est désormais lu dans la table
+//   `produits_fournisseurs` — la SEULE source écrite par les écrans (fiche fournisseur, BE ›
+//   Références, validation d'une demande de prix) et lue par les nomenclatures, le BC, les DA et le
+//   stock. Le bloc jsonb `fournisseurs.catalogue` était un cul-de-sac (0 article sur 155
+//   fournisseurs et 20 sous-traitants au 17/09/2026, sonde Docker) : ses références ne sont plus
+//   rendues qu'en COMPLÉMENT, si une base en porte encore et que la table ne les a pas — jamais en
+//   doublon d'une ligne de la table, jamais à sa place. Les sous-traitants gardent le jsonb : leurs
+//   prestations ne vivent pas dans `produits_fournisseurs` (colonnes `tarifs` / `prestations`).
+//   La qté par paquet suit la règle commune (`qtePaquetDe` : colonne numérique, repli sur l'ancien
+//   libellé texte `conditionnement`) et fonctionne donc AVANT comme APRÈS cloud-13.
 app.get('/api/catalogue-fournisseurs', async (c) => {
   const activite = c.req.query('activite') || ''
-  const [fournisseurs, sts] = await Promise.all([getFournisseurs(), getSousTraitantsAll()])
+  const [fournisseurs, sts, cat] = await Promise.all([getFournisseurs(), getSousTraitantsAll(), getProduitsFournisseursStrict()])
+  // Lecture STRICTE : un catalogue illisible ne doit pas passer pour un catalogue vide.
+  if (cat.error) return c.json({ ok: false, error: 'Catalogue fournisseurs illisible : ' + cat.error }, 503)
   const out: any[] = []
   const visible = (a: any) => !activite || activite === 'both' || !a || a === 'both' || a === activite
+  const parFournisseur = new Map<string, any[]>()
+  for (const p of cat.data) {
+    const k = String((p as any).fournisseur_id ?? '')
+    if (!parFournisseur.has(k)) parFournisseur.set(k, [])
+    parFournisseur.get(k)!.push(p)
+  }
   ;(fournisseurs as any[]).forEach(f => {
     if (!visible(f.activite)) return
+    const meta = { type: 'fournisseur', source_id: f.id, source_nom: f.nom, source_activite: f.activite || 'both', source_categorie: f.categorie || null }
+    const lignes = parFournisseur.get(String(f.id)) || []
+    const refsVues = new Set<string>()
+    lignes.forEach((p: any) => {
+      if (!visible(p.activite)) return
+      const refN = normaliserReference(p.reference)
+      if (refN) refsVues.add(refN)
+      out.push({
+        ...meta,
+        ref: p.reference, designation: p.designation, categorie: p.categorie || null, unite: p.unite || null,
+        prix_moyen_ht: p.prix ?? null, qte_paquet: qtePaquetDe(p), prix_mini_cde_ht: null, delai_j: p.delai_jours ?? null,
+        notes: null, date_prix: p.date_prix ?? null, source_prix: p.source_prix ?? null, produit_id: p.id ?? null,
+      })
+    })
+    // Complément éventuel de l'ancien bloc jsonb (normalement vide) : jamais en doublon de la table.
     let items: any[] = []
     if (Array.isArray(f.catalogue)) items = f.catalogue
     else if (typeof f.catalogue === 'string') { try { const o = JSON.parse(f.catalogue); items = Array.isArray(o) ? o : (o?.items || []) } catch (_e) {} }
     items.forEach(it => {
+      if (!it) return
+      const refN = normaliserReference(it.ref)
+      if (refN && refsVues.has(refN)) return
       out.push({
-        type: 'fournisseur', source_id: f.id, source_nom: f.nom, source_activite: f.activite || 'both', source_categorie: f.categorie || null,
+        ...meta,
         ref: it.ref, designation: it.designation, categorie: it.categorie || null, unite: it.unite || null,
-        prix_moyen_ht: it.prix_moyen_ht ?? null, qte_paquet: it.qte_paquet ?? null, prix_mini_cde_ht: it.prix_mini_cde_ht ?? null, delai_j: it.delai_j ?? null,
-        notes: it.notes || null,
+        prix_moyen_ht: it.prix_moyen_ht ?? null, qte_paquet: nombrePositif(it.qte_paquet), prix_mini_cde_ht: it.prix_mini_cde_ht ?? null, delai_j: it.delai_j ?? null,
+        notes: it.notes || null, date_prix: null, source_prix: 'jsonb_fournisseur', produit_id: null,
       })
     })
   })
@@ -4232,45 +4281,95 @@ app.post('/api/commandes/:id/generer-da', async (c) => {
 // BUREAU D'ÉTUDES
 // ══════════════════════════════════════════════════════════════
 app.get('/be/service', async (c) => {
-  const [dts, cmds, noms, refs, produits, prixHist, salaries, offres] = await Promise.all([
+  const [dts, cmds, noms, refs, catalogue, prixHist, salaries, offres] = await Promise.all([
     getDemandesTravaux(), getCommandes(), getNomenclatures(), getBeRefs(),
-    getProduitsFournisseursAll().catch(() => [] as any[]), getRefPrixHistoriqueAll().catch(() => [] as any[]),
+    // Lot H1 : lecture STRICTE et PAGINÉE du catalogue (getProduitsFournisseursAll s'arrêtait à la
+    // page PostgREST par défaut, 1000 lignes, et rendait [] en cas de panne — « aucun prix » partout
+    // et une demande de prix conseillée sur chaque ligne). `select('*')` : compatible avec ou sans la
+    // colonne `qte_paquet` (cloud sans cloud-13).
+    getProduitsFournisseursStrict(), getRefPrixHistoriqueAll().catch(() => [] as any[]),
     getSalariesActifs().catch(() => [] as any[]),
     getOffres().catch(() => [] as any[]),
   ])
+  if (catalogue.error) console.error('[BE] catalogue fournisseurs illisible : ' + catalogue.error)
+  const produits = catalogue.data
   // Analystes BE = salariés dont le rôle donne l'accès BE en écriture (bei, direction)
   const BE_ROLES = new Set(['bei', 'direction'])
   const beUsers = (salaries as any[])
     .filter((s: any) => [s.role, ...(Array.isArray(s.roles) ? s.roles : [])].some((r: any) => BE_ROLES.has(String(r))))
     .map((s: any) => ({ id: s.id, prenom: s.prenom, nom: s.nom }))
+  // Dernier prix connu par référence, comparée NORMALISÉE (lot H1 : « 126 001 », « 126001 » et
+  // « Réf A » / « ref a » sont la même référence pour l'historique comme pour le catalogue).
   const lastDate: Record<string, string> = {}
-  ;(prixHist as any[]).forEach((h: any) => { const k = h.reference; if (k && (!lastDate[k] || String(h.date_prix) > lastDate[k])) lastDate[k] = h.date_prix })
-  // Catalogue commercial (produits_fournisseurs) — JAMAIS de quantité de stock ici (§5)
+  ;(prixHist as any[]).forEach((h: any) => { const k = normaliserReference(h.reference); if (k && (!lastDate[k] || String(h.date_prix) > lastDate[k])) lastDate[k] = h.date_prix })
+  // Catalogue commercial (produits_fournisseurs) — JAMAIS de quantité de stock ici (§5).
+  // Lot H1 : la qté par paquet (accessoires), le conditionnement texte de repli, la date et la source
+  // du prix voyagent jusqu'à l'écran — BE › Références les affiche et les modifie, et le prix moyen
+  // d'une référence ne peut pas se calculer sans le conditionnement de CHAQUE fournisseur.
   const refsStock = (produits as any[]).map((p: any) => ({
     id: p.id, fournisseur_id: p.fournisseur_id,
     reference: p.reference, designation: p.designation, famille: p.categorie, categorie: '',
     activite: p.activite, fournisseur_nom: p.fournisseur_nom || '', prix: p.prix,
-    derniere_date: lastDate[p.reference] || p.date_prix || null,
+    qte_paquet: p.qte_paquet ?? null, conditionnement: p.conditionnement ?? null,
+    unite: p.unite ?? null, delai_jours: p.delai_jours ?? null,
+    date_prix: p.date_prix ?? null, source_prix: p.source_prix ?? null, statut: p.statut ?? null,
+    derniere_date: lastDate[normaliserReference(p.reference)] || p.date_prix || null,
   }))
   const _preps = await getPreparationsTechniques().catch(() => [] as any[])
   return c.html(pageServiceBE(dts, cmds, noms, refs, refsStock, produits as any[], beUsers, offres as any[], _preps))
 })
 
-// — Prix courant d'une référence chez un fournisseur (rafraîchissement live nomenclature) —
+// — Prix d'une référence : TOUTES ses lignes catalogue + le PRIX MOYEN multi-fournisseurs —
+// Lot H1 (17/09/2026) : une ligne de nomenclature ne porte plus de fournisseur, elle porte une
+// RÉFÉRENCE. Cette route rend donc, pour la référence demandée (comparaison NORMALISÉE : casse,
+// accents, espaces multiples) :
+//   • `lignes[]` : toutes les lignes chiffrées, avec `qte_paquet` (accessoires) et `prix_converti` ;
+//   • `prix_moyen` : le résultat du module partagé `prixMoyenReference` (§3 de la spec) — même
+//     calcul, même code, que celui exécuté dans le navigateur. Rien n'est recalculé ici.
+// Paramètres : `reference` (ou `designation` en repli), `categorie` ('matiere' / 'accessoire'),
+// `nb_par_tole` (matière : donnée de géométrie du BE), `fournisseur` (filtre optionnel, compat H0).
+// Lecture STRICTE : une panne rend 503 (« prix indisponible »), jamais « aucun prix » — qui ferait
+// conseiller une demande de prix pour des références déjà chiffrées.
 app.get('/api/produit-prix', async (c) => {
   const fid = c.req.query('fournisseur') || ''
   const ref = String(c.req.query('reference') || '').trim()
   // Relecture lot H0 : une ligne de nomenclature peut n'avoir qu'une désignation (demande de prix sans réf).
   const des = String(c.req.query('designation') || '').trim()
   if (!ref && !des) return c.json({ ok: false, error: 'reference ou designation requise' }, 400)
-  const list = fid ? await getProduitsFournisseur(fid).catch(() => [] as any[]) : await getProduitsFournisseursAll().catch(() => [] as any[])
-  const candidats = (list as any[]).filter((x: any) => (ref ? String(x.reference) === ref : String(x.designation || '').trim() === des) && (!fid || String(x.fournisseur_id) === String(fid)))
+  // ⚠ RELECTURE 17/09/2026 — la catégorie n'est plus SUPPOSÉE « accessoire » quand le paramètre
+  //   manque : pour une ligne MATIÈRE, la réponse publiait alors un `prix_moyen` de sémantique
+  //   accessoire (`prix_tole: null`, `prix_unitaire` = prix de la TÔLE présenté comme prix à la
+  //   pièce, `prix_converti` divisé par une qté/paquet qui ne concerne pas la matière). Le paramètre
+  //   fait foi ; à défaut, la catégorie est DÉDUITE des lignes catalogue trouvées et la réponse le dit.
+  const catDemandee = categorieFourniture(c.req.query('categorie'))
+  const npt = nombrePositif(c.req.query('nb_par_tole'))
+  // Une référence : lecture ciblée (ilike puis repli complet). Sinon (désignation seule) : tout le catalogue.
+  const lec = ref ? await getProduitsFournisseursParReference(ref) : await getProduitsFournisseursStrict()
+  if (lec.error) return c.json({ ok: false, code: 'catalogue_illisible', error: 'Catalogue fournisseurs illisible, prix non vérifié : ' + lec.error }, 503)
+  const candidats = (lec.data as any[]).filter((x: any) => (ref ? memeReference(x.reference, ref) : normaliserReference(x.designation) === normaliserReference(des)) && (!fid || String(x.fournisseur_id) === String(fid)))
+  let _nbMat = 0, _nbAcc = 0
+  for (const x of candidats) { const k = categorieFourniture(x.categorie); if (k === 'matiere') _nbMat++; else if (k === 'accessoire') _nbAcc++ }
+  const catDeduite = _nbMat > _nbAcc ? 'matiere' : (_nbAcc > 0 ? 'accessoire' : '')
+  const cat = (catDemandee || catDeduite || 'accessoire') === 'matiere' ? 'matiere' : 'accessoire'
   // Sans fournisseur, TOUTES les lignes chiffrées sont rendues (le client choisit : une seule réponse → il adopte
   // son fournisseur, plusieurs → il demande de choisir). En tête : la plus récemment chiffrée (compatibilité).
   const chiffres = candidats.filter((x: any) => Number(x.prix) > 0).sort((a: any, b: any) => String(b.date_prix || '').localeCompare(String(a.date_prix || '')))
   const p = chiffres[0] || candidats[0] || null
-  const lignes = chiffres.map((x: any) => ({ fournisseur_id: x.fournisseur_id, fournisseur_nom: x.fournisseur_nom, reference: x.reference, designation: x.designation, prix: x.prix, date_prix: x.date_prix, categorie: x.categorie, conditionnement: x.conditionnement }))
-  return c.json({ ok: true, prix: p ? p.prix : null, date_prix: p ? p.date_prix : null, designation: p ? p.designation : null, reference: p ? p.reference : null, fournisseur_id: p ? p.fournisseur_id : null, fournisseur_nom: p ? p.fournisseur_nom : null, lignes })
+  // Le prix moyen se calcule sur la référence (toutes les lignes, filtre fournisseur NON appliqué :
+  // la moyenne est celle de la référence, pas d'un fournisseur).
+  const refMoyenne = ref || (p ? String(p.reference || '') : '')
+  const moyenne = prixMoyenReference(lec.data as any[], refMoyenne, cat, { nbParTole: npt, validiteJours: PRIX_VALIDITE_JOURS })
+  const lignes = chiffres.map((x: any) => {
+    const d = moyenne.detail.find((y: any) => String(y.fournisseur_id ?? '') === String(x.fournisseur_id ?? ''))
+    return {
+      id: x.id ?? null, fournisseur_id: x.fournisseur_id, fournisseur_nom: x.fournisseur_nom,
+      reference: x.reference, designation: x.designation, prix: x.prix, date_prix: x.date_prix,
+      categorie: x.categorie, conditionnement: x.conditionnement ?? null,
+      qte_paquet: qtePaquetDe(x), source_prix: x.source_prix ?? null, unite: x.unite ?? null,
+      prix_converti: d ? d.prix_converti : null, perime: d ? d.perime : null,
+    }
+  })
+  return c.json({ ok: true, prix: p ? p.prix : null, date_prix: p ? p.date_prix : null, designation: p ? p.designation : null, reference: p ? p.reference : null, fournisseur_id: p ? p.fournisseur_id : null, fournisseur_nom: p ? p.fournisseur_nom : null, qte_paquet: p ? qtePaquetDe(p) : null, lignes, prix_moyen: moyenne, categorie: cat, categorie_deduite: !catDemandee && !!catDeduite })
 })
 
 // ─── Historique du prix unitaire d'une référence (pour la courbe d'évolution) ──
@@ -4284,6 +4383,23 @@ app.get('/api/ref-prix/:reference', async (c) => {
 // PRODUITS FOURNISSEURS (catalogue commercial) + DEMANDES DE PRIX (RFQ)
 //   Règle : le prix officiel n'est écrit QUE par la validation d'une RFQ (ou manuellement).
 // ══════════════════════════════════════════════════════════════
+
+// Lot H1 — COMPATIBILITÉ CLOUD : `produits_fournisseurs.qte_paquet` et
+// `demandes_prix_reponses.qte_paquet` n'existent en ligne qu'APRÈS que l'utilisateur a joué
+// `docker/db/cloud/cloud-13-catalogue-qte-paquet.sql` à la main. D'ici là, les helpers « tolérants »
+// de queries.ts enregistrent TOUT LE RESTE et signalent l'omission : la réponse reste `ok: true` avec
+// cet avertissement (jamais une erreur bloquante, jamais une page cassée).
+// ⚠ Ce texte s'affiche à l'ACHETEUR ou au DESSINATEUR, pas à un administrateur : il dit ce qui a été
+//   enregistré, ce qui ne l'a pas été, la conséquence concrète et qui prévenir — jamais un chemin de
+//   fichier auquel l'utilisateur n'a pas accès. Le détail technique reste dans les logs (console).
+const MSG_CLOUD13_PF = 'Référence enregistrée, sauf la quantité par paquet : cette base n’est pas encore à jour. Prévenez l’administrateur (mise à jour « cloud-13 » à appliquer). En attendant, le prix de cet accessoire sera compris comme un prix à la pièce.'
+const LOG_CLOUD13_PF = '[catalogue] colonne produits_fournisseurs.qte_paquet absente — jouer docker/db/cloud/cloud-13-catalogue-qte-paquet.sql'
+/** Bloc `{ avertissement }` à fusionner dans une réponse `ok: true`, + la trace technique en logs. */
+const avertirCloud13 = (ignoree: any): Record<string, string> => {
+  if (!ignoree) return {}
+  console.warn(LOG_CLOUD13_PF)
+  return { avertissement: MSG_CLOUD13_PF }
+}
 
 // — Déclarer une référence chez un fournisseur (réf+désignation requis, prix OPTIONNEL §4.1) —
 app.post('/api/produits-fournisseurs', async (c) => {
@@ -4300,6 +4416,14 @@ app.post('/api/produits-fournisseurs', async (c) => {
   const prixLu = (b.prix != null && b.prix !== '') ? Number(b.prix) : null
   if (prixLu != null && !isFinite(prixLu)) return c.json({ ok: false, error: 'Prix illisible : « ' + String(b.prix) + ' »' }, 400)
   const delaiLu = (b.delai_jours != null && b.delai_jours !== '') ? Number(b.delai_jours) : null
+  // Lot H1 : QTÉ PAR PAQUET (accessoires) — nb de PIÈCES par paquet, déclarée au catalogue, par
+  // couple fournisseur + référence. C'est la SEULE place où elle se saisit désormais ; le prix
+  // catalogue d'un accessoire reste le prix du PAQUET, le prix à la pièce est un calcul.
+  // `nombrePositif` : 0, '' ou du texte ⇒ on n'écrit rien (jamais d'écrasement par du vide).
+  if (b.qte_paquet != null && String(b.qte_paquet).trim() !== '' && nombrePositif(b.qte_paquet) === null) {
+    return c.json({ ok: false, error: 'Quantité par paquet illisible ou nulle : « ' + String(b.qte_paquet) + ' » (nombre de pièces par paquet, supérieur à 0)' }, 400)
+  }
+  const qtePaquetLu = nombrePositif(b.qte_paquet)
   // Couple fournisseur + réf DÉJÀ au catalogue (lot H0, 17/09/2026) : l'upsert complet effaçait
   // prix, date, source et activité dès que le formulaire les laissait vides (« Déclarer » une réf
   // existante, modale « Entrée catalogue » du BE). On ne met plus à jour QUE les champs fournis et
@@ -4319,36 +4443,63 @@ app.post('/api/produits-fournisseurs', async (c) => {
     if (prixLu != null && prixLu > 0) {
       patch.prix = prixLu; patch.devise = 'EUR'; patch.date_prix = TODAY_ISO(); patch.source_prix = b.source_prix || 'manuel'; patch.statut = 'actif'
     }
-    const maj = await updateProduitFournisseur(String(exData.id), patch)
+    if (qtePaquetLu != null) patch.qte_paquet = qtePaquetLu          // lot H1 : écrite telle quelle, jamais effacée par du vide
+    const maj = await updateProduitFournisseurTolerant(String(exData.id), patch)
     if (maj.error) return c.json({ ok: false, error: 'Mise à jour de la référence existante impossible : ' + maj.error.message }, 400)
     const ignores = ['categorie', 'activite'].filter((k) => nonVidePf(b[k]) && !(k in patch) && String(b[k]) !== String(exData[k]))
-    return c.json({ ok: true, produit: maj.data, existant: true, champs_mis_a_jour: Object.keys(patch).filter((k) => k !== 'updated_at'), champs_ignores: ignores })
+    // Lot H1 : la ligne retrouvée peut porter la référence dans une AUTRE casse (ou avec d'autres
+    // espaces). On garde l'orthographe en base — renommer la ligne d'un fournisseur pour une simple
+    // différence de casse n'apporte rien — et on le dit, pour que l'écran n'affiche pas une réf que
+    // l'utilisateur croirait enregistrée telle quelle.
+    const memeOrthographe = String(exData.reference || '') === reference
+    return c.json({ ok: true, produit: maj.data, existant: true, champs_mis_a_jour: Object.keys(patch).filter((k) => k !== 'updated_at' && !(k === 'qte_paquet' && maj.qte_paquet_ignoree)), champs_ignores: ignores, ...(memeOrthographe ? {} : { reference_existante: exData.reference ?? null }), ...avertirCloud13(maj.qte_paquet_ignoree) })
   }
+  // Lot H1 : la ligne existante est cherchée en comparaison NORMALISÉE (« REF » = « ref » = « Réf »).
+  // Sans cela, une réf ressaisie dans une autre casse partait en INSERTION et se faisait refuser par
+  // l'index `ux_produits_fournisseurs_ref_norm` (migration 017) — alors que l'utilisateur voulait
+  // simplement compléter la ligne qu'il a déjà. La comparaison est applicative : PostgREST ne sait
+  // pas comparer sans accents, et l'index peut être absent (base qui portait des doublons).
   if (b.fournisseur_id) {
-    const ex = await getProduitFournisseurCouple(String(b.fournisseur_id), reference)
-    if (ex.error) return c.json({ ok: false, error: 'Lecture du catalogue impossible, rien n\'a été écrit : ' + ex.error }, 500)
-    if (ex.data) return majExistant(ex.data)
+    const lecRef = await getProduitsFournisseursParReference(reference)
+    if (lecRef.error) return c.json({ ok: false, error: 'Lecture du catalogue impossible, rien n\'a été écrit : ' + lecRef.error }, 500)
+    const dejaLa = lecRef.data.find((x: any) => String(x.fournisseur_id ?? '') === String(b.fournisseur_id))
+    if (dejaLa) return majExistant(dejaLa)
   }
   const prix = (prixLu != null && prixLu > 0) ? prixLu : null
   // Relecture H0 : insertion SI ABSENT (plus d'upsert complet). Si le couple est créé entre la lecture
   // ci-dessus et cette écriture (ex. validation d'une demande de prix), la ligne chiffrée n'est plus
   // écrasée sans prix : on la relit et on lui applique le même patch partiel.
-  const { data, error } = await insertProduitFournisseurSiAbsent({
+  const { data, error, qte_paquet_ignoree } = await insertProduitFournisseurSiAbsentTolerant({
     fournisseur_id: b.fournisseur_id || null, fournisseur_nom: fournisseurNom,
     reference, designation, categorie: b.categorie || 'matiere_premiere',
     prix, devise: 'EUR', unite: b.unite || 'pce',
     date_prix: prix != null ? TODAY_ISO() : null, source_prix: b.source_prix || 'manuel',
     delai_jours: (delaiLu != null && isFinite(delaiLu)) ? delaiLu : null,
     statut: prix != null ? 'actif' : 'en_attente_prix', activite: b.activite || 'both',
+    ...(qtePaquetLu != null ? { qte_paquet: qtePaquetLu } : {}),
   })
-  if (error) return c.json({ ok: false, error: 'Déclaration de la référence impossible : ' + error.message }, 400)
+  if (error) {
+    // 23505 = index unique de la base. `ON CONFLICT (fournisseur_id, reference)` ne couvre pas la
+    // variante de casse : c'est `ux_produits_fournisseurs_ref_norm` qui refuse. On relit en
+    // normalisé (la ligne a pu naître entre-temps) et, à défaut, on le dit clairement en 409.
+    if (String((error as any).code || '') === '23505') {
+      if (b.fournisseur_id) {
+        const lec2 = await getProduitsFournisseursParReference(reference)
+        const ex3 = lec2.error ? null : lec2.data.find((x: any) => String(x.fournisseur_id ?? '') === String(b.fournisseur_id))
+        if (ex3) return majExistant(ex3)
+      }
+      return c.json({ ok: false, code: 'doublon_catalogue', error: 'Cette référence existe déjà chez ce fournisseur (à la casse près) : modifiez la ligne existante.' }, 409)
+    }
+    return c.json({ ok: false, error: 'Déclaration de la référence impossible : ' + error.message }, 400)
+  }
   if (!data) {
     if (!b.fournisseur_id) return c.json({ ok: false, error: 'Déclaration de la référence impossible : insertion sans retour.' }, 500)
-    const ex2 = await getProduitFournisseurCouple(String(b.fournisseur_id), reference)
-    if (ex2.error || !ex2.data) return c.json({ ok: false, error: 'La référence vient d\'être créée par ailleurs et n\'a pas pu être relue : ' + (ex2.error || 'introuvable') + '. Réessayez.' }, 409)
-    return majExistant(ex2.data)
+    const lec3 = await getProduitsFournisseursParReference(reference)
+    const ex2 = lec3.error ? null : lec3.data.find((x: any) => String(x.fournisseur_id ?? '') === String(b.fournisseur_id))
+    if (!ex2) return c.json({ ok: false, error: 'La référence vient d\'être créée par ailleurs et n\'a pas pu être relue : ' + (lec3.error || 'introuvable') + '. Réessayez.' }, 409)
+    return majExistant(ex2)
   }
-  return c.json({ ok: true, produit: data, existant: false })
+  return c.json({ ok: true, produit: data, existant: false, ...avertirCloud13(qte_paquet_ignoree) })
 })
 
 // — Modifier une référence catalogue par id (édition en place depuis BE › Références) —
@@ -4374,27 +4525,48 @@ app.put('/api/produits-fournisseurs/:id', async (c) => {
   if (b.unite != null && b.unite !== '') patch.unite = b.unite
   if (b.fournisseur_id != null && b.fournisseur_id !== '') { patch.fournisseur_id = b.fournisseur_id; if (fournisseurNom) patch.fournisseur_nom = fournisseurNom }
   if (b.delai_jours != null && b.delai_jours !== '' && isFinite(Number(b.delai_jours))) patch.delai_jours = Number(b.delai_jours)
+  // Lot H1 : qté par paquet (accessoires). Même règle qu'en déclaration : > 0 exigé, du vide n'écrase rien.
+  if (b.qte_paquet != null && String(b.qte_paquet).trim() !== '' && nombrePositif(b.qte_paquet) === null) {
+    return c.json({ ok: false, error: 'Quantité par paquet illisible ou nulle : « ' + String(b.qte_paquet) + ' » (nombre de pièces par paquet, supérieur à 0)' }, 400)
+  }
+  const qtePaquetPut = nombrePositif(b.qte_paquet)
+  if (qtePaquetPut != null) patch.qte_paquet = qtePaquetPut
+  // État AVANT, lu STRICTEMENT une seule fois : il sert au garde-fou du prix (H0) ET à la détection
+  // de doublon (lot H1 : le fournisseur de la ligne quand le corps ne l'envoie pas).
+  const avantPf = await getProduitFournisseurParId(id)
+  if (avantPf.error) return c.json({ ok: false, error: 'Lecture de la référence impossible, rien n\'a été écrit : ' + avantPf.error }, 500)
+  if (!avantPf.data) return c.json({ ok: false, error: 'Référence catalogue introuvable (supprimée entre-temps ?)' }, 404)
   // Prix optionnel : touché UNIQUEMENT si un prix positif est fourni (sinon inchangé — le prix est piloté par les RFQ).
   const prix = (b.prix != null && b.prix !== '') ? Number(b.prix) : null
   if (prix != null && !isFinite(prix)) return c.json({ ok: false, error: 'Prix illisible : « ' + String(b.prix) + ' »' }, 400)
   if (prix != null && prix > 0) {
     // Relecture H0 : la fiche fournisseur pré-remplit le prix en base et le renvoie à chaque modification
     // (désignation, délai…). Un prix INCHANGÉ ne se « rajeunit » pas : date, source (rfq) et statut restent.
-    const avantPf = await getProduitFournisseurParId(id)
-    if (avantPf.error) return c.json({ ok: false, error: 'Lecture de la référence impossible, rien n\'a été écrit : ' + avantPf.error }, 500)
-    if (!avantPf.data) return c.json({ ok: false, error: 'Référence catalogue introuvable (supprimée entre-temps ?)' }, 404)
     const prixBase = Number(avantPf.data.prix)
     const inchange = avantPf.data.prix != null && avantPf.data.prix !== '' && isFinite(prixBase) && Math.abs(prixBase - prix) < 1e-9
     if (!inchange) { patch.prix = prix; patch.devise = 'EUR'; patch.date_prix = TODAY_ISO(); patch.source_prix = 'manuel'; patch.statut = 'actif' }
   }
-  const { data, error } = await updateProduitFournisseur(id, patch)
+  // Lot H1 : DOUBLON applicatif. Le même fournisseur ne peut pas porter deux fois la même référence,
+  // désormais à la CASSE et aux ESPACES près. L'index `ux_produits_fournisseurs_ref_norm` (migration
+  // 017) le garantit en base, mais il peut être absent (base qui portait des doublons, cloud sans
+  // cloud-13) : la garde est donc d'abord applicative, puis confirmée par le 23505. La même
+  // référence chez PLUSIEURS fournisseurs reste normale — c'est la base même du prix moyen.
+  // Ligne SANS fournisseur : aucun contrôle (comme l'index unique, pour qui deux NULL sont distincts).
+  const fournisseurCible = String((patch.fournisseur_id != null && patch.fournisseur_id !== '') ? patch.fournisseur_id : (avantPf.data.fournisseur_id ?? ''))
+  if (fournisseurCible) {
+    const lecDoublon = await getProduitsFournisseursParReference(reference)
+    if (lecDoublon.error) return c.json({ ok: false, error: 'Vérification des doublons impossible, rien n\'a été écrit : ' + lecDoublon.error }, 500)
+    const concurrente = lecDoublon.data.find((x: any) => String(x.id) !== String(id) && String(x.fournisseur_id ?? '') === fournisseurCible)
+    if (concurrente) return c.json({ ok: false, code: 'doublon_catalogue', error: 'Cette référence existe déjà chez ce fournisseur (à la casse près) : modifiez la ligne existante.', produit_existant: concurrente.id ?? null }, 409)
+  }
+  const { data, error, qte_paquet_ignoree } = await updateProduitFournisseurTolerant(id, patch)
   if (error || !data) {
     const code = (error as any)?.code
-    if (code === '23505') return c.json({ ok: false, error: 'Cette référence existe déjà chez ce fournisseur : modifiez la ligne existante.' }, 409)
+    if (code === '23505') return c.json({ ok: false, code: 'doublon_catalogue', error: 'Cette référence existe déjà chez ce fournisseur (à la casse près) : modifiez la ligne existante.' }, 409)
     if (!error || code === 'PGRST116') return c.json({ ok: false, error: 'Référence catalogue introuvable (supprimée entre-temps ?)' }, 404)
     return c.json({ ok: false, error: 'Modification de la référence impossible : ' + error.message }, 400)
   }
-  return c.json({ ok: true, produit: data })
+  return c.json({ ok: true, produit: data, ...avertirCloud13(qte_paquet_ignoree) })
 })
 
 app.delete('/api/produits-fournisseurs/:id', async (c) => {
@@ -4656,10 +4828,20 @@ app.post('/api/demandes-prix/:id/envoyer', async (c) => {
 })
 
 // — RFQ : enregistrer les réponses (update si id connu, sinon création) —
+// Lot H1 (17/09/2026) : chaque réponse peut porter sa QTÉ PAR PAQUET (`qte_paquet`) — le
+// conditionnement auquel se rapporte CE prix. Sans elle, le prix d'un accessoire sera compris comme
+// un prix à la pièce et signalé en orange (« conditionnement non déclaré chez X »).
+// Écriture par les helpers TOLÉRANTS : sur une base sans la colonne (cloud avant cloud-13), le prix
+// est quand même enregistré et la réponse le dit — jamais de saisie perdue en silence.
+// ⚠ supabase-js ne lève JAMAIS : les anciens `.catch(() => {})` étaient du code mort et une réponse
+//   non écrite passait pour enregistrée. On lit chaque { error } et on le remonte.
 app.post('/api/demandes-prix/:id/reponses', async (c) => {
   const id = c.req.param('id')
   const b = await c.req.json().catch(() => ({} as any))
   const reponses = Array.isArray(b.reponses) ? b.reponses : []
+  const echecs: string[] = []
+  let qtePaquetIgnoree = false
+  let n = 0
   for (const r of reponses) {
     const patch: any = {
       ligne_id: r.ligne_id || null, fournisseur_id: r.fournisseur_id || null, fournisseur_nom: r.fournisseur_nom || null,
@@ -4668,11 +4850,26 @@ app.post('/api/demandes-prix/:id/reponses', async (c) => {
       validite_date: r.validite_date || null, commentaire: r.commentaire || null,
       date_reponse: new Date().toISOString(), retenu: !!r.retenu,
     }
-    if (r.id) await updateDemandePrixReponse(r.id, patch).catch(() => {})
-    else await createDemandePrixReponse({ demande_prix_id: id, ...patch }).catch(() => {})
+    const qp = nombrePositif(r.qte_paquet)
+    if (qp != null) patch.qte_paquet = qp
+    const quoi = String(r.fournisseur_nom || r.fournisseur_id || 'fournisseur') + (r.reference ? ' / ' + String(r.reference) : '')
+    const ecrit = r.id
+      ? await updateDemandePrixReponseTolerant(String(r.id), patch)
+      : await createDemandePrixReponseTolerant({ demande_prix_id: id, ...patch })
+    if (ecrit.error) { echecs.push(quoi + ' : ' + (ecrit.error.message || String(ecrit.error))); continue }
+    if (ecrit.qte_paquet_ignoree) qtePaquetIgnoree = true
+    n++
   }
-  await updateDemandePrix(id, { statut: 'reponse_recue' }).catch(() => {})
-  return c.json({ ok: true })
+  // Statut : seulement si au moins une réponse a été enregistrée (sinon la demande reste « à traiter »).
+  if (n > 0) {
+    const st = await updateDemandePrix(id, { statut: 'reponse_recue' })
+    if ((st as any)?.error) echecs.push('statut de la demande non mis à jour — ' + ((st as any).error.message || String((st as any).error)))
+  }
+  if (echecs.length) {
+    console.error('[RFQ] réponses ' + id + ' : ' + echecs.length + ' échec(s) — ' + echecs.join(' | '))
+    return c.json({ ok: false, error: echecs.length + ' réponse(s) non enregistrée(s) : ' + echecs.join(' ; '), echecs, enregistrees: n }, 500)
+  }
+  return c.json({ ok: true, enregistrees: n, ...avertirCloud13(qtePaquetIgnoree) })
 })
 
 // — RFQ : VALIDER → écrit le prix officiel (produits_fournisseurs + ref_prix_historique source=rfq) puis clôture —
@@ -4690,6 +4887,14 @@ app.post('/api/demandes-prix/:id/valider', async (c) => {
   // d'activité remise à 'both' ni de désignation remplacée par la référence.
   const echecs: string[] = []
   const nonVide = (v: any) => v != null && String(v).trim() !== ''
+  // Lot H1 (17/09/2026) : la validation écrit le prix de CHAQUE réponse chiffrée, plus seulement
+  // celle du fournisseur « retenu ». C'est CETTE route qui alimente le prix moyen multi-fournisseurs :
+  // sans elle, `nb_fournisseurs` vaudrait 1 partout. `retenu` ne marque désormais qu'une PRÉFÉRENCE
+  // d'achat (une seule par ligne, bouton radio conservé à l'écran).
+  // Compatibilité : un écran qui n'envoie aucune préférence (ancien client, qui n'envoyait QUE le
+  // fournisseur retenu) voit toutes ses réponses marquées « retenues », comme avant.
+  const aucunePreference = !retenus.some((r: any) => r && r.retenu === true)
+  let qtePaquetIgnoree = false
   for (const r of retenus) {
     const reference = String(r.reference || '').trim()
     const pu = Number(r.prix_unitaire)
@@ -4699,41 +4904,78 @@ app.post('/api/demandes-prix/:id/valider', async (c) => {
     // POST / PUT /api/produits-fournisseurs). Un 0 daté du jour passait pour « frais » dans l'éditeur de
     // nomenclature et remplaçait le prix enregistré des lignes, puis « X → 0 » au journal EN 9100.
     if (pu <= 0) { echecs.push(quoi + ' : prix nul ou négatif (' + String(r.prix_unitaire) + '), non écrit'); continue }
+    // Qté par paquet chiffrée par CE fournisseur (accessoires) : écrite au catalogue avec son prix —
+    // sans elle, la moyenne compterait ce prix comme un prix à la pièce.
+    const qp = nombrePositif(r.qte_paquet)
+    // Ligne catalogue du fournisseur de la réponse, retrouvée en comparaison NORMALISÉE (casse,
+    // accents, espaces) : une réf ressaisie autrement dans la demande de prix ne doit pas créer une
+    // seconde ligne chez le même fournisseur (refusée par `ux_produits_fournisseurs_ref_norm`).
     let ex: { data: any | null; error: string | null } = { data: null, error: null }
-    if (r.fournisseur_id) ex = await getProduitFournisseurCouple(String(r.fournisseur_id), reference)
+    if (r.fournisseur_id) {
+      const lecRef = await getProduitsFournisseursParReference(reference)
+      if (lecRef.error) ex = { data: null, error: lecRef.error }
+      else ex = { data: lecRef.data.find((x: any) => String(x.fournisseur_id ?? '') === String(r.fournisseur_id)) || null, error: null }
+    }
     if (ex.error) { echecs.push(quoi + ' : lecture du catalogue impossible — ' + ex.error); continue }
-    let ecrit: { error: any }
+    let ecrit: { error: any; qte_paquet_ignoree?: boolean }
     if (ex.data) {
       const patch: Record<string, any> = { prix: pu, devise: 'EUR', date_prix: TODAY_ISO(), source_prix: 'rfq', statut: 'actif', updated_at: new Date().toISOString() }
       if (nonVide(r.fournisseur_nom) && !nonVide(ex.data.fournisseur_nom)) patch.fournisseur_nom = r.fournisseur_nom
       if (nonVide(r.designation) && !nonVide(ex.data.designation)) patch.designation = String(r.designation).trim()
       if (nonVide(r.categorie) && !nonVide(ex.data.categorie)) patch.categorie = r.categorie
       if (nonVide(r.activite) && !nonVide(ex.data.activite)) patch.activite = r.activite
-      ecrit = await updateProduitFournisseur(String(ex.data.id), patch)
+      if (qp != null) patch.qte_paquet = qp
+      ecrit = await updateProduitFournisseurTolerant(String(ex.data.id), patch)
     } else {
-      ecrit = await upsertProduitFournisseur({
+      // Ligne absente : création SI ABSENTE (jamais d'upsert complet, qui écraserait une ligne créée
+      // entre-temps — lot H0). `data` nul = la ligne existait : elle est alors relue et patchée.
+      const cree = await insertProduitFournisseurSiAbsentTolerant({
         fournisseur_id: r.fournisseur_id || null, fournisseur_nom: r.fournisseur_nom || null,
         reference, designation: nonVide(r.designation) ? String(r.designation).trim() : reference, categorie: r.categorie || 'matiere_premiere',
         prix: pu, devise: 'EUR', date_prix: TODAY_ISO(), source_prix: 'rfq', statut: 'actif', activite: r.activite || 'both',
+        ...(qp != null ? { qte_paquet: qp } : {}),
       })
+      ecrit = cree
+      if (!cree.error && !cree.data && r.fournisseur_id) {
+        const relu = await getProduitsFournisseursParReference(reference)
+        const dejaLa = relu.error ? null : relu.data.find((x: any) => String(x.fournisseur_id ?? '') === String(r.fournisseur_id))
+        if (!dejaLa) { echecs.push(quoi + ' : ligne catalogue créée par ailleurs et non relue — ' + (relu.error || 'introuvable')); continue }
+        const patch2: Record<string, any> = { prix: pu, devise: 'EUR', date_prix: TODAY_ISO(), source_prix: 'rfq', statut: 'actif', updated_at: new Date().toISOString() }
+        if (qp != null) patch2.qte_paquet = qp
+        ex = { data: dejaLa, error: null }
+        ecrit = await updateProduitFournisseurTolerant(String(dejaLa.id), patch2)
+      }
     }
     if (ecrit.error) { echecs.push(quoi + ' : prix catalogue non écrit — ' + (ecrit.error.message || String(ecrit.error))); continue }
+    if (ecrit.qte_paquet_ignoree) qtePaquetIgnoree = true
     // Relecture H0 : un échec laisse la demande OUVERTE et « Valider » renvoie TOUS les retenus. Le point
     // d'historique n'est donc écrit qu'une fois par (réf, fournisseur, demande, prix) — une revalidation ne
     // duplique plus la courbe « Évolution » (lecture stricte : dans le doute, on n'écrit pas).
-    const dejaHist = await getRefPrixHistoriqueRfq(reference, r.fournisseur_id ? String(r.fournisseur_id) : null, numero)
+    // Lot H1 : l'historique porte l'orthographe de la RÉFÉRENCE DU CATALOGUE quand la ligne existe.
+    // La lecture d'idempotence compare la référence à l'identique (PostgREST) : une réf ressaisie
+    // dans une autre casse aurait sinon rouvert un second point à chaque revalidation, et la courbe
+    // « Évolution » d'une réf se serait scindée en deux séries.
+    const refHist = (ex.data && nonVide(ex.data.reference)) ? String(ex.data.reference) : reference
+    const dejaHist = await getRefPrixHistoriqueRfq(refHist, r.fournisseur_id ? String(r.fournisseur_id) : null, numero)
     if (dejaHist.error) echecs.push(quoi + ' : prix écrit au catalogue mais historique non vérifiable (rien ajouté) — ' + dejaHist.error)
     else if (!dejaHist.data.some((h: any) => Math.abs(Number(h.prix_unitaire) - pu) < 1e-9)) {
       const hist = await createRefPrixHistorique({
-        reference, designation: nonVide(r.designation) ? String(r.designation).trim() : (ex.data?.designation || reference), categorie_ref: r.categorie || ex.data?.categorie || 'matiere_premiere',
+        reference: refHist, designation: nonVide(r.designation) ? String(r.designation).trim() : (ex.data?.designation || reference), categorie_ref: r.categorie || ex.data?.categorie || 'matiere_premiere',
         fournisseur_id: r.fournisseur_id || null, fournisseur_nom: r.fournisseur_nom || null,
         prix_unitaire: pu, quantite: null, date_prix: TODAY_ISO(), bc_num: numero, source: 'rfq', activite: r.activite || ex.data?.activite || 'both',
       })
       if (hist.error) echecs.push(quoi + ' : prix écrit au catalogue mais historique non écrit — ' + (hist.error.message || String(hist.error)))
     }
-    if (r.reponse_id) {
-      const rep = await updateDemandePrixReponse(r.reponse_id, { retenu: true })
-      if ((rep as any)?.error) echecs.push(quoi + ' : réponse non marquée « retenue » — ' + ((rep as any).error.message || String((rep as any).error)))
+    // « Retenu » = préférence d'achat de la ligne. On ne marque QUE la réponse préférée (et, si
+    // l'écran n'en désigne aucune, toutes celles qu'il envoie : comportement de l'ancien client).
+    // La qté par paquet chiffrée est aussi conservée sur la réponse quand l'écran la fournit.
+    if (r.reponse_id && (r.retenu === true || aucunePreference || qp != null)) {
+      const patchRep: Record<string, any> = {}
+      if (r.retenu === true || aucunePreference) patchRep.retenu = true
+      if (qp != null) patchRep.qte_paquet = qp
+      const rep = await updateDemandePrixReponseTolerant(String(r.reponse_id), patchRep)
+      if (rep.error) echecs.push(quoi + ' : réponse non marquée « retenue » — ' + (rep.error.message || String(rep.error)))
+      else if (rep.qte_paquet_ignoree) qtePaquetIgnoree = true
     }
     n++
   }
@@ -4744,7 +4986,7 @@ app.post('/api/demandes-prix/:id/valider', async (c) => {
   }
   const clo = await updateDemandePrix(id, { statut: 'cloturee', date_cloture: new Date().toISOString() })
   if ((clo as any)?.error) return c.json({ ok: false, error: 'Prix écrits (' + n + ') mais clôture de la demande impossible : ' + ((clo as any).error.message || String((clo as any).error)), prix_maj: n }, 500)
-  return c.json({ ok: true, prix_maj: n })
+  return c.json({ ok: true, prix_maj: n, ...avertirCloud13(qtePaquetIgnoree) })
 })
 
 // — RFQ : supprimer —
@@ -4810,10 +5052,21 @@ app.get('/api/nomenclature/:id/journal', async (c) => {
   return c.json({ ok: true, disponible: r.disponible, entrees: r.rows, tronque: r.tronque })
 })
 
+// Lecture des fournitures d'une nomenclature (rechargement du formulaire BE).
+// ⚠ Lot H1 (17/09/2026) : lecture STRICTE. Une panne rendait `ok: true` avec une liste VIDE — le
+//   formulaire vidait alors ses deux compartiments et l'enregistrement suivant effaçait vraiment les
+//   fournitures de la fiche (même famille que la perte des composants d'une mère, lot H0). Un
+//   `ok: false` fait que le client garde ce qu'il affiche.
+// Les lignes sont rendues TELLES QU'ELLES SONT EN BASE : une ancienne ligne porte encore
+// `fournisseur` et `qte_paquet` (avec un `prix_unitaire` « prix du paquet »), une ligne du nouveau
+// modèle non. C'est l'éditeur qui les réaffiche avec le prix moyen du catalogue ; la bascule en base
+// n'a lieu qu'au prochain enregistrement volontaire (aucune reprise en masse).
 app.get('/api/nomenclature/:id/fournitures', async (c) => {
   const id = c.req.param('id')
-  const rows = await getFournitures(id).catch(() => [])
-  return c.json({ ok: true, fournitures: rows })
+  const lec = await getFournituresStrictes(id)
+  c.header('Cache-Control', 'no-store')
+  if (lec.error) return c.json({ ok: false, error: 'Lecture des fournitures impossible (rien n\'a été modifié) : ' + lec.error }, 503)
+  return c.json({ ok: true, fournitures: lec.data || [] })
 })
 
 // ─── Analyse DT auto-calculée depuis les nomenclatures validées des pièces ───
@@ -4822,8 +5075,13 @@ app.get('/api/nomenclature/:id/fournitures', async (c) => {
 // Temps d'une étape pour créer un BDT : etapeTempsMin (src/shared.ts), aligné sur etapeDecomp (14/09/2026).
 app.get('/api/be/analyse-dt/:id', async (c) => {
   const id = c.req.param('id')
-  const [dt, noms, produitsAll, stockAll, machinesAll, postesAll, tauxAt] = await Promise.all([getDemandeTravaux(id).catch(() => null), getNomenclatures().catch(() => [] as any[]), getProduitsFournisseursAll().catch(() => [] as any[]), getStockReel().catch(() => [] as any[]), getMachines().catch(() => [] as any[]), getPostes().catch(() => [] as any[]), getTauxAtelier()])
+  const [dt, noms, catalogueAll, stockAll, machinesAll, postesAll, tauxAt] = await Promise.all([getDemandeTravaux(id).catch(() => null), getNomenclatures().catch(() => [] as any[]), getProduitsFournisseursStrict(), getStockReel().catch(() => [] as any[]), getMachines().catch(() => [] as any[]), getPostes().catch(() => [] as any[]), getTauxAtelier()])
   if (!dt) return c.json({ ok: false, error: 'DT introuvable' }, 404)
+  // Lot H1 : le coût des fournitures est recalculé EN DIRECT sur le catalogue (prix moyen de tous
+  // les fournisseurs portant la référence). Un catalogue illisible ferait tomber tous les prix : on
+  // REFUSE de chiffrer plutôt que d'annoncer un coût faussement bas (même règle que les taux).
+  if (catalogueAll.error) return c.json({ ok: false, error: 'Catalogue fournisseurs illisible, coût des fournitures non calculé — ' + catalogueAll.error }, 503)
+  const produitsAll = catalogueAll.data
   // Coût horaire porté par le PROCESS (14/09/2026) : taux machine = process_atelier.taux_horaire_machine (lu en direct),
   //   taux homme = coût chargé RH MOYEN des opérateurs du site. Lecture en échec → on REFUSE de chiffrer
   //   (un coût à 0 partirait tel quel dans l'offre) : supabase-js ne lève jamais, l'échec est dans tauxAt.error.
@@ -4852,10 +5110,11 @@ app.get('/api/be/analyse-dt/:id', async (c) => {
     const pid = pid0 || (proc && proc.poste_id ? String(proc.poste_id) : '')
     return pid ? { id: pid, nom: _posteNom[pid] || pid } : { id: null, nom: e && (e.machine_nom || e.fournisseur_st_nom) ? String(e.machine_nom || e.fournisseur_st_nom) : 'Sans poste' }
   }
-  // Carte prix par référence (pour repérer matière/accessoires à chiffrer)
+  // Carte prix par référence (pour repérer matière/accessoires à chiffrer) — clé NORMALISÉE
+  // (lot H1 : « 126 001 », « Réf A » et « ref a » sont la même référence qu'au catalogue).
   const _prixMap: Record<string, { prix: any; date: any }> = {}
-  ;(produitsAll as any[]).forEach((p: any) => { const k = String(p.reference || ''); if (k && (!_prixMap[k] || String(p.date_prix || '') > String(_prixMap[k].date || ''))) _prixMap[k] = { prix: p.prix, date: p.date_prix } })
-  const _fresh = (ref: string) => { const e = _prixMap[String(ref || '')]; if (!e || e.prix == null || !e.date) return false; return (Date.now() - Date.parse(e.date)) < PRIX_VALIDITE_JOURS * 86400000 }
+  ;(produitsAll as any[]).forEach((p: any) => { const k = normaliserReference(p.reference); if (k && (!_prixMap[k] || String(p.date_prix || '') > String(_prixMap[k].date || ''))) _prixMap[k] = { prix: p.prix, date: p.date_prix } })
+  const _fresh = (ref: string) => { const e = _prixMap[normaliserReference(ref)]; if (!e || e.prix == null || !e.date) return false; return (Date.now() - Date.parse(e.date)) < PRIX_VALIDITE_JOURS * 86400000 }
   // Index stock par référence (insensible casse/espaces) → besoin vs restant vs seuil
   const _stockByRef: Record<string, any> = {}
   ;(stockAll as any[]).forEach((s: any) => { const k = String(s.reference || '').toLowerCase().trim(); if (k && !_stockByRef[k]) _stockByRef[k] = s })
@@ -4893,7 +5152,18 @@ app.get('/api/be/analyse-dt/:id', async (c) => {
     // Site du taux homme : celui de la nomenclature, sinon l'activité de la DT.
     const site: string | null = nom.entite ? String(nom.entite) : siteDt
     const costOpts = { taux: tx, site: siteDt }   // computeNomCostForQty prend nom.entite en priorité
-    const fournitures = await getFournitures(nom.id).catch(() => [] as any[])
+    const fournituresBase = await getFournitures(nom.id).catch(() => [] as any[])
+    // ── PRIX MOYEN EN DIRECT (lot H1, spec §9) ───────────────────────────────────────────────
+    // « computeNomCostForQty et l'analyse DT utilisent le prix moyen recalculé en direct depuis le
+    //   catalogue quand il existe, sinon la copie enregistrée. » `recalculerFournitures` (module
+    //   partagé) rend des COPIES : prix moyen de la référence (tôle pour la matière, pièce pour
+    //   l'accessoire), `prix_total_par_piece` cohérent, et `qte_paquet` remis à null pour que le
+    //   coût des accessoires reste LINÉAIRE (« linéaire au BE, paquets au BC »). Une référence
+    //   absente du catalogue, ou sans aucun prix, garde sa copie enregistrée telle quelle.
+    // ⚠ Ces copies ne servent QU'AU CALCUL : rien n'est réécrit en base ici (une analyse déjà
+    //   acceptée reste figée : son prix vit dans l'offre, jamais recalculé par cette route).
+    const _rec = recalculerFournitures(fournituresBase as any[], produitsAll as any[], { validiteJours: PRIX_VALIDITE_JOURS })
+    const fournitures = _rec.fournitures
     const cost = computeNomCostForQty(nom, fournitures, qte, costOpts)
     // Process ordonnés → durée = temps fixe (réglage) + temps variable (homme + machine) × quantité client.
     // Temps et coûts d'une étape : UNE source (etapeDecomp), STRICTEMENT le même calcul que le CRU (computeNomCostForQty)
@@ -4937,23 +5207,44 @@ app.get('/api/be/analyse-dt/:id', async (c) => {
         const qpp = Number(f.quantite_par_piece) || 0
         const isMat = f.categorie === 'matiere'
         const npt = Number(f.nb_par_tole) || 0       // matière : pièces par tôle
-        const qtePaq = Number(f.qte_paquet) || 0     // accessoire : accessoires par paquet
-        // Besoin en UNITÉS D'ACHAT ENTIÈRES (arrondi SUPÉRIEUR) : tôles (matière) ou paquets (accessoire).
+        const qtePaq = Number(f.qte_paquet) || 0     // accessoire : accessoires par paquet (ancien modèle seulement)
+        // Besoin : TÔLES ENTIÈRES pour la matière (unité d'achat connue au BE : la géométrie fixe le
+        // nombre de pièces par tôle), PIÈCES pour l'accessoire — toujours, y compris sur une ligne
+        // restée à l'ancien modèle.
+        // ⚠ RELECTURE 17/09/2026 : le besoin d'un accessoire était encore exprimé en PAQUETS quand la
+        //   ligne portait un `qte_paquet` (fiche non réenregistrée dont la référence n'est pas — ou
+        //   plus — chiffrée au catalogue : `recalculerFournitures` ne neutralise `qte_paquet` que
+        //   lorsqu'un prix existe). On annonçait alors « 1 paquet » et on le comparait à un stock
+        //   compté en PIÈCES → « Couvert » à tort, puis une DA de 100 pièces à l'acceptation. La
+        //   cascade de DA (`cascadeDAManques`) compte en pièces : les deux doivent dire la même chose.
+        //   Le passage en paquets se fait au BC, par les Achats, qui connaissent le fournisseur retenu.
         const besoin = isMat
           ? (npt > 0 ? Math.ceil(qte / npt) : Math.ceil(qpp * qte))
-          : (qtePaq > 0 ? Math.ceil((qpp * qte) / qtePaq) : Math.ceil(qpp * qte))
-        const besoin_unite = isMat ? 'tôle' : 'paquet'
-        // Coût série de cette réf (MÊME logique que computeNomCostForQty) : unités d'achat entières × prix, sinon repli linéaire.
-        const prixUnite = Number(f.prix_unitaire) || 0             // prix d'une tôle (matière) / d'un paquet (accessoire)
-        const prixLin = Number(f.prix_total_par_piece) || 0        // repli : prix / pièce
+          : Math.ceil(qpp * qte)
+        const besoin_unite = isMat ? 'tôle' : 'pièce'
+        // Coût série de cette réf : tôles entières pour la matière (MÊME logique que
+        // computeNomCostForQty), LINÉAIRE en pièces pour l'accessoire (spec §7) — sans quoi le besoin
+        // et le coût n'auraient plus la même unité. Prix d'UNE pièce d'accessoire : `prix_unitaire`
+        // au nouveau modèle, `prix du paquet ÷ qte_paquet` sur une ligne restée à l'ancien.
+        const prixUnite = Number(f.prix_unitaire) || 0             // prix d'une tôle (matière) / d'une pièce ou d'un paquet (accessoire)
+        const prixLin = Number(f.prix_total_par_piece) || 0        // prix rapporté à UNE pièce fabriquée
+        const prixPieceAcc = isMat ? 0 : (prixUnite > 0 ? +(prixUnite / (qtePaq > 0 ? qtePaq : 1)).toFixed(6) : 0)
         const cout_serie = isMat
           ? ((npt > 0 && prixUnite > 0) ? Math.ceil(qte / npt) * prixUnite : prixLin * qte)
-          : ((qpp > 0 && qtePaq > 0 && prixUnite > 0) ? Math.ceil((qpp * qte) / qtePaq) * prixUnite : prixLin * qte)
-        const cout_unite = (prixUnite > 0) ? prixUnite : (prixLin > 0 ? +(prixLin * (isMat ? (npt > 0 ? npt : 1) : (qtePaq > 0 ? qtePaq : 1))).toFixed(4) : 0)
+          : ((prixPieceAcc > 0 && qpp > 0) ? prixPieceAcc * qpp * qte : prixLin * qte)
+        const cout_unite = isMat
+          ? ((prixUnite > 0) ? prixUnite : (prixLin > 0 ? +(prixLin * (npt > 0 ? npt : 1)).toFixed(4) : 0))
+          : ((prixPieceAcc > 0) ? +prixPieceAcc.toFixed(4) : (prixLin > 0 && qpp > 0 ? +(prixLin / qpp).toFixed(4) : 0))
         const reste = st ? (Number(st.stock_actuel) || 0) : null
         const seuil = st ? (Number(st.point_commande) || Number(st.stock_mini) || 0) : null
         const unite = st ? (st.unite || null) : null
-        const prix_frais = f.ref_stock ? _fresh(f.ref_stock) : false
+        // Lot H1 : « frais » se juge sur le PRIX MOYEN retenu (toutes les lignes catalogue de la
+        // référence) et non plus sur la ligne la plus récemment chiffrée : un prix moyen dont au
+        // moins une composante a plus de PRIX_VALIDITE_JOURS est « périmé » (demande de prix
+        // conseillée), aucun prix du tout est « incomplet ». Référence absente du catalogue : repli
+        // sur l'ancien test de date (_fresh).
+        const pm = (f as any).prix_moyen || null
+        const prix_frais = pm ? (!pm.incomplet && !pm.perime) : (f.ref_stock ? _fresh(f.ref_stock) : false)
         let statut: string
         if (!st) statut = 'hors_stock'                                              // référence absente de la table stock
         else if ((reste as number) <= 0) statut = 'rupture'
@@ -4962,10 +5253,15 @@ app.get('/api/be/analyse-dt/:id', async (c) => {
         else statut = 'ok'
         return { reference: f.ref_stock || '', designation: f.designation || '', categorie: f.categorie,
           quantite_par_piece: qpp, besoin, besoin_unite, reste, seuil, unite, fournisseur: f.fournisseur || '', prix_frais, statut,
-          cout_unite: +cout_unite.toFixed(4), cout_serie: +cout_serie.toFixed(2) }
+          cout_unite: +cout_unite.toFixed(4), cout_serie: +cout_serie.toFixed(2),
+          // Prix moyen retenu (lot H1) : de quoi afficher « n fournisseur(s) · min–max », l'orange
+          // « demande de prix conseillée », le rouge « coût incomplet » et « conditionnement non
+          // déclaré chez X » — sans recalculer quoi que ce soit côté écran.
+          prix_moyen: pm ? { prix_unitaire: pm.prix_unitaire, prix_base: pm.prix_base, nb_fournisseurs: pm.nb_fournisseurs, min: pm.min, max: pm.max, perime: pm.perime, incomplet: pm.incomplet, sans_conditionnement: pm.sans_conditionnement, date_plus_ancienne: pm.date_plus_ancienne, date_plus_recente: pm.date_plus_recente } : null }
       })
     const prix_a_chiffrer = fournitures_stock.filter((f: any) => f.reference && !f.prix_frais)
-      .map((f: any) => ({ reference: f.reference, designation: f.designation, categorie: f.categorie === 'matiere' ? 'matiere_premiere' : 'accessoire', fournisseur: f.fournisseur, quantite: qte }))
+      .map((f: any) => ({ reference: f.reference, designation: f.designation, categorie: f.categorie === 'matiere' ? 'matiere_premiere' : 'accessoire', fournisseur: f.fournisseur, quantite: qte,
+        nb_fournisseurs: f.prix_moyen ? f.prix_moyen.nb_fournisseurs : 0, incomplet: f.prix_moyen ? f.prix_moyen.incomplet : true, perime: f.prix_moyen ? f.prix_moyen.perime : false }))
     // Plan client ouvrable : dernier document GED « plan_client » rattaché à la nomenclature (si déjà chargé)
     const planDocs = await getDocumentsForNom(nom.id).catch(() => [] as any[])
     const planDoc = (planDocs as any[]).filter((d: any) => d.categorie === 'plan_client' && d.actif !== false).slice(-1)[0] || null
@@ -4994,7 +5290,14 @@ app.get('/api/be/analyse-dt/:id', async (c) => {
       site, taux_homme: tx.tauxHomme(site), homme_manquant: tx.hommeManquant,
       manquants: Array.from(new Set<string>([...(cost.manquants as string[]), ...libres.manquants])),
       plan_doc_id: planDoc ? planDoc.id : null, plan_fichier: planDoc ? (planDoc.fichier_nom || null) : null,
-      nomenclature: { id: nom.id, num_nom: nom.num_nom, code: nom.code_ref_produit, indice: nom.indice || 'A', statut: nomStatut }, cost, etapes, fournitures_stock, prix_a_chiffrer })
+      nomenclature: { id: nom.id, num_nom: nom.num_nom, code: nom.code_ref_produit, indice: nom.indice || 'A', statut: nomStatut }, cost, etapes, fournitures_stock, prix_a_chiffrer,
+      // Lot H1 : état du chiffrage des fournitures (prix moyen du catalogue) pour cette pièce.
+      //   `fournitures_incompletes` : aucun prix au catalogue ⇒ « coût incomplet » (rouge), la copie
+      //     enregistrée dans la nomenclature est conservée telle quelle ;
+      //   `fournitures_perimees` : au moins une composante de la moyenne a plus de 6 mois (orange) ;
+      //   `fournitures_sans_conditionnement` : fournisseurs chiffrés sans qté par paquet déclarée
+      //     (leur prix est compté comme un prix à la pièce).
+      fournitures_incompletes: _rec.incompletes, fournitures_perimees: _rec.perimees, fournitures_sans_conditionnement: _rec.sans_conditionnement })
   }
   const totalSerie = out.reduce((s, x) => s + (x.cost ? x.cost.totalSerie : 0), 0)
   const missing = out.filter((x: any) => !x.nomenclature && !x.piece_existante_a_jour).length
@@ -5387,8 +5690,15 @@ app.post('/api/plans/entity', async (c) => {
 //   et la désignation — à CHAQUE enregistrement de nomenclature. Le prix officiel s'écrit par la
 //   validation d'une demande de prix ou la saisie catalogue, jamais depuis la nomenclature.
 // Un échec n'empêche pas l'enregistrement de la nomenclature : il est journalisé côté serveur.
+// ⚠ Lot H1 (17/09/2026) : une ligne de fourniture ne porte PLUS de fournisseur (le prix est la
+//   moyenne de tous ceux qui portent la référence). Cette synchro ne fait donc RIEN pour une ligne
+//   du nouveau modèle — on ne devine pas un fournisseur — et garde son comportement H0 (création
+//   seule, sans prix) pour les anciennes lignes, non encore réenregistrées, qui en portent un.
+//   Sans aucune ligne à fournisseur, on ne lit même pas le référentiel fournisseurs.
 async function syncFournituresToCatalogue(fournitures: any[], entite: string) {
   if (!Array.isArray(fournitures) || !fournitures.length) return
+  const aFournisseur = fournitures.some((f: any) => f && String(f.ref_stock || '').trim() && String(f.fournisseur || '').trim())
+  if (!aFournisseur) return   // nouveau modèle : rien à synchroniser (aucune ligne ne nomme de fournisseur)
   const fournisseurs = await getFournisseurs()
   if (!fournisseurs.length) return   // lecture vide ou en panne : ne rien écrire à l'aveugle
   const byNom = new Map(fournisseurs.map((f: any) => [String(f.nom || '').trim().toLowerCase(), f]))
@@ -5510,10 +5820,52 @@ async function upsertRefClientTrace(c: any, payload: any, route: string, nomIdCo
   return { data, error: null, jr }
 }
 
+// ── DOUBLONS de fourniture : refus 409 AVANT toute écriture (lot H1, spec §4) ───────────────
+// « on ne doit pas pouvoir mettre deux fois la même référence de produit » : une référence
+// (NORMALISÉE : casse, accents, espaces multiples) ne peut figurer qu'UNE fois dans une
+// nomenclature, matière et accessoires CONFONDUS ; une ligne sans référence est comparée sur sa
+// désignation. Même module, même message et mêmes règles que le contrôle du navigateur
+// (`premierDoublonFourniture` / `messageDoublonFourniture`, src/prix_moyen.ts).
+// ⚠ Le contrôle a lieu AVANT `upsertFournitures`, qui EFFACE puis réinsère les fournitures
+//   (queries.ts) : un refus tardif laisserait la fiche SANS AUCUNE fourniture. Aucun index unique
+//   n'est posé en base pour la même raison — la garde est applicative, en amont de l'effacement.
+function refusDoublonFournitures(c: any, fournitures: any): Response | null {
+  if (!Array.isArray(fournitures) || fournitures.length < 2) return null
+  const d = premierDoublonFourniture(fournitures)
+  if (!d) return null
+  return c.json({
+    ok: false, code: 'doublon_reference', error: messageDoublonFourniture(d),
+    reference: d.reference, reference_normalisee: d.cle, cle_sur: d.cle_sur,
+    designation: d.designation, indices: d.indices, categories: d.categories,
+  }, 409)
+}
+// Champs CALCULÉS qu'un écran peut faire voyager avec une ligne de fourniture (détail du prix moyen,
+// état d'affichage) : ils ne sont pas des colonnes de `fournitures_nomenclature`. Sans ce nettoyage,
+// PostgREST refuse l'insertion entière (PGRST204) et la fiche perd ses fournitures. On RETIRE
+// seulement ces clés connues — jamais de liste blanche, qui perdrait une colonne présente en cloud
+// et absente du schéma local.
+// La liste est EXACTEMENT la forme de sortie de `prixMoyenReference` (+ le champ `prix_moyen`
+// attaché par `recalculerFournitures`) : rien d'autre n'est retiré, aucune colonne réelle ne peut
+// donc être perdue en silence sur une base dont le schéma serait plus riche que le schéma local.
+const CLES_FOURNITURE_CALCULEES = ['prix_moyen', 'prix_base', 'prix_tole', 'nb_fournisseurs', 'min', 'max', 'perime', 'incomplet', 'sans_conditionnement', 'detail', 'date_plus_ancienne', 'date_plus_recente', 'reference_normalisee']
+function fournituresPropres(fournitures: any): any {
+  if (!Array.isArray(fournitures)) return fournitures
+  return fournitures.map((f: any) => {
+    if (!f || typeof f !== 'object') return f
+    const out: Record<string, any> = {}
+    for (const k of Object.keys(f)) if (CLES_FOURNITURE_CALCULEES.indexOf(k) < 0) out[k] = f[k]
+    return out
+  })
+}
+
 app.post('/api/nomenclature', async (c) => {
   const payload = await c.req.json()
   // strip client-side id + temps calculés côté client (non colonnes) ; etapes_production est désormais persisté (colonne jsonb)
-  const { fournitures, id: _id, temps_reglage_total_min: _tr, temps_unitaire_total_min: _tu, vider_composants: _vc, ...nomPayload } = payload
+  const { fournitures: _fournituresBrutes, id: _id, temps_reglage_total_min: _tr, temps_unitaire_total_min: _tu, vider_composants: _vc, vider_fournitures: _vf, ...nomPayload } = payload
+  // Lot H1 : doublon de référence refusé AVANT la moindre écriture (création comme écrasement d'un brouillon).
+  const _refusDoublon = refusDoublonFournitures(c, _fournituresBrutes)
+  if (_refusDoublon) return _refusDoublon
+  const fournitures = fournituresPropres(_fournituresBrutes)
   if ('composants' in nomPayload) nomPayload.composants = composantsDe(nomPayload.composants)   // tableau, quel que soit le type de colonne
   // N3 : num_nom = réf. pièce saisie manuellement ; auto-génération seulement en secours si vide
   if (!nomPayload.num_nom || !String(nomPayload.num_nom).trim()) {
@@ -5598,13 +5950,32 @@ app.put('/api/nomenclature/:id', async (c) => {
   const id = c.req.param('id')
   const payload = await c.req.json()
   // strip temps calculés côté client (non colonnes) ; etapes_production est persisté (colonne jsonb)
-  const { fournitures, temps_reglage_total_min: _tr, temps_unitaire_total_min: _tu, devalider: _devalider, motif: _motifPut, vider_composants: _viderComposants, ...nomPayload } = payload
+  const { fournitures: _fournituresBrutes, temps_reglage_total_min: _tr, temps_unitaire_total_min: _tu, devalider: _devalider, motif: _motifPut, vider_composants: _viderComposants, vider_fournitures: _viderFournitures, ...nomPayload } = payload
+  // Lot H1 : doublon de référence refusé AVANT tout (avant même la lecture de l'état) — `upsertFournitures`
+  // efface puis réinsère : refuser après l'effacement viderait les fournitures de la fiche.
+  const _refusDoublonPut = refusDoublonFournitures(c, _fournituresBrutes)
+  if (_refusDoublonPut) return _refusDoublonPut
+  const fournitures = fournituresPropres(_fournituresBrutes)
   // L'état AVANT, lu strictement : il sert au garde-fou de validation ET au journal EN 9100.
   const lecAvant = await getNomenclatureStricte(id)
   const avant: any = lecAvant.data
   // Sans l'état avant, on ne peut ni garder le statut validé ni tracer : on refuse plutôt que
   // d'enregistrer une modification sans trace (même règle que la suppression).
   if (lecAvant.error) return c.json({ ok: false, error: 'Lecture de la nomenclature impossible : enregistrement refusé pour garantir la traçabilité EN 9100 (' + lecAvant.error + '). Réessayez.' }, 503)
+  // ⚠ GARDE-FOU FOURNITURES (relecture 17/09/2026) — MÊME famille que la perte des composants d'une
+  //   mère (lot H0). `upsertFournitures` EFFACE puis réinsère : un tableau VIDE efface pour de bon les
+  //   matières et accessoires de la fiche. Or l'éditeur vide ses deux compartiments AVANT de relire
+  //   `GET /api/nomenclature/:id/fournitures` — si cette lecture échoue (503 PostgREST / RLS), l'écran
+  //   affiche « Aucune matière » et l'« Enregistrer » suivant envoyait `fournitures: []`.
+  //   Remplacer une liste NON VIDE par une liste vide exige donc désormais le drapeau explicite
+  //   { vider_fournitures: true }, que le client ne pose que lorsqu'il a VRAIMENT lu l'état de la base.
+  if (Array.isArray(_fournituresBrutes) && _fournituresBrutes.length === 0 && _viderFournitures !== true) {
+    const lecF = await getFournituresStrictes(id)
+    if (lecF.error) return c.json({ ok: false, error: 'Fournitures de la fiche illisibles : enregistrement refusé pour ne pas les effacer (' + lecF.error + '). Réessayez.' }, 503)
+    if ((lecF.data || []).length > 0) {
+      return c.json({ ok: false, code: 'fournitures_vides', error: 'Enregistrement refusé : cette nomenclature compte ' + (lecF.data || []).length + ' fourniture(s) en base et la liste envoyée est vide. Rouvrez la fiche pour recharger ses matières et accessoires ; pour les retirer toutes volontairement, supprimez-les ligne par ligne puis enregistrez.', fournitures_en_base: (lecF.data || []).length }, 409)
+    }
+  }
   // ⚠ GARDE-FOU COMPOSANTS (lot H0, 17/09/2026) : `composants` était TEXT dans la base Docker ;
   //   PostgREST le rendait en chaîne, l'éditeur n'y voyait AUCUN composant, et l'enregistrement
   //   suivant écrasait la mère avec []. Un client périmé ne doit plus pouvoir détruire la liste :
@@ -5727,7 +6098,7 @@ app.post('/api/nomenclature/:id/nouvel-indice', async (c) => {
   const payload = await c.req.json().catch(() => ({} as any))
   const { fournitures, temps_reglage_total_min: _tr, temps_unitaire_total_min: _tu,
           id: _id, created_at: _ca, updated_at: _ua, indice: _i, version_groupe: _vg,
-          statut: _statutDemande, valide_par: _vp, date_validation: _dv, vider_composants: _vc, devalider: _dev, motif: _mot, ...over } = payload
+          statut: _statutDemande, valide_par: _vp, date_validation: _dv, vider_composants: _vc, vider_fournitures: _vf, devalider: _dev, motif: _mot, ...over } = payload
   const all = await getNomenclatures()
   const base: any = (all as any[]).find(n => String(n.id) === String(id))
   if (!base) return c.json({ ok: false, error: 'Nomenclature introuvable' }, 404)
@@ -6070,7 +6441,7 @@ ${BE_ETAPE_COUT_JS}
     host.innerHTML="<div style='overflow-x:auto;'><table style='width:100%;border-collapse:collapse;'><thead><tr style='background:#f8fafc;'>"
       + th('Qté',0)+th('Matière ×q',1)+th('Access. ×q',1)+th('MO+mach ×q',1)+th('S-trait ×q',1)+th('Frais g. (lot)',1)+th('CRU total',1)+th('CRU /pc',1)
       + "</tr></thead><tbody>"+rows+"</tbody></table></div>"
-      + "<div style='font-size:.62rem;color:#94a3b8;padding:6px 2px 0;line-height:1.5;'><i class='fas fa-circle-info' style='margin-right:3px;'></i>Colonnes <strong>« ×q »</strong> = coût <strong>total de la série</strong> ; les <strong>frais généraux</strong> sont un coût <strong>par LOT</strong> (comptés une fois). <strong>CRU/pc</strong> = coût de revient par pièce. Matière et accessoires en <strong>unités d'achat entières</strong> (tôles / paquets, arrondi supérieur). La <strong>marge</strong> et le prix de vente se fixent dans l'<strong>offre de prix</strong> (commercial).</div>";
+      + "<div style='font-size:.62rem;color:#94a3b8;padding:6px 2px 0;line-height:1.5;'><i class='fas fa-circle-info' style='margin-right:3px;'></i>Colonnes <strong>« ×q »</strong> = coût <strong>total de la série</strong> ; les <strong>frais généraux</strong> sont un coût <strong>par LOT</strong> (comptés une fois). <strong>CRU/pc</strong> = coût de revient par pièce. Matière en <strong>tôles entières</strong> (arrondi supérieur) ; accessoires en <strong>pièces</strong> (le passage en paquets se fait au bon de commande). La <strong>marge</strong> et le prix de vente se fixent dans l'<strong>offre de prix</strong> (commercial).</div>";
     updateSynthese();
   }
   window.beRenderResults=beRenderResults;
@@ -6100,7 +6471,7 @@ ${BE_ETAPE_COUT_JS}
     var totMat=0, totAcc=0;
     var rows=list.map(function(f){
       var u=f.unite?(' '+esc(f.unite)):''; var reste=(f.reste==null?'—':fmtNum(f.reste)+u); var seuil=(f.seuil==null?'—':fmtNum(f.seuil)+u);
-      // Besoin en UNITÉS D'ACHAT entières (tôles / paquets, arrondi supérieur) — pas en pièces individuelles.
+      // Besoin : matière en tôles entières (arrondi supérieur), accessoires en pièces (lot H1 : paquets au BC).
       var bu=f.besoin_unite?(' '+esc(f.besoin_unite)+((Number(f.besoin)||0)>1?'s':'')):u;
       var isMat=(f.categorie==='matiere');
       var cu=Number(f.cout_unite)||0, cs=Number(f.cout_serie)||0;   // coût unité d'achat + coût série (× quantité, arrondi supérieur)
@@ -11191,7 +11562,7 @@ app.get('/api/stock/:id/emplacement/historique', async (c) => {
 })
 
 app.get('/stock/service', async (c) => {
-  const [stockRows, mvts, fournisseurs, das, fileLu, rangeesLu, typesLu, zonesLu, histLu, typesStock] = await Promise.all([
+  const [stockRows, mvts, fournisseurs, das, fileLu, rangeesLu, typesLu, zonesLu, histLu, typesStock, produitsLu] = await Promise.all([
     getStockReel().catch(() => [] as any[]),
     getMouvementsStock().catch(() => [] as any[]),
     getFournisseurs().catch(() => [] as any[]),
@@ -11202,7 +11573,13 @@ app.get('/stock/service', async (c) => {
     getStockZones(),
     getHistoriqueEmplacements({ limite: 300 }),
     lireTypesObjetStock(),
+    // Lot H1 : le bloc « Catalogue fournisseurs par catégorie » de l'onglet Gestion lisait le jsonb
+    // `fournisseurs.catalogue` (vide partout — sonde du 17/09/2026) : il lit désormais la table
+    // `produits_fournisseurs`. Lecture `select('*')` (jamais de projection nommant `qte_paquet`) ;
+    // une panne n'affiche qu'un catalogue vide, elle ne casse pas la page (le stock reste lisible).
+    getProduitsFournisseursStrict(),
   ])
+  if (produitsLu.error) console.error('[stock/service] catalogue fournisseurs illisible : ' + produitsLu.error)
   const fournById: Record<string, string> = {}
   ;(fournisseurs as any[]).forEach((f: any) => { fournById[String(f.id)] = f.nom })
   const rot = computeRotations(mvts as any[])
@@ -11276,7 +11653,7 @@ app.get('/stock/service', async (c) => {
     erreurFile: tableAbsente ? null : (fileLu.error || null),
     erreurTypes: tableAbsente ? null : (typesLu.error || zonesLu.error || null),
     peutEcrire: enforceStk ? peutEcrireService(userStk, 'stock') : true,
-  }))
+  }, produitsLu.data))
 })
 
 // ══════════════════════════════════════════════════════════════

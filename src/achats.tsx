@@ -2,7 +2,7 @@
 // ACHATS – ERP Seem Semrac v2.0
 // Service Achats : DA à traiter · Cmds fournisseurs · Dashboard · Fournisseurs
 // ══════════════════════════════════════════════════════════════
-import { escX, layout, pageHeader, serviceHeader, validationCheckbox, bulkToolbar, bulkSelectAssets } from './shared'
+import { escX, layout, pageHeader, serviceHeader, validationCheckbox, bulkToolbar, bulkSelectAssets, prixMoyenClientJs } from './shared'
 import type { DemandeAchat, FournisseurSt } from './types'
 import { MODES_FACTURATION } from './commercial'
 
@@ -139,8 +139,25 @@ export const pageServiceAchats = (
     ...FOURN.map((f: any) => ({ id: f.id, nom: f.nom })),
     ...STRAIT.map((s: any) => ({ id: s.id, nom: s.nom })),
   ].filter((x: any) => x && x.nom)
-  // Nb de références liées à un fournisseur = lignes de stock (fournisseur_id) ∪ catalogue manuel
-  const refCountFor = (f: any) => (REFCOUNT[String(f.id)] || 0) || parseCatLen(f.catalogue)
+  // Nb de références liées à un tiers = ses lignes de `produits_fournisseurs` (REFCOUNT, calculé en
+  // amont sur `fournisseur_id`). Lot H1 : plus de repli sur l'ancien jsonb `catalogue` — il est
+  // vide partout (sonde du 17/09/2026 : 0 item, cloud et Docker) et il faisait doublon avec la table.
+  const refCountFor = (t: any) => REFCOUNT[String(t.id)] || 0
+  // ⚠ Les SOUS-TRAITANTS ne sont pas dans `produits_fournisseurs` — décision explicite du lot H1
+  //   (« leurs prestations ne vivent pas dans produits_fournisseurs »). REFCOUNT, construit sur
+  //   `produits_fournisseurs.fournisseur_id`, leur donnait donc structurellement 0 : la colonne ne
+  //   pouvait plus RIEN remonter. On compte ce que la fiche ST déclare réellement : ses opérations
+  //   (tarifs par opération + prestations), dédoublonnées, plus les items de l'ancien jsonb.
+  const stOpsCount = (s: any) => {
+    const vus: Record<string, number> = Object.create(null)
+    const ajoute = (v: any) => { const k = String(v ?? '').trim().toLowerCase(); if (k) vus[k] = 1 }
+    for (const t of (Array.isArray(s?.tarifs) ? s.tarifs : [])) ajoute(t && (t.operation ?? t.nom))
+    for (const p of (Array.isArray(s?.prestations) ? s.prestations : [])) ajoute(p)
+    let cat: any = s?.catalogue
+    if (typeof cat === 'string') { try { cat = JSON.parse(cat) } catch { cat = null } }
+    for (const it of (Array.isArray(cat) ? cat : [])) ajoute(it && (it.operation ?? it.designation ?? it.reference ?? it))
+    return Object.keys(vus).length
+  }
 
   // Une DA est « traitée » dès qu'un BC a été créé (statut commande/envoyé/reçu/clôturé…)
   // « traitée » = un BC a été créé pour la DA. ⚠ BUG CORRIGÉ : l'ancienne regex `trait[eé]`
@@ -348,13 +365,6 @@ export const pageServiceAchats = (
 
   // ── ONGLET FOURNISSEURS / SOUS-TRAITANTS (2 listes + bascule) ──
   const arr = (v: any) => Array.isArray(v) ? v.join(', ') : (v || '')
-  const parseCatLen = (raw: any): number => {
-    if (Array.isArray(raw)) return raw.length
-    if (typeof raw === 'string' && raw.trim()) {
-      try { const o = JSON.parse(raw); return Array.isArray(o) ? o.length : (Array.isArray(o?.items) ? o.items.length : 0) } catch (_e) { return 0 }
-    }
-    return 0
-  }
   const activiteBadge = (a: string | undefined) => {
     const v = a || 'both'
     const m: Record<string, string> = { Seem:'#3b82f6', Semrac:'#ec4899', both:'#8b5cf6' }
@@ -398,7 +408,7 @@ export const pageServiceAchats = (
       <td style="${TD}">${activiteBadge(s.activite)}</td>
       <td style="${TD}font-size:.78rem;color:#374151;">${escX(s.contact)||'—'}</td>
       <td style="${TD}font-size:.76rem;color:#2563eb;">${escX(s.email)||'—'}<div style="font-size:.7rem;color:#9ca3af;">${escX(s.tel||'')}</div></td>
-      <td style="${TD}text-align:center;"><span style="background:#ede9fe;color:#5b21b6;border-radius:999px;padding:2px 9px;font-size:.7rem;font-weight:700;">${parseCatLen(s.catalogue)} réf.</span></td>
+      <td style="${TD}text-align:center;"><span title="Opérations déclarées sur la fiche (tarifs de sous-traitance + prestations)" style="background:#ede9fe;color:#5b21b6;border-radius:999px;padding:2px 9px;font-size:.7rem;font-weight:700;">${stOpsCount(s)} op.</span></td>
       <td style="${TD}font-size:.74rem;color:#374151;">${(Array.isArray(s.prestations)&&s.prestations.length)?s.prestations.slice(0,4).map((p:string)=>`<span style="display:inline-block;background:#ede9fe;color:#5b21b6;border-radius:999px;padding:1px 7px;font-size:.62rem;font-weight:700;margin:1px;">${escX(p)}</span>`).join('')+(s.prestations.length>4?` <span style="color:#94a3b8;font-size:.62rem;">+${s.prestations.length-4}</span>`:''):'<span style="color:#cbd5e1;">—</span>'}</td>
       <td style="${TD}text-align:center;white-space:nowrap;"><button onclick="rfqNew('${s.id}')" title="Demander un prix à ce sous-traitant" style="margin-right:5px;padding:5px 10px;background:#ede9fe;color:#5b21b6;border:none;border-radius:6px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fas fa-file-invoice-dollar"></i></button><a href="/achats/sous-traitant/${encodeURIComponent(s.id)}" title="Ouvrir / modifier la fiche" style="display:inline-flex;align-items:center;gap:4px;padding:5px 11px;background:#ede9fe;color:#5b21b6;border:none;border-radius:6px;font-size:.7rem;font-weight:700;text-decoration:none;"><i class="fas fa-folder-open"></i>Fiche</a><button onclick="achDeleteRef('sous_traitant','${s.id}',this)" title="Supprimer" style="margin-left:5px;width:28px;height:26px;border-radius:6px;border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;cursor:pointer;"><i class="fas fa-trash"></i></button></td>
     </tr>`).join('')
@@ -462,7 +472,7 @@ export const pageServiceAchats = (
         <table style="width:100%;border-collapse:collapse;font-size:.8rem;" id="ach-st">
           <thead><tr style="background:#f8fafc;border-bottom:2px solid #f1f5f9;">
             <th class="bcell bcell-st" style="display:none;text-align:center;${TH}"><input type="checkbox" onclick="bulkAll('st',this.checked)" title="Tout sélectionner"/></th>
-            <th style="text-align:left;${TH}">Sous-traitant</th><th style="text-align:left;${TH}">Catégorie</th><th style="text-align:left;${TH}">Activité</th><th style="text-align:left;${TH}">Contact</th><th style="text-align:left;${TH}">Email / Tél</th><th style="text-align:center;${TH}">Catalogue</th><th style="text-align:left;${TH}">Prestations</th><th style="text-align:center;${TH}">Fiche</th>
+            <th style="text-align:left;${TH}">Sous-traitant</th><th style="text-align:left;${TH}">Catégorie</th><th style="text-align:left;${TH}">Activité</th><th style="text-align:left;${TH}">Contact</th><th style="text-align:left;${TH}">Email / Tél</th><th style="text-align:center;${TH}">Opérations</th><th style="text-align:left;${TH}">Prestations</th><th style="text-align:center;${TH}">Fiche</th>
           </tr></thead>
           <tbody>${stRows}</tbody>
         </table>
@@ -501,7 +511,7 @@ export const pageServiceAchats = (
       <span style="color:#94a3b8;font-size:.74rem;">${DPRIX.length} demande(s)</span>
       <button onclick="rfqNew()" style="margin-left:auto;background:linear-gradient(135deg,#0ea5e9,#0369a1);color:white;border:none;border-radius:8px;padding:7px 15px;font-size:.76rem;font-weight:700;cursor:pointer;"><i class="fas fa-plus" style="margin-right:6px;"></i>Demande de prix</button>
     </div>
-    <div style="font-size:.74rem;color:#64748b;margin-bottom:12px;">Une demande peut viser <strong>plusieurs références</strong> et <strong>plusieurs fournisseurs</strong> (à choisir par référence) : elle se <strong>scinde en une RFQ par fournisseur</strong>. ⚠️ La <strong>validation d'une réponse</strong> met à jour le <strong>prix officiel</strong> du fournisseur — les bons de commande n'y touchent jamais.</div>
+    <div style="font-size:.74rem;color:#64748b;margin-bottom:12px;line-height:1.55;">Une demande peut viser <strong>plusieurs références</strong> et <strong>plusieurs fournisseurs</strong> (à choisir par référence) : elle se <strong>scinde en une RFQ par fournisseur</strong>. ⚠️ « Valider » écrit le prix de <strong>CHAQUE réponse chiffrée</strong> au catalogue de son fournisseur — c'est ce qui alimente le <strong>prix moyen multi-fournisseurs</strong> des nomenclatures. Le bouton « Préféré » ne désigne que le fournisseur à commander : il n'écarte aucun prix. Les bons de commande, eux, ne touchent jamais au prix officiel.</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
       ${rfqPill('all', 'Toutes', true)}${DP_STATUTS.map(s => rfqPill(s[0], s[1], false)).join('')}
     </div>
@@ -1812,9 +1822,14 @@ export const pageServiceAchats = (
   }
 
   // ─── Demandes de prix (RFQ) ───────────────────────────────────
+  // Lot H1 (17/09/2026) — le module PARTAGÉ de prix (src/prix_moyen.ts) est injecté tel quel :
+  // categorieFourniture (accessoire ou matière) et nombrePositif (prix réellement chiffré) sont
+  // les MÊMES fonctions que côté serveur. Aucune règle de prix n'est recopiée à la main ici.
+  ${prixMoyenClientJs()}
   var RFQ_CUR=null;
   function rfqClose(){ document.getElementById('rfq-modal-overlay').style.display='none'; }
-  function rfqEsc(s){ return String(s==null?'':s).replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+  function rfqEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+  function rfqEstAccessoire(cat){ return categorieFourniture(cat)==='accessoire'; }
   function rfqFilter(s){
     document.querySelectorAll('.rfq-pill').forEach(function(b){ b.style.background='white'; b.style.color='#475569'; });
     var el=document.getElementById('rfqf-'+s); if(el){ el.style.background='#10b981'; el.style.color='white'; }
@@ -1828,19 +1843,42 @@ export const pageServiceAchats = (
   async function rfqOpen(id){
     var ov=document.getElementById('rfq-modal-overlay'), body=document.getElementById('rfq-modal-body');
     body.innerHTML='<div style="padding:40px;text-align:center;color:#94a3b8;">Chargement…</div>'; ov.style.display='flex';
-    try{ var r=await fetch('/api/demandes-prix/'+id); var j=await r.json(); if(!j.ok){ body.innerHTML='<div style="padding:30px;color:#b91c1c;">Introuvable.</div>'; return; } RFQ_CUR=j; body.innerHTML=rfqRender(j); }
+    try{ var r=await fetch('/api/demandes-prix/'+id); var j=await r.json(); if(!j.ok){ body.innerHTML='<div style="padding:30px;color:#b91c1c;">Introuvable.</div>'; return; } RFQ_CUR=j; body.innerHTML=rfqRender(j);
+      // Le HTML vient d'être posé : les cellules « = x €/pièce » se calculent une première fois ici
+      // (les oninput ne se déclenchent qu'à la frappe).
+      body.querySelectorAll('tr.rfq-resp .rr-prix').forEach(function(el){ rfqPiece(el); });
+    }
     catch(e){ body.innerHTML='<div style="padding:30px;color:#b91c1c;">Erreur de chargement.</div>'; }
   }
-  function rfqRespRow(ligneId, rep){
+  // Une ligne de réponse = un fournisseur. Pour un ACCESSOIRE, la quantité par paquet est demandée
+  // À CÔTÉ du prix : c'est le conditionnement auquel se rapporte CE prix. Sans elle, le prix sera
+  // compris comme un prix à la pièce et signalé en orange (« conditionnement non déclaré chez X »).
+  function rfqRespRow(ligneId, rep, acc){
     var rid=rep.id||''; var fixed=(!rep._new && rep.fournisseur_id);
-    var fcell = fixed ? ('<input type="hidden" class="rr-fourn" value="'+rep.fournisseur_id+'"/><span style="font-size:.76rem;font-weight:700;color:#334155;">'+rfqEsc(rep.fournisseur_nom)+'</span>')
+    var fcell = fixed ? ('<input type="hidden" class="rr-fourn" value="'+rfqEsc(rep.fournisseur_id)+'"/><span class="rr-fnom" style="font-size:.76rem;font-weight:700;color:#334155;">'+rfqEsc(rep.fournisseur_nom)+'</span>')
       : ('<select class="rr-fourn" style="width:100%;border:1.5px solid #e2e8f0;border-radius:6px;padding:5px 6px;font-size:.74rem;">'+rfqFournOptions(rep.fournisseur_id)+'</select>');
-    return '<tr class="rfq-resp" data-rid="'+rid+'" data-ligne="'+ligneId+'">'
+    var h='<tr class="rfq-resp" data-rid="'+rid+'" data-ligne="'+ligneId+'">'
       +'<td style="padding:3px 8px;">'+fcell+'</td>'
-      +'<td style="padding:3px 8px;text-align:right;"><input class="rr-prix" type="number" step="0.01" min="0" value="'+(rep.prix_unitaire!=null?rep.prix_unitaire:'')+'" style="width:90px;border:1.5px solid #e2e8f0;border-radius:6px;padding:5px 6px;text-align:right;font-size:.74rem;"/></td>'
-      +'<td style="padding:3px 8px;text-align:right;"><input class="rr-delai" type="number" min="0" value="'+(rep.delai_jours!=null?rep.delai_jours:'')+'" style="width:64px;border:1.5px solid #e2e8f0;border-radius:6px;padding:5px 6px;text-align:right;font-size:.74rem;"/></td>'
-      +'<td style="padding:3px 8px;text-align:center;"><input class="rr-ret" type="radio" name="ret-'+ligneId+'"'+(rep.retenu?' checked':'')+'/></td>'
+      +'<td style="padding:3px 8px;text-align:right;"><input class="rr-prix" type="number" step="0.01" min="0" value="'+(rep.prix_unitaire!=null?rep.prix_unitaire:'')+'" oninput="rfqPiece(this)" title="'+(acc?'Prix du PAQUET propos\\u00e9 par ce fournisseur':'Prix d\\u2019une T\\u00d4LE propos\\u00e9 par ce fournisseur')+'" style="width:92px;border:1.5px solid #e2e8f0;border-radius:6px;padding:5px 6px;text-align:right;font-size:.74rem;"/></td>';
+    if(acc){
+      h+='<td style="padding:3px 8px;text-align:right;"><input class="rr-qtepaq" type="number" step="0.001" min="0" value="'+(rep.qte_paquet!=null?rep.qte_paquet:'')+'" oninput="rfqPiece(this)" placeholder="ex. 100" title="Nombre de PI\\u00c8CES dans le paquet auquel se rapporte ce prix. Laiss\\u00e9 vide = le prix sera compris comme un prix \\u00e0 la pi\\u00e8ce." style="width:88px;border:1.5px solid #fed7aa;border-radius:6px;padding:5px 6px;text-align:right;font-size:.74rem;"/>'
+        +'<div class="rr-piece" style="font-size:.6rem;color:#94a3b8;font-weight:600;margin-top:2px;white-space:nowrap;"></div></td>';
+    }
+    h+='<td style="padding:3px 8px;text-align:right;"><input class="rr-delai" type="number" min="0" value="'+(rep.delai_jours!=null?rep.delai_jours:'')+'" style="width:64px;border:1.5px solid #e2e8f0;border-radius:6px;padding:5px 6px;text-align:right;font-size:.74rem;"/></td>'
+      +'<td style="padding:3px 8px;text-align:center;"><input class="rr-ret" type="radio" name="ret-'+ligneId+'"'+(rep.retenu?' checked':'')+' title="Fournisseur \\u00e0 commander en priorit\\u00e9. Tous les prix chiffr\\u00e9s sont enregistr\\u00e9s, pr\\u00e9f\\u00e9r\\u00e9s ou non."/></td>'
       +'</tr>';
+    return h;
+  }
+  // Prix a la piece affiche sous la qte/paquet : prix du paquet / nb de pieces. Le calcul de la
+  // MOYENNE, lui, vit dans le module partage (prixMoyenReference) et s affiche au BE.
+  function rfqPiece(el){
+    var tr=el.closest('tr'); if(!tr) return;
+    var cell=tr.querySelector('.rr-piece'); if(!cell) return;
+    var pxEl=tr.querySelector('.rr-prix'), qEl=tr.querySelector('.rr-qtepaq');
+    var px=nombrePositif(pxEl?pxEl.value:null), q=nombrePositif(qEl?qEl.value:null);
+    if(px==null){ cell.textContent=''; cell.style.color='#94a3b8'; return; }
+    if(q==null){ cell.textContent='conditionnement non d\\u00e9clar\\u00e9'; cell.style.color='#b45309'; return; }
+    cell.textContent='= '+arrondiPrix(px/q).toFixed(4).replace('.',',')+' \\u20ac/pi\\u00e8ce'; cell.style.color='#94a3b8';
   }
   function rfqRender(j){
     var d=j.demande, lignes=j.lignes||[], reps=j.reponses||[];
@@ -1856,60 +1894,112 @@ export const pageServiceAchats = (
     lignes.forEach(function(l,idx){
       var lr=reps.filter(function(x){ return String(x.ligne_id)===String(l.id); });
       if(!lr.length) lr=[{ligne_id:l.id,_new:true}];
+      var acc=rfqEstAccessoire(l.categorie);
       b+='<div style="border:1.5px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin-bottom:12px;">';
       b+='<div style="font-weight:800;color:#1e293b;font-size:.84rem;margin-bottom:2px;">'+(l.reference?'<span style="font-family:monospace;color:#4338ca;">'+rfqEsc(l.reference)+'</span> · ':'')+rfqEsc(l.designation)+'</div>';
-      b+='<div style="font-size:.7rem;color:#94a3b8;margin-bottom:8px;">Qté estimée : '+(l.quantite_estimee!=null?l.quantite_estimee:'—')+' '+rfqEsc(l.unite)+'</div>';
-      b+='<table data-ligne="'+l.id+'" data-ref="'+rfqEsc(l.reference)+'" data-des="'+rfqEsc(l.designation)+'" data-cat="'+rfqEsc(l.categorie||'matiere_premiere')+'" style="width:100%;border-collapse:collapse;">';
-      b+='<thead><tr style="background:#f8fafc;"><th style="padding:4px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;color:#6b7280;">Fournisseur</th><th style="padding:4px 8px;text-align:right;font-size:.58rem;text-transform:uppercase;color:#6b7280;">Prix unit.</th><th style="padding:4px 8px;text-align:right;font-size:.58rem;text-transform:uppercase;color:#6b7280;">Délai (j)</th><th style="padding:4px 8px;text-align:center;font-size:.58rem;text-transform:uppercase;color:#6b7280;">Retenu</th></tr></thead><tbody>';
-      lr.forEach(function(rep){ b+=rfqRespRow(l.id, rep); });
+      b+='<div style="font-size:.7rem;color:#94a3b8;margin-bottom:8px;">Qté estimée : '+(l.quantite_estimee!=null?l.quantite_estimee:'—')+' '+rfqEsc(l.unite)+(acc?' · <span style="color:#b45309;font-weight:700;">accessoire : prix du PAQUET + nb de pièces dedans</span>':'')+'</div>';
+      b+='<table data-ligne="'+rfqEsc(l.id)+'" data-ref="'+rfqEsc(l.reference)+'" data-des="'+rfqEsc(l.designation)+'" data-cat="'+rfqEsc(l.categorie||'matiere_premiere')+'" data-acc="'+(acc?'1':'0')+'" style="width:100%;border-collapse:collapse;">';
+      b+='<thead><tr style="background:#f8fafc;"><th style="padding:4px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;color:#6b7280;">Fournisseur</th><th style="padding:4px 8px;text-align:right;font-size:.58rem;text-transform:uppercase;color:#6b7280;">'+(acc?'Prix du paquet':'Prix unit.')+'</th>'
+        +(acc?'<th style="padding:4px 8px;text-align:right;font-size:.58rem;text-transform:uppercase;color:#b45309;">Qté / paquet</th>':'')
+        +'<th style="padding:4px 8px;text-align:right;font-size:.58rem;text-transform:uppercase;color:#6b7280;">Délai (j)</th><th style="padding:4px 8px;text-align:center;font-size:.58rem;text-transform:uppercase;color:#6b7280;">Préféré</th></tr></thead><tbody>';
+      lr.forEach(function(rep){ b+=rfqRespRow(l.id, rep, acc); });
       b+='</tbody></table>';
       b+='<button onclick="rfqAddResp('+idx+')" style="margin-top:6px;background:#eef2ff;color:#4338ca;border:none;border-radius:6px;padding:4px 10px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-plus" style="margin-right:4px;"></i>Ajouter un fournisseur</button>';
       b+='</div>';
     });
-    b+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;border-top:1px solid #f1f5f9;padding-top:14px;">';
+    b+='<div id="rfq-echecs" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:.74rem;color:#991b1b;line-height:1.5;"></div>';
+    b+='<div style="font-size:.7rem;color:#64748b;margin-bottom:8px;line-height:1.5;"><i class="fas fa-circle-info" style="margin-right:5px;color:#0ea5e9;"></i>« Valider » enregistre au catalogue le prix de <strong>toutes</strong> les réponses chiffrées (une par fournisseur), pas seulement celle du fournisseur préféré : c\\'est la moyenne de ces prix que les nomenclatures utilisent. Un prix nul ou négatif n\\'est jamais écrit.</div>';
+    b+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;border-top:1px solid #f1f5f9;padding-top:14px;flex-wrap:wrap;">';
     b+='<button onclick="rfqDelete()" style="background:#fef2f2;color:#b91c1c;border:none;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:.76rem;margin-right:auto;"><i class="fas fa-trash" style="margin-right:5px;"></i>Supprimer</button>';
     b+='<button onclick="rfqSaveResponses()" style="background:#f1f5f9;color:#374151;border:none;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:.76rem;"><i class="fas fa-save" style="margin-right:5px;"></i>Enregistrer les réponses</button>';
-    b+='<button onclick="rfqValider()" style="background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:8px;padding:8px 14px;font-weight:800;cursor:pointer;font-size:.76rem;"><i class="fas fa-circle-check" style="margin-right:5px;"></i>Valider &amp; mettre à jour les prix</button>';
+    b+='<button onclick="rfqValider()" style="background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:8px;padding:8px 14px;font-weight:800;cursor:pointer;font-size:.76rem;"><i class="fas fa-circle-check" style="margin-right:5px;"></i>Valider &amp; enregistrer tous les prix</button>';
     b+='</div></div>';
     return h+b;
   }
   function rfqAddResp(idx){
     if(!RFQ_CUR||!RFQ_CUR.lignes[idx]) return;
-    var ligneId=RFQ_CUR.lignes[idx].id;
+    var ligne=RFQ_CUR.lignes[idx], ligneId=ligne.id;
     var tb=document.querySelector('table[data-ligne="'+ligneId+'"] tbody'); if(!tb) return;
-    var tmp=document.createElement('tbody'); tmp.innerHTML=rfqRespRow(ligneId,{_new:true}); tb.appendChild(tmp.firstChild);
+    var tmp=document.createElement('tbody'); tmp.innerHTML=rfqRespRow(ligneId,{_new:true},rfqEstAccessoire(ligne.categorie)); tb.appendChild(tmp.firstChild);
   }
+  function rfqFnom(tr){
+    var fEl=tr.querySelector('.rr-fourn'); if(!fEl) return '';
+    if(fEl.tagName==='SELECT') return fEl.options[fEl.selectedIndex]?fEl.options[fEl.selectedIndex].text:'';
+    var sp=tr.querySelector('.rr-fnom'); return sp?sp.textContent:'';
+  }
+  function rfqQtePaq(tr){ var e=tr.querySelector('.rr-qtepaq'); return e?nombrePositif(e.value):null; }
   function rfqCollectResponses(){
     var out=[];
     document.querySelectorAll('#rfq-modal-body tr.rfq-resp').forEach(function(tr){
       var fEl=tr.querySelector('.rr-fourn'); var fid=fEl?fEl.value:''; if(!fid) return;
-      var fnom=''; if(fEl.tagName==='SELECT'){ fnom=fEl.options[fEl.selectedIndex].text; } else { var sp=tr.querySelector('span'); fnom=sp?sp.textContent:''; }
       var prix=tr.querySelector('.rr-prix').value, delai=tr.querySelector('.rr-delai').value;
-      out.push({ id:tr.getAttribute('data-rid')||null, ligne_id:tr.getAttribute('data-ligne'), fournisseur_id:fid, fournisseur_nom:fnom, prix_unitaire:(prix!==''?parseFloat(prix):null), delai_jours:(delai!==''?parseInt(delai,10):null), retenu:tr.querySelector('.rr-ret').checked });
+      out.push({ id:tr.getAttribute('data-rid')||null, ligne_id:tr.getAttribute('data-ligne'), fournisseur_id:fid, fournisseur_nom:rfqFnom(tr),
+        prix_unitaire:(prix!==''?parseFloat(prix):null), delai_jours:(delai!==''?parseInt(delai,10):null),
+        qte_paquet:rfqQtePaq(tr), retenu:tr.querySelector('.rr-ret').checked });
     });
     return out;
   }
-  function rfqCollectRetenus(){
-    var retenus=[];
+  // Lot H1 — TOUTES les réponses chiffrées partent à la validation (plus seulement la « retenue ») :
+  // c'est ce qui alimente la moyenne multi-fournisseurs. Le drapeau retenu ne marque qu'une préférence d'achat.
+  function rfqCollectChiffrees(){
+    var out=[];
     document.querySelectorAll('#rfq-modal-body table[data-ligne]').forEach(function(tbl){
-      var checked=tbl.querySelector('.rr-ret:checked'); if(!checked) return;
-      var tr=checked.closest('tr');
-      var fEl=tr.querySelector('.rr-fourn'); var fid=fEl?fEl.value:''; if(!fid) return;
-      var fnom=''; if(fEl.tagName==='SELECT'){ fnom=fEl.options[fEl.selectedIndex].text; } else { var sp=tr.querySelector('span'); fnom=sp?sp.textContent:''; }
-      var prix=tr.querySelector('.rr-prix').value; if(prix==='') return;
-      retenus.push({ reference:tbl.getAttribute('data-ref'), designation:tbl.getAttribute('data-des'), categorie:tbl.getAttribute('data-cat'), fournisseur_id:fid, fournisseur_nom:fnom, prix_unitaire:parseFloat(prix), reponse_id:tr.getAttribute('data-rid')||null });
+      tbl.querySelectorAll('tr.rfq-resp').forEach(function(tr){
+        var fEl=tr.querySelector('.rr-fourn'); var fid=fEl?fEl.value:''; if(!fid) return;
+        var px=nombrePositif(tr.querySelector('.rr-prix').value); if(px==null) return;
+        var ret=tr.querySelector('.rr-ret');
+        out.push({ reference:tbl.getAttribute('data-ref'), designation:tbl.getAttribute('data-des'), categorie:tbl.getAttribute('data-cat'),
+          fournisseur_id:fid, fournisseur_nom:rfqFnom(tr), prix_unitaire:px, qte_paquet:rfqQtePaq(tr),
+          retenu:!!(ret&&ret.checked), reponse_id:tr.getAttribute('data-rid')||null });
+      });
     });
-    return retenus;
+    return out;
+  }
+  // Détail des échecs affiché DANS la modale (la notif est tronquée quand il y a plusieurs lignes).
+  function rfqEchecs(j){
+    var box=document.getElementById('rfq-echecs'); if(!box) return;
+    var l=(j&&Array.isArray(j.echecs))?j.echecs:[];
+    if(!l.length){ box.style.display='none'; box.innerHTML=''; return; }
+    box.innerHTML='<div style="font-weight:800;margin-bottom:5px;"><i class="fas fa-triangle-exclamation" style="margin-right:6px;"></i>'+l.length+' écriture(s) en échec — la demande reste ouverte, corrigez puis revalidez :</div><ul style="margin:0;padding-left:18px;">'+l.map(function(x){ return '<li>'+rfqEsc(x)+'</li>'; }).join('')+'</ul>';
+    box.style.display='block'; box.scrollIntoView({block:'center'});
   }
   function rfqId(){ return RFQ_CUR&&RFQ_CUR.demande?RFQ_CUR.demande.id:''; }
   function rfqEnvoyer(){ var id=rfqId(); fetch('/api/demandes-prix/'+id+'/envoyer',{method:'POST'}).then(function(r){return r.json();}).then(function(j){ if(j.ok){ pushNotif('ok','fa-paper-plane','RFQ envoyée aux fournisseurs.'); rfqOpen(id); } else pushNotif('err','fa-ban','Échec.'); }); }
-  function rfqSaveResponses(){ var id=rfqId(); fetch('/api/demandes-prix/'+id+'/reponses',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reponses:rfqCollectResponses()})}).then(function(r){return r.json();}).then(function(j){ if(j.ok){ pushNotif('ok','fa-save','Réponses enregistrées.'); rfqOpen(id); } else pushNotif('err','fa-ban','Échec.'); }); }
-  function rfqValider(){
-    var id=rfqId(); var retenus=rfqCollectRetenus();
-    if(!retenus.length){ pushNotif('err','fa-exclamation-circle','Cochez au moins un prix « retenu » (avec un prix saisi).'); return; }
+  function rfqSaveResponses(){
+    var id=rfqId();
     fetch('/api/demandes-prix/'+id+'/reponses',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reponses:rfqCollectResponses()})})
-      .then(function(){ return fetch('/api/demandes-prix/'+id+'/valider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({retenus:retenus})}); })
-      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ pushNotif('ok','fa-circle-check',(j.prix_maj||0)+' prix officiel(s) mis à jour. RFQ clôturée.',6000); rfqClose(); setTimeout(function(){softReload();},1000); } else pushNotif('err','fa-ban',(j&&j.error)?String(j.error):'Échec de la validation.',12000); });
+      .then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)?String(j.error):'Échec de l\\'enregistrement des réponses.',12000); return; }
+        // Repli cloud : la colonne qte_paquet manque encore (cloud-13 pas joué) — tout le reste est
+        // enregistré et le serveur le dit. On le répète sans bloquer la saisie.
+        if(j.avertissement) pushNotif('warn','fa-triangle-exclamation',String(j.avertissement),14000);
+        pushNotif('ok','fa-save','Réponses enregistrées.'); rfqOpen(id);
+      }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
+  }
+  function rfqValider(){
+    var id=rfqId(); var chiffrees=rfqCollectChiffrees();
+    if(!chiffrees.length){ pushNotif('err','fa-exclamation-circle','Aucun prix chiffré : saisissez au moins un prix (> 0) avec son fournisseur avant de valider.',9000); return; }
+    var sansPaquet=chiffrees.filter(function(x){ return rfqEstAccessoire(x.categorie) && x.qte_paquet==null; });
+    if(sansPaquet.length) pushNotif('warn','fa-triangle-exclamation',sansPaquet.length+' prix d\\'accessoire sans quantité par paquet : ils seront comptés comme des prix à la pièce. Renseignez « Qté / paquet » si ce sont des paquets.',12000);
+    var nbF=chiffrees.length;
+    fetch('/api/demandes-prix/'+id+'/reponses',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reponses:rfqCollectResponses()})})
+      .then(function(r){return r.json();})
+      .then(function(j0){
+        if(!j0||!j0.ok) throw new Error((j0&&j0.error)?String(j0.error):'Enregistrement des réponses impossible : aucun prix écrit.');
+        if(j0.avertissement) pushNotif('warn','fa-triangle-exclamation',String(j0.avertissement),14000);
+        return fetch('/api/demandes-prix/'+id+'/valider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({retenus:chiffrees})});
+      })
+      .then(function(r){return r.json();}).then(function(j){
+        if(j&&j.ok){
+          rfqEchecs(null);
+          if(j.avertissement) pushNotif('warn','fa-triangle-exclamation',String(j.avertissement),14000);
+          pushNotif('ok','fa-circle-check',(j.prix_maj||0)+' prix catalogue écrit(s) sur '+nbF+' réponse(s) chiffrée(s) — la moyenne des nomenclatures en tient compte. RFQ clôturée.',7000);
+          rfqClose(); setTimeout(function(){softReload();},1000); return;
+        }
+        rfqEchecs(j);
+        pushNotif('err','fa-ban',(j&&j.error)?String(j.error):'Échec de la validation.',14000);
+      })
+      .catch(function(e){ pushNotif('err','fa-exclamation-circle',(e&&e.message)?String(e.message):'Erreur réseau.',12000); });
   }
   async function rfqDelete(){ var id=rfqId(); if(!await appConfirm('Supprimer cette demande de prix ?')) return; fetch('/api/demandes-prix/'+id,{method:'DELETE'}).then(function(r){return r.json();}).then(function(j){ if(j.ok){ pushNotif('ok','fa-trash','RFQ supprimée.'); rfqClose(); setTimeout(function(){softReload();},700); } else pushNotif('err','fa-ban','Échec.'); }); }
 

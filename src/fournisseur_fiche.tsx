@@ -1,8 +1,21 @@
 // ══════════════════════════════════════════════════════════════
 // FICHE DÉTAILLÉE — Fournisseur / Sous-traitant
-// Catalogue produits · Prix · Conditions standards · Activité Seem/Semrac
+// Références fournies (produits_fournisseurs) · Prix · Conditions standards · Activité Seem/Semrac
 // ══════════════════════════════════════════════════════════════
-import { layout, interlocuteursPanel, bulkToolbar, bulkSelectAssets } from './shared'
+// Lot H1 (17/09/2026) — CATALOGUE UNIQUE : le bloc jsonb « Catalogue produits — politique de prix »
+// (colonne `fournisseurs.catalogue`) a été RETIRÉ. Il faisait doublon avec « Références fournies »
+// (table `produits_fournisseurs`), seule source des prix, des délais et désormais de la quantité par
+// paquet. Sonde en LECTURE SEULE du 17/09/2026, cloud (REST anon) ET Docker local :
+//   fournisseurs   : 155 lignes cloud / 155 Docker — 0 catalogue jsonb non vide (123 `[]`, 32 `null`)
+//   sous_traitants :  20 lignes cloud /  20 Docker — 0 catalogue jsonb non vide ( 12 `[]`,  8 `null`)
+// Aucun item n'existait donc nulle part : rien à migrer, rien à reprendre. La colonne reste en base
+// (pas de DROP) et `parseCatalogue` reste exporté pour relire une éventuelle donnée héritée.
+import {
+  layout, interlocuteursPanel, bulkToolbar, bulkSelectAssets,
+  qtePaquetDe, nombrePositif, arrondiPrix, prixPerime, prixMoyenClientJs, PRIX_VALIDITE_JOURS,
+} from './shared'
+
+const sjX = (v: any) => JSON.stringify(v).replace(/</g, '\\u003c')
 
 // ─── Catégories normalisées ────────────────────────────────────
 export const CATEGORIES_FOURNISSEURS = [
@@ -36,6 +49,7 @@ const ACTIVITES = ['Seem', 'Semrac', 'both'] as const
 const MODES_REGLEMENT = ['Virement', 'Chèque', 'Prélèvement', 'Traite / LCR', 'Carte bancaire', 'Espèces'] as const
 const CONDITIONS_PAIEMENT = ['Comptant', 'À réception', '30 jours', '30 jours fin de mois', '45 jours fin de mois', '60 jours', 'Paiement à la commande (proforma)'] as const
 
+/** Lecture tolérante de l'ancienne colonne jsonb `catalogue` (héritage — plus jamais écrite). */
 export function parseCatalogue(raw: any): any[] {
   if (Array.isArray(raw)) return raw
   if (typeof raw === 'string' && raw.trim()) {
@@ -68,7 +82,6 @@ export function pageFournisseurFiche(entity: any, isSt: boolean = false, dbStock
   const couleurPrimaire = isSt ? '#7c3aed' : '#6366f1'
   const couleurSecondaire = isSt ? '#6d28d9' : '#4f46e5'
   const titre = entity?.nom || (isSt ? 'Sous-traitant' : 'Fournisseur')
-  const catalogue = parseCatalogue(entity?.catalogue)
   // Catégories = liste figée selon le type ∪ valeurs déjà présentes en base (datalist créable)
   const baseCats = isSt ? CATEGORIES_SOUSTRAITANTS : CATEGORIES_FOURNISSEURS
   const categories = Array.from(new Set([...baseCats, ...(opts.categoriesExistantes || [])])).filter(Boolean)
@@ -82,51 +95,35 @@ export function pageFournisseurFiche(entity: any, isSt: boolean = false, dbStock
   const famArr = Array.isArray(entity?.familles_fourniture) ? entity.familles_fourniture : []
   const FAM_OPTS: [string, string][] = [['matiere', 'Matière'], ['accessoire', 'Accessoires'], ['outils', 'Outils'], ['chimique', 'Produits chimiques'], ['consommable', 'Consommable'], ['autres', 'Autres']]
   const PRODUITS: any[] = opts.produits || []
-  const pfEsc = (s: any) => String(s ?? '').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+  // Échappement HTML complet (texte ET attributs) : `>` et `'` compris — les désignations
+  // fournisseur viennent d'imports et ont déjà porté du HTML.
+  const pfEsc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
   const PF_CATS: Record<string, string> = { matiere_premiere: 'Matière', accessoire: 'Accessoires', outillage: 'Outils', chimique: 'Chimique', consommable: 'Consommable', autre: 'Autres' }
-  const pfCatLabel = (c: string) => PF_CATS[c] || c || '—'
+  const pfCatLabel = (c: string) => PF_CATS[c] || pfEsc(c) || '—'
+  // Lot H1 — le prix catalogue d'un accessoire reste le prix du PAQUET ; le prix à la pièce est un
+  // CALCUL (jamais une donnée stockée) et il vient du module partagé `src/prix_moyen.ts` : aucune
+  // règle de prix n'est recopiée ici. `qtePaquetDe` retombe sur l'ancien libellé texte
+  // `conditionnement` s'il porte un nombre, puis sur `null` (= « non déclaré », signalé en orange).
+  const pfQtePaquet = (p: any) => qtePaquetDe(p)
+  const pfEstAccessoire = (p: any) => String(p?.categorie || '') === 'accessoire'
+  const pfPrixPiece = (p: any): number | null => {
+    const prix = nombrePositif(p?.prix)
+    if (prix == null || !pfEstAccessoire(p)) return null
+    const q = pfQtePaquet(p)
+    return arrondiPrix(prix / (q != null && q > 0 ? q : 1))
+  }
+  const pfPerime = (p: any) => nombrePositif(p?.prix) != null && prixPerime(p?.date_prix, PRIX_VALIDITE_JOURS)
+  // Lignes exposées au navigateur : « Modifier » recharge le formulaire unique depuis CES données
+  // (plus d'attributs data-* à échapper) et le contrôle de doublon se fait avant l'aller-retour.
+  const PF_LIGNES = PRODUITS.map((p: any) => ({
+    id: String(p.id ?? ''), reference: p.reference ?? '', designation: p.designation ?? '',
+    categorie: p.categorie ?? '', prix: p.prix != null && p.prix !== '' ? Number(p.prix) : null,
+    delai_jours: p.delai_jours != null && p.delai_jours !== '' ? Number(p.delai_jours) : null,
+    unite: p.unite ?? '', qte_paquet: pfQtePaquet(p), conditionnement: p.conditionnement ?? '',
+  }))
 
   const FINP = 'width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 10px;font-size:.82rem;background:#f8fafc;outline:none;box-sizing:border-box;color:#374151;'
   const FLBL = 'display:block;font-size:.66rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;'
-
-  // ─── Catalogue rows ─────────────────────────────────────────
-  const catalogueRowsHtml = catalogue.map((it: any, i: number) => `
-  <tr class="cat-row" data-idx="${i}">
-    <td style="padding:8px 12px;border-bottom:1px solid #f9fafb;">
-      <input class="cat-ref" data-idx="${i}" type="text" value="${(it.ref || '').replace(/"/g, '&quot;')}" style="${FINP}font-family:monospace;font-weight:700;"/>
-    </td>
-    <td style="padding:8px 12px;border-bottom:1px solid #f9fafb;">
-      <input class="cat-designation" data-idx="${i}" type="text" value="${(it.designation || '').replace(/"/g, '&quot;')}" style="${FINP}"/>
-    </td>
-    <td style="padding:8px 12px;border-bottom:1px solid #f9fafb;">
-      <select class="cat-categorie" data-idx="${i}" style="${FINP}">
-        <option value=""${!it.categorie ? ' selected' : ''}>—</option>
-        <option value="matiere"${it.categorie === 'matiere' ? ' selected' : ''}>Matière</option>
-        <option value="accessoire"${it.categorie === 'accessoire' ? ' selected' : ''}>Accessoire</option>
-      </select>
-    </td>
-    <td style="padding:8px 12px;border-bottom:1px solid #f9fafb;">
-      <input class="cat-unite" data-idx="${i}" type="text" value="${(it.unite || '').replace(/"/g, '&quot;')}" placeholder="kg/m/u" style="${FINP}text-align:center;"/>
-    </td>
-    <td style="padding:8px 12px;border-bottom:1px solid #f9fafb;">
-      <input class="cat-prix" data-idx="${i}" type="number" step="0.01" min="0" value="${it.prix_moyen_ht ?? ''}" placeholder="prix tôle/paquet" title="Matière : prix de la tôle · Accessoire : prix du paquet" style="${FINP}text-align:right;"/>
-    </td>
-    <td style="padding:8px 12px;border-bottom:1px solid #f9fafb;">
-      <input class="cat-qtepaq" data-idx="${i}" type="number" step="0.001" min="0" value="${it.qte_paquet ?? ''}" placeholder="quantité unitaire" title="Quantité unitaire (nb de pièces par conditionnement/paquet)" style="${FINP}text-align:right;"/>
-    </td>
-    <td style="padding:8px 12px;border-bottom:1px solid #f9fafb;">
-      <input class="cat-mini" data-idx="${i}" type="number" step="0.01" min="0" value="${it.prix_mini_cde_ht ?? ''}" style="${FINP}text-align:right;"/>
-    </td>
-    <td style="padding:8px 12px;border-bottom:1px solid #f9fafb;">
-      <input class="cat-delai" data-idx="${i}" type="number" min="0" value="${it.delai_j ?? ''}" placeholder="j" style="${FINP}text-align:center;"/>
-    </td>
-    <td style="padding:8px 12px;border-bottom:1px solid #f9fafb;">
-      <input class="cat-notes" data-idx="${i}" type="text" value="${(it.notes || '').replace(/"/g, '&quot;')}" placeholder="Conditions, MOQ, palette…" style="${FINP}"/>
-    </td>
-    <td style="padding:8px;border-bottom:1px solid #f9fafb;text-align:center;">
-      <button onclick="removeCatRow(${i})" title="Supprimer" style="padding:6px 10px;background:#fef2f2;color:#b91c1c;border:1.5px solid #fca5a5;border-radius:7px;cursor:pointer;"><i class="fas fa-trash"></i></button>
-    </td>
-  </tr>`).join('')
 
   // ─── Tarifs sous-traitance (ST) : forfait minimum + prix unitaire pièce par opération ──
   const tarifs = isSt ? (Array.isArray((entity as any)?.tarifs) ? (entity as any).tarifs : []) : []
@@ -160,7 +157,7 @@ export function pageFournisseurFiche(entity: any, isSt: boolean = false, dbStock
     <div>
       <a href="${backHref}" style="display:inline-flex;align-items:center;gap:6px;font-size:.78rem;color:rgba(255,255,255,.85);text-decoration:none;margin-bottom:6px;"><i class="fas fa-arrow-left"></i>Retour Achats</a>
       <h1 style="font-size:1.45rem;font-weight:900;margin:0;display:flex;align-items:center;gap:10px;"><i class="fas ${ICON}"></i>${titre}</h1>
-      <div style="font-size:.8rem;opacity:.88;margin-top:3px;">${type === 'sous-traitant' ? 'Fiche sous-traitant — catalogue prestations & politiques de vente' : 'Fiche fournisseur — catalogue produits & politiques de vente'}</div>
+      <div style="font-size:.8rem;opacity:.88;margin-top:3px;">${type === 'sous-traitant' ? 'Fiche sous-traitant — catalogue prestations & politiques de vente' : 'Fiche fournisseur — références fournies & politiques de vente'}</div>
     </div>
     <div style="display:flex;gap:8px;">
       <button onclick="deleteFiche()" style="padding:10px 18px;background:rgba(255,255,255,.15);color:white;border:1.5px solid rgba(255,255,255,.6);border-radius:10px;font-weight:700;cursor:pointer;font-size:.85rem;"><i class="fas fa-trash" style="margin-right:6px;"></i>Supprimer</button>
@@ -172,7 +169,7 @@ export function pageFournisseurFiche(entity: any, isSt: boolean = false, dbStock
 <div style="padding:24px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;margin-bottom:18px;">
   <div class="kpi"><div class="kpi-ic" style="background:${couleurPrimaire}22;color:${couleurPrimaire};"><i class="fas fa-tags"></i></div><div><div style="font-size:.72rem;color:#64748b;font-weight:700;text-transform:uppercase;">Catégorie</div><div style="font-size:.95rem;font-weight:800;color:#1e293b;">${categorie}</div></div></div>
   <div class="kpi"><div class="kpi-ic" style="background:#10b98122;color:#059669;"><i class="fas fa-building"></i></div><div><div style="font-size:.72rem;color:#64748b;font-weight:700;text-transform:uppercase;">Activité</div><div style="font-size:.95rem;font-weight:800;color:#1e293b;">${activiteBadge(activite)}</div></div></div>
-  <div class="kpi"><div class="kpi-ic" style="background:#f59e0b22;color:#d97706;"><i class="fas fa-box"></i></div><div><div style="font-size:.72rem;color:#64748b;font-weight:700;text-transform:uppercase;">${isSt ? 'Opérations déclarées' : 'Références au catalogue'}</div><div style="font-size:.95rem;font-weight:800;color:#1e293b;">${isSt ? (tarifs as any[]).length : catalogue.length}</div></div></div>
+  <div class="kpi"><div class="kpi-ic" style="background:#f59e0b22;color:#d97706;"><i class="fas fa-box"></i></div><div><div style="font-size:.72rem;color:#64748b;font-weight:700;text-transform:uppercase;">${isSt ? 'Opérations déclarées' : 'Références fournies'}</div><div style="font-size:.95rem;font-weight:800;color:#1e293b;">${isSt ? (tarifs as any[]).length : PRODUITS.length}</div></div></div>
   <div class="kpi"><div class="kpi-ic" style="background:#0ea5e922;color:#0284c7;"><i class="fas fa-warehouse"></i></div><div><div style="font-size:.72rem;color:#64748b;font-weight:700;text-transform:uppercase;">Articles stock liés</div><div style="font-size:.95rem;font-weight:800;color:#1e293b;">${stockLies.length}</div></div></div>
 </div>
 
@@ -254,72 +251,70 @@ export function pageFournisseurFiche(entity: any, isSt: boolean = false, dbStock
         <i class="fas fa-info-circle"></i>Coût réel d'une commande = <strong>max(forfait ; quantité × prix unitaire)</strong>. Ces tarifs alimentent les étapes sous-traitées des nomenclatures.
       </div>
     </div>` : ''}
-    ${!isSt ? `<div class="card" style="margin-bottom:16px;">
-      <div style="padding:14px 18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9;">
-        <div style="font-weight:800;color:#1e293b;font-size:.95rem;"><i class="fas fa-boxes" style="color:${couleurPrimaire};margin-right:6px;"></i>Catalogue produits — politique de prix</div>
-        <button onclick="addCatRow()" style="padding:7px 14px;background:${couleurPrimaire};color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.78rem;"><i class="fas fa-plus" style="margin-right:5px;"></i>Ajouter une référence</button>
-      </div>
-      <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:.78rem;">
-          <thead><tr style="background:#f8fafc;">
-            <th style="text-align:left;padding:9px 12px;font-size:.65rem;font-weight:800;color:#64748b;text-transform:uppercase;width:130px;">Réf.</th>
-            <th style="text-align:left;padding:9px 12px;font-size:.65rem;font-weight:800;color:#64748b;text-transform:uppercase;">Désignation</th>
-            <th style="text-align:center;padding:9px 12px;font-size:.65rem;font-weight:800;color:#64748b;text-transform:uppercase;width:110px;">Catégorie</th>
-            <th style="text-align:center;padding:9px 12px;font-size:.65rem;font-weight:800;color:#64748b;text-transform:uppercase;width:85px;">Unité</th>
-            <th style="text-align:right;padding:9px 12px;font-size:.65rem;font-weight:800;color:#64748b;text-transform:uppercase;width:115px;">Prix tôle/paquet</th>
-            <th style="text-align:right;padding:9px 12px;font-size:.65rem;font-weight:800;color:#64748b;text-transform:uppercase;width:110px;">Quantité unitaire</th>
-            <th style="text-align:right;padding:9px 12px;font-size:.65rem;font-weight:800;color:#64748b;text-transform:uppercase;width:130px;">Mini cde HT</th>
-            <th style="text-align:center;padding:9px 12px;font-size:.65rem;font-weight:800;color:#64748b;text-transform:uppercase;width:80px;">Délai (j)</th>
-            <th style="text-align:left;padding:9px 12px;font-size:.65rem;font-weight:800;color:#64748b;text-transform:uppercase;">Notes / conditions</th>
-            <th style="width:60px;"></th>
-          </tr></thead>
-          <tbody id="catalogueBody">${catalogueRowsHtml || '<tr><td colspan="10" style="text-align:center;padding:24px;color:#94a3b8;">Catalogue vide — ajoutez une référence.</td></tr>'}</tbody>
-        </table>
-      </div>
-      <div style="padding:10px 18px;background:#eff6ff;border-top:1px solid #dbeafe;font-size:.72rem;color:#1d4ed8;display:flex;align-items:center;gap:8px;">
-        <i class="fas fa-link"></i>Ces références sont proposées dans les nomenclatures BE (filtrées par activité ${activite === 'both' ? 'Seem &amp; Semrac' : activite}) et liées au stock par <strong>fournisseur principal</strong>.
-      </div>
-    </div>` : ''}
-
-    <!-- Références fournies (catalogue commercial — produits_fournisseurs, SANS quantité de stock §5) -->
+    <!-- ════════════════════════════════════════════════════════════════════════════
+         RÉFÉRENCES FOURNIES — FORMULAIRE UNIQUE du catalogue de ce fournisseur (lot H1)
+         Table produits_fournisseurs. L'ancien bloc jsonb « Catalogue produits » a été retiré
+         (sonde du 17/09/2026 : 0 item, cloud et Docker). C'est ICI, et nulle part ailleurs, que se
+         déclare la quantité par paquet d'un accessoire : la nomenclature ne la porte plus.
+         Ouvert en écriture au BE ET aux Achats (exception de chemin de canAccess, lot H1).
+         ════════════════════════════════════════════════════════════════════════════ -->
     ${!isSt ? `<div class="card">
-      <div style="padding:14px 18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9;">
+      <div style="padding:14px 18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9;flex-wrap:wrap;gap:8px;">
         <div style="font-weight:800;color:#1e293b;font-size:.95rem;"><i class="fas fa-tags" style="color:${couleurPrimaire};margin-right:6px;"></i>Références fournies <span style="color:#94a3b8;font-weight:600;font-size:.8rem;">(${PRODUITS.length})</span></div>
-        <div style="display:flex;align-items:center;gap:10px;">${bulkToolbar('pf', couleurPrimaire)}<span style="font-size:.66rem;color:#94a3b8;"><i class="fas fa-circle-info" style="margin-right:4px;"></i>Données commerciales — le stock est géré à part.</span></div>
+        <div style="display:flex;align-items:center;gap:10px;">${bulkToolbar('pf', couleurPrimaire)}<span style="font-size:.66rem;color:#94a3b8;"><i class="fas fa-circle-info" style="margin-right:4px;"></i>Catalogue unique — le stock est géré à part.</span></div>
       </div>
-      <div style="padding:12px 18px;background:#f8fafc;border-bottom:1px solid #f1f5f9;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
-        <div><label style="${FLBL}">Référence *</label><input id="pf_ref" style="${FINP}width:140px;font-family:monospace;font-weight:700;"/></div>
-        <div style="flex:1;min-width:160px;"><label style="${FLBL}">Désignation *</label><input id="pf_des" style="${FINP}"/></div>
-        <div><label style="${FLBL}">Catégorie</label><select id="pf_cat" style="${FINP}width:130px;">${Object.entries(PF_CATS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
-        <div><label style="${FLBL}">Prix <span style="color:#94a3b8;font-weight:500;text-transform:none;">(optionnel)</span></label><input id="pf_prix" type="number" step="0.01" min="0" placeholder="à chiffrer" style="${FINP}width:110px;"/></div>
-        <div><label style="${FLBL}">Délai (j)</label><input id="pf_delai" type="number" min="0" style="${FINP}width:80px;"/></div>
-        <input type="hidden" id="pf_id"/>
-        <button id="pf_save_btn" onclick="pfDeclare('${entity?.id || ''}')" style="padding:8px 14px;background:${couleurPrimaire};color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.78rem;white-space:nowrap;"><i class="fas fa-plus" style="margin-right:5px;"></i>Déclarer</button>
+      <div style="padding:12px 18px;background:#f8fafc;border-bottom:1px solid #f1f5f9;">
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+          <div><label style="${FLBL}">Référence *</label><input id="pf_ref" style="${FINP}width:140px;font-family:monospace;font-weight:700;"/></div>
+          <div style="flex:1;min-width:170px;"><label style="${FLBL}">Désignation *</label><input id="pf_des" style="${FINP}"/></div>
+          <div><label style="${FLBL}">Catégorie</label><select id="pf_cat" onchange="pfHint()" style="${FINP}width:132px;">${Object.entries(PF_CATS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
+          <div><label style="${FLBL}">Qté / paquet <span style="color:#94a3b8;font-weight:500;text-transform:none;">(accessoires)</span></label><input id="pf_qtepaq" type="number" step="0.001" min="0" placeholder="ex. 100" title="Nombre de PIÈCES contenues dans le conditionnement auquel se rapporte le prix. Sans elle, le prix est compris comme un prix à la pièce." style="${FINP}width:112px;text-align:right;"/></div>
+          <div><label style="${FLBL}">Unité</label><input id="pf_unite" placeholder="pce, kg, m…" title="Unité de la référence (pièce, kilo, mètre…). Le libellé libre du conditionnement n'est plus saisi : la quantité par paquet le remplace." style="${FINP}width:100px;text-align:center;"/></div>
+          <div><label style="${FLBL}">Délai (j)</label><input id="pf_delai" type="number" min="0" style="${FINP}width:80px;"/></div>
+          <div><label style="${FLBL}">Prix HT <span style="color:#94a3b8;font-weight:500;text-transform:none;">(optionnel)</span></label><input id="pf_prix" type="number" step="0.01" min="0" placeholder="à chiffrer" title="Matière : prix d'UNE TÔLE · Accessoire : prix du PAQUET (jamais le prix à la pièce, qui est calculé)." style="${FINP}width:112px;text-align:right;"/></div>
+          <input type="hidden" id="pf_id"/>
+          <input type="hidden" id="pf_fid" value="${pfEsc(entity?.id || '')}"/>
+          <button id="pf_save_btn" onclick="pfDeclare()" style="padding:8px 14px;background:${couleurPrimaire};color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.78rem;white-space:nowrap;"><i class="fas fa-plus" style="margin-right:5px;"></i>Déclarer</button>
+          <button id="pf_cancel_btn" onclick="pfReset()" style="display:none;padding:8px 12px;background:#f1f5f9;color:#475569;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.78rem;white-space:nowrap;">Annuler</button>
+        </div>
+        <div id="pf_hint" style="font-size:.68rem;color:#64748b;margin-top:7px;line-height:1.45;"></div>
       </div>
       ${PRODUITS.length === 0 ? `<div style="padding:24px;text-align:center;color:#94a3b8;font-size:.8rem;">Aucune référence déclarée. Référence + désignation suffisent — le prix se renseigne via une demande de prix (RFQ).</div>` : `
       <div style="overflow-x:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:.78rem;">
           <thead><tr style="background:#f8fafc;">
             <th class="bcell bcell-pf" style="display:none;text-align:center;padding:9px 8px;"><input type="checkbox" onclick="bulkAll('pf',this.checked)" title="Tout sélectionner"/></th>
-            ${['Réf.', 'Désignation', 'Catégorie', 'Prix', 'Délai', 'Source', 'Évol.', ''].map((h, i) => `<th style="text-align:${i === 3 ? 'right' : 'left'};padding:9px 12px;font-size:.62rem;font-weight:800;color:#64748b;text-transform:uppercase;">${h}</th>`).join('')}
+            ${[['Réf.', 'left'], ['Désignation', 'left'], ['Catégorie', 'left'], ['Qté / paquet', 'right'], ['Unité', 'center'], ['Prix HT', 'right'], ['Délai', 'left'], ['Source', 'left'], ['Évol.', 'left'], ['', 'left']].map(([h, al]) => `<th style="text-align:${al};padding:9px 12px;font-size:.62rem;font-weight:800;color:#64748b;text-transform:uppercase;white-space:nowrap;">${h}</th>`).join('')}
           </tr></thead>
           <tbody>
-            ${PRODUITS.map((p: any) => `<tr style="border-bottom:1px solid #f9fafb;">
+            ${PRODUITS.map((p: any) => {
+    const q = pfQtePaquet(p)
+    const acc = pfEstAccessoire(p)
+    const piece = pfPrixPiece(p)
+    const perime = pfPerime(p)
+    return `<tr style="border-bottom:1px solid #f9fafb;">
               <td class="bcell bcell-pf" style="display:none;text-align:center;"><input type="checkbox" class="bsel" data-bulk="pf" data-id="${pfEsc(p.id)}" onclick="bulkCount('pf')"/></td>
               <td style="padding:8px 12px;font-family:monospace;font-weight:700;color:${couleurPrimaire};">${pfEsc(p.reference)}</td>
               <td style="padding:8px 12px;">${pfEsc(p.designation)}</td>
               <td style="padding:8px 12px;"><span style="background:#eef2ff;color:#4338ca;border-radius:6px;padding:1px 8px;font-size:.64rem;font-weight:700;">${pfCatLabel(p.categorie)}</span></td>
-              <td style="padding:8px 12px;text-align:right;font-weight:800;color:${p.prix != null ? '#0f766e' : '#f59e0b'};">${p.prix != null ? Number(p.prix).toFixed(2) + ' €' : '— à chiffrer'}</td>
-              <td style="padding:8px 12px;">${p.delai_jours != null ? p.delai_jours + ' j' : '—'}</td>
-              <td style="padding:8px 12px;"><span style="font-size:.6rem;color:#64748b;text-transform:uppercase;background:#f1f5f9;border-radius:5px;padding:1px 6px;">${p.source_prix || '—'}</span></td>
-              <td style="padding:8px 12px;"><button onclick="ffEvol('${String(p.reference || '').replace(/[''\\]/g, '')}','${String(p.designation || '').replace(/[''\\<]/g, '')}')" style="background:#eef2ff;color:#4338ca;border:none;border-radius:6px;padding:4px 9px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-chart-line"></i></button></td>
-              <td style="padding:8px 12px;text-align:center;white-space:nowrap;"><button onclick="pfEdit(this)" data-id="${pfEsc(p.id)}" data-ref="${pfEsc(p.reference)}" data-des="${pfEsc(p.designation)}" data-cat="${pfEsc(p.categorie || '')}" data-prix="${p.prix != null ? p.prix : ''}" data-delai="${p.delai_jours != null ? p.delai_jours : ''}" title="Modifier cette référence" style="background:none;border:none;color:${couleurPrimaire};cursor:pointer;font-size:.92rem;margin-right:10px;"><i class="fas fa-pen"></i></button><button onclick="pfDelete('${p.id}')" title="Supprimer la référence" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:1rem;">&times;</button></td>
-            </tr>`).join('')}
+              <td style="padding:8px 12px;text-align:right;white-space:nowrap;">${q != null
+      ? `<span style="font-weight:800;color:#334155;">${q}</span><span style="font-size:.62rem;color:#94a3b8;"> pce/paquet</span>${p.qte_paquet == null && String(p.conditionnement || '').trim() ? `<div style="font-size:.6rem;color:#94a3b8;font-style:italic;" title="Libellé hérité de la colonne texte « conditionnement » — plus jamais écrit">${pfEsc(p.conditionnement)}</div>` : ''}`
+      : (acc
+        ? `<span style="background:#fff7ed;color:#b45309;border-radius:6px;padding:1px 8px;font-size:.62rem;font-weight:700;" title="Sans quantité par paquet, le prix est compris comme un prix à la pièce dans le prix moyen.">non déclaré</span>${String(p.conditionnement || '').trim() ? `<div style="font-size:.6rem;color:#94a3b8;font-style:italic;" title="Libellé hérité de la colonne texte « conditionnement » — illisible comme nombre, à ressaisir dans « Qté / paquet »">${pfEsc(p.conditionnement)}</div>` : ''}`
+        : '<span style="color:#cbd5e1;">—</span>')}</td>
+              <td style="padding:8px 12px;text-align:center;color:#64748b;font-size:.72rem;">${pfEsc(p.unite) || '—'}</td>
+              <td style="padding:8px 12px;text-align:right;white-space:nowrap;font-weight:800;color:${p.prix != null ? (perime ? '#b45309' : '#0f766e') : '#f59e0b'};">${p.prix != null ? Number(p.prix).toFixed(2) + ' €' : '— à chiffrer'}${perime ? `<i class="fas fa-clock" style="margin-left:5px;font-size:.66rem;" title="Prix de plus de ${PRIX_VALIDITE_JOURS} jours — demande de prix conseillée"></i>` : ''}${piece != null ? `<div style="font-size:.6rem;color:#94a3b8;font-weight:600;">≈ ${piece.toFixed(4)} €/pièce</div>` : ''}</td>
+              <td style="padding:8px 12px;white-space:nowrap;">${p.delai_jours != null ? p.delai_jours + ' j' : '—'}</td>
+              <td style="padding:8px 12px;"><span style="font-size:.6rem;color:#64748b;text-transform:uppercase;background:#f1f5f9;border-radius:5px;padding:1px 6px;">${pfEsc(p.source_prix) || '—'}</span></td>
+              <td style="padding:8px 12px;"><button onclick="ffEvolRow(this)" data-ref="${pfEsc(p.reference)}" data-des="${pfEsc(p.designation)}" title="Historique de prix" style="background:#eef2ff;color:#4338ca;border:none;border-radius:6px;padding:4px 9px;font-size:.68rem;font-weight:700;cursor:pointer;"><i class="fas fa-chart-line"></i></button></td>
+              <td style="padding:8px 12px;text-align:center;white-space:nowrap;"><button onclick="pfEdit(this)" data-id="${pfEsc(p.id)}" title="Modifier cette référence" style="background:none;border:none;color:${couleurPrimaire};cursor:pointer;font-size:.92rem;margin-right:10px;"><i class="fas fa-pen"></i></button><button onclick="pfDelete(this)" data-id="${pfEsc(p.id)}" title="Supprimer la référence" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:1rem;">&times;</button></td>
+            </tr>`
+  }).join('')}
           </tbody>
         </table>
       </div>`}
-      <div style="padding:10px 18px;background:#eff6ff;border-top:1px solid #dbeafe;font-size:.72rem;color:#1d4ed8;display:flex;align-items:center;gap:8px;">
-        <i class="fas fa-shield-halved"></i>Le <strong>prix officiel</strong> se met à jour uniquement via les <strong>demandes de prix</strong> validées — jamais par les bons de commande.
+      <div style="padding:10px 18px;background:#eff6ff;border-top:1px solid #dbeafe;font-size:.72rem;color:#1d4ed8;display:flex;align-items:flex-start;gap:8px;line-height:1.5;">
+        <i class="fas fa-shield-halved" style="margin-top:2px;"></i><span>Le <strong>prix officiel</strong> se met à jour par les <strong>demandes de prix</strong> validées (source <em>rfq</em>) ou à la main ici (source <em>manuel</em>) — <strong>jamais</strong> par un bon de commande. Le prix d'un accessoire est celui du <strong>paquet</strong> : la nomenclature en déduit le prix à la pièce et fait la <strong>moyenne de tous les fournisseurs</strong> qui portent la référence.</span>
       </div>
     </div>` : ''}
 
@@ -336,42 +331,117 @@ export function pageFournisseurFiche(entity: any, isSt: boolean = false, dbStock
 </div>
 
 <script>
-function pfDeclare(fid){
-  var id=(document.getElementById('pf_id').value||'').trim();
-  var ref=(document.getElementById('pf_ref').value||'').trim();
-  var des=(document.getElementById('pf_des').value||'').trim();
+${prixMoyenClientJs()}
+// Lignes du catalogue de CE fournisseur (même normalisation de référence que le serveur et que
+// l'index SQL : normaliserReference vient du module partagé injecté juste au-dessus).
+var PF_LIGNES = ${sjX(PF_LIGNES)};
+function pfEl(id){ return document.getElementById(id); }
+function pfVal(id){ var e=pfEl(id); return e?(e.value||'').trim():''; }
+function pfLigneParId(id){
+  for(var i=0;i<PF_LIGNES.length;i++){ if(String(PF_LIGNES[i].id)===String(id)) return PF_LIGNES[i]; }
+  return null;
+}
+function pfLigneParRef(ref, saufId){
+  var k=normaliserReference(ref); if(!k) return null;
+  for(var i=0;i<PF_LIGNES.length;i++){
+    var l=PF_LIGNES[i];
+    if(saufId && String(l.id)===String(saufId)) continue;
+    if(normaliserReference(l.reference)===k) return l;
+  }
+  return null;
+}
+// Aide contextuelle : ce qu'on attend dans « Prix » et « Qté / paquet » depend de la catégorie.
+function pfHint(){
+  var h=pfEl('pf_hint'); if(!h) return;
+  var cat=pfVal('pf_cat'), mode=pfVal('pf_id')?'Modification':'Déclaration';
+  var txt;
+  if(cat==='accessoire') txt='<strong>Accessoire</strong> — « Prix HT » = prix du <strong>paquet</strong> et « Qté / paquet » = nombre de <strong>pièces</strong> dedans. Sans la quantité, le prix sera compris comme un prix à la pièce et signalé en orange dans les nomenclatures.';
+  else if(cat==='matiere_premiere') txt='<strong>Matière</strong> — « Prix HT » = prix d\\'<strong>une tôle</strong>. Le nombre de pièces par tôle dépend de la géométrie : il reste saisi au BE, pas ici. La quantité par paquet ne sert pas.';
+  else txt='« Prix HT » est le prix de l\\'unité de commande. La quantité par paquet ne sert qu\\'aux accessoires.';
+  h.innerHTML=mode+' · '+txt+' Laisser le prix vide n\\'efface jamais le prix en base (il est piloté par les demandes de prix).';
+}
+function pfReset(){
+  ['pf_id','pf_ref','pf_des','pf_qtepaq','pf_unite','pf_delai','pf_prix'].forEach(function(k){ var e=pfEl(k); if(e) e.value=''; });
+  var c=pfEl('pf_cat'); if(c) c.value='matiere_premiere';
+  var b=pfEl('pf_save_btn'); if(b) b.innerHTML='<i class="fas fa-plus" style="margin-right:5px;"></i>Déclarer';
+  var a=pfEl('pf_cancel_btn'); if(a) a.style.display='none';
+  pfHint();
+}
+// Charge une ligne du catalogue dans le formulaire unique.
+// conserverSaisie : ne remplit que les champs VIDES — la saisie en cours n'est jamais écrasée
+// (cas du doublon détecté à la volée : l'utilisateur vient de taper un prix, on le garde).
+function pfRemplir(l, conserverSaisie){
+  var pose=function(k, v){
+    var e=pfEl(k); if(!e) return;
+    var vide=String(e.value||'').trim()==='';
+    if(!conserverSaisie || vide) e.value=(v==null?'':v);
+  };
+  pfEl('pf_id').value=l.id||'';
+  pose('pf_ref', l.reference||'');
+  pose('pf_des', l.designation||'');
+  var c=pfEl('pf_cat');
+  if(c && (!conserverSaisie || !c.value)) c.value=l.categorie||'matiere_premiere';
+  pose('pf_qtepaq', l.qte_paquet);
+  pose('pf_unite', l.unite||'');
+  pose('pf_delai', l.delai_jours);
+  pose('pf_prix', l.prix);
+  var b=pfEl('pf_save_btn'); if(b) b.innerHTML='<i class="fas fa-check" style="margin-right:5px;"></i>Enregistrer la modification';
+  var a=pfEl('pf_cancel_btn'); if(a) a.style.display='';
+  pfHint();
+  var r=pfEl('pf_ref'); if(r){ r.focus(); r.scrollIntoView({block:'center'}); }
+}
+function pfDeclare(){
+  var fid=pfVal('pf_fid');
+  var id=pfVal('pf_id'), ref=pfVal('pf_ref'), des=pfVal('pf_des');
   if(!ref||!des){ pushNotif('err','fa-exclamation-circle','Référence et désignation obligatoires.'); return; }
-  var prixV=document.getElementById('pf_prix').value, delaiV=document.getElementById('pf_delai').value;
-  var payload={ fournisseur_id:fid, reference:ref, designation:des, categorie:document.getElementById('pf_cat').value,
-    prix:(prixV!==''?parseFloat(prixV):null), delai_jours:(delaiV!==''?parseInt(delaiV,10):null), source_prix:'manuel' };
+  // Doublon catalogue : la même référence ne peut exister qu'UNE fois chez CE fournisseur, à la
+  // casse et aux espaces près (index ux_produits_fournisseurs_ref_norm). On le dit AVANT
+  // l'aller-retour et on charge la ligne existante plutôt que de laisser un 409 sans suite.
+  var jumeau=pfLigneParRef(ref, id);
+  if(jumeau){
+    pushNotif('err','fa-triangle-exclamation','Référence « '+ref+' » déjà déclarée chez ce fournisseur (« '+(jumeau.designation||'sans désignation')+' ») : une même référence ne peut apparaître qu\\'une fois par fournisseur. Le formulaire passe en MODIFICATION de cette ligne (votre saisie est conservée, les champs vides sont pré-remplis) : vérifiez puis enregistrez.',14000);
+    pfRemplir(jumeau, true);
+    return;
+  }
+  var prixV=pfVal('pf_prix'), delaiV=pfVal('pf_delai'), qteV=pfVal('pf_qtepaq'), uniteV=pfVal('pf_unite');
+  var payload={ fournisseur_id:fid, reference:ref, designation:des, categorie:pfVal('pf_cat'),
+    prix:(prixV!==''?parseFloat(prixV):null), delai_jours:(delaiV!==''?parseInt(delaiV,10):null),
+    qte_paquet:(qteV!==''?parseFloat(qteV):null), unite:(uniteV!==''?uniteV:null), source_prix:'manuel' };
   var url=id?('/api/produits-fournisseurs/'+encodeURIComponent(id)):'/api/produits-fournisseurs';
   var method=id?'PUT':'POST';
   fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json();}).then(function(j){
-      if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Échec.'); return; }
-      pushNotif('ok','fa-check', id?'Référence modifiée.':'Référence déclarée.'); setTimeout(function(){softReload();},700);
+      if(!j||!j.ok){
+        if(j&&j.code==='doublon_reference'){ pushNotif('err','fa-ban',String(j.error||'Référence en doublon.'),14000); return; }
+        if(j&&j.code==='doublon_catalogue'){ pushNotif('err','fa-ban',String(j.error||'Cette référence existe déjà chez ce fournisseur (à la casse près) : modifiez la ligne existante.'),14000); return; }
+        pushNotif('err','fa-ban',(j&&j.error)||'Échec.',10000); return;
+      }
+      // Repli cloud sans la colonne qte_paquet (cloud-13 pas encore joué) : tout le reste est
+      // enregistré, le serveur le DIT — on le répète à l'écran sans bloquer.
+      if(j.avertissement) pushNotif('warn','fa-triangle-exclamation',String(j.avertissement),14000);
+      var msg = id?'Référence modifiée.':(j.existant?'Référence déjà au catalogue : champs mis à jour (aucun prix effacé).':'Référence déclarée.');
+      pushNotif('ok','fa-check',msg); setTimeout(function(){softReload();},900);
     }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
 function pfEdit(btn){
-  document.getElementById('pf_id').value=btn.getAttribute('data-id')||'';
-  document.getElementById('pf_ref').value=btn.getAttribute('data-ref')||'';
-  document.getElementById('pf_des').value=btn.getAttribute('data-des')||'';
-  document.getElementById('pf_cat').value=btn.getAttribute('data-cat')||'matiere_premiere';
-  document.getElementById('pf_prix').value=btn.getAttribute('data-prix')||'';
-  document.getElementById('pf_delai').value=btn.getAttribute('data-delai')||'';
-  var b=document.getElementById('pf_save_btn'); if(b) b.innerHTML='<i class="fas fa-check" style="margin-right:5px;"></i>Enregistrer la modification';
-  var r=document.getElementById('pf_ref'); if(r){ r.focus(); r.scrollIntoView({block:'center'}); }
+  var l=pfLigneParId(btn.getAttribute('data-id'));
+  if(!l){ pushNotif('err','fa-ban','Référence introuvable — rechargez la page.'); return; }
+  pfRemplir(l);
 }
-async function pfDelete(id){
+async function pfDelete(btn){
+  var id=btn.getAttribute('data-id')||'';
+  if(!id) return;
   if(!await appConfirm('Supprimer cette référence du catalogue fournisseur ?')) return;
-  fetch('/api/produits-fournisseurs/'+id,{method:'DELETE'}).then(function(r){return r.json();}).then(function(j){
+  fetch('/api/produits-fournisseurs/'+encodeURIComponent(id),{method:'DELETE'}).then(function(r){return r.json();}).then(function(j){
     if(!j||!j.ok){ pushNotif('err','fa-ban',(j&&j.error)||'Échec.'); return; }
     pushNotif('ok','fa-check','Référence supprimée.'); setTimeout(function(){softReload();},500);
   }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
+function ffEvolRow(btn){ ffEvol(btn.getAttribute('data-ref')||'', btn.getAttribute('data-des')||''); }
 async function ffEvol(reference, desig){
   var m=document.getElementById('ffEvolModal'), body=document.getElementById('ffEvolBody');
-  document.getElementById('ffEvolTitle').innerHTML='<i class="fas fa-chart-line" style="color:#6366f1;margin-right:6px;"></i>'+reference+' — '+desig;
+  var ffE=function(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  document.getElementById('ffEvolTitle').innerHTML='<i class="fas fa-chart-line" style="color:#6366f1;margin-right:6px;"></i>'+ffE(reference)+' — '+ffE(desig);
   body.innerHTML='<div style="text-align:center;padding:30px;color:#94a3b8;">Chargement…</div>'; m.style.display='flex';
   try{ var r=await fetch('/api/ref-prix/'+encodeURIComponent(reference)); var j=await r.json(); var h=(j.historique||[]);
     if(!h.length){ body.innerHTML='<div style="text-align:center;padding:30px;color:#cbd5e1;">Aucun historique de prix. Il se remplit à chaque bon de commande validé pour cette référence.</div>'; return; }
@@ -386,56 +456,6 @@ async function ffEvol(reference, desig){
     var rows=pts.slice().reverse().map(function(p){return '<tr style="border-bottom:1px solid #f8fafc;"><td style="padding:5px 10px;font-size:.74rem;color:#64748b;">'+p.d+'</td><td style="padding:5px 10px;text-align:right;font-weight:800;color:#0f766e;font-size:.78rem;">'+p.p.toFixed(2)+' €</td><td style="padding:5px 10px;text-align:right;font-size:.74rem;">'+(p.q!=null?p.q:'—')+'</td><td style="padding:5px 10px;font-size:.72rem;color:#94a3b8;">'+p.bc+'</td></tr>';}).join('');
     body.innerHTML='<div style="display:flex;gap:12px;margin-bottom:10px;"><div style="background:#f8fafc;border-radius:8px;padding:7px 13px;"><div style="font-size:.58rem;color:#94a3b8;text-transform:uppercase;font-weight:700;">Dernier prix</div><div style="font-size:1.05rem;font-weight:900;color:#0f766e;">'+last.toFixed(2)+' €</div></div><div style="background:#f8fafc;border-radius:8px;padding:7px 13px;"><div style="font-size:.58rem;color:#94a3b8;text-transform:uppercase;font-weight:700;">Évolution</div><div style="font-size:1.05rem;font-weight:900;color:'+(delta>0?'#b91c1c':delta<0?'#15803d':'#64748b')+';">'+(delta>0?'+':'')+delta.toFixed(1)+'%</div></div></div>'+svg+'<table style="width:100%;border-collapse:collapse;margin-top:8px;"><thead><tr style="background:#f8fafc;">'+['Date','PU','Qté','BC'].map(function(x,i){return '<th style="padding:5px 10px;text-align:'+(i===1||i===2?'right':'left')+';font-size:.58rem;text-transform:uppercase;color:#6b7280;">'+x+'</th>';}).join('')+'</tr></thead><tbody>'+rows+'</tbody></table>';
   }catch(e){ body.innerHTML='<div style="color:#b91c1c;padding:20px;">Erreur de chargement.</div>'; }
-}
-function _catRows(){ return Array.prototype.slice.call(document.querySelectorAll('#catalogueBody .cat-row')); }
-function addCatRow(){
-  var body = document.getElementById('catalogueBody');
-  if(body.querySelector('.cat-row') === null) body.innerHTML = '';
-  var idx = _catRows().length;
-  var FINP = '${FINP.replace(/'/g, "\\'")}';
-  var tr = document.createElement('tr');
-  tr.className = 'cat-row';
-  tr.setAttribute('data-idx', idx);
-  tr.innerHTML = ''
-    + '<td style="padding:8px 12px;border-bottom:1px solid #f9fafb;"><input class="cat-ref" type="text" placeholder="REF-XXX" style="'+FINP+'font-family:monospace;font-weight:700;"/></td>'
-    + '<td style="padding:8px 12px;border-bottom:1px solid #f9fafb;"><input class="cat-designation" type="text" placeholder="Désignation" style="'+FINP+'"/></td>'
-    + '<td style="padding:8px 12px;border-bottom:1px solid #f9fafb;"><select class="cat-categorie" style="'+FINP+'"><option value="">—</option><option value="matiere">Matière</option><option value="accessoire">Accessoire</option></select></td>'
-    + '<td style="padding:8px 12px;border-bottom:1px solid #f9fafb;"><input class="cat-unite" type="text" placeholder="kg/m/u" style="'+FINP+'text-align:center;"/></td>'
-    + '<td style="padding:8px 12px;border-bottom:1px solid #f9fafb;"><input class="cat-prix" type="number" step="0.01" min="0" placeholder="prix tôle/paquet" style="'+FINP+'text-align:right;"/></td>'
-    + '<td style="padding:8px 12px;border-bottom:1px solid #f9fafb;"><input class="cat-qtepaq" type="number" step="0.001" min="0" placeholder="quantité unitaire" style="'+FINP+'text-align:right;"/></td>'
-    + '<td style="padding:8px 12px;border-bottom:1px solid #f9fafb;"><input class="cat-mini" type="number" step="0.01" min="0" style="'+FINP+'text-align:right;"/></td>'
-    + '<td style="padding:8px 12px;border-bottom:1px solid #f9fafb;"><input class="cat-delai" type="number" min="0" placeholder="j" style="'+FINP+'text-align:center;"/></td>'
-    + '<td style="padding:8px 12px;border-bottom:1px solid #f9fafb;"><input class="cat-notes" type="text" placeholder="MOQ, conditions…" style="'+FINP+'"/></td>'
-    + '<td style="padding:8px;border-bottom:1px solid #f9fafb;text-align:center;"><button onclick="removeCatRow(this)" title="Supprimer" style="padding:6px 10px;background:#fef2f2;color:#b91c1c;border:1.5px solid #fca5a5;border-radius:7px;cursor:pointer;"><i class="fas fa-trash"></i></button></td>';
-  body.appendChild(tr);
-}
-function removeCatRow(idxOrBtn){
-  var rows = _catRows();
-  if(typeof idxOrBtn === 'number'){
-    if(rows[idxOrBtn]) rows[idxOrBtn].remove();
-  } else {
-    var tr = idxOrBtn; while(tr && tr.tagName !== 'TR') tr = tr.parentNode;
-    if(tr) tr.remove();
-  }
-  var body = document.getElementById('catalogueBody');
-  if(_catRows().length === 0) body.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:24px;color:#94a3b8;">Catalogue vide — ajoutez une référence.</td></tr>';
-}
-function collectCatalogue(){
-  return _catRows().map(function(tr){
-    var catSel = tr.querySelector('.cat-categorie');
-    var qtePaq = tr.querySelector('.cat-qtepaq');
-    return {
-      ref: (tr.querySelector('.cat-ref').value || '').trim(),
-      designation: (tr.querySelector('.cat-designation').value || '').trim(),
-      categorie: catSel ? catSel.value : '',
-      unite: (tr.querySelector('.cat-unite').value || '').trim(),
-      prix_moyen_ht: parseFloat(tr.querySelector('.cat-prix').value) || null,
-      qte_paquet: qtePaq ? (parseFloat(qtePaq.value) || null) : null,
-      prix_mini_cde_ht: parseFloat(tr.querySelector('.cat-mini').value) || null,
-      delai_j: parseInt(tr.querySelector('.cat-delai').value, 10) || null,
-      notes: (tr.querySelector('.cat-notes').value || '').trim(),
-    };
-  }).filter(function(x){ return x.ref || x.designation; });
 }
 // ── Tarifs sous-traitance (forfait + prix unitaire par opération) ──
 function _tarRows(){ return Array.prototype.slice.call(document.querySelectorAll('#tarifsBody .tar-row')); }
@@ -486,7 +506,8 @@ function saveFicheFourn(){
     qualification: document.getElementById('f_qualif').value.trim(),
     otd_methode: document.getElementById('f_otd_methode').value,
     scoring: parseFloat(document.getElementById('f_score').value) || null,
-    catalogue: isSt ? undefined : collectCatalogue(),
+    // Lot H1 : catalogue (jsonb) n'est PLUS envoyé — le catalogue vit dans produits_fournisseurs
+    // (bloc « Références fournies »). La colonne reste en base, elle n'est simplement plus écrite.
     tarifs: isSt ? collectTarifs() : undefined,
     // Prestations (capacités utilisées par le planning ST) = opérations déclarées dans les tarifs
     prestations: isSt ? collectTarifs().map(function(t){ return t.operation; }).filter(Boolean) : undefined,
@@ -496,7 +517,7 @@ function saveFicheFourn(){
   fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     .then(function(r){ return r.json(); }).then(function(j){
       if(!j || !j.ok){ pushNotif('err','fa-ban', (j && j.error) || 'Enregistrement échoué.'); return; }
-      var msg = isSt ? ('Fiche enregistrée — ' + (payload.prestations.length) + ' prestation' + (payload.prestations.length > 1 ? 's' : '') + '.') : ('Fiche enregistrée — catalogue de ' + (payload.catalogue.length) + ' référence' + (payload.catalogue.length > 1 ? 's' : '') + '.');
+      var msg = isSt ? ('Fiche enregistrée — ' + (payload.prestations.length) + ' prestation' + (payload.prestations.length > 1 ? 's' : '') + '.') : 'Fiche enregistrée. Les références fournies s\\'enregistrent ligne par ligne, dans leur propre bloc.';
       pushNotif('ok','fa-save', msg, 5000);
     }).catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
@@ -516,6 +537,8 @@ async function deleteFiche(){
     })
     .catch(function(){ pushNotif('err','fa-exclamation-circle','Erreur réseau.'); });
 }
+// Aide du formulaire unique posée dès l'ouverture (le bloc est visible, pas sous un onglet caché).
+if(document.getElementById('pf_hint')) pfHint();
 </script>`
 
   return layout((isSt ? 'Sous-traitant' : 'Fournisseur') + ' — ' + titre, content, 'service-achats')

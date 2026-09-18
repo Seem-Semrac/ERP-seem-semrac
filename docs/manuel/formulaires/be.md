@@ -40,37 +40,36 @@
 
 ## Éditeur de nomenclature — Matière (tôle)
 **Quand l'utiliser :** Pour indiquer la ou les matières premières (tôle) qui servent à fabriquer la pièce, et obtenir leur prix.
-**Où le trouver :** Éditeur de nomenclature, colonne de gauche, encadré « Matière (tôle) » → bouton « Ajouter matière ».
+**Où le trouver :** Éditeur de nomenclature, **colonne de droite, tout en haut** (au-dessus des étapes), encadré « Matière (tôle) » → bouton « Ajouter matière ».
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
-| Réf. matière | recherche (liste) | Non | La référence de la tôle. Tapez ou choisissez dans la liste des matières du catalogue. | TOLE-ALU-2MM |
-| Désignation | recherche (liste) | Non | Le nom de la matière. Se remplit tout seul si vous choisissez une référence connue. | Tôle aluminium 2 mm |
-| Fournisseur | liste déroulante (fournisseurs « matière » de l'entité choisie) | Non | Le fournisseur de la tôle. Se choisit tout seul s'il n'y en a qu'un. | Métaux Services |
-| Prix tôle | nombre / bouton | Non | Le prix d'une tôle entière. Repris du catalogue s'il a moins de 6 mois (avec un petit bouton gris pour redemander un prix). Un prix plus ancien, ou introuvable au catalogue, **reste affiché en orange** avec un bouton orange de demande de prix. Sans aucun prix : bouton orange « demande de prix ». Après l'envoi : sablier « vérifier ». | 48,00 € |
-| Pc/tôle | nombre | Non | Combien de pièces on tire d'une seule tôle. Sert à répartir le prix tôle par pièce. | 12 |
+| Réf. matière | recherche (liste déroulante filtrée) | Non | La référence de la tôle. Tapez quelques lettres : la liste propose **tout le catalogue matière, tous fournisseurs confondus** (majuscules et accents sans importance). Choisir une entrée remplit aussi la désignation. La saisie libre est permise. | TOLE-ALU-2MM |
+| Désignation | recherche (liste déroulante filtrée) | Non | Le nom de la matière. **La recherche marche aussi ici** : « tole alu » propose « Tôle aluminium ». Choisir une entrée remplit aussi la référence. | Tôle aluminium 2 mm |
+| Pc/tôle | nombre | Non | Combien de pièces on tire d'une seule tôle (dépend de l'imbrication, c'est le BE qui le sait). Sert à répartir le prix de la tôle par pièce. | 12 |
+| Prix estimé / pièce | calculé (non saisissable) | — | **Moyenne du prix d'une tôle chez tous les fournisseurs** qui portent la référence, ÷ Pc/tôle. Sous la valeur : « n fourn. · min–max €/tôle ». Survolez pour le détail, **cliquez** pour l'ouvrir en grand (fournisseur, prix, date). | 3,1200 € |
+| *(bouton)* Demande de prix | bouton | — | Disponible **à tout moment**. Gris à côté d'un prix récent, **orange** si un prix a plus de 6 mois ou s'il n'y en a aucun ; sablier « vérifier » quand une demande est en cours. | — |
+| *(bouton)* × | bouton | — | Retire la ligne. | — |
 
-💡 **Astuce :** Prix tôle ÷ Pc/tôle = prix matière par pièce (affiché en €/pièce à droite).
-⚠️ **Attention :** Si aucun prix récent n'existe, cliquez « demande de prix » : la demande part au service Achats (une référence **ou** une désignation suffit, le fournisseur n'est pas obligatoire). Le sablier « vérifier » reste affiché tant que les Achats n'ont pas validé ; cliquez-le ensuite : un seul fournisseur a répondu → son prix et son nom sont repris ; plusieurs → choisissez le fournisseur. Le sablier est perdu si vous rechargez la page.
-💡 **Prix jamais remis à 0 :** un prix déjà sur la ligne n'est effacé que si **vous** changez la référence, le fournisseur, ou la désignation d'une ligne sans référence.
-💡 **Petit écran :** si la ligne dépasse, faites défiler le compartiment horizontalement ; les titres restent alignés sur les cases.
+💡 **Il n'y a plus de case Fournisseur** : une ligne désigne une **référence**, et son prix est la moyenne des fournisseurs qui la portent (voir le [manuel du Bureau d'études](../be.md), « Comprendre le prix estimé / pièce »).
+⚠️ **Attention :** une **même référence ne peut figurer qu'une seule fois** dans la nomenclature, matière et accessoires confondus. La ligne en double est refusée avec un message qui indique où est l'autre.
+💡 **Couleurs du prix :** normal = à jour · **orange** = un prix a plus de 6 mois, ou le prix affiché vient d'une ancienne saisie (hors catalogue) · **rouge « coût incomplet »** = aucun prix connu (vous pouvez quand même enregistrer et valider).
 
 ## Éditeur de nomenclature — Accessoires
 **Quand l'utiliser :** Pour lister les fournitures achetées (visserie, joints, etc.) qui entrent dans la pièce.
-**Où le trouver :** Éditeur de nomenclature, colonne de gauche, encadré « Accessoires » → bouton « Ajouter accessoire ».
-
-**Ordre : la référence d'abord** (comme la matière). Le champ « Réf. » déroule **toutes les références d'accessoires existantes** du catalogue ; on peut aussi taper une **nouvelle** référence.
+**Où le trouver :** Éditeur de nomenclature, **colonne de droite**, encadré « Accessoires » → bouton « Ajouter accessoire ».
 
 | Champ | Saisie | Obligatoire | À quoi ça sert / comment le remplir | Exemple |
 |---|---|---|---|---|
-| Réf. | recherche (liste de **toutes** les réfs accessoires) | Non | La référence de l'accessoire. **On la choisit en premier** : la liste déroule toutes les réfs existantes ; on peut aussi en saisir une nouvelle. | 136290 |
-| Désignation | texte | Non | Le nom de l'accessoire. **Se remplit tout seul** dès qu'on choisit une réf du catalogue. | Ecrou CLS M3-1 |
-| Fournisseur | liste déroulante | Non | **Se choisit tout seul** selon la réf : seuls les fournisseurs qui **ont cette réf à leur catalogue** sont proposés (auto-sélection s'il n'y en a qu'un). Pour une réf nouvelle : tous les fournisseurs de l'entité. | BOSSARD |
-| Prix paquet | nombre / bouton | Non | Le prix d'un paquet/lot entier, repris du catalogue s'il a moins de 6 mois. Mêmes règles et mêmes boutons de demande de prix que le « Prix tôle » (prix ancien conservé en orange, jamais remis à 0 à l'affichage). | 10,40 € |
-| Qté/paq | nombre | Non | Le nombre d'unités dans un paquet. | 100 |
-| Nb/pc | nombre | Non | Le nombre d'accessoires nécessaires par pièce. | 4 |
+| Réf catalogue | recherche (liste déroulante filtrée) | Non | La référence de l'accessoire, cherchée dans **tout le catalogue accessoires, tous fournisseurs confondus**. Saisie libre permise. | 136290 |
+| Désignation | recherche (liste déroulante filtrée) | Non | Le nom de l'accessoire. La recherche marche aussi ici ; choisir une entrée remplit la référence. | Ecrou CLS M3-1 |
+| Nb/pièce | nombre | Non | Le nombre d'accessoires nécessaires **par pièce fabriquée**. | 4 |
+| Prix estimé / pièce | calculé (non saisissable) | — | **Moyenne du prix d'UNE pièce chez tous les fournisseurs** (prix du paquet ÷ quantité par paquet de chacun) × Nb/pièce. Badge « n fourn. · min–max €/pce » ; clic = détail par fournisseur. | 0,4400 € |
+| *(bouton)* Demande de prix · × | boutons | — | Mêmes règles que pour la matière. | — |
 
-💡 **Astuce :** (Prix paquet ÷ Qté/paq) × Nb/pc = prix accessoire par pièce (affiché à droite).
+💡 **La « Qté/paquet » ne se saisit plus ici** : elle est déclarée **au catalogue**, par fournisseur — onglet **Références** (bouton « Éditer ») ou *Achats › Fournisseurs › fiche › Références fournies*. C'est ce qui permet de comparer un paquet de 100 et un paquet de 50.
+⚠️ **« cond. ? » en orange** sous le prix = un fournisseur a un prix mais **personne n'a déclaré la quantité de son paquet** : son prix est compté **comme un prix à la pièce**. Déclarez-la, sinon la moyenne peut être fausse d'un facteur 100.
+💡 **Ancienne nomenclature :** une fiche qui portait encore un fournisseur et une quantité par paquet s'affiche **avec le nouveau calcul** (mention « ancien modèle » dans le détail) ; elle ne bascule réellement qu'au prochain enregistrement que vous ferez.
 
 ## Éditeur de nomenclature — Étapes de production (gamme)
 **Quand l'utiliser :** Pour décrire la suite des opérations de fabrication (usinage, pliage, sous-traitance…) et leurs temps.
@@ -147,13 +146,16 @@ Chaque entrée affiche l'événement (Création, Validation, Modification, Déva
 | Référence | texte | Oui | La référence de l'article au catalogue. | TOLE-ALU-2MM |
 | Catégorie | liste déroulante (Matière, Accessoire, Outillage, Consommable, Chimique) | Non | La famille de l'article. | Matière |
 | Désignation | texte | Oui | Le nom lisible de l'article. | Tôle aluminium 2 mm |
-| Prix HT (optionnel) | nombre | Non | Le prix hors taxes. Si vide, l'entrée reste « en attente de prix ». | 48,00 |
+| Prix HT (optionnel) | nombre | Non | Le prix hors taxes : **prix d'UNE TÔLE** pour une matière, **prix du PAQUET** pour un accessoire (jamais le prix à la pièce, qui est calculé). Si vide, l'entrée reste « en attente de prix ». | 48,00 |
 | Activité | liste déroulante (Les deux, Seem, Semrac) | Non | L'usine concernée. | Les deux |
+| Quantité par paquet | nombre | Non | **Accessoires seulement** (la case n'apparaît que pour la catégorie « Accessoire ») : le nombre de **pièces** contenues dans le paquet auquel se rapporte le prix ci-dessus. Sans elle, le prix du paquet est compris comme un prix à la pièce dans toutes les nomenclatures. | 100 |
 
 ⚠️ **Attention :** La « Référence » et la « Désignation » sont obligatoires. Sans prix, l'article reste marqué « en attente de prix ».
 💡 **En modification :** laissez le champ **Prix** vide pour ne **pas** toucher au prix existant (il reste piloté par les demandes de prix). Ne renseignez un prix ici que pour le fixer manuellement. Remettre le **même** prix ne change pas sa date.
 ⚠️ **Cases vides = inchangées** (depuis le 17/09/2026) : en modification, une case vide ne change rien (fournisseur, unité, délai, catégorie, activité). On ne peut donc plus vider un délai ni retirer le fournisseur d'une référence en effaçant la case.
 💡 **Référence déjà au catalogue :** « Entrée catalogue » sur un couple fournisseur + référence qui existe déjà complète la ligne existante (pas de doublon) **sans changer sa catégorie ni son activité** — pour les changer, utilisez « Éditer ».
+⚠️ **Deux fois la même référence chez le même fournisseur, c'est refusé** (message « Cette référence existe déjà chez ce fournisseur (à la casse près) : modifiez la ligne existante »). En revanche, la **même référence chez plusieurs fournisseurs est normale** : c'est elle qui fait la moyenne des prix.
+💡 **Base pas encore à jour :** si l'ERP répond « *Référence enregistrée, sauf la quantité par paquet…* », tout le reste est bien enregistré — prévenez l'administrateur (script `cloud-13`).
 
 ## Nouvelle demande de prix (RFQ)
 **Quand l'utiliser :** Pour demander au service Achats de chiffrer un ou plusieurs articles (matière, accessoire…). Un prix est à re-demander dès qu'il est **absent ou daté de plus de 6 mois**.
@@ -168,7 +170,8 @@ Chaque entrée affiche l'événement (Création, Validation, Modification, Déva
 | Qté est. | nombre | Non | La quantité estimée à chiffrer. | 50 |
 | Catégorie | liste déroulante (Matière, Accessoires, Outils, Chimique, Consommable, Autres) | Non | La famille de l'article. | Matière |
 
-💡 **Astuce :** Cliquez « Ajouter un article » pour chiffrer plusieurs articles d'un coup. Le **demandeur** enregistré est **votre compte connecté** (pas besoin de le saisir). Le chiffrage se fait ensuite côté Achats, où l'on ajoute **plusieurs fournisseurs, un prix pour chacun** ; à la validation, le prix retenu se met à jour **partout** (catalogue, nomenclatures, DT).
+💡 **Destinataires (depuis une ligne de nomenclature) :** la fenêtre s'ouvre pré-remplie et propose comme destinataires **tous les fournisseurs qui portent déjà cette référence**, cochés d'avance. Si personne ne la porte, choisissez librement. Plus vous en consultez, plus le prix estimé de la ligne sera juste : les Achats enregistrent **tous** les prix chiffrés, pas seulement celui du fournisseur retenu.
+💡 **Astuce :** Cliquez « Ajouter un article » pour chiffrer plusieurs articles d'un coup. Le **demandeur** enregistré est **votre compte connecté** (pas besoin de le saisir). Le chiffrage se fait ensuite côté Achats, où l'on ajoute **plusieurs fournisseurs, un prix pour chacun** ; à la validation, **chaque** prix chiffré entre au catalogue chez **son** fournisseur, et le prix moyen se recalcule **partout** (nomenclatures, analyse DT).
 ⚠️ **Attention :** Une ligne sans « Désignation » est ignorée à l'envoi.
 
 ## Analyse DT — deux boutons sur chaque ligne de DT
@@ -190,7 +193,7 @@ Chaque entrée affiche l'événement (Création, Validation, Modification, Déva
 | Réf. pièce client | texte (avec liste) | Non | La référence de la pièce **chez le client**. Se lie automatiquement aux deux autres cases (répertoire). | 94402 |
 | Quantité | nombre (lecture) | — | Quantité de référence reprise de la DT. Sert au calcul du besoin matière et des temps. Si la DT demande **plusieurs quantités** (champ « Quantités à chiffrer » de la DT), le tableau de chiffrage affiche **une ligne de prix par quantité**. | 4260 |
 | Exigences normatives | cases à cocher | Non | **Exactement** les mêmes normes que la DT (ISO 9001, EN 9100, REACH, RoHS, EN 13485). Cochées d'après la pièce. | ☑ ISO 9001 |
-| Couverture matière & accessoires | tableau (lecture) | — | Déversé de la nomenclature : pour chaque matière/accessoire, le **besoin en unités d'achat** (nombre de **tôles** pour la matière, de **paquets** pour les accessoires — arrondi supérieur) face au **stock restant** et au **seuil**, avec un état (Couvert / Sous seuil / Insuffisant / Rupture / Hors stock). | 136290 · besoin 1 747 paquets · Rupture |
+| Couverture matière & accessoires | tableau (lecture) | — | Déversé de la nomenclature : pour chaque matière/accessoire, le **besoin** (nombre de **tôles** pour la matière, arrondi supérieur ; nombre de **pièces** pour les accessoires — le passage en paquets se fait au bon de commande, par les Achats) face au **stock restant** et au **seuil**, avec un état (Couvert / Sous seuil / Insuffisant / Rupture / Hors stock). Le prix unité est le **prix moyen des fournisseurs** du catalogue, recalculé à l'ouverture. | 136290 · besoin 400 pièces · Rupture |
 | Gamme opératoire | tableau | — | Mêmes colonnes que la nomenclature. Les étapes de la nomenclature sont **verrouillées** 🔒 (non déplaçables). Le bouton **« Ajouter une étape »** crée une étape que l'on peut **glisser** pour l'insérer où l'on veut **dans** la gamme (sans jamais déplacer les étapes verrouillées). | Contrôle dim. inséré après Poinçonnage |
 | Chiffrage — Coût de revient (CRU) | tableau (auto) + 1 champ saisissable | Non (auto) | Les coûts **Matière**, **Accessoire**, **MO+machine** et **Sous-traitance** sont **calculés automatiquement** depuis la nomenclature — **on ne peut pas les modifier**. Seul le champ **Frais généraux /lot** se saisit : c'est un **coût fixe par lot** (pas par pièce), amorti sur la quantité. **Il n'y a plus de marge ici** : le BE ne chiffre que le **coût de revient**. Le tableau donne **une ligne par quantité** : colonnes « ×q » (Matière · Access. · MO+mach · S-trait), **Frais g. (lot)** (compté une fois), **CRU total** (coût de la série) et **CRU/pc** (coût par pièce). Matière et accessoires comptés en **unités d'achat entières** (tôles / paquets, arrondi supérieur). La quantité de la DT est marquée « DT ». La **marge et le prix de vente** se fixent ensuite dans l'**offre de prix** (côté commercial). | Qté 4260 · frais g. 1 000 €/lot → CRU total 19 139 € · CRU/pc 4,49 € |
 | Faisabilité *(sous les process)* | liste déroulante | Oui | Faisable sans réserve / Faisable avec adaptation / Non faisable – alternative proposée. | Faisable avec adaptation |

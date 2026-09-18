@@ -48,6 +48,20 @@ export const escX = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/
 // Constante UNIQUE : ne plus écrire 92 / 90 / 180 en dur ailleurs.
 export const PRIX_VALIDITE_JOURS = 183
 
+// ─── PRIX MOYEN MULTI-FOURNISSEURS (lot H1, 17/09/2026) ──────────────────────
+// Le calcul vit dans `src/prix_moyen.ts` : module PUR, sans aucune dépendance, dont les fonctions
+// sont ré-émises telles quelles au navigateur (`prixMoyenClientJs()`) — UNE seule source pour le
+// serveur (analyse DT, KPI, routes) et pour l'éditeur de nomenclature.
+// Il est réexporté ici pour que `import { … } from './shared'` suffise, comme pour le reste.
+// ⚠ Ne JAMAIS recopier le calcul ailleurs : l'écart écran / analyse DT est déjà arrivé (lot H0).
+export {
+  normaliserReference, memeReference, categorieFourniture, categorieCompatible, nombrePositif,
+  arrondiPrix, qtePaquetDe, prixPerime, prixMoyenReference, chercherReferences, optionsReferences,
+  doublonsFournitures, premierDoublonFourniture, messageDoublonFourniture, recalculerFournitures,
+  prixMoyenClientJs, PRIX_MOYEN_NOMS_CLIENT,
+} from './prix_moyen'
+export type { LigneCatalogue, DetailPrixMoyen, PrixMoyenRef, OptionsPrixMoyen, OptionReference, DoublonFourniture } from './prix_moyen'
+
 // ─── NOMENCLATURE MÈRE : lecture tolérante de `composants` (lot H0) ───────────
 // La colonne est jsonb dans le cloud mais a été TEXT dans le schéma Docker
 // (migration 015) : selon la base, supabase-js rend un tableau OU une chaîne JSON.
